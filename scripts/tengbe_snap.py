@@ -9,13 +9,15 @@ Created on Fri Jan  3 10:40:53 2014
 
 @author: paulp
 """
-import sys, logging, time, argparse
+import sys
+import logging
+import time
+import argparse
 
 logger = logging.getLogger(__name__)
 #logging.basicConfig(level=logging.INFO)
 
-from corr2.katcp_client_fpga import KatcpClientFpga
-from corr2.fpgadevice import tengbe
+from casperfpga import KatcpClientFpga, tengbe
 
 parser = argparse.ArgumentParser(description='Display the contents of an FPGA''s 10Gbe buffers.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -56,10 +58,12 @@ if args.listcores:
     fpga.disconnect()
     sys.exit(0)
 
+
 def decode_item_pointer(current_spead_info, header_data):
     hdr_id = header_data >> current_spead_info['addr_bits']
     hdr_data = header_data & (pow(2, current_spead_info['addr_bits']) - 1)
-    return (hdr_id, hdr_data)
+    return hdr_id, hdr_data
+
 
 def decode_spead_header(header_data):
     magic_number = header_data >> 56
@@ -76,20 +80,22 @@ def decode_spead_header(header_data):
             'num_headers': num_headers,
             'flavour': '%s,%s' % ((spead_addr_width * 8) + (spead_id_width * 8), (spead_addr_width * 8))}
 
-def process_spead(current_spead_info, data, packet_counter):
-    if packet_counter == 1:
+
+def process_spead(current_spead_info, data, pkt_counter):
+    if pkt_counter == 1:
         spead_header = decode_spead_header(data)
         if len(current_spead_info) == 0:
             current_spead_info = spead_header
         rv_string = 'spead %s, %d headers to come' % (spead_header['flavour'], spead_header['num_headers'])
         if current_spead_info['num_headers'] != spead_header['num_headers']:
-            rv_string += ', ERROR: num spead hdrs changed from %d to %d?!' % (current_spead_info['num_headers'], spead_header['num_headers'])
+            rv_string += ', ERROR: num spead hdrs changed from %d to %d?!' %\
+                         (current_spead_info['num_headers'], spead_header['num_headers'])
         return spead_header, rv_string
-    elif (packet_counter > 1) and (packet_counter <= 1 + current_spead_info['num_headers']):
+    elif (pkt_counter > 1) and (pkt_counter <= 1 + current_spead_info['num_headers']):
         hdr_id, hdr_data = decode_item_pointer(current_spead_info, data)
         if hdr_id == 0x004:
             current_spead_info['packet_length'] = current_spead_info['num_headers'] + hdr_data
-        string_data = 'spead hdr 0x%04x: '%hdr_id + ('%d'%hdr_data if not args.hex else '0x%X'%hdr_data)
+        string_data = 'spead hdr 0x%04x: ' % hdr_id + ('%d' % hdr_data if not args.hex else '0x%X' % hdr_data)
         return current_spead_info if hdr_id == 0x0004 else None, string_data
     else:
 #        data = '%d, %d, %d, %d' % (data >> 48, (data >> 32) & 0xffff, (data >> 16) & 0xffff, (data >> 0) & 0xffff)
@@ -129,7 +135,7 @@ for ctr in range(0, len(coredata[coredata.keys()[0]])):
             print '%s(%s)' % (display_key, tengbe.ip2str(coredata[key][ctr])), '\t',
         elif (key == data_key) and args.spead:
             new_spead_info, spead_stringdata = process_spead(spead_info, coredata[data_key][ctr], packet_counter)
-            if new_spead_info != None:
+            if new_spead_info is not None:
                 spead_info = new_spead_info.copy()
             print '%s(%s)' % (key, spead_stringdata), '\t',
         else:

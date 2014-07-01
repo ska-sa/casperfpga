@@ -1,5 +1,3 @@
-# pylint: disable-msg=C0301
-# pylint: disable-msg=C0103
 import logging
 LOGGER = logging.getLogger(__name__)
 

@@ -10,9 +10,9 @@ import logging
 import struct
 import time
 
-import katcp
-
 LOGGER = logging.getLogger(__name__)
+
+import katcp
 
 import register
 import sbram
@@ -21,7 +21,6 @@ import katadc
 import tengbe
 import memory
 import qdr
-
 import host
 import async_requester
 

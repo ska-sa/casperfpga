@@ -9,13 +9,16 @@ Created on Fri Jan  3 10:40:53 2014
 
 @author: paulp
 """
-import sys, logging, time, argparse
+import sys
+import logging
+import time
+import argparse
 
 logger = logging.getLogger(__name__)
 #logging.basicConfig(level=logging.INFO)
 
-from corr2.katcp_client_fpga import KatcpClientFpga
-import corr2.scroll as scroll
+from casperfpga import KatcpClientFpga
+import casperfpga.scroll as scroll
 
 parser = argparse.ArgumentParser(description='Display TenGBE interface information about a MeerKAT fpga host.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -40,20 +43,24 @@ for host in hosts:
     print '%s: found %i 10gbe core%s.' % (host, numgbes, '' if numgbes == 1 else 's')
     fpgas.append(fpga)
 
+
+# noinspection PyShadowingNames
 def get_gbe_data(fpga):
-    '''Get 10gbe data counters from the fpga.
-    '''
+    """Get 10gbe data counters from the fpga.
+    """
     returndata = {}
-    for core in fpga.tengbes:
-        returndata[core.name] = core.read_counters()
+    for gbecore in fpga.tengbes:
+        returndata[gbecore.name] = gbecore.read_counters()
     return returndata
 
+
+# noinspection PyShadowingNames
 def get_tap_data(fpga):
-    '''What is says on the tin.
-    '''
+    """What is says on the tin.
+    """
     data = {}
-    for core in fpga.tengbes.names():
-        data[core] = fpga.device_by_name(core).tap_info()
+    for gbecore in fpga.tengbes.names():
+        data[gbecore] = fpga.device_by_name(gbecore).tap_info()
     return data
 
 # get tap data
@@ -66,13 +73,11 @@ fpga_headers = []
 master_list = []
 for cnt, fpga in enumerate(fpgas):
     gbedata = get_gbe_data(fpga)
-    core0_regs = {}
     gbe0 = gbedata.keys()[0]
     core0_regs = [key.replace(gbe0, 'gbe') for key in gbedata[gbe0].keys()]
     if cnt == 0:
         master_list = core0_regs[:]
     for core in gbedata:
-        core_regs = {}
         core_regs = [key.replace(core, 'gbe') for key in gbedata[core].keys()]
         if sorted(core0_regs) != sorted(core_regs):
             raise RuntimeError('Not all GBE cores for FPGA %s have the same support registers. Problem.', fpga.host)
@@ -86,9 +91,14 @@ for cnt, fpga in enumerate(fpgas):
 if all_the_same:
     fpga_headers = [fpga_headers[0]]
 
-fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr', 'gbe_rxerrctr', 'gbe_rxbadctr', 'gbe_txerrctr', 'gbe_txfullctr', 'gbe_txofctr', 'gbe_txctr', 'gbe_txvldctr']]
+fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr', 'gbe_rxerrctr',
+                 'gbe_rxbadctr', 'gbe_txerrctr', 'gbe_txfullctr', 'gbe_txofctr',
+                 'gbe_txctr', 'gbe_txvldctr']]
 
 import signal
+
+
+# noinspection PyShadowingNames
 def signal_handler(sig, frame):
     print sig, frame
     for fpga in fpgas:
@@ -118,9 +128,9 @@ try:
         if time.time() > last_refresh + polltime:
             scroller.clear_buffer()
             scroller.add_line('Polling %i host%s every %s - %is elapsed.' %
-                (len(fpgas), '' if len(fpgas) == 1 else 's',
-                'second' if polltime == 1 else ('%i seconds' % polltime),
-                time.time() - STARTTIME), 0, 0, absolute=True)
+                              (len(fpgas), '' if len(fpgas) == 1 else 's',
+                               'second' if polltime == 1 else ('%i seconds' % polltime),
+                               time.time() - STARTTIME), 0, 0, absolute=True)
             start_pos = 20
             pos_increment = 15
             if len(fpga_headers) == 1:
@@ -137,21 +147,23 @@ try:
                 fpga_data = get_gbe_data(fpga)
                 scroller.add_line(fpga.host)
                 for core, core_data in fpga_data.items():
-                    fpga_data[core]['tap_running'] = {'data': {'reg': False if tap_data[fpga.host][core]['name'] == '' else True}}
+                    fpga_data[core]['tap_running'] =\
+                        {'data': {'reg': False if tap_data[fpga.host][core]['name'] == '' else True}}
                     fpga_data[core]['ip'] = {'data': {'reg': tap_data[fpga.host][core]['ip']}}
                     start_pos = 20
                     scroller.add_line(core, 5)
                     for header_register in fpga_headers[0]:
                         core_register_name = header_register.replace('gbe', core)
                         if start_pos < 200:
-                            if core_data.has_key(core_register_name):
+                            if core_register_name in core_data.keys():
                                 if not isinstance(core_data[core_register_name]['data']['reg'], str):
                                     regval = '%d' % core_data[core_register_name]['data']['reg']
                                 else:
                                     regval = core_data[core_register_name]['data']['reg']
                             else:
                                 regval = 'n/a'
-                            scroller.add_line(regval.rjust(pos_increment), start_pos, scroller.get_current_line() - 1) # all on the same line
+                            # all on the same line
+                            scroller.add_line(regval.rjust(pos_increment), start_pos, scroller.get_current_line() - 1)
                             start_pos += pos_increment
             scroller.draw_screen()
             last_refresh = time.time()

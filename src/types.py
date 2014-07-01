@@ -2,6 +2,8 @@
 TO_PROCESSOR = 1
 FROM_PROCESSOR = 0
 BIDIRECTIONAL = 2
+
+
 def direction_string(direction):
     if direction == TO_PROCESSOR:
         return 'TO_PROCESSOR' 
@@ -11,6 +13,8 @@ def direction_string(direction):
         return 'BIDIRECTIONAL'
     else:
         raise RuntimeError('Unknown direction')
+
+
 def direction_from_string(dirstr):
     if dirstr == 'To Processor':
         return TO_PROCESSOR 

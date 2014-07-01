@@ -1,7 +1,8 @@
 # pylint: disable-msg=C0301
 # pylint: disable-msg=E1101
 """
-Playing with ncurses in Python to scroll up and down, left and right, through a list of data that is periodically refreshed.
+Playing with ncurses in Python to scroll up and down, left and right, through a list of data
+that is periodically refreshed.
 
 Revs:
 2010-12-11  JRM Added concat for status line to prevent bailing on small terminals.
@@ -11,12 +12,14 @@ Revs:
 
 import curses
 
+
 def screen_teardown():
-    '''Restore sensible options to the terminal upon exit
-    '''
+    """Restore sensible options to the terminal upon exit
+    """
     curses.nocbreak()
     curses.echo()
     curses.endwin()
+
 
 class Screenline(object):
     def __init__(self, data, xpos=-1, ypos=-1, absolute=False, attributes=curses.A_NORMAL):
@@ -29,12 +32,13 @@ class Screenline(object):
             attributes = [attributes]
         self.line_attributes = attributes
 
+
 class Scroll(object):
-    '''Scrollable ncurses screen.
-    '''
+    """Scrollable ncurses screen.
+    """
     def __init__(self, debug=False):
-        '''Constructor
-        '''
+        """Constructor
+        """
         self._instruction_string = ''
         self._offset_y = 0
         self._offset_x = 0
@@ -50,20 +54,21 @@ class Scroll(object):
 
     # set up the screen
     def screen_setup(self):
-        '''Set up a curses screen object and associated options
-        '''
+        """Set up a curses screen object and associated options
+        """
         self._screen = curses.initscr()
         self._screen.keypad(1)
         self._screen.nodelay(1)
         curses.noecho()
         curses.cbreak()
-        self._ymax = curses.LINES - 1
-        self._xmax = curses.COLS
+        height, width = self._screen.getmaxyx()
+        self._ymax = height - 1
+        self._xmax = width
 
     def on_keypress(self):
-        '''
+        """
         Handle key presses.
-        '''
+        """
         key = self._screen.getch()
         if key > 0:
             if key == 259:
@@ -77,13 +82,13 @@ class Scroll(object):
             elif chr(key) == 'q':
                 return [-1, 'q']
             elif chr(key) == 'u':
-                self._offset_y -= curses.LINES
+                self._offset_y -= self._ymax + 1
             elif chr(key) == 'd':
-                self._offset_y += curses.LINES
+                self._offset_y += self._ymax + 1
             elif chr(key) == 'l':
-                self._offset_x += curses.COLS
+                self._offset_x += self._xmax
             elif chr(key) == 'r':
-                self._offset_x -= curses.COLS
+                self._offset_x -= self._xmax
             elif chr(key) == 'h':
                 self._offset_x = 0
                 self._offset_y = 0
@@ -96,13 +101,13 @@ class Scroll(object):
             return [0, '_']
 
     def clear_screen(self):
-        '''Clear the ncurses screen.
-        '''
+        """Clear the ncurses screen.
+        """
         self._screen.clear()
 
     def add_line(self, new_line, xpos=-1, ypos=-1, absolute=False, attributes=curses.A_NORMAL):
-        '''Add a text line to the screen buffer.
-        '''
+        """Add a text line to the screen buffer.
+        """
         if not isinstance(new_line, str):
             raise TypeError('new_line must be a string!')
         yposition = ypos
@@ -112,18 +117,19 @@ class Scroll(object):
         self._sbuffer.append(Screenline(new_line, xpos, yposition, absolute, attributes))
 
     def get_current_line(self):
-        '''Return the current y position of the internal screen buffer.
-        '''
+        """Return the current y position of the internal screen buffer.
+        """
         return self._curr_y
+
     def set_current_line(self, linenum):
-        '''Set the current y position of the internal screen buffer.
-        '''
+        """Set the current y position of the internal screen buffer.
+        """
         self._curr_y = linenum
 
     def _load_buffer_from_list(self, screendata):
-        '''Load the internal screen buffer from a given mixed list of
+        """Load the internal screen buffer from a given mixed list of
         strings and Screenlines.
-        '''
+        """
         if not isinstance(screendata, list):
             raise TypeError('Provided screen data must be a list!')
         self._sbuffer = []
@@ -133,8 +139,8 @@ class Scroll(object):
             self._sbuffer.append(line)
 
     def _sbuffer_y_max(self):
-        '''Work out how many lines the sbuffer needs.
-        '''
+        """Work out how many lines the sbuffer needs.
+        """
         maxy = 0
         for sline in self._sbuffer:
             if sline.ypos == -1:
@@ -146,7 +152,7 @@ class Scroll(object):
     def _calculate_screen_pos(self, sline, yposition):
         if sline.absolute:
             strs = 0
-            stre = curses.COLS
+            stre = self._xmax
             strx = sline.xpos
             stry = sline.ypos
         else:
@@ -157,28 +163,28 @@ class Scroll(object):
             else:
                 xpos = stringx
                 strs = 0
-            stre = strs + curses.COLS
+            stre = strs + self._xmax
             stry = sline.ypos
             if stry == -1:
                 stry = yposition
                 yposition += 1
             strx = xpos
             stry -= self._offset_y
-        return (strs, stre, strx, stry, yposition)
+        return strs, stre, strx, stry, yposition
 
     def draw_screen(self, data=None):
-        '''Draw the screen using the provided data
+        """Draw the screen using the provided data
         TODO: ylimits, xlimits, proper line counts in the status
-        '''
+        """
         self._screen.clear()
-        if data != None:
+        if data is not None:
             self._load_buffer_from_list(data)
         num_lines_total = self._sbuffer_y_max()
         yposition = 0
         top_line = 0
         for sline in self._sbuffer:
             (strs, stre, strx, stry, yposition) = self._calculate_screen_pos(sline, yposition)
-            drawstring = sline.data[strs : stre]
+            drawstring = sline.data[strs:stre]
             if self._debugging:
                 drawstring += '_(%d,%d,[%d:%d])' % (strx, stry, strs, stre)
             try:
@@ -194,12 +200,12 @@ class Scroll(object):
                 break
         if self._debugging:
             self._screen.addstr(self._ymax - 2, 0, 'offsets(%d,%d) dims(%d,%d) sbuf_ymax(%d) xlim(%d,%d) ylim(%d,%d)' %
-                (self._offset_x, self._offset_y, curses.COLS, curses.LINES,
-                num_lines_total, self._xmin, self._xmax, self._ymin, self._ymax))
-        stat_line = 'Showing line %i to %i of %i. Column offset %i. %s Scroll with arrow keys. u, d, l, r = page up, down, left and right. h = home, q = quit.' % \
-            (top_line, yposition, num_lines_total, self._offset_x,
-             self._instruction_string)
-        self._screen.addstr(curses.LINES - 1, 0, stat_line, curses.A_REVERSE)
+                                (self._offset_x, self._offset_y, self._xmax, self._ymax + 1,
+                                 num_lines_total, self._xmin, self._xmax, self._ymin, self._ymax))
+        stat_line = 'Showing line %i to %i of %i. Column offset %i. %s Scroll with arrow keys. \
+        u, d, l, r = page up, down, left and right. h = home, q = quit.' %\
+                    (top_line, yposition, num_lines_total, self._offset_x, self._instruction_string)
+        self._screen.addstr(self._ymax, 0, stat_line, curses.A_REVERSE)
         self._screen.refresh()
 
     def clear_buffer(self):
@@ -229,12 +235,14 @@ class Scroll(object):
     # set and get the instruction string at the bottom
     def get_instruction_string(self):
         return self._instruction_string
+
     def set_instruction_string(self, new_string):
         self._instruction_string = new_string
 
     def draw_string(self, new_string, **kwargs):
-        '''Draw a new line to the screen, takes an argument as to whether the screen should be immediately refreshed or not
-        '''
+        """Draw a new line to the screen, takes an argument as to whether the screen should be
+        immediately refreshed or not
+        """
         raise NotImplementedError
         try:
             refresh = kwargs.pop('refresh')

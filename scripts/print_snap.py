@@ -11,7 +11,7 @@ Created on Fri Jan  3 10:40:53 2014
 """
 import argparse
 
-from corr2.katcp_client_fpga import KatcpClientFpga
+from casperfpga import KatcpClientFpga
 
 parser = argparse.ArgumentParser(description='Print any snapblock(s) on a FPGA.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -56,13 +56,14 @@ if args.listsnaps:
     numsnaps = len(snapshots)
     print 'Found %i snapshot%s:' % (numsnaps, '' if numsnaps == 1 else 's')
     for snap in snapshots:
-        print '\t', snap.name, '-', snap.length, '-', snap._fields.keys()
+        print '\t', snap.name, '-', snap.length, '-', snap.fields_string_get()
     fpga.disconnect()
     import sys
     sys.exit(0)
 
 # read and print the snap block
-fpga.device_by_name(args.snap).print_snap(limit_lines=args.numrows, man_valid=args.manvalid, man_trig=args.mantrig, circular_capture=args.circcap)
+fpga.device_by_name(args.snap).print_snap(limit_lines=args.numrows, man_valid=args.manvalid, man_trig=args.mantrig,
+                                          circular_capture=args.circcap)
 
 fpga.disconnect()
 # end
