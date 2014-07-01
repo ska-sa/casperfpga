@@ -13,7 +13,6 @@ from numpy import int32 as numpy_signed, uint32 as numpy_unsigned
 LOGGER = logging.getLogger(__name__)
 
 import bitfield
-from misc import log_runtime_error
 
 
 def bin2fp(bits, mantissa=8, exponent=7, signed=False):
@@ -27,7 +26,7 @@ def bin2fp(bits, mantissa=8, exponent=7, signed=False):
             return float(bits) / (2 ** exponent)
 
     if (mantissa > 32) or (exponent >= mantissa):
-        log_runtime_error(LOGGER, 'Unsupported fixed format: %i.%i' % (mantissa,
+        raise TypeError('Unsupported fixed format: %i.%i' % (mantissa,
                                                                        exponent))
     shift = 32 - mantissa
     bits <<= shift
@@ -76,7 +75,7 @@ class Memory(bitfield.Bitfield):
         """Process raw data according to this memory's bitfield setup.
         """
         if not(isinstance(rawdata, str) or isinstance(rawdata, buffer)):
-            log_runtime_error(LOGGER, 'self.read_raw returning incorrect datatype. Must be str or buffer.')
+            raise TypeError('self.read_raw returning incorrect datatype. Must be str or buffer.')
         #large_unsigned_detected = False
         repeater = construct.GreedyRange(self.bitstruct)
         parsed = repeater.parse(rawdata)
@@ -99,7 +98,7 @@ class Memory(bitfield.Bitfield):
                 elif field.numtype == 2:
                     val = int(data[field.name])
                 else:
-                    log_runtime_error(LOGGER, 'Cannot process unknown field numtype: %s' % field.numtype)
+                    raise TypeError('Cannot process unknown field numtype: %s' % field.numtype)
                 if val is not None:
                     processed[field.name].append(val)
                 else:

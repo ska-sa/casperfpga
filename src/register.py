@@ -10,7 +10,6 @@ import time
 
 from memory import Memory
 import bitfield
-from misc import log_runtime_error
 
 
 class Register(Memory):
@@ -90,7 +89,7 @@ class Register(Memory):
         changes = False
         for k in kwargs:
             if k not in current_values.keys():
-                log_runtime_error(LOGGER, 'Attempting to write field %s, doesn\'t exist.' % k)
+                raise RuntimeError('Attempting to write field %s, doesn\'t exist.' % k)
             if kwargs[k] == 'pulse':
                 LOGGER.debug('Pulsing field %s (%i -> %i)', k, current_values[k], not current_values[k])
                 pulse[k] = current_values[k]

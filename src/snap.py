@@ -2,11 +2,11 @@
 # pylint: disable-msg = C0301
 
 import logging
+import time
 LOGGER = logging.getLogger(__name__)
 
 from memory import Memory
 import bitfield
-from misc import log_runtime_error
 from register import Register
 
 
@@ -43,12 +43,14 @@ class Snap(Memory):
 
     def update_from_bitsnap(self, info):
         """Update this device with information from a bitsnap container.
+        :type self: Snap
+        :param info: device information dictionary containing Simulink block information
         """
         self.block_info = info
         if self.width != int(info['snap_data_width']):
-            log_runtime_error(LOGGER, 'Snap and matched bitsnap widths do not match.')
+            raise ValueError('Snap and matched bitsnap widths do not match.')
         if self.length != pow(2, int(info['snap_nsamples'])):
-            log_runtime_error(LOGGER, 'Snap and matched bitsnap lengths do not match.')
+            raise ValueError('Snap and matched bitsnap lengths do not match.')
 
         def clean_fields(fstr):
             _fstr = fstr.replace('[', '').replace(']', '').rstrip().lstrip().replace(', ', ',')
@@ -85,12 +87,12 @@ class Snap(Memory):
                     break
         if (self.control_registers['control']['register'] is None) or\
                 (self.control_registers['status']['register'] is None):
-            log_runtime_error(LOGGER, 'Critical control registers for snap %s missing.' % self.name)
+            raise RuntimeError('Critical control registers for snap %s missing.' % self.name)
         if 'value' in self.block_info.keys():
             self.block_info['snap_value'] = self.block_info['value']
         if self.block_info['snap_value'] == 'on':
             if self.control_registers['extra_value']['register'] is None:
-                log_runtime_error(LOGGER, 'snap %s extra value register specified, but not found. Problem.' % self.name)
+                raise RuntimeError('snap %s extra value register specified, but not found. Problem.' % self.name)
             extra_info = raw_device_info[self.control_registers['extra_value']['name']]
             extra_info['mode'] = 'fields of arbitrary size'
             if 'extra_names' in self.block_info.keys():
@@ -158,7 +160,6 @@ class Snap(Memory):
             self._arm(man_trig=man_trig, man_valid=man_valid, offset=offset, circular_capture=circular_capture)
         # wait
         done = False
-        import time
         start_time = time.time()
         # TODO - what would a sensible option be to check addr? the default of zero is probably not right
         addr = 0
@@ -174,13 +175,11 @@ class Snap(Memory):
             error_info = 'timeout %2.2f seconds. Addr at stop time: %i. Now: Still running :%s, addr: %i.'\
                          % (timeout, bram_dmp['length'], 'yes' if now_status else 'no', now_addr)
             if bram_dmp['length'] != now_addr:
-                log_runtime_error(LOGGER, "Snap %s error: Address still changing after %s" % (self.name, error_info))
+                raise RuntimeError("Snap %s error: Address still changing after %s" % (self.name, error_info))
             elif bram_dmp['length'] == 0:
-                log_runtime_error(LOGGER, "Snap %s error: Returned 0 bytes after %s" % (self.name, error_info))
+                raise RuntimeError("Snap %s error: Returned 0 bytes after %s" % (self.name, error_info))
             else:
-                log_runtime_error(LOGGER, "Snap %s error: %s" % (self.name, error_info))
-            bram_dmp['length'] = 0
-            bram_dmp['offset'] = 0
+                raise RuntimeError("Snap %s error: %s" % (self.name, error_info))
         if circular_capture:
             val = self.control_registers['tr_en_cnt']['register'].read_uint()
             bram_dmp['offset'] = val - bram_dmp['length']
@@ -196,7 +195,7 @@ class Snap(Memory):
         if bram_dmp['offset'] < 0:
             bram_dmp['offset'] = 0
         if bram_dmp['length'] != self.length * (self.width / 8):
-            log_runtime_error(LOGGER, '%s.read_uint() - expected %i bytes, got %i'
+            raise RuntimeError('%s.read_uint() - expected %i bytes, got %i'
                               % (self.name, self.length, bram_dmp['length'] / (self.width / 8)))
         # read the extra value
         if self.control_registers['extra_value']['register'] is not None:

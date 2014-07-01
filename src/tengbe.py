@@ -11,8 +11,6 @@ import logging
 import struct
 LOGGER = logging.getLogger(__name__)
 
-from misc import log_runtime_error
-
 
 class Mac(object):
     """A MAC address.
@@ -27,7 +25,7 @@ class Mac(object):
         elif isinstance(mac, int):
             mac_int = mac
         if (mac_str is None) and (mac_int is None):
-            log_runtime_error(LOGGER, 'Cannot make a MAC with no value.')
+            raise ValueError('Cannot make a MAC with no value.')
         elif mac_str is not None:
             self.mac_str = mac_str
             self.mac_int = str2mac(mac_str)
@@ -58,7 +56,7 @@ class IpAddress(object):
         elif isinstance(ip, int):
             ip_int = ip
         if (ip_str is None) and (ip_int is None):
-            log_runtime_error(LOGGER, 'Cannot make an IP with no value.')
+            raise ValueError('Cannot make an IP with no value.')
         elif ip_str is not None:
             self.ip_str = ip_str
             self.ip_int = str2ip(ip_str)
@@ -151,12 +149,12 @@ class TenGbe(object):
             if fabric_mac.find('hex2dec') != -1:
                 fabric_mac = fabric_mac.replace('hex2dec(\'', '').replace('\')', '')
                 info['fab_mac'] = fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' + fabric_mac[4:6] + ':' +\
-                                  fabric_mac[6:8] + ':' + fabric_mac[8:10] + ':' + fabric_mac[10:]
+                    fabric_mac[6:8] + ':' + fabric_mac[8:10] + ':' + fabric_mac[10:]
             mac = info['fab_mac']
             ip_address = info['fab_ip']
             port = info['fab_udp']
         if mac is None or ip_address is None or port is None:
-            log_runtime_error(LOGGER, '10Gbe interface \'%s\' must have mac, ip and port.' % self.name)
+            raise ValueError('10Gbe interface \'%s\' must have mac, ip and port.' % self.name)
         self.setup(mac, ip_address, port)
         self.core_details = None
         self._check()
@@ -198,10 +196,7 @@ class TenGbe(object):
     def _check(self):
         """Does this device exist on the parent?
         """
-#        try:
         self.parent.read(self.name, 1)
-#        except Exception:
-#            log_runtime_error(LOGGER, 'Cannot connect to 10Gbe interface \'%s\'' % self.name)
 
     def __str__(self):
         """String representation of this 10Gbe interface.
@@ -263,7 +258,7 @@ class TenGbe(object):
         @param self  This object.
         """
         if len(self.name) > 8:
-            log_runtime_error(LOGGER, 'Tap device identifier must be shorter than 9 characters.\
+            raise NameError('Tap device identifier must be shorter than 9 characters.\
             You specified %s for device %s.' % (self.name, self.name))
         if restart:
             self.tap_stop()
@@ -275,12 +270,11 @@ class TenGbe(object):
                                             request_args=(self.name, self.name, str(self.ip_address),
                                                           str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
-            log_runtime_error(LOGGER, "Failure starting tap driver instance for %s." % str(self))
+            raise RuntimeError('Failure starting tap driver instance for %s.' % str(self))
 
     def tap_stop(self):
         """Stop a TAP driver.
         @param self  This object.
-        @param device  String: name of the device you want to stop.
         """
         if not self.tap_running():
             return
@@ -288,7 +282,7 @@ class TenGbe(object):
         reply, _ = self.parent.katcprequest(name="tap-stop", request_timeout=-1, require_ok=True,
                                             request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
-            log_runtime_error(LOGGER, "Failure stopping tap device for %s." % str(self))
+            raise RuntimeError("Failure stopping tap device for %s." % str(self))
 
     def tap_info(self):
         """Get info on the tap instance running on this interface.
@@ -343,12 +337,13 @@ class TenGbe(object):
         #mask = 255*(2 ** 24) + 255*(2 ** 16) + 255*(2 ** 8) + (255-group_size)
         #self.parent.write_int(self.name, str2ip(ip_str), offset=12)
         #self.parent.write_int(self.name, mask, offset=13)
-        mcast_group_string = ip_str + '+' + str(group_size)
+
+        # mcast_group_string = ip_str + '+' + str(group_size)
         mcast_group_string = ip_str
         try:
             reply, _ = self.parent.katcprequest("tap-multicast-add", -1, True,
                                                 request_args=(self.name, 'recv', mcast_group_string, ))
-        except Exception:
+        except:
             raise RuntimeError("tap-multicast-add does not seem to be supported on %s" % self.parent.host)
         if reply.arguments[0] == 'ok':
             return
@@ -452,7 +447,7 @@ class TenGbe(object):
 
     def get_arp_details(self, port_dump=None):
         """Get ARP details from this interface.
-        @param port_dump list: A list of raw bytes from interface memory.
+        @param port_dump: list - A list of raw bytes from interface memory.
         """
         if port_dump is None:
             port_dump = list(struct.unpack('>16384B', self.parent.read(self.name, 16384)))

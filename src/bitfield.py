@@ -1,8 +1,6 @@
 import logging
 LOGGER = logging.getLogger(__name__)
 
-from misc import log_runtime_error
-
 import construct
 
 
@@ -28,9 +26,9 @@ class Bitfield(object):
         """Add a dictionary of Fields to this bitfield.
         """
         if not isinstance(fields, dict):
-            log_runtime_error(LOGGER, 'fields should be a dictionary of Field objects.')
+            raise TypeError('fields should be a dictionary of Field objects.')
         if len(fields) == 0:
-            log_runtime_error(LOGGER, 'Empty dictionary is not so useful?')
+            raise ValueError('Empty dictionary is not so useful?')
         for newfield in fields.itervalues():
             self.field_add(newfield)
 
@@ -38,7 +36,7 @@ class Bitfield(object):
         """Add a Field to this bitfield.
         """
         if not isinstance(newfield, Field):
-            log_runtime_error(LOGGER, 'Expecting Field object.')
+            raise TypeError('Expecting Field object.')
         # add it at the end of the current fields
         if auto_offset:
             width = 0
@@ -106,7 +104,7 @@ class Field(object):
         @param lsb_offset  The offset in the memory field, in bits - -1 means it hasn't been set yet.
         """
         if not isinstance(numtype, int):
-            log_runtime_error(LOGGER, 'Type must be an integer.')
+            raise TypeError('Type must be an integer.')
         self.name = name
         self.numtype = numtype
         self.width = width
