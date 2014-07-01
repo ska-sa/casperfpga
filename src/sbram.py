@@ -13,11 +13,6 @@ class Sbram(memory.Memory):
         self.options = info
         LOGGER.info('New SBRAM block - %s', self.__str__())
 
-    def post_create_update(self, raw_device_info):
-        """Update the device with information not available at creation.
-        """
-        return
-
     def read_raw(self, **kwargs):
         """Read raw data from memory.
         """

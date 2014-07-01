@@ -59,11 +59,6 @@ class Qdr(object):
                                                 'show_format': 'off'})
         self.memory = self.qdr_number + '_memory'
 
-    def post_create_update(self, raw_device_info):
-        """Update the QDR using device info from Simulink.
-        """
-        return
-
     def reset(self):
         """Reset the QDR controller by toggling the lsb of the control register.
         Sets all taps to zero (all IO delays reset).

@@ -1,5 +1,3 @@
-# pylint: disable-msg=C0103
-# pylint: disable-msg=C0301
 """
 Created on Feb 28, 2013
 
@@ -21,13 +19,10 @@ import katadc
 import tengbe
 import memory
 import qdr
-import host
 import async_requester
 
-from misc import log_runtime_error, log_not_implemented_error, log_io_error, AttributeContainer
-
-# if __name__ == '__main__':
-#     print 'Hello World'
+from misc import log_runtime_error, log_not_implemented_error, log_io_error
+from attribute_container import AttributeContainer
 
 
 def _create_meta_dictionary(metalist):
@@ -95,7 +90,7 @@ def sendfile(filename, targethost, port, result_queue):
     return
 
 
-class KatcpClientFpga(host.Host, async_requester.AsyncRequester, katcp.CallbackClient):
+class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
     """
     A FPGA host board that has a KATCP server running on it.
     """
@@ -104,11 +99,11 @@ class KatcpClientFpga(host.Host, async_requester.AsyncRequester, katcp.CallbackC
         """
         if (not isinstance(host_device, str)) or (not isinstance(katcp_port, int)):
             log_runtime_error(LOGGER, 'host must be a string, katcp_port must be an int')
-        host.Host.__init__(self, host_device, katcp_port)
+        self.host = host_device
+        self.katcp_port = katcp_port
         async_requester.AsyncRequester.__init__(self, host_device, self.callback_request, max_requests=100)
         katcp.CallbackClient.__init__(self, host_device, katcp_port, tb_limit=20, timeout=timeout, logger=LOGGER,
                                       auto_reconnect=True)
-
         self.devices_known = {'register': {'tag': 'xps:sw_reg',
                                            'class': register.Register,
                                            'attr_container': 'registers'},
@@ -258,6 +253,7 @@ class KatcpClientFpga(host.Host, async_requester.AsyncRequester, katcp.CallbackC
            @todo  Implement or remove.
            @param self  This object.
            """
+        _, informs = self.katcprequest(name="listcmd", request_timeout=self._timeout)
         log_not_implemented_error(LOGGER, "LISTCMD not implemented by client.")
 
     def deprogram(self):
@@ -834,8 +830,11 @@ class KatcpClientFpga(host.Host, async_requester.AsyncRequester, katcp.CallbackC
                 log_runtime_error(LOGGER, 'Device %s already exists.' % dev_name)
             new_object = None
             for known_device in self.devices_known.values():
+                known_device_class = known_device['class']
+                if not callable(known_device_class):
+                    raise TypeError('%s is not a callable Memory class!' % known_device_class)
                 if (dev_info['tag'] == known_device['tag']) and (known_device['class'] is not None):
-                    new_object = known_device['class'](parent=self, name=dev_name, info=dev_info)
+                    new_object = known_device_class(parent=self, name=dev_name, info=dev_info)
             if new_object is None:
                 LOGGER.info('Unhandled device %s of type %s', dev_name, dev_info['tag'])
             else:
@@ -843,7 +842,13 @@ class KatcpClientFpga(host.Host, async_requester.AsyncRequester, katcp.CallbackC
         # allow devices to update themselves with full device info
         for name, container in self.devices.items():
             device = getattr(getattr(self, container), name)
-            device.post_create_update(all_device_info)
+            # the device may not have an update function
+            try:
+                update_func = device.post_create_update
+            except AttributeError:
+                pass
+            else:
+                update_func(all_device_info)
 
     def device_by_name(self, device_name):
         """Get a device object using its name.

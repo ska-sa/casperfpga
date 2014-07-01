@@ -7,13 +7,35 @@ busses. Normally via KATCP.
 """
 
 import logging
+import construct
+from numpy import int32 as numpy_signed, uint32 as numpy_unsigned
 
 LOGGER = logging.getLogger(__name__)
 
-import construct
-
 import bitfield
-from misc import log_runtime_error, bin2fp
+from misc import log_runtime_error
+
+
+def bin2fp(bits, mantissa=8, exponent=7, signed=False):
+    """Convert a raw fixed-point number to a float based on a given
+    mantissa and exponent.
+    """
+    if not signed:
+        if exponent == 0:
+            return long(bits)
+        else:
+            return float(bits) / (2 ** exponent)
+
+    if (mantissa > 32) or (exponent >= mantissa):
+        log_runtime_error(LOGGER, 'Unsupported fixed format: %i.%i' % (mantissa,
+                                                                       exponent))
+    shift = 32 - mantissa
+    bits <<= shift
+    # mantissa = mantissa + shift
+    exponent += shift
+    if signed:
+        return float(numpy_signed(bits)) / (2 ** exponent)
+    return float(numpy_unsigned(bits)) / (2 ** exponent)
 
 
 class Memory(bitfield.Bitfield):

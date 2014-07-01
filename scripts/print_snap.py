@@ -13,6 +13,9 @@ import argparse
 
 from casperfpga import KatcpClientFpga
 
+# if __name__ == '__main__':
+#     print 'mainfunc'
+
 parser = argparse.ArgumentParser(description='Print any snapblock(s) on a FPGA.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(dest='hostname', type=str, action='store',

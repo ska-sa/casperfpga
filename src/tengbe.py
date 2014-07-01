@@ -130,14 +130,14 @@ class TenGbe(object):
     """
     def __init__(self, parent, name, mac=None, ip_address=None, port=None, info=None):
         """
-        @param parent object: The KATCP client device that owns this ten gbe
+        @param parent: object - The KATCP client device that owns this ten gbe
         interface.
-        @param name string: Name of the tengbe device in Simulink.
-        @param mac string: A xx:xx:xx:xx:xx string representation of the MAC
+        @param name: string - Name of the tengbe device in Simulink.
+        @param mac: string - A xx:xx:xx:xx:xx string representation of the MAC
         address for this interface.
-        @param ip_address string: a xxx.xxx.xxx.xxx string representation of
+        @param ip_address: string - a xxx.xxx.xxx.xxx string representation of
         the IP address for this interface.
-        @param port integer: the port this interface should use.
+        @param port: integer - the port this interface should use.
         """
         self.parent = parent
         self.name = name

@@ -111,11 +111,6 @@ class Register(Memory):
         if len(pulse) > 0:
             self.write(**pulse)
 
-    def post_create_update(self, raw_device_info):
-        """Update the Register with information not available at creation.
-        """
-        return
-
     def process_info(self, info):
         """Set this Register's extra information.
         """

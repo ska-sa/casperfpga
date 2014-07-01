@@ -14,6 +14,7 @@ setup(
     install_requires=[
         'katcp',
         'construct',
+        'numpy',
     ],
     provides=['casperfpga'],
     packages=['casperfpga'],  # , 'casperfpga.test'],
