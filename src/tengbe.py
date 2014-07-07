@@ -157,9 +157,10 @@ class TenGbe(object):
             raise ValueError('10Gbe interface \'%s\' must have mac, ip and port.' % self.name)
         self.setup(mac, ip_address, port)
         self.core_details = None
-        self._check()
         self.snaps = {'tx': None, 'rx': None}
         self.registers = {'tx': [], 'rx': []}
+        if self.parent.is_connected():
+            self._check()
 
     def setup(self, mac, ipaddress, port):
         self.mac = Mac(mac)
@@ -170,7 +171,6 @@ class TenGbe(object):
         """Update the device with information not available at creation.
         """
         self.registers = {'tx': [], 'rx': []}
-        #fpga_registers = self.parent.device_names_by_container('registers')
         for register in self.parent.registers:
             if register.name.find(self.name + '_') == 0:
                 name = register.name.replace(self.name + '_', '')
@@ -182,7 +182,6 @@ class TenGbe(object):
                     if not (name.find('txs_') == 0 or name.find('rxs_') == 0):
                         LOGGER.warn('Funny register name %s under tengbe block %s', register.name, self.name)
         self.snaps = {'tx': None, 'rx': None}
-        #fpga_snaps = self.parent.device_names_by_container('snapshots')
         for snapshot in self.parent.snapshots:
             if snapshot.name.find(self.name + '_') == 0:
                 name = snapshot.name.replace(self.name + '_', '')
@@ -204,19 +203,17 @@ class TenGbe(object):
         return '%s: MAC(%s) IP(%s) Port(%s)' % (self.name, str(self.mac), str(self.ip_address), str(self.port))
 
     def read_txsnap(self):
-        snap = self.parent.device_by_name(self.name + '_txs_ss')
-        return snap.read(timeout=10)['data']
+        return self.parent.memory_devices[self.name + '_txs_ss'].read(timeout=10)['data']
 
     def read_rxsnap(self):
-        snap = self.parent.device_by_name(self.name + '_rxs_ss')
-        return snap.read(timeout=10)['data']
-    
+        return self.parent.memory_devices[self.name + '_rxs_ss'].read(timeout=10)['data']
+
     def read_rx_counters(self):
         """Read all rx counters in gbe block
         """
         results = {}
         for reg in self.registers['rx']:
-            results[reg] = self.parent.device_by_name(reg).read()
+            results[reg] = self.parent.memory_devices[reg].read()
         return results
 
     def read_tx_counters(self):
@@ -224,7 +221,7 @@ class TenGbe(object):
         """
         results = {}
         for reg in self.registers['tx']:
-            results[reg] = self.parent.device_by_name(reg).read()
+            results[reg] = self.parent.memory_devices[reg].read()
         return results
 
     def read_counters(self):
@@ -233,7 +230,7 @@ class TenGbe(object):
         results = {}
         for direction in ['tx', 'rx']:
             for reg in self.registers[direction]:
-                results[reg] = self.parent.device_by_name(reg).read()
+                results[reg] = self.parent.memory_devices[reg].read()
         return results
 
     #def read_raw(self,  **kwargs):

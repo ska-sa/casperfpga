@@ -23,6 +23,33 @@ import async_requester
 
 from attribute_container import AttributeContainer
 
+# known CASPER memory-accessible  devices and their associated classes and containers
+casper_memory_devices = {
+    'xps:sw_reg':       {'class': register.Register,    'container': 'registers',   'coreinfo': True},
+    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots',   'coreinfo': False},
+    'xps:bram':         {'class': sbram.Sbram,          'container': 'sbrams',      'coreinfo': True},
+    'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes',     'coreinfo': True},
+    'xps:katadc':       {'class': katadc.KatAdc,        'container': 'katadcs',     'coreinfo': True},
+    'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs',        'coreinfo': False},}
+
+
+# other devices - blocks that aren't memory devices, but about which we'd like to know
+# tagged in the simulink diagram
+casper_other_devices = {
+    'casper:bitsnap':               'bitsnap',
+    'casper:fft_biplex_real_4x':    'fft_biplex_real_4x',
+    'casper:fft_biplex_real_2x':    'fft_biplex_real_2x',
+    'casper:fft':                   'fft',
+    'casper:fft_wideband_real':     'fft_wideband_real',
+    'casper:pfb_fir':               'pfb_fir',
+    'casper:pfb_fir_async':         'pfb_fir_async',
+    'casper:pfb_fir_generic':       'pfb_fir_generic',
+    'casper:pfb_fir_real':          'pfb_fir_real',
+    'casper:dec_fir':               'dec_fir',
+    'casper:xeng':                  'xeng',
+    'casper:spead_pack':            'spead_pack',
+    'casper:spead_unpack':          'spead_unpack',}
+
 
 def _create_meta_dictionary(metalist):
     """Build a meta information dictionary from a provided list.
@@ -32,32 +59,44 @@ def _create_meta_dictionary(metalist):
         if name not in meta_items.keys():
             meta_items[name] = {}
         try:
-            meta_items[name]['tag']
+            if meta_items[name]['tag'] != tag:
+                raise ValueError('Different tags - %s, %s - for the same item %s'
+                                  % (meta_items[name]['tag'], tag, name))
         except KeyError:
             meta_items[name]['tag'] = tag
-        if meta_items[name]['tag'] != tag:
-            raise ValueError('Different tags - %s, %s - for the same item %s'
-                              % (meta_items[name]['tag'], tag, name))
         meta_items[name][param] = value
     return meta_items
 
 
-def _read_system_info_from_file(filename):
-    """Katcp request for extra system information embedded in the boffile.
+def _read_system_info_from_fpg(filename):
+    """Read the meta information from the FPG file.
     """
     if filename is not None:
         fptr = open(filename, 'r')
-        lines = fptr.readlines()
-        fptr.close()
+        firstline = fptr.readline().strip().rstrip('\n')
+        if firstline != '#!/bin/kcpfpg':
+            fptr.close()
+            raise RuntimeError('%s does not look like an fpg file we can parse.' % filename)
     else:
         raise IOError('No such file %s' % filename)
+    memorylist = []
     metalist = []
-    for line in lines:
-        line = line.replace('\_', ' ')
-        name, tag, param, value = line.replace('\n', '').split('\t')
-        name = name.replace('/', '_')
-        metalist.append((name, tag, param, value))
-    return _create_meta_dictionary(metalist)
+    done = False
+    while not done:
+        line = fptr.readline().strip().rstrip('\n')
+        if line.lstrip().rstrip() == '?quit':
+            done = True
+        elif line.startswith('?meta'):
+            line = line.replace('\_', ' ').replace('?meta ', '').replace('\n', '').lstrip().rstrip()
+            name, tag, param, value = line.split('\t')
+            name = name.replace('/', '_')
+            metalist.append((name, tag, param, value))
+        elif line.startswith('?register'):
+            register = line.replace('\_', ' ').replace('?register ', '').replace('\n', '').lstrip().rstrip()
+            name, address, size = register.split(' ')
+            memorylist.append(name)
+    fptr.close()
+    return _create_meta_dictionary(metalist), memorylist
 
 
 def dummy_inform_handler(_):
@@ -65,7 +104,7 @@ def dummy_inform_handler(_):
     return
 
 
-def sendfile(filename, targethost, port, result_queue):
+def _sendfile(filename, targethost, port, result_queue):
     """Send a file to a host using sockets. Place the result of the
     action in a Queue.Queue
     """
@@ -103,28 +142,6 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         async_requester.AsyncRequester.__init__(self, host_device, self.callback_request, max_requests=100)
         katcp.CallbackClient.__init__(self, host_device, katcp_port, tb_limit=20, timeout=timeout, logger=LOGGER,
                                       auto_reconnect=True)
-        self.devices_known = {'register': {'tag': 'xps:sw_reg',
-                                           'class': register.Register,
-                                           'attr_container': 'registers'},
-                              'snapshot': {'tag': 'casper:snapshot',
-                                           'class': snap.Snap,
-                                           'attr_container': 'snapshots'},
-                              'bitsnap': {'tag': 'casper:bitsnap',
-                                          'class': None,
-                                          'attr_container': None},
-                              'sbram': {'tag': 'xps:bram',
-                                        'class': sbram.Sbram,
-                                        'attr_container': 'sbrams'},
-                              'tengbe': {'tag': 'xps:tengbe_v2',
-                                         'class': tengbe.TenGbe,
-                                         'attr_container': 'tengbes'},
-                              'katadc': {'tag': 'xps:katadc',
-                                         'class': katadc.KatAdc,
-                                         'attr_container': 'katadcs'},
-                              'qdr': {'tag': 'xps:qdr',
-                                      'class': qdr.Qdr,
-                                      'attr_container': 'qdrs'}}
-
         self.__reset_devices()
         self.system_info = {'last_programmed_bof': '', 'system_name': None, 'target_bof': ''}
         self.unhandled_inform_handler = dummy_inform_handler
@@ -134,14 +151,20 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         LOGGER.info('%s:%s created%s.', host_device, katcp_port, ' & daemon started' if connect else '')
 
     def __reset_devices(self):
-        self.devices = {}
+        """Reset information about devices this FPGA knows about.
+        """
+        # the memory devices
+        self.memory_devices = {}
+        self.other_devices = {}
+
+        # containers
         self.registers = AttributeContainer()
         self.snapshots = AttributeContainer()
         self.sbrams = AttributeContainer()
         self.tengbes = AttributeContainer()
         self.katadcs = AttributeContainer()
         self.qdrs = AttributeContainer()
-        
+
     def __reset_system_info(self):
         """Clear out system_info when programming etc
         """
@@ -167,15 +190,15 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
 
 #    def __getattribute__(self, name):
 #        if name == 'registers':
-#            return {self.devices[r].name: self.devices[r] for r in self.devices_known['register']['items']}
+#            return {self.memory_devices[r].name: self.memory_devices[r] for r in self.memory_devices_memory['register']['items']}
 #        elif name == 'snapshots':
-#            return {self.devices[r].name: self.devices[r] for r in self.devices_known['snapshot']['items']}
+#            return {self.memory_devices[r].name: self.memory_devices[r] for r in self.memory_devices_memory['snapshot']['items']}
 #        elif name == 'sbrams':
-#            return {self.devices[r].name: self.devices[r] for r in self.devices_known['sbram']['items']}
+#            return {self.memory_devices[r].name: self.memory_devices[r] for r in self.memory_devices_memory['sbram']['items']}
 #        elif name == 'tengbes':
-#            return {self.devices[r].name: self.devices[r] for r in self.devices_known['tengbe']['items']}
+#            return {self.memory_devices[r].name: self.memory_devices[r] for r in self.memory_devices_memory['tengbe']['items']}
 #        elif name == 'qdrs':
-#            return {self.devices[r].name: self.devices[r] for r in self.devices_known['qdr']['items']}
+#            return {self.memory_devices[r].name: self.memory_devices[r] for r in self.memory_devices_memory['qdr']['items']}
 #        return object.__getattribute__(self, name)
 
     def connect(self, timeout=1):
@@ -396,7 +419,7 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         request_thread = threading.Thread(target=makerequest, args=(request_queue, ))
         # upload thread
         upload_queue = Queue.Queue()
-        upload_thread = threading.Thread(target=sendfile, args=(binary_file, self.host, port, upload_queue, ))
+        upload_thread = threading.Thread(target=_sendfile, args=(binary_file, self.host, port, upload_queue, ))
         # start the threads and join
         old_timeout = self._timeout
         self._timeout = timeout
@@ -464,7 +487,7 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         request_thread = threading.Thread(target=makerequest, args=(request_queue, ))
         # upload thread
         upload_queue = Queue.Queue()
-        upload_thread = threading.Thread(target=sendfile, args=(bof_file, self.host, port, upload_queue, ))
+        upload_thread = threading.Thread(target=_sendfile, args=(bof_file, self.host, port, upload_queue, ))
         # start the threads and join
         old_timeout = self._timeout
         self._timeout = timeout
@@ -516,7 +539,7 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
            @param offset  Integer: offset to read data from (in bytes).
            @return  Binary string: data read.
         """
-        #Modified 2010-01-07 to use bulkread.
+        # Modified 2010-01-07 to use bulkread.
         data = []
         n_reads = 0
         last_dram_page = -1
@@ -740,7 +763,6 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         else:
             reply, informs = self.katcprequest(name='meta', request_timeout=self._timeout, require_ok=True,
                                                request_args=(device, ))
-    
         if reply.arguments[0] != 'ok':
             raise RuntimeError('Could not read meta information from %s' % self.host)
         metalist = []
@@ -759,101 +781,97 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         """
         if (not self.is_running()) and (filename is None):
             raise RuntimeError('This can only be run on a running device when no file is given.')
+        coreinfo_devices = None
         if filename is not None:
-            device_info = _read_system_info_from_file(filename)
+            device_info, coreinfo_devices = _read_system_info_from_fpg(filename)
         else:
             device_info = self._read_system_info()
+            coreinfo_devices = self.listdev()
         try:
             more_sys_info = device_info['77777']
             self.system_info.update(more_sys_info)
         except KeyError:
             LOGGER.warn('No sys info key in design info!')
-
+        # reset current devices and create new ones from the new design information
         self.__reset_devices()
-        self.__create_devices(device_info)
-
-        # match devices to actual memory bus devices
-        if self.is_connected():
-            listdev = self.listdev()
-            for dev_name, dev in self.devices.items():
-                if isinstance(dev, memory.Memory) and not isinstance(dev, snap.Snap):
-                    try:
-                        listdev.index(dev_name)
-                    except ValueError:
-                        raise NameError('Specified Memory device %s could not be found on parent %s.'
-                                          % (dev_name, self.host))
-        else:
-            raise RuntimeError('This cannot be run on an unconnected device.')
+        self.__create_memory_devices(device_info, coreinfo_devices)
+        self.__create_other_devices(device_info)
 
     def remove_device(self, device_name):
-        """
-        Remove a specified device from the list of devices present on this design.
+        """Remove a specified device from the list of devices present on this design.
         """
         try:
-            self.devices.pop(device_name)
+            self.memory_devices.pop(device_name)
         except KeyError:
             raise NameError('No such device to remove - %s.' % device_name)
 
-    def add_device(self, new_device_obj):
+    def __create_memory_devices(self, device_info, coreinfo):
+        """Set up memory devices on this FPGA from a list of design information, from XML or from KATCP.
         """
-        Add an object to the device list, throwing an exception if it's not an object known to this version.
-        """
-        assert not new_device_obj is None, 'Calling add_device on None type?'
-        if new_device_obj.name in self.devices.keys():
-            raise NameError('Device %s of type %s already exists in devices list.' % (new_device_obj.name,
-                                                                                                type(new_device_obj)))
-        categorised = False
-        for known_device in self.devices_known.values():
-            if known_device['class'] is not None:
-                if isinstance(new_device_obj, known_device['class']):
-                    self.devices[new_device_obj.name] = known_device['attr_container']
-                    setattr(getattr(self, known_device['attr_container']), new_device_obj.name, new_device_obj)
-                    categorised = True
-                    break
-        if not categorised:
-            raise ValueError('Unknown device %s of type %s' % (new_device_obj.name, type(new_device_obj)))
-
-    def __create_devices(self, all_device_info):
-        """Set up devices on this FPGA from a list of design information, from XML or from KATCP.
-        """
-        for dev_name, dev_info in all_device_info.items():
-            if dev_name == '':
+        # create and add memory devices to the memory device dictionary
+        for dname, dinfo in device_info.items():
+            if dname == '':
                 raise NameError('There\'s a problem somewhere, got a blank device name?')
-            if dev_name in self.devices.keys():
-                raise NameError('Device %s already exists.' % dev_name)
-            new_object = None
-            for known_device in self.devices_known.values():
-                known_device_class = known_device['class']
-                if not callable(known_device_class):
-                    raise TypeError('%s is not a callable Memory class!' % known_device_class)
-                if (dev_info['tag'] == known_device['tag']) and (known_device['class'] is not None):
-                    new_object = known_device_class(parent=self, name=dev_name, info=dev_info)
-            if new_object is None:
-                LOGGER.info('Unhandled device %s of type %s', dev_name, dev_info['tag'])
-            else:
-                self.add_device(new_object)
-        # allow devices to update themselves with full device info
-        for name, container in self.devices.items():
-            device = getattr(getattr(self, container), name)
-            # the device may not have an update function
+            if dname in self.memory_devices.keys():
+                raise NameError('Memory device %s already exists.' % dname)
+            # get the class from the known devices, if it exists there
             try:
-                update_func = device.post_create_update
-            except AttributeError:
+                known_device_class = casper_memory_devices[dinfo['tag']]['class']
+                known_device_container = casper_memory_devices[dinfo['tag']]['container']
+            except KeyError:
                 pass
             else:
-                update_func(all_device_info)
+                if not callable(known_device_class):
+                    raise TypeError('%s is not a callable Memory class - that\'s a problem.' % known_device_class)
+                if casper_memory_devices[dinfo['tag']]['coreinfo']:
+                    try:
+                        coreinfo.index(dname)
+                    except ValueError:
+                        raise NameError('Memory device %s could not be found on parent %s\'s bus.'
+                                        % (dname, self.host))
+                new_device = known_device_class(parent=self, name=dname, info=dinfo)
+                if new_device.name in self.memory_devices.keys():
+                    raise NameError('Device called %s of type %s already exists in devices list.' %
+                                    (new_device.name, type(new_device)))
+                self.memory_devices[dname] = new_device
+                container = getattr(self, known_device_container)
+                setattr(container, dname, new_device)
+                assert id(getattr(container, dname)) == id(new_device) == id(self.memory_devices[dname])
+        # allow devices to update themselves with full device info
+        for name, device in self.memory_devices.items():
+            try:
+                update_func = device.post_create_update
+            except AttributeError:  # the device may not have an update function
+                pass
+            else:
+                update_func(device_info)
 
-    def device_by_name(self, device_name):
-        """Get a device object using its name.
+    def __create_other_devices(self, device_info):
+        """Other devices information are just stored in a dictionary.
         """
-        device_container = self.devices[device_name]
-        container = getattr(self, device_container)
-        return getattr(container, device_name)
+        for dname, dinfo in device_info.items():
+            if dname == '':
+                raise NameError('There\'s a problem somewhere, got a blank device name?')
+            if dname in self.other_devices.keys():
+                raise NameError('Other device %s already exists.' % dname)
+            try:
+                known_device = casper_other_devices[dinfo['tag']]
+            except KeyError:
+                pass
+            else:
+                self.other_devices[dname] = dinfo
+
+    # def device_by_name(self, device_name):
+    #     """Get a device object using its name.
+    #     """
+    #     device_container = self.memory_devices[device_name]
+    #     container = getattr(self, device_container)
+    #     return getattr(container, device_name)
 
     def device_names_by_container(self, container_name):
         """Return a list of devices in a certain container.
         """
-        return [devname for devname, container in self.devices.iteritems() if container == container_name]
+        return [devname for devname, container in self.memory_devices.iteritems() if container == container_name]
 
     def devices_by_container(self, container):
         """Get devices using container type.
@@ -885,7 +903,7 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
 
     def is_initialised(self):
         # test if we have device information
-        return not len(self.devices) == 0
+        return not len(self.memory_devices) == 0
         #TODO hardware calibration
 
 # end

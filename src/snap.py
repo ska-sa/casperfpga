@@ -20,11 +20,11 @@ class Snap(Memory):
         self.width = int(info['data_width'])
         self.length = pow(2, int(info['nsamples']))
         self.field_add(bitfield.Field(name='data', numtype=0, width=self.width, binary_pt=0, lsb_offset=0))
-        self.control_registers = {'control': {'register': None, 'name': self.name + '_ctrl'},
-                                  'status': {'register': None, 'name': self.name + '_status'},
-                                  'trig_offset': {'register': None, 'name': self.name + '_trig_offset'},
-                                  'extra_value': {'register': None, 'name': self.name + '_val'},
-                                  'tr_en_cnt': {'register': None, 'name': self.name + '_tr_en_cnt'}}
+        self.control_registers = {'control':        {'register': None, 'name': self.name + '_ctrl'},
+                                  'status':         {'register': None, 'name': self.name + '_status'},
+                                  'trig_offset':    {'register': None, 'name': self.name + '_trig_offset'},
+                                  'extra_value':    {'register': None, 'name': self.name + '_val'},
+                                  'tr_en_cnt':      {'register': None, 'name': self.name + '_tr_en_cnt'}}
         LOGGER.info('New Snap - %s', self)
 
     def post_create_update(self, raw_device_info):
@@ -39,7 +39,7 @@ class Snap(Memory):
                         self.update_from_bitsnap(dev_info)
                         break
         # find control registers for this snap block
-        self._link_control_registers(self.parent.device_names_by_container('registers'), raw_device_info)
+        self._link_control_registers(raw_device_info)
 
     def update_from_bitsnap(self, info):
         """Update this device with information from a bitsnap container.
@@ -75,16 +75,16 @@ class Snap(Memory):
                                    binary_pt=int(field_bps[n]), lsb_offset=-1)
             self.field_add(field, auto_offset=True)
 
-    def _link_control_registers(self, available_registers, raw_device_info):
+    def _link_control_registers(self, raw_device_info):
         """Link available registers to this snapshot block's control registers.
         """
         for controlreg in self.control_registers.values():
-            for register_name in available_registers:
-                regobj = getattr(self.parent.registers, register_name)
-                assert isinstance(regobj, Register)
-                if regobj.name == controlreg['name']:
-                    controlreg['register'] = regobj
-                    break
+            try:
+                reg = self.parent.memory_devices[controlreg['name']]
+                assert isinstance(reg, Register)
+                controlreg['register'] = reg
+            except KeyError:
+                pass
         if (self.control_registers['control']['register'] is None) or\
                 (self.control_registers['status']['register'] is None):
             raise RuntimeError('Critical control registers for snap %s missing.' % self.name)
