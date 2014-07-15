@@ -13,6 +13,9 @@ class Sbram(memory.Memory):
         self.options = info
         LOGGER.info('New SBRAM block - %s', self.__str__())
 
+    def __repr__(self):
+        return '%s:%s' % (self.__class__.__name__, self.name)
+
     def read_raw(self, **kwargs):
         """Read raw data from memory.
         """

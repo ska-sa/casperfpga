@@ -206,5 +206,5 @@ class Snap(Memory):
     def __str__(self):
         return '%s: %s' % (self.name, self.block_info)
 
-#     def __repr__(self):
-#         return '[' + self.__str__() + ']'
+    def __repr__(self):
+        return '%s:%s' % (self.__class__.__name__, self.name)

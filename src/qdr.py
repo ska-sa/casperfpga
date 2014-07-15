@@ -59,6 +59,9 @@ class Qdr(object):
                                                 'show_format': 'off'})
         self.memory = self.qdr_number + '_memory'
 
+    def __repr__(self):
+        return '%s:%s' % (self.__class__.__name__, self.name)
+
     def reset(self):
         """Reset the QDR controller by toggling the lsb of the control register.
         Sets all taps to zero (all IO delays reset).

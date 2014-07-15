@@ -35,8 +35,8 @@ class Register(Memory):
             vstr += '%s(%d)' % (k, v)
         return '%s, %i, %s' % (self.name, self.width, vstr)
 
-#     def __repr__(self):
-#         return '[' + self.__str__() + ']'
+    def __repr__(self):
+        return '%s:%s' % (self.__class__.__name__, self.name)
 
     def info(self):
         """Return a string with information about this Register instance.

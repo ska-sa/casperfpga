@@ -162,6 +162,9 @@ class TenGbe(object):
         if self.parent.is_connected():
             self._check()
 
+    def __repr__(self):
+        return '%s:%s' % (self.__class__.__name__, self.name)
+
     def setup(self, mac, ipaddress, port):
         self.mac = Mac(mac)
         self.ip_address = IpAddress(ipaddress)
