@@ -25,30 +25,32 @@ from attribute_container import AttributeContainer
 
 # known CASPER memory-accessible  devices and their associated classes and containers
 casper_memory_devices = {
-    'xps:sw_reg':       {'class': register.Register,    'container': 'registers',   'coreinfo': True},
-    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots',   'coreinfo': False},
     'xps:bram':         {'class': sbram.Sbram,          'container': 'sbrams',      'coreinfo': True},
-    'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes',     'coreinfo': True},
     'xps:katadc':       {'class': katadc.KatAdc,        'container': 'katadcs',     'coreinfo': True},
-    'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs',        'coreinfo': False},}
+    'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs',        'coreinfo': False},
+    'xps:sw_reg':       {'class': register.Register,    'container': 'registers',   'coreinfo': True},
+    'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes',     'coreinfo': True},
+    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots',   'coreinfo': False},}
 
 
 # other devices - blocks that aren't memory devices, but about which we'd like to know
 # tagged in the simulink diagram
 casper_other_devices = {
     'casper:bitsnap':               'bitsnap',
-    'casper:fft_biplex_real_4x':    'fft_biplex_real_4x',
-    'casper:fft_biplex_real_2x':    'fft_biplex_real_2x',
+    'casper:dec_fir':               'dec_fir',
     'casper:fft':                   'fft',
+    'casper:fft_biplex_real_2x':    'fft_biplex_real_2x',
+    'casper:fft_biplex_real_4x':    'fft_biplex_real_4x',
     'casper:fft_wideband_real':     'fft_wideband_real',
+    'casper:info':                  'info',
     'casper:pfb_fir':               'pfb_fir',
     'casper:pfb_fir_async':         'pfb_fir_async',
     'casper:pfb_fir_generic':       'pfb_fir_generic',
     'casper:pfb_fir_real':          'pfb_fir_real',
-    'casper:dec_fir':               'dec_fir',
-    'casper:xeng':                  'xeng',
     'casper:spead_pack':            'spead_pack',
-    'casper:spead_unpack':          'spead_unpack',}
+    'casper:spead_unpack':          'spead_unpack',
+    'casper:vacc':                  'vacc',
+    'casper:xeng':                  'xeng',}
 
 
 def _create_meta_dictionary(metalist):
