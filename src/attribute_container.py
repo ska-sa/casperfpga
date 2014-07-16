@@ -9,6 +9,14 @@ class AttributeContainer(object):
         self._next_item = 0
         self._items = []
 
+    def __getitem__(self, item_to_get):
+        """
+        This means we can access the attributes of this class like a dictionary.
+        :param item_to_get: the name of the attribute we want to get
+        :return: the attribute value
+        """
+        return self.__getattribute__(item_to_get)
+
     def __setattr__(self, name, value):
         try:
             if name != '_next_item':
@@ -16,9 +24,6 @@ class AttributeContainer(object):
         except AttributeError:
             pass
         object.__setattr__(self, name, value)
-
-    def __str__(self):
-        return str(self.__dict__)
 
     def __iter__(self):
         return self
@@ -41,3 +46,9 @@ class AttributeContainer(object):
 
     def __len__(self):
         return len(self._items)
+
+    def __str__(self):
+        return str(self.__dict__)
+
+    def __repr__(self):
+        return str(self.__dict__.keys())

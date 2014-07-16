@@ -3,6 +3,7 @@ Created on Feb 28, 2013
 
 @author: paulp
 """
+from _hashlib import new
 
 import logging
 import struct
@@ -155,7 +156,11 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
     def __reset_devices(self):
         """Reset information about devices this FPGA knows about.
         """
-        # the memory devices
+        # device dictionaries:
+        # devices: all of them
+        # memory_devices: only devices on the bus
+        # other_devices: anything not on the bus
+        self.devices = {}
         self.memory_devices = {}
         self.other_devices = {}
 
@@ -519,7 +524,7 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
                 inf = uninform_queue.get(block=True, timeout=timeout)
             except Queue.Empty:
                 LOGGER.warning('No programming informs yet. Odd?')
-#                log_runtime_error(LOGGER, 'FPGA programming informs not received.')
+                raise RuntimeError('No programming informs yet.')
             if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
                 done = True
         self._timeout = old_timeout
@@ -799,14 +804,6 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         self.__create_memory_devices(device_info, coreinfo_devices)
         self.__create_other_devices(device_info)
 
-    def remove_device(self, device_name):
-        """Remove a specified device from the list of devices present on this design.
-        """
-        try:
-            self.memory_devices.pop(device_name)
-        except KeyError:
-            raise NameError('No such device to remove - %s.' % device_name)
-
     def __create_memory_devices(self, device_info, coreinfo):
         """Set up memory devices on this FPGA from a list of design information, from XML or from KATCP.
         """
@@ -835,6 +832,7 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
                 if new_device.name in self.memory_devices.keys():
                     raise NameError('Device called %s of type %s already exists in devices list.' %
                                     (new_device.name, type(new_device)))
+                self.devices[dname] = new_device
                 self.memory_devices[dname] = new_device
                 container = getattr(self, known_device_container)
                 setattr(container, dname, new_device)
@@ -857,18 +855,12 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
             if dname in self.other_devices.keys():
                 raise NameError('Other device %s already exists.' % dname)
             try:
-                known_device = casper_other_devices[dinfo['tag']]
+                casper_other_devices[dinfo['tag']]
             except KeyError:
-                pass
+                pass  # we do not know about this tag, so ignore it
             else:
+                self.devices[dname] = dinfo
                 self.other_devices[dname] = dinfo
-
-    # def device_by_name(self, device_name):
-    #     """Get a device object using its name.
-    #     """
-    #     device_container = self.memory_devices[device_name]
-    #     container = getattr(self, device_container)
-    #     return getattr(container, device_name)
 
     def device_names_by_container(self, container_name):
         """Return a list of devices in a certain container.
@@ -902,10 +894,5 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         info = {'name': host_dict['77777']['system'], 'build_time': host_dict['77777']['builddate']}
         #TODO conversion to time python understands
         return info
-
-    def is_initialised(self):
-        # test if we have device information
-        return not len(self.memory_devices) == 0
-        #TODO hardware calibration
 
 # end
