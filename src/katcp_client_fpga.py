@@ -51,7 +51,8 @@ casper_other_devices = {
     'casper:spead_pack':            'spead_pack',
     'casper:spead_unpack':          'spead_unpack',
     'casper:vacc':                  'vacc',
-    'casper:xeng':                  'xeng',}
+    'casper:xeng':                  'xeng',
+    'xps:xsg':                      'xps',}
 
 
 def _create_meta_dictionary(metalist):

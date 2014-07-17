@@ -48,7 +48,10 @@ class AttributeContainer(object):
         return len(self._items)
 
     def __str__(self):
-        return str(self.__dict__)
+        return self.__repr__()
 
     def __repr__(self):
-        return str(self.__dict__.keys())
+        keys = self.__dict__.keys()
+        keys.pop(keys.index('_next_item'))
+        keys.pop(keys.index('_items'))
+        return str(keys)
