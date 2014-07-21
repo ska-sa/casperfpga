@@ -219,8 +219,6 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
             except RuntimeError:
                 pass
             time.sleep(0.1)
-            if self.is_running():
-                self.get_system_information()
         LOGGER.info('%s: daemon started', self.host)
 
     def disconnect(self):
