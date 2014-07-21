@@ -106,13 +106,13 @@ if args.direction == 'tx':
     data_key = 'data'
     ip_key = 'ip'
     eof_key = 'eof'
-    coredata = fpga.device_by_name(args.core).read_txsnap()
+    coredata = fpga.tengbes[args.core].read_txsnap()
 else:
     key_order = ['led_up', 'led_rx', 'valid_in', 'eof_in', 'bad_frame', 'overrun', 'ip_in', 'data_in']
     data_key = 'data_in'
     ip_key = 'ip_in'
     eof_key = 'eof_in'
-    coredata = fpga.device_by_name(args.core).read_rxsnap()
+    coredata = fpga.tengbes[args.core].read_rxsnap()
 
 # read the snap block
 spead_info = {}

@@ -31,7 +31,7 @@ casper_memory_devices = {
     'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs',        'coreinfo': False},
     'xps:sw_reg':       {'class': register.Register,    'container': 'registers',   'coreinfo': True},
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes',     'coreinfo': True},
-    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots',   'coreinfo': False},}
+    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots',   'coreinfo': False}, }
 
 
 # other devices - blocks that aren't memory devices, but about which we'd like to know
@@ -52,7 +52,7 @@ casper_other_devices = {
     'casper:spead_unpack':          'spead_unpack',
     'casper:vacc':                  'vacc',
     'casper:xeng':                  'xeng',
-    'xps:xsg':                      'xps',}
+    'xps:xsg':                      'xps', }
 
 
 def _create_meta_dictionary(metalist):
@@ -64,8 +64,8 @@ def _create_meta_dictionary(metalist):
             meta_items[name] = {}
         try:
             if meta_items[name]['tag'] != tag:
-                raise ValueError('Different tags - %s, %s - for the same item %s'
-                                  % (meta_items[name]['tag'], tag, name))
+                raise ValueError('Different tags - %s, %s - for the same item %s' %
+                                 (meta_items[name]['tag'], tag, name))
         except KeyError:
             meta_items[name]['tag'] = tag
         meta_items[name][param] = value
@@ -251,8 +251,8 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         request = katcp.Message.request(name, *request_args)
         reply, informs = self.blocking_request(request, timeout=request_timeout)
         if (reply.arguments[0] != katcp.Message.OK) and require_ok:
-            raise RuntimeError('Request %s on host %s failed.\n\tRequest: %s\n\tReply: %s'
-                                      % (request.name, self.host, request, reply))
+            raise RuntimeError('Request %s on host %s failed.\n\tRequest: %s\n\tReply: %s' %
+                               (request.name, self.host, request, reply))
         return reply, informs
 
     def listdev(self):

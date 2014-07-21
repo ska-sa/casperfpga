@@ -65,7 +65,7 @@ if args.listsnaps:
     sys.exit(0)
 
 # read and print the snap block
-fpga.device_by_name(args.snap).print_snap(limit_lines=args.numrows, man_valid=args.manvalid, man_trig=args.mantrig,
+fpga.snapshots[args.snap].print_snap(limit_lines=args.numrows, man_valid=args.manvalid, man_trig=args.mantrig,
                                           circular_capture=args.circcap)
 
 fpga.disconnect()
