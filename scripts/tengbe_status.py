@@ -60,7 +60,7 @@ def get_tap_data(fpga):
     """
     data = {}
     for gbecore in fpga.tengbes.names():
-        data[gbecore] = fpga.device_by_name(gbecore).tap_info()
+        data[gbecore] = fpga.tengbes[gbecore].tap_info()
     return data
 
 # get tap data
