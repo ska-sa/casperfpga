@@ -117,17 +117,17 @@ def _sendfile(filename, targethost, port, result_queue):
     stime = time.time()
     connected = False
     while (not connected) and (time.time() - stime < 2):
-#        try:
-        upload_socket.connect((targethost, port))
-        connected = True
-#        except Exception:
-#            time.sleep(0.1)
+        try:
+            upload_socket.connect((targethost, port))
+            connected = True
+        except Exception:
+            time.sleep(0.1)
     if not connected:
         result_queue.put('Could not connect to upload port.')
-#    try:
-    upload_socket.send(open(filename).read())
-#    except Exception:
-#        result_queue.put('Could not send file to upload port.')
+    try:
+        upload_socket.send(open(filename).read())
+    except Exception:
+        result_queue.put('Could not send file to upload port.')
     result_queue.put('')
     return
 
