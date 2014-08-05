@@ -317,6 +317,17 @@ class TenGbe(object):
             return False
         return True
 
+    def tap_arp_reload(self):
+        """
+        Have the tap driver reload its ARP table right now.
+        :return:
+        """
+        reply, _ = self.parent.katcprequest(name="tap-arp-reload", request_timeout=-1,
+                                            require_ok=True, request_args=(self.name, ))
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError("Failure requesting ARP reload for tap device %s." % str(self))
+
+
 # == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
 # NOT NEEDED
 #     def multicast_send(self, ip_str):

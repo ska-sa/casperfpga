@@ -894,4 +894,13 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         #TODO conversion to time python understands
         return info
 
+    def tap_arp_reload(self):
+        """
+        Have the tap driver reload its ARP table right now.
+        :return:
+        """
+        reply, _ = self.katcprequest(name="tap-arp-reload", request_timeout=-1, require_ok=True)
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError("Failure requesting ARP reload for host %s." % str(self.host))
+
 # end
