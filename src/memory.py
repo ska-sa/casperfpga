@@ -55,11 +55,19 @@ class Memory(bitfield.Bitfield):
         rv = '%s, %i * %i, fields[%s]' % (self.name, self.width, self.length, self.fields_string_get())
         return rv
 
+    # def __setattr__(self, name, value):
+    #     try:
+    #         if name in self._fields.keys():
+    #             self.write(**{name: value})
+    #     except AttributeError:
+    #         pass
+    #     object.__setattr__(self, name, value)
+
     def read_raw(self, **kwargs):
         """Placeholder for child classes.
         @return: (rawdata, timestamp)
         """
-        raise NotImplementedError
+        raise RuntimeError('Must be implemented by subclass.')
 
     def read(self, **kwargs):
         """Read raw binary data and convert it using the bitfield description
@@ -70,6 +78,12 @@ class Memory(bitfield.Bitfield):
         rawdata, rawtime = self.read_raw(**kwargs)
         # and convert using our bitstruct
         return {'data': self._process_data(rawdata), 'timestamp': rawtime}
+
+    def write(self, **kwargs):
+        raise RuntimeError('Must be implemented by subclass.')
+
+    def write_raw(self, uintvalue):
+        raise RuntimeError('Must be implemented by subclass.')
 
     def _process_data(self, rawdata):
         """Process raw data according to this memory's bitfield setup.
@@ -106,17 +120,3 @@ class Memory(bitfield.Bitfield):
         if large_unsigned_detected:
             LOGGER.warn('Signed numbers larger than 32-bits detected! Raw values returned.')
         return processed
-
-#==============================================================================
-#     def read_raw(self, **kwargs):
-#         raise RuntimeError('Must be implemented by subclass.')
-#
-#     def read(self, **kwargs):
-#         raise RuntimeError('Must be implemented by subclass.')
-#
-#     def write_raw(self, uintvalue):
-#         raise RuntimeError('Must be implemented by subclass.')
-#
-#     def write(self, **kwargs):
-#         raise RuntimeError('Must be implemented by subclass.')
-#==============================================================================

@@ -61,6 +61,9 @@ if args.listcores:
 
 def decode_item_pointer(current_spead_info, header_data):
     hdr_id = header_data >> current_spead_info['addr_bits']
+    # if the top bit is set, it's immediate addressing
+    if hdr_id & pow(2, current_spead_info['id_bits'] - 1):
+        hdr_id &= pow(2, current_spead_info['id_bits'] - 1) - 1
     hdr_data = header_data & (pow(2, current_spead_info['addr_bits']) - 1)
     return hdr_id, hdr_data
 
@@ -93,8 +96,8 @@ def process_spead(current_spead_info, data, pkt_counter):
         return spead_header, rv_string
     elif (pkt_counter > 1) and (pkt_counter <= 1 + current_spead_info['num_headers']):
         hdr_id, hdr_data = decode_item_pointer(current_spead_info, data)
-        if hdr_id == 0x004:
-            current_spead_info['packet_length'] = current_spead_info['num_headers'] + hdr_data
+        if hdr_id == 0x0004:
+            current_spead_info['packet_length'] = current_spead_info['num_headers'] + (hdr_data / 8)
         string_data = 'spead hdr 0x%04x: ' % hdr_id + ('%d' % hdr_data if not args.hex else '0x%X' % hdr_data)
         return current_spead_info if hdr_id == 0x0004 else None, string_data
     else:
