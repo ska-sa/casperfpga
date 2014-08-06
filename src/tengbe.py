@@ -327,7 +327,6 @@ class TenGbe(object):
         if reply.arguments[0] != 'ok':
             raise RuntimeError("Failure requesting ARP reload for tap device %s." % str(self))
 
-
 # == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
 # NOT NEEDED
 #     def multicast_send(self, ip_str):
@@ -377,7 +376,8 @@ class TenGbe(object):
             raise RuntimeError('Failed removing multicast address %s to tap device' % (str2ip(ip_str)))
 
     def get_10gbe_core_details(self, read_arp=False, read_cpu=False):
-        """Prints 10GbE core details.
+        """
+        Get 10GbE core details.
         assemble struct for header stuff...
         0x00 - 0x07: MAC address
         0x08 - 0x0b: Not used
@@ -457,7 +457,8 @@ class TenGbe(object):
         return returnval
 
     def get_arp_details(self, port_dump=None):
-        """Get ARP details from this interface.
+        """
+        Get ARP details from this interface.
         @param port_dump: list - A list of raw bytes from interface memory.
         """
         if port_dump is None:
@@ -470,7 +471,12 @@ class TenGbe(object):
             returnval.append(mac)
         return returnval
 
-    def get_cpu_details(self, port_dump):
+    def get_cpu_details(self, port_dump=None):
+        """
+        Read details of the CPU buffers.
+        :param port_dump:
+        :return:
+        """
         if port_dump is None:
             port_dump = list(struct.unpack('>16384B', self.parent.read(self.name, 16384)))
         returnval = {'cpu_tx': {}}
@@ -530,7 +536,17 @@ class TenGbe(object):
             self.print_cpu_details(refresh=refresh)
 
     def print_arp_details(self, refresh=False, only_hits=False):
-        if refresh or (self.core_details is None):
+        """
+        Print nicely formatted ARP info.
+        :param refresh:
+        :param only_hits:
+        :return:
+        """
+        if self.core_details is None:
+            refresh = True
+        elif 'arp' not in self.core_details.keys():
+            refresh = True
+        if refresh:
             self.get_10gbe_core_details(read_arp=True)
         print 'ARP Table: '
         for ip_address in range(256):
@@ -550,7 +566,16 @@ class TenGbe(object):
                 print ''
 
     def print_cpu_details(self, refresh=False):
-        if refresh or (self.core_details is None):
+        """
+        Print nicely formatted CPU details info.
+        :param refresh:
+        :return:
+        """
+        if self.core_details is None:
+            refresh = True
+        elif 'cpu_rx' not in self.core_details.keys():
+            refresh = True
+        if refresh:
             self.get_10gbe_core_details(read_cpu=True)
         print 'CPU TX Interface (at offset 4096 bytes):'
         print 'Byte offset: Contents (Hex)'
