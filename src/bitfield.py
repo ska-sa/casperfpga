@@ -1,7 +1,7 @@
 import logging
-LOGGER = logging.getLogger(__name__)
-
 import construct
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Bitfield(object):

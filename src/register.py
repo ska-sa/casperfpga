@@ -1,15 +1,11 @@
-# pylint: disable-msg=C0103
-# pylint: disable-msg=C0301
-
 import logging
-LOGGER = logging.getLogger(__name__)
-
 import construct
 import struct
 import time
-
 from memory import Memory
 import bitfield
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Register(Memory):
@@ -124,12 +120,12 @@ class Register(Memory):
             self._process_info_tabbed()
         elif 'name' in self.block_info.keys():
             # oldest
-            LOGGER.warn('Old registers are deprecated!')
+            LOGGER.error('Old registers are deprecated!')
             self.field_add(bitfield.Field('', 0, 32, 0, 0))
         else:
-            LOGGER.warn('That is a seriously old register - please swap it out!')
-            print self
-            print self.block_info
+            LOGGER.error('That is a seriously old register - please swap it out!')
+            LOGGER.debug(self)
+            LOGGER.debug(self.block_info)
             raise RuntimeError('Unknown Register type.')
 
     def _process_info_current(self):

@@ -96,7 +96,8 @@ class AsyncRequester(object):
             print "Request list full, removing oldest one(%s,%s)." % (oldreq.request, oldreq.request_id)
         request_id = self.nb_get_next_request_id()
         self.nb_add_request(request, request_id, inform_cb, reply_cb)
-        self._nb_request_func(msg=Message.request(request, *args), reply_cb=self.nb_replycb,
+        request_msg = Message.request(request, *args)
+        self._nb_request_func(msg=request_msg, reply_cb=self.nb_replycb,
                               inform_cb=self.nb_informcb, user_data=request_id)
         return {'host': self.host, 'request': request, 'id': request_id}
 

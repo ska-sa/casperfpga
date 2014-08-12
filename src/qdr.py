@@ -9,12 +9,11 @@ Created on Fri Mar  7 07:15:45 2014
 # pylint: disable-msg = C0301
 
 import logging
-LOGGER = logging.getLogger(__name__)
-
 import numpy
 import struct
-
 import register
+
+LOGGER = logging.getLogger(__name__)
 
 calibration_data = [[0xAAAAAAAA, 0x55555555] * 16, [0, 0, 0xFFFFFFFF, 0, 0, 0, 0, 0], numpy.arange(256) << 0,
                     numpy.arange(256) << 8, numpy.arange(256) << 16, numpy.arange(256) << 24]

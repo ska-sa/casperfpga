@@ -1,13 +1,10 @@
-# pylint: disable-msg = C0103
-# pylint: disable-msg = C0301
-
 import logging
 import time
-LOGGER = logging.getLogger(__name__)
-
 from memory import Memory
 import bitfield
 from register import Register
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Snap(Memory):

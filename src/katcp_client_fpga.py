@@ -3,14 +3,9 @@ Created on Feb 28, 2013
 
 @author: paulp
 """
-from _hashlib import new
-
 import logging
 import struct
 import time
-
-LOGGER = logging.getLogger(__name__)
-
 import katcp
 
 import register
@@ -21,8 +16,10 @@ import tengbe
 import memory
 import qdr
 import async_requester
-
 from attribute_container import AttributeContainer
+
+LOGGER = logging.getLogger(__name__)
+
 
 # known CASPER memory-accessible  devices and their associated classes and containers
 casper_memory_devices = {
@@ -120,13 +117,13 @@ def _sendfile(filename, targethost, port, result_queue):
         try:
             upload_socket.connect((targethost, port))
             connected = True
-        except Exception:
+        except:
             time.sleep(0.1)
     if not connected:
         result_queue.put('Could not connect to upload port.')
     try:
         upload_socket.send(open(filename).read())
-    except Exception:
+    except:
         result_queue.put('Could not send file to upload port.')
     result_queue.put('')
     return
