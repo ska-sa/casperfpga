@@ -1,18 +1,15 @@
-# pylint: disable-msg=C0103
-# pylint: disable-msg=C0301
-
 import logging
-LOGGER = logging.getLogger(__name__)
-
 import threading
 import time
-
 from katcp import Message
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AsyncRequester(object):
-    """A class to hold information about a specific KATCP request made by a Fpga.
-       """
+    """
+    A class to hold information about a specific KATCP request made by a Fpga.
+    """
     def __init__(self, host, request_func, max_requests=100):
         self.host = host
         self._nb_request_id_lock = threading.Lock()
@@ -92,8 +89,7 @@ class AsyncRequester(object):
            """
         if len(self._nb_requests) == self._nb_max_requests:
             oldreq = self.nb_pop_oldest_request()
-            LOGGER.info("Request list full, removing oldest one(%s,%s).", oldreq.request, oldreq.request_id)
-            print "Request list full, removing oldest one(%s,%s)." % (oldreq.request, oldreq.request_id)
+            LOGGER.debug("Request list full, removing oldest one(%s,%s).", oldreq.request, oldreq.request_id)
         request_id = self.nb_get_next_request_id()
         self.nb_add_request(request, request_id, inform_cb, reply_cb)
         self._nb_request_func(msg=Message.request(request, *args), reply_cb=self.nb_replycb,

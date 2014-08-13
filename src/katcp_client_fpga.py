@@ -305,7 +305,7 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
         if boffile is None:
             boffile = self.system_info['target_bof']
         elif boffile != self.system_info['target_bof']:
-            LOGGER.warning('Programming BOF file %s, config BOF file %s', boffile, self.system_info['target_bof'])
+            LOGGER.error('Programming BOF file %s, config BOF file %s', boffile, self.system_info['target_bof'])
         uninforms = []
 
         def handle_inform(msg):
@@ -320,11 +320,13 @@ class KatcpClientFpga(async_requester.AsyncRequester, katcp.CallbackClient):
                 if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
                     complete_okay = True
             if not complete_okay:
+                LOGGER.error('Programming file %s failed.' % boffile)
                 for inf in uninforms:
-                    print inf
+                    LOGGER.debug(inf)
                 raise RuntimeError('Programming file %s failed.' % boffile)
             self.system_info['last_programmed_bof'] = boffile
         else:
+            LOGGER.error('progdev message for file %s failed.' % boffile)
             raise RuntimeError('progdev message for file %s failed.' % boffile)
         self.__reset_system_info()
         self.get_system_information()
