@@ -1,6 +1,3 @@
-# pylint: disable-msg=C0103
-# pylint: disable-msg=C0301
-
 """The base class for all things memory. More or less everything on the
 FPGA is accessed by reading and writing memory addresses on the EPB/OPB
 busses. Normally via KATCP.
@@ -9,10 +6,9 @@ busses. Normally via KATCP.
 import logging
 import construct
 from numpy import int32 as numpy_signed, uint32 as numpy_unsigned
+import bitfield
 
 LOGGER = logging.getLogger(__name__)
-
-import bitfield
 
 
 def bin2fp(bits, mantissa=8, exponent=7, signed=False):

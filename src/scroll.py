@@ -1,5 +1,3 @@
-# pylint: disable-msg=C0301
-# pylint: disable-msg=E1101
 """
 Playing with ncurses in Python to scroll up and down, left and right, through a list of data
 that is periodically refreshed.

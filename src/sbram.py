@@ -1,7 +1,7 @@
 import logging
-LOGGER = logging.getLogger(__name__)
-
 import memory
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Sbram(memory.Memory):
@@ -20,4 +20,3 @@ class Sbram(memory.Memory):
         """Read raw data from memory.
         """
         raise NotImplementedError
-# end

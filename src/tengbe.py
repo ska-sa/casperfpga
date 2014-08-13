@@ -1,6 +1,3 @@
-# pylint: disable-msg = C0103
-# pylint: disable-msg = C0301
-
 """
 Created on Feb 28, 2013
 
@@ -9,6 +6,7 @@ Created on Feb 28, 2013
 
 import logging
 import struct
+
 LOGGER = logging.getLogger(__name__)
 
 
