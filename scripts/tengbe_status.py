@@ -13,12 +13,12 @@ import sys
 import logging
 import time
 import argparse
+import casperfpga.scroll as scroll
+from casperfpga import utils
 
 logger = logging.getLogger(__name__)
 #logging.basicConfig(level=logging.INFO)
 
-from casperfpga import KatcpClientFpga
-import casperfpga.scroll as scroll
 
 parser = argparse.ArgumentParser(description='Display TenGBE interface information about a MeerKAT fpga host.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -31,17 +31,16 @@ args = parser.parse_args()
 polltime = args.polltime
 
 hosts = args.hosts.lstrip().rstrip().replace(' ', '').split(',')
+
 # create the devices and connect to them
-fpgas = []
-for host in hosts:
-    fpga = KatcpClientFpga(host)
-    fpga.test_connection()
-    fpga.get_system_information()
+fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
+utils.threaded_fpga_function(fpgas, 10, 'test_connection')
+utils.threaded_fpga_function(fpgas, 10, 'get_system_information')
+for fpga in fpgas:
     numgbes = len(fpga.tengbes)
     if numgbes < 1:
-        raise RuntimeWarning('Host %s has no 10gbe cores', host)
-    print '%s: found %i 10gbe core%s.' % (host, numgbes, '' if numgbes == 1 else 's')
-    fpgas.append(fpga)
+        raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
+    print '%s: found %i 10gbe core%s.' % (fpga.host, numgbes, '' if numgbes == 1 else 's')
 
 
 # noinspection PyShadowingNames

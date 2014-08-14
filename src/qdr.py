@@ -27,6 +27,7 @@ def calibrate_qdrs(fpgahost, timeout=10):
 
     import Queue
     import threading
+    import time
 
     def calqdr(resultq, qdrobj):
         try:
