@@ -4,21 +4,56 @@ import threading
 import Queue
 import time
 import logging
-from katcp_client_fpga import KatcpClientFpga
-import qdr
 
 LOGGER = logging.getLogger(__name__)
 
 
-def calibrate_qdrs(fpga_list, timeout):
+def create_meta_dictionary(metalist):
+        """Build a meta information dictionary from a provided list.
+        """
+        meta_items = {}
+        for name, tag, param, value in metalist:
+            if name not in meta_items.keys():
+                meta_items[name] = {}
+            try:
+                if meta_items[name]['tag'] != tag:
+                    raise ValueError('Different tags - %s, %s - for the same item %s' %
+                                     (meta_items[name]['tag'], tag, name))
+            except KeyError:
+                meta_items[name]['tag'] = tag
+            meta_items[name][param] = value
+        return meta_items
+
+
+def parse_fpg(filename):
+    """Read the meta information from the FPG file.
     """
-    Software calibrate all the QDRs on a list of FPGAs.
-    Threaded to save time.
-    :param fpga_list: a List of CASPER FPGAs
-    :param timeout: how long to wait
-    :return: a dictionary containing the calibration status of all the FPGAs in the list.
-    """
-    return threaded_fpga_operation(fpga_list, qdr.calibrate_qdrs, -1, timeout)
+    if filename is not None:
+        fptr = open(filename, 'r')
+        firstline = fptr.readline().strip().rstrip('\n')
+        if firstline != '#!/bin/kcpfpg':
+            fptr.close()
+            raise RuntimeError('%s does not look like an fpg file we can parse.' % filename)
+    else:
+        raise IOError('No such file %s' % filename)
+    memorylist = []
+    metalist = []
+    done = False
+    while not done:
+        line = fptr.readline().strip().rstrip('\n')
+        if line.lstrip().rstrip() == '?quit':
+            done = True
+        elif line.startswith('?meta'):
+            line = line.replace('\_', ' ').replace('?meta ', '').replace('\n', '').lstrip().rstrip()
+            name, tag, param, value = line.split('\t')
+            name = name.replace('/', '_')
+            metalist.append((name, tag, param, value))
+        elif line.startswith('?register'):
+            register = line.replace('\_', ' ').replace('?register ', '').replace('\n', '').lstrip().rstrip()
+            name, address, size = register.split(' ')
+            memorylist.append(name)
+    fptr.close()
+    return create_meta_dictionary(metalist), memorylist
 
 
 def program_fpgas(fpga_list, progfile, timeout=10):

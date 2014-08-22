@@ -9,11 +9,24 @@ import numpy
 import struct
 import register
 
+from utils import threaded_fpga_operation
+
 #LOGGER = logging.getLogger(__name__)
 LOGGER = logging.getLogger('qdr')
 
 calibration_data = [[0xAAAAAAAA, 0x55555555] * 16, [0, 0, 0xFFFFFFFF, 0, 0, 0, 0, 0], numpy.arange(256) << 0,
                     numpy.arange(256) << 8, numpy.arange(256) << 16, numpy.arange(256) << 24]
+
+
+def calibrate_qdrs(fpga_list, timeout):
+    """
+    Software calibrate all the QDRs on a list of FPGAs.
+    Threaded to save time.
+    :param fpga_list: a List of CASPER FPGAs
+    :param timeout: how long to wait
+    :return: a dictionary containing the calibration status of all the FPGAs in the list.
+    """
+    return threaded_fpga_operation(fpga_list, calibrate_qdrs, -1, timeout)
 
 
 def calibrate_qdrs(fpgahost, timeout=10):

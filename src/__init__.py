@@ -2,11 +2,11 @@
 control and monitor fpga-based casper designs.
 """
 
-
 # import all the main classes that we'll use often
 from bitfield import Bitfield, Field
+from dcp_fpga import DcpFpga
 from katadc import KatAdc
-from katcp_client_fpga import KatcpClientFpga
+from katcp_fpga import KatcpFpga
 from memory import Memory
 from qdr import Qdr
 from register import Register

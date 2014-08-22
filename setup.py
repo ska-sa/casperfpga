@@ -9,7 +9,7 @@ setup(
     # scripts=['bin/stowe-towels.py','bin/wash-towels.py'],
     url='',
     license='LICENSE.txt',
-    description='Talk to CASPER fpga devices using katcp.',
+    description='Talk to CASPER fpga devices using katcp or dcp.',
     long_description=open('README.txt').read(),
     install_requires=[
         'katcp',
