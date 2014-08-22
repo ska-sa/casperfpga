@@ -98,13 +98,21 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
                                (request.name, self.host, request, reply))
         return reply, informs
 
-    def listdev(self):
+    def listdev(self, getsize=False, getaddress=False):
         """
         Get a list of the memory bus items in this design.
         :return: a list of memory devices
         """
-        _, informs = self.katcprequest(name='listdev', request_timeout=self._timeout)
-        return [i.arguments[0] for i in informs]
+        if getsize:
+
+            _, informs = self.katcprequest(name='listdev', request_timeout=self._timeout, request_args=('size',))
+            return [(i.arguments[0], i.arguments[1]) for i in informs]
+        elif getaddress:
+            _, informs = self.katcprequest(name='listdev', request_timeout=self._timeout, request_args=('detail',))
+            return [(i.arguments[0], i.arguments[1]) for i in informs]
+        else:
+            _, informs = self.katcprequest(name='listdev', request_timeout=self._timeout)
+            return [i.arguments[0] for i in informs]
 
     def listbof(self):
         """
@@ -414,6 +422,29 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             metalist.append((name, tag, param, value))
         return create_meta_dictionary(metalist)
 
+    def _read_coreinfo_from_host(self):
+        """
+        Get the equivalent of coreinfo.tab from the host using KATCP listdev commands.
+        :return:
+        """
+        memorymap_dict = {}
+        listdev_size = self.listdev(getsize=True)
+        listdev_address = self.listdev(getaddress=True)
+        if len(listdev_address) != len(listdev_size):
+            raise RuntimeError('Different length listdev(size) and listdev(detail)')
+        for byte_dev, byte_size in listdev_size:
+            matched = False
+            for addrdev, address in listdev_address:
+                if addrdev == byte_dev:
+                    byte_size = int(byte_size.split(':')[0])
+                    address = int(address.split(':')[0], 16)
+                    memorymap_dict[byte_dev] = {'address': address, 'bytes': byte_size}
+                    matched = True
+                    continue
+            if not matched:
+                raise RuntimeError('No matching listdev address for device %s' % byte_dev)
+        return memorymap_dict
+
     def get_system_information(self, filename=None, fpg_info=None):
         """
         Get information about the design running on the FPGA.
@@ -424,13 +455,11 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         if (not self.is_running()) and (filename is None):
             raise RuntimeError('This can only be run on a running device when no file is given.')
         if filename is not None:
-            device_info, coreinfo_devices = parse_fpg(filename)
+            device_dict, memorymap_dict = parse_fpg(filename)
         else:
-            device_info = self._read_design_info_from_host()
-            coreinfo_devices = {}
-            for dev in self.listdev():
-                coreinfo_devices[dev] = {'address': -1, 'bytes': -1}
-        super(KatcpFpga, self).get_system_information(fpg_info=(device_info, coreinfo_devices))
+            device_dict = self._read_design_info_from_host()
+            memorymap_dict = self._read_coreinfo_from_host()
+        super(KatcpFpga, self).get_system_information(fpg_info=(device_dict, memorymap_dict))
 
     def unhandled_inform(self, msg):
         """

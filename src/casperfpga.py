@@ -22,12 +22,12 @@ LOGGER = logging.getLogger(__name__)
 
 # known CASPER memory-accessible  devices and their associated classes and containers
 CASPER_MEMORY_DEVICES = {
-    'xps:bram':         {'class': sbram.Sbram,          'container': 'sbrams',      'coreinfo': True},
-    'xps:katadc':       {'class': katadc.KatAdc,        'container': 'katadcs',     'coreinfo': True},
-    'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs',        'coreinfo': False},
-    'xps:sw_reg':       {'class': register.Register,    'container': 'registers',   'coreinfo': True},
-    'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes',     'coreinfo': True},
-    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots',   'coreinfo': False},}
+    'xps:bram':         {'class': sbram.Sbram,          'container': 'sbrams'},
+    'xps:katadc':       {'class': katadc.KatAdc,        'container': 'katadcs'},
+    'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs'},
+    'xps:sw_reg':       {'class': register.Register,    'container': 'registers'},
+    'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes'},
+    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots'},}
 
 
 # other devices - blocks that aren't memory devices, but about which we'd like to know
@@ -306,11 +306,11 @@ class CasperFpga(object):
             rv['app_rev'] = app & ((2 ** 28)-1)
         return rv
 
-    def __create_memory_devices(self, device_dict, coreinfo_dict):
+    def __create_memory_devices(self, device_dict, memorymap_dict):
         """
         Create memory devices from dictionaries of design information.
         :param device_dict: raw dictionary of information from tagged blocks in Simulink design, keyed on device name
-        :param coreinfo_dict: dictionary of information that would have been in coreinfo.tab - memory bus information
+        :param memorymap_dict: dictionary of information that would have been in coreinfo.tab - memory bus information
         :return:
         """
         # create and add memory devices to the memory device dictionary
@@ -329,12 +329,7 @@ class CasperFpga(object):
             else:
                 if not callable(known_device_class):
                     raise TypeError('%s is not a callable Memory class - that\'s a problem.' % known_device_class)
-                # should this device appear in the memory map?
-                if CASPER_MEMORY_DEVICES[tag]['coreinfo']:
-                    if device_name not in coreinfo_dict.keys():
-                        raise NameError('Memory device %s could not be found on parent %s\'s bus.'
-                                        % (device_name, self.host))
-                new_device = known_device_class(parent=self, name=device_name, info=device_info)
+                new_device = known_device_class.from_device_info(self, device_name, device_info, memorymap_dict)
                 if new_device.name in self.memory_devices.keys():
                     raise NameError('Device called %s of type %s already exists in devices list.' %
                                     (new_device.name, type(new_device)))
@@ -343,7 +338,8 @@ class CasperFpga(object):
                 container = getattr(self, known_device_container)
                 setattr(container, device_name, new_device)
                 assert id(getattr(container, device_name)) == id(new_device) == id(self.memory_devices[device_name])
-        # allow devices to update themselves with full device info
+        # allow created devices to update themselves with full device info
+        # link control registers, etc
         for name, device in self.memory_devices.items():
             try:
                 device.post_create_update(device_dict)

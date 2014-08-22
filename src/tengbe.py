@@ -7,6 +7,8 @@ Created on Feb 28, 2013
 import logging
 import struct
 
+from memory import Memory
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -120,37 +122,38 @@ def str2ip(ip_str):
     return ip_addr
 
 
-class TenGbe(object):
-    """To do with the CASPER ten GBE yellow block implemented on FPGAs,
+class TenGbe(Memory):
+    """
+    To do with the CASPER ten GBE yellow block implemented on FPGAs,
     and interfaced-to via KATCP memory reads/writes.
     """
-    def __init__(self, parent, name, mac=None, ip_address=None, port=None, info=None):
+    def __init__(self, parent, name, address, length, device_info=None):
         """
-        @param parent: object - The KATCP client device that owns this ten gbe
-        interface.
-        @param name: string - Name of the tengbe device in Simulink.
-        @param mac: string - A xx:xx:xx:xx:xx string representation of the MAC
-        address for this interface.
-        @param ip_address: string - a xxx.xxx.xxx.xxx string representation of
-        the IP address for this interface.
-        @param port: integer - the port this interface should use.
+
+        :param parent:
+        :param name:
+        :param address:
+        :param length:
+        :param device_info:
+        :return:
         """
+        super(TenGbe, self).__init__(name=name, width=32, address=address, length=length)
         self.parent = parent
-        self.name = name
+        self.block_info = device_info
         self.mac, self.ip_address, self.port = None, None, None
-        if info is not None:
-            fabric_ip = info['fab_ip']
+        if device_info is not None:
+            fabric_ip = device_info['fab_ip']
             if fabric_ip.find('(2^24) + ') != -1:
-                info['fab_ip'] = fabric_ip.replace('*(2^24) + ', '.').replace('*(2^16) + ', '.').\
+                device_info['fab_ip'] = fabric_ip.replace('*(2^24) + ', '.').replace('*(2^16) + ', '.').\
                     replace('*(2^8) + ', '.').replace('*(2^0)', '')
-            fabric_mac = info['fab_mac']
+            fabric_mac = device_info['fab_mac']
             if fabric_mac.find('hex2dec') != -1:
                 fabric_mac = fabric_mac.replace('hex2dec(\'', '').replace('\')', '')
-                info['fab_mac'] = fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' + fabric_mac[4:6] + ':' +\
+                device_info['fab_mac'] = fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' + fabric_mac[4:6] + ':' +\
                     fabric_mac[6:8] + ':' + fabric_mac[8:10] + ':' + fabric_mac[10:]
-            mac = info['fab_mac']
-            ip_address = info['fab_ip']
-            port = info['fab_udp']
+            mac = device_info['fab_mac']
+            ip_address = device_info['fab_ip']
+            port = device_info['fab_udp']
         if mac is None or ip_address is None or port is None:
             raise ValueError('10Gbe interface \'%s\' must have mac, ip and port.' % self.name)
         self.setup(mac, ip_address, port)
@@ -159,6 +162,24 @@ class TenGbe(object):
         self.registers = {'tx': [], 'rx': []}
         if self.parent.is_connected():
             self._check()
+
+    @classmethod
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+        """
+        Process device info and the memory map to get all necessary info and return a TenGbe instance.
+        :param device_name: the unique device name
+        :param device_info: information about this device
+        :param memorymap_dict: a dictionary containing the device memory map
+        :return: a TenGbe object
+        """
+        address, length = -1, -1
+        for mem_name in memorymap_dict.keys():
+            if mem_name == device_name:
+                address, length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                break
+        if address == -1 or length == -1:
+            raise RuntimeError('Could not find address or length for TenGbe %s' % device_name)
+        return cls(parent, device_name, address, length, device_info)
 
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.name)

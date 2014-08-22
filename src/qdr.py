@@ -9,6 +9,7 @@ import numpy
 import struct
 import register
 
+from memory import Memory
 from utils import threaded_fpga_operation
 
 #LOGGER = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ calibration_data = [[0xAAAAAAAA, 0x55555555] * 16, [0, 0, 0xFFFFFFFF, 0, 0, 0, 0
                     numpy.arange(256) << 8, numpy.arange(256) << 16, numpy.arange(256) << 24]
 
 
-def calibrate_qdrs(fpga_list, timeout):
+def calibrate_all_qdrs(fpga_list, timeout):
     """
     Software calibrate all the QDRs on a list of FPGAs.
     Threaded to save time.
@@ -85,24 +86,56 @@ def _find_cal_area(area):
     return max_so_far, begin_index, end_index
 
 
-class Qdr(object):
+class Qdr(Memory):
     """Qdr memory on an FPGA.
     """
-    def __init__(self, parent, name, info):
+    def __init__(self, parent, name, address, length, device_info, ctrlreg_address):
         """
         Make the QDR instance, given a parent, name and info from Simulink.
         """
+        super(Qdr, self).__init__(name=name, width=32, address=address, length=length)
         self.parent = parent
-        self.name = name
-        self.block_info = info
+        self.block_info = device_info
         self.which_qdr = self.block_info['which_qdr']
-        self.ctrl_reg = register.Register(self.parent, self.which_qdr + '_ctrl',
-                                          info={'tag': 'xps:sw_reg', 'mode': 'one\_value',
-                                                'io_dir': 'From\_Processor', 'io_delay': '0',
-                                                'sample_period': '1', 'names': 'reg', 'bitwidths': '32',
-                                                'arith_types': '0', 'bin_pts': '0', 'sim_port': 'on',
-                                                'show_format': 'off'})
+        self.ctrl_reg = register.Register(self.parent, self.which_qdr+'_ctrl', address=ctrlreg_address,
+                                          device_info={'tag': 'xps:sw_reg', 'mode': 'one\_value',
+                                                       'io_dir': 'From\_Processor', 'io_delay': '0',
+                                                       'sample_period': '1', 'names': 'reg', 'bitwidths': '32',
+                                                       'arith_types': '0', 'bin_pts': '0', 'sim_port': 'on',
+                                                       'show_format': 'off'})
         self.memory = self.which_qdr + '_memory'
+        LOGGER.debug('New Qdr %s', self)
+        # TODO
+        # Link QDR ctrl register properly
+
+    @classmethod
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+        """
+        Process device info and the memory map to get all necessary info and return a Qdr instance.
+        :param device_name: the unique device name
+        :param device_info: information about this device
+        :param memorymap_dict: a dictionary containing the device memory map
+        :return: a Qdr object
+        """
+        mem_address, mem_length = -1, -1
+        for mem_name in memorymap_dict.keys():
+            if mem_name == device_info['which_qdr'] + '_memory':
+                mem_address, mem_length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                break
+        if mem_address == -1 or mem_length == -1:
+            raise RuntimeError('Could not find address or length for Qdr %s' % device_name)
+        # find the ctrl register
+        ctrlreg_address, ctrlreg_length = -1, -1
+        for mem_name in memorymap_dict.keys():
+            if mem_name == device_info['which_qdr'] + '_ctrl':
+                ctrlreg_address, ctrlreg_length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                break
+        if ctrlreg_address == -1 or ctrlreg_length == -1:
+            raise RuntimeError('Could not find ctrl reg  address or length for Qdr %s' % device_name)
+
+        # TODO - is the ctrl reg a register or the whole 256 bytes?
+
+        return cls(parent, device_name, mem_address, mem_length, device_info, ctrlreg_address)
 
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.name)

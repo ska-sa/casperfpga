@@ -8,35 +8,57 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Snap(Memory):
-    """Snap blocks are triggered/controlled blocks of RAM on FPGAs.
     """
-    def __init__(self, parent, name, info):
-        Memory.__init__(self, name=name, width=1, length=1)
+    Snap blocks are triggered/controlled blocks of RAM on FPGAs.
+    """
+    def __init__(self, parent, name, width, address, length, device_info=None):
+
+        super(Snap, self).__init__(name=name, width=width, address=address, length=length)
         self.parent = parent
-        self.block_info = info
-        self.width = int(info['data_width'])
-        self.length = pow(2, int(info['nsamples']))
+        self.block_info = device_info
         self.field_add(bitfield.Field(name='data', numtype=0, width=self.width, binary_pt=0, lsb_offset=0))
         self.control_registers = {'control':        {'register': None, 'name': self.name + '_ctrl'},
                                   'status':         {'register': None, 'name': self.name + '_status'},
                                   'trig_offset':    {'register': None, 'name': self.name + '_trig_offset'},
                                   'extra_value':    {'register': None, 'name': self.name + '_val'},
                                   'tr_en_cnt':      {'register': None, 'name': self.name + '_tr_en_cnt'}}
-        LOGGER.info('New Snap - %s', self)
+        LOGGER.debug('New Snap %s', self)
 
-    def post_create_update(self, raw_device_info):
+    @classmethod
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+        """
+        Process device info and the memory map to get all necessary info and return a Snap instance.
+        :param device_name: the unique device name
+        :param device_info: information about this device
+        :param memorymap_dict: a dictionary containing the device memory map
+        :return: a Snap object
+        """
+        address, length = -1, -1
+        for mem_name in memorymap_dict.keys():
+            if mem_name == device_name + '_bram':
+                address, length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                break
+        word_bits = int(device_info['data_width'])
+        num_bytes = pow(2, int(device_info['nsamples'])) * (word_bits/8)
+        if length == -1:
+            length = num_bytes
+        if length != num_bytes:
+            raise RuntimeError('%s has mask length %d bytes, but mem map length %d bytes' % (device_name, num_bytes, length))
+        return cls(parent, device_name, width=word_bits, address=address, length=length, device_info=device_info)
+
+    def post_create_update(self, raw_system_info):
         """Update the device with information not available at creation.
         @param raw_device_info: dictionary of device information
         """
         # is this snap block inside a bitsnap block?
-        for device_name, dev_info in raw_device_info.items():
-            if device_name != '':
+        for dev_name, dev_info in raw_system_info.items():
+            if dev_name != '':
                 if dev_info['tag'] == 'casper:bitsnap':
-                    if self.name == device_name + '_ss':
+                    if self.name == dev_name + '_ss':
                         self.update_from_bitsnap(dev_info)
                         break
         # find control registers for this snap block
-        self._link_control_registers(raw_device_info)
+        self._link_control_registers(raw_system_info)
 
     def update_from_bitsnap(self, info):
         """Update this device with information from a bitsnap container.
@@ -46,7 +68,7 @@ class Snap(Memory):
         self.block_info = info
         if self.width != int(info['snap_data_width']):
             raise ValueError('Snap and matched bitsnap widths do not match.')
-        if self.length != pow(2, int(info['snap_nsamples'])):
+        if self.length != pow(2, int(info['snap_nsamples'])) * (self.width/8):
             raise ValueError('Snap and matched bitsnap lengths do not match.')
 
         def clean_fields(fstr):
@@ -191,7 +213,7 @@ class Snap(Memory):
         bram_dmp['offset'] += offset
         if bram_dmp['offset'] < 0:
             bram_dmp['offset'] = 0
-        if bram_dmp['length'] != self.length * (self.width / 8):
+        if bram_dmp['length'] != self.length:
             raise RuntimeError('%s.read_uint() - expected %i bytes, got %i'
                               % (self.name, self.length, bram_dmp['length'] / (self.width / 8)))
         # read the extra value

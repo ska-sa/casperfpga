@@ -37,19 +37,33 @@ class Memory(bitfield.Bitfield):
     """
     Memory on an FPGA
     """
-    def __init__(self, name, width, length):
+    def __init__(self, name, width, address, length):
         """
-        @param width  In bits. i.e. a register is 32 bits wide, one long.
-        @param length  In words, how many times does this bitfield repeat?
+        A chunk of memory on a device.
+        :param name: a name for this memory
+        :param width: the width, in bits, PER WORD
+        :param address: the start address in device memory
+        :param length: length, in BYTES
+        :return:
+
+        e.g. a Register has width=32, length=4
+        e.g.2. a Snapblock could have width=128, length=32768
         """
         bitfield.Bitfield.__init__(self, name=name, width=width)
+        self.address = address
         self.length = length
         self.block_info = {}
-        LOGGER.debug('New FPGA memory block, %s', self)
+        LOGGER.debug('New Memory %s', self)
 
     def __str__(self):
-        rv = '%s, %i * %i, fields[%s]' % (self.name, self.width, self.length, self.fields_string_get())
-        return rv
+        return '%s%s: %ibits * %i, fields[%s]' % (self.name, '' if self.address == -1 else '@0x%08x',
+                                                  self.width, self.length_in_words(), self.fields_string_get())
+
+    def length_in_words(self):
+        """
+        :return: the memory block's length, in Words
+        """
+        return self.width / (self.length / 8)
 
     # def __setattr__(self, name, value):
     #     try:
@@ -82,7 +96,8 @@ class Memory(bitfield.Bitfield):
         raise RuntimeError('Must be implemented by subclass.')
 
     def _process_data(self, rawdata):
-        """Process raw data according to this memory's bitfield setup.
+        """
+        Process raw data according to this memory's bitfield setup.
         """
         if not(isinstance(rawdata, str) or isinstance(rawdata, buffer)):
             raise TypeError('self.read_raw returning incorrect datatype. Must be str or buffer.')

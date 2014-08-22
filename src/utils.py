@@ -5,6 +5,8 @@ import Queue
 import time
 import logging
 
+from casperfpga import CasperFpga
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -56,10 +58,12 @@ def parse_fpg(filename):
             metalist.append((name, tag, param, value))
         elif line.startswith('?register'):
             register = line.replace('\_', ' ').replace('?register ', '').replace('\n', '').lstrip().rstrip()
-            name, address, size = register.split(' ')
+            name, address, size_bytes = register.split(' ')
+            address = int(address, 16)
+            size_bytes = int(size_bytes, 16)
             if name in memorydict.keys():
                 raise RuntimeError('%s: mem device %s already in dictionary' % (filename, name))
-            memorydict[name] = {'address': address, 'bytes': size}
+            memorydict[name] = {'address': address, 'bytes': size_bytes}
     fptr.close()
     return create_meta_dictionary(metalist), memorydict
 
@@ -104,14 +108,14 @@ def program_fpgas(fpga_list, progfile, timeout=10):
     LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (len(fpga_list), time.time() - stime))
 
 
-def threaded_create_fpgas_from_hosts(host_list, port=7147, timeout=10):
+def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=10):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
     :param host_list:
     :return:
     """
     def makefpga(resultq, host):
-        resultq.put_nowait(KatcpClientFpga(host, port))
+        resultq.put_nowait(fpga_class(host, port))
 
     results = Queue.Queue(maxsize=len(host_list))
     thread_list = []
@@ -160,8 +164,8 @@ def threaded_fpga_function(fpga_list, timeout, function_name, *function_args):
 
 def threaded_fpga_operation(fpga_list, job_function, num_threads=-1, *job_args):
     """
-    Run any function on a list of KatcpClientFpga objects in a specified number of threads.
-    :param fpga_list: list of KatcpClientFpga objects
+    Run any function on a list of CasperFpga objects in a specified number of threads.
+    :param fpga_list: list of CasperFpga objects
     :param job_function: the function to be run - MUST take the FpgaClient object as its first argument
     :param num_threads: how many threads should be used. Default is one per list item
     :param job_args: further arugments for the job_function
@@ -223,7 +227,7 @@ def threaded_fpga_operation(fpga_list, job_function, num_threads=-1, *job_args):
     result_queue = Queue.Queue()
     # put the fpgas into a Thread-safe Queue
     for fpga_ in fpga_list:
-        if not isinstance(fpga_, KatcpClientFpga):
+        if not isinstance(fpga_, CasperFpga):
             raise TypeError('Currently this function only supports KatcpClientFpga objects.')
         request_queue.put(fpga_)
     # make as many worker threads a specified and start them off

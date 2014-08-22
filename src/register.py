@@ -9,17 +9,35 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Register(Memory):
-    """A CASPER register on an FPGA.
     """
-    def __init__(self, parent, name, width=32, info=None, auto_update=False):
-        """Constructor.
-        """
+    A CASPER register on an FPGA.
+    """
+    def __init__(self, parent, name, address, device_info=None, auto_update=False):
         self.auto_update = auto_update
         self.parent = parent
         self.last_values = {}
-        Memory.__init__(self, name=name, width=width, length=1)
-        self.process_info(info)
-        LOGGER.info('New register - %s', self)
+        Memory.__init__(self, name=name, width=32, address=address, length=4)
+        self.process_info(device_info)
+        LOGGER.debug('New Register %s', self)
+
+    @classmethod
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+        """
+        Process device info and the memory map to get all necessary info and return a Register instance.
+        :param device_name: the unique device name
+        :param device_info: information about this device
+        :param memorymap_dict: a dictionary containing the device memory map
+        :return: a Register object
+        """
+        address, length = -1, -1
+        for mem_name in memorymap_dict.keys():
+            if mem_name == device_name:
+                address, length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                break
+        if address == -1 or length == -1:
+            print memorymap_dict
+            raise RuntimeError('Could not find address or length for Register %s' % device_name)
+        return cls(parent, device_name, address=address, device_info=device_info)
 
     def __str__(self):
         """Return a string representation of this Register instance.
