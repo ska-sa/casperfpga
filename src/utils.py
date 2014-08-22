@@ -88,6 +88,10 @@ def program_fpgas(fpga_list, progfile, timeout=10):
         else:
             break
     if len(waiting) > 0:
+        errstr = ''
+        for waiting_ in waiting:
+            errstr += waiting_.host + ', '
+        LOGGER.error('FPGAs did not complete programming in %.2f seconds: %s', timeout, errstr)
         raise RuntimeError('Timed out waiting for FPGA programming to complete.')
     LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (len(fpga_list), time.time() - stime))
 
