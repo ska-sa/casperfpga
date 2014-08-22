@@ -9,24 +9,30 @@ LOGGER = logging.getLogger(__name__)
 
 
 def create_meta_dictionary(metalist):
-        """Build a meta information dictionary from a provided list.
-        """
-        meta_items = {}
-        for name, tag, param, value in metalist:
-            if name not in meta_items.keys():
-                meta_items[name] = {}
-            try:
-                if meta_items[name]['tag'] != tag:
-                    raise ValueError('Different tags - %s, %s - for the same item %s' %
-                                     (meta_items[name]['tag'], tag, name))
-            except KeyError:
-                meta_items[name]['tag'] = tag
-            meta_items[name][param] = value
-        return meta_items
+    """
+    Build a meta information dictionary from a provided raw meta info list.
+    :param metalist: a list of all meta information about the system
+    :return: a dictionary of device info, keyed by unique device name
+    """
+    meta_items = {}
+    for name, tag, param, value in metalist:
+        if name not in meta_items.keys():
+            meta_items[name] = {}
+        try:
+            if meta_items[name]['tag'] != tag:
+                raise ValueError('Different tags - %s, %s - for the same item %s' %
+                                 (meta_items[name]['tag'], tag, name))
+        except KeyError:
+            meta_items[name]['tag'] = tag
+        meta_items[name][param] = value
+    return meta_items
 
 
 def parse_fpg(filename):
-    """Read the meta information from the FPG file.
+    """
+    Read the meta information from the FPG file.
+    :param filename: the name of the fpg file to parse
+    :return: device info dictionary, memory map info (coreinfo.tab) dictionary
     """
     if filename is not None:
         fptr = open(filename, 'r')
@@ -36,7 +42,7 @@ def parse_fpg(filename):
             raise RuntimeError('%s does not look like an fpg file we can parse.' % filename)
     else:
         raise IOError('No such file %s' % filename)
-    memorylist = []
+    memorydict = {}
     metalist = []
     done = False
     while not done:
@@ -51,9 +57,11 @@ def parse_fpg(filename):
         elif line.startswith('?register'):
             register = line.replace('\_', ' ').replace('?register ', '').replace('\n', '').lstrip().rstrip()
             name, address, size = register.split(' ')
-            memorylist.append(name)
+            if name in memorydict.keys():
+                raise RuntimeError('%s: mem device %s already in dictionary' % (filename, name))
+            memorydict[name] = {'address': address, 'bytes': size}
     fptr.close()
-    return create_meta_dictionary(metalist), memorylist
+    return create_meta_dictionary(metalist), memorydict
 
 
 def program_fpgas(fpga_list, progfile, timeout=10):

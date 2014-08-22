@@ -5,6 +5,7 @@ Created on Feb 28, 2013
 """
 import logging
 import struct
+import time
 
 import register
 import sbram
@@ -16,10 +17,11 @@ import qdr
 from attribute_container import AttributeContainer
 from utils import parse_fpg
 
+
 LOGGER = logging.getLogger(__name__)
 
 # known CASPER memory-accessible  devices and their associated classes and containers
-casper_memory_devices = {
+CASPER_MEMORY_DEVICES = {
     'xps:bram':         {'class': sbram.Sbram,          'container': 'sbrams',      'coreinfo': True},
     'xps:katadc':       {'class': katadc.KatAdc,        'container': 'katadcs',     'coreinfo': True},
     'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs',        'coreinfo': False},
@@ -30,7 +32,7 @@ casper_memory_devices = {
 
 # other devices - blocks that aren't memory devices, but about which we'd like to know
 # tagged in the simulink diagram
-casper_other_devices = {
+CASPER_OTHER_DEVICES = {
     'casper:bitsnap':               'bitsnap',
     'casper:dec_fir':               'dec_fir',
     'casper:fft':                   'fft',
@@ -59,7 +61,7 @@ class CasperFpga(object):
         """
         self.host = host
         self.__reset_device_info()
-        LOGGER.debug('Made a CasperFpga')
+        LOGGER.debug('%s: now a CasperFpga')
 
     def read(self, device_name, size, offset=0):
         raise NotImplementedError
@@ -75,12 +77,15 @@ class CasperFpga(object):
         raise NotImplementedError
 
     def deprogram(self):
-        # the child class will deprogram the FPGA, we just reset out device information
+        """
+        The child class will deprogram the FPGA, we just reset out device information
+        :return:
+        """
         self.__reset_device_info()
 
     def __reset_device_info(self):
         """
-        Reset information about devices this FPGA knows about.
+        Reset information of devices this FPGA knows about.
         """
         # device dictionaries:
         #   devices: all of them
@@ -109,7 +114,7 @@ class CasperFpga(object):
             self.write_int('sys_scratchpad', val)
             rval = self.read_int('sys_scratchpad')
             if rval != val:
-                raise RuntimeError('%s cannot write scratchpad? %i != %i' % (self.host, rval, val))
+                raise RuntimeError('%s: cannot write scratchpad? %i != %i' % (self.host, rval, val))
         return True
 
 #    def __getattribute__(self, name):
@@ -124,11 +129,10 @@ class CasperFpga(object):
         It returns a string, as per the normal 'read' function.
         ROACH has a fixed device name for the DRAM (dram memory).
         Uses bulkread internally.
-
-        @param self    This object.
-        @param size    Integer: amount of data to read (in bytes).
-        @param offset  Integer: offset to read data from (in bytes).
-        @return  Binary string: data read.
+        :param size: amount of data to read, in bytes
+        :param offset: offset at which to read, in bytes
+        :param verbose: print extra information
+        :return: binary data string
         """
         data = []
         n_reads = 0
@@ -138,7 +142,6 @@ class CasperFpga(object):
         #read_chunk_size = (1024*1024)
         if verbose:
             print 'Reading a total of %8i bytes from offset %8i...' % (size, offset)
-
         while n_reads < size:
             dram_page = (offset + n_reads) / dram_indirect_page_size
             local_offset = (offset + n_reads) % dram_indirect_page_size
@@ -158,15 +161,15 @@ class CasperFpga(object):
         return ''.join(data)
 
     def write_dram(self, data, offset=0, verbose=False):
-        """Writes data to a ROACH's DRAM. Writes are done up to 512KiB at a time.
-           The 64MB indirect address register is automatically incremented as necessary.
-           ROACH has a fixed device name for the DRAM (dram memory) and so the user does not need to specify the write
-           register.
-
-           @param self    This object.
-           @param data    Binary packed string to write.
-           @param offset  Integer: offset to read data from (in bytes).
-           @return  Binary string: data read.
+        """
+        Writes data to a ROACH's DRAM. Writes are done up to 512KiB at a time.
+        The 64MB indirect address register is automatically incremented as necessary.
+        ROACH has a fixed device name for the DRAM (dram memory) and so the user does not need to specify the write
+        register.
+        :param data: packed binary string data to write
+        :param offset: the offset at which to write
+        :param verbose: print extra information
+        :return:
         """
         size = len(data)
         n_writes = 0
@@ -193,86 +196,77 @@ class CasperFpga(object):
             n_writes += local_writes
 
     def write(self, device_name, data, offset=0):
-        """Should issue a read command after the write and compare return to
-           the string argument to confirm that data was successfully written.
-
-           Throw exception if not match. (alternative command 'blindwrite' does
-           not perform this confirmation).
-
-           @see blindwrite
-           @param self  This object.
-           @param device_name  String: name of device / register to write to.
-           @param data  Byte string: data to write.
-           @param offset  Integer: offset to write data to (in bytes)
-           """
+        """
+        Write data, then read it to confirm a successful write.
+        :param device_name: memory device name to write
+        :param data: packed binary data string to write
+        :param offset: offset at which to write, in bytes
+        :return:
+        """
         self.blindwrite(device_name, data, offset)
         new_data = self.read(device_name, len(data), offset)
         if new_data != data:
             unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
             unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
-            LOGGER.error('Verification of write to %s at offset %d failed. \
-            Wrote 0x%08x... but got back 0x%08x...' % (device_name, offset, unpacked_wrdata, unpacked_rddata))
-            raise ValueError('Verification of write to %s at offset %d failed. \
-            Wrote 0x%08x... but got back 0x%08x...' % (device_name, offset, unpacked_wrdata, unpacked_rddata))
+            LOGGER.error('%s: verification of write to %s at offset %d failed. Wrote 0x%08x... '
+                         'but got back 0x%08x...' % (self.host, device_name, offset, unpacked_wrdata, unpacked_rddata))
+            raise ValueError('%s: verification of write to %s at offset %d failed. Wrote 0x%08x... '
+                             'but got back 0x%08x...' % (self.host, device_name, offset,
+                                                         unpacked_wrdata, unpacked_rddata))
 
-    def read_int(self, device_name):
-        """Calls .read() command with size = 4, offset = 0 and
-           unpacks returned four bytes into signed 32-bit integer.
+    def read_int(self, device_name, word_offset=0):
+        """
+        Read an integer from memory device.
+        i.e. calls self.read(device_name, size=4, offset=0) and uses struct to unpack it into an integer
+        :param device_name: device from which to read
+        :param word_offset: the 32-bit word offset at which to read
+        :return: signed 32-bit integer
+        """
+        data = self.read(device_name, 4, word_offset*4)
+        return struct.unpack('>i', data)[0]
 
-           @see read
-           @param self  This object.
-           @param device_name  String: name of device / register to read.
-           @return  Integer: value read.
-           """
-        data = self.read(device_name, 4, 0)
-        return struct.unpack(">i", data)[0]
+    def read_uint(self, device_name, word_offset=0):
+        """
+        Read an unsigned integer from memory device.
+        :param device_name: device from which to read
+        :param word_offset: the 32-bit word offset at which to read
+        :return: unsigned 32-bit integer
+        """
+        data = self.read(device_name, 4, word_offset*4)
+        return struct.unpack('>I', data)[0]
 
-    def write_int(self, device_name, integer, blindwrite=False, offset=0):
-        """Calls .write() with optional offset and integer packed into 4 bytes.
-
-           @see write
-           @param self  This object.
-           @param device_name  String: name of device / register to write to.
-           @param integer  Integer: value to write.
-           @param blindwrite  Boolean: if true, don't verify the write (calls blindwrite instead of write function).
-           @param offset  Integer: position in 32-bit words where to write data.
-           """
+    def write_int(self, device_name, integer, blindwrite=False, word_offset=0):
+        """
+        Writes an integer to the device specified at the offset specified.
+        A blind write is optional.
+        :param device_name: device to be written
+        :param integer: the integer to write
+        :param blindwrite: True for blind write, default False
+        :param word_offset: the offset at which to write, in 32-bit words
+        :return:
+        """
         # careful of packing input data into 32 bit - check range: if
         # negative, must be signed int; if positive over 2^16, must be unsigned
         # int.
-        if integer < 0:
-            data = struct.pack(">i", integer)
-        else:
-            data = struct.pack(">I", integer)
+        data = struct.pack('>i' if integer < 0 else '>I', integer)
         if blindwrite:
-            self.blindwrite(device_name, data, offset*4)
-            LOGGER.debug('Blindwrite %8x to register %s at offset %d done.'
-                               % (integer, device_name, offset))
+            self.blindwrite(device_name, data, word_offset*4)
         else:
-            self.write(device_name, data, offset*4)
-            LOGGER.debug('Write %8x to register %s at offset %d ok.'
-                               % (integer, device_name, offset))
-
-    def read_uint(self, device_name, offset=0):
-        """As in .read_int(), but unpack into 32 bit unsigned int. Optionally read at an offset 32-bit register.
-
-           @see read_int
-           @param self  This object.
-           @param device_name  String: name of device / register to read from.
-           @return  Integer: value read.
-           """
-        data = self.read(device_name, 4, offset*4)
-        return struct.unpack(">I", data)[0]
+            self.write(device_name, data, word_offset*4)
+        LOGGER.debug('write_int %8x to register %s at word offset %d okay%s.'
+                     % (integer, device_name, word_offset, ' (blind)' if blindwrite else ''))
 
     def estimate_board_clock(self):
-        """Returns the approximate clock rate of the FPGA in MHz."""
-        import time
+        """
+        Estimate the FPGA clock, in Mhz
+        :return: FPGA clock rate, in Mhz
+        """
         firstpass = self.read_uint('sys_clkcounter')
         time.sleep(2)
         secondpass = self.read_uint('sys_clkcounter')
         if firstpass > secondpass:
-            secondpass += 2 ** 32
-        return (secondpass-firstpass)/2000000.
+            secondpass += 2**32
+        return (secondpass - firstpass) / 2000000.
 
     def get_rcs(self, rcs_block_name='rcs'):
         """Retrieves and decodes a revision control block."""
@@ -312,63 +306,64 @@ class CasperFpga(object):
             rv['app_rev'] = app & ((2 ** 28)-1)
         return rv
 
-    def __create_memory_devices(self, device_info, coreinfo):
-        """Set up memory devices on this FPGA from a list of design information, from XML or from KATCP.
+    def __create_memory_devices(self, device_dict, coreinfo_dict):
+        """
+        Create memory devices from dictionaries of design information.
+        :param device_dict: raw dictionary of information from tagged blocks in Simulink design, keyed on device name
+        :param coreinfo_dict: dictionary of information that would have been in coreinfo.tab - memory bus information
+        :return:
         """
         # create and add memory devices to the memory device dictionary
-        for dname, dinfo in device_info.items():
-            if dname == '':
+        for device_name, device_info in device_dict.items():
+            if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank device name?')
-            if dname in self.memory_devices.keys():
-                raise NameError('Memory device %s already exists.' % dname)
+            if device_name in self.memory_devices.keys():
+                raise NameError('Memory device %s already exists.' % device_name)
             # get the class from the known devices, if it exists there
+            tag = device_info['tag']
             try:
-                known_device_class = casper_memory_devices[dinfo['tag']]['class']
-                known_device_container = casper_memory_devices[dinfo['tag']]['container']
+                known_device_class = CASPER_MEMORY_DEVICES[tag]['class']
+                known_device_container = CASPER_MEMORY_DEVICES[tag]['container']
             except KeyError:
                 pass
             else:
                 if not callable(known_device_class):
                     raise TypeError('%s is not a callable Memory class - that\'s a problem.' % known_device_class)
-                if casper_memory_devices[dinfo['tag']]['coreinfo']:
-                    try:
-                        coreinfo.index(dname)
-                    except ValueError:
+                # should this device appear in the memory map?
+                if CASPER_MEMORY_DEVICES[tag]['coreinfo']:
+                    if device_name not in coreinfo_dict.keys():
                         raise NameError('Memory device %s could not be found on parent %s\'s bus.'
-                                        % (dname, self.host))
-                new_device = known_device_class(parent=self, name=dname, info=dinfo)
+                                        % (device_name, self.host))
+                new_device = known_device_class(parent=self, name=device_name, info=device_info)
                 if new_device.name in self.memory_devices.keys():
                     raise NameError('Device called %s of type %s already exists in devices list.' %
                                     (new_device.name, type(new_device)))
-                self.devices[dname] = new_device
-                self.memory_devices[dname] = new_device
+                self.devices[device_name] = new_device
+                self.memory_devices[device_name] = new_device
                 container = getattr(self, known_device_container)
-                setattr(container, dname, new_device)
-                assert id(getattr(container, dname)) == id(new_device) == id(self.memory_devices[dname])
+                setattr(container, device_name, new_device)
+                assert id(getattr(container, device_name)) == id(new_device) == id(self.memory_devices[device_name])
         # allow devices to update themselves with full device info
         for name, device in self.memory_devices.items():
             try:
-                update_func = device.post_create_update
+                device.post_create_update(device_dict)
             except AttributeError:  # the device may not have an update function
                 pass
-            else:
-                update_func(device_info)
 
-    def __create_other_devices(self, device_info):
-        """Other devices information are just stored in a dictionary.
+    def __create_other_devices(self, device_dict):
         """
-        for dname, dinfo in device_info.items():
-            if dname == '':
+        Store non-memory device information in a dictionary
+        :param device_dict: raw dictionary of information from tagged blocks in Simulink design, keyed on device name
+        :return:
+        """
+        for device_name, device_info in device_dict.items():
+            if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank device name?')
-            if dname in self.other_devices.keys():
-                raise NameError('Other device %s already exists.' % dname)
-            try:
-                casper_other_devices[dinfo['tag']]
-            except KeyError:
-                pass  # we do not know about this tag, so ignore it
-            else:
-                self.devices[dname] = dinfo
-                self.other_devices[dname] = dinfo
+            if device_name in self.other_devices.keys():
+                raise NameError('Other device %s already exists.' % device_name)
+            if device_info['tag'] in CASPER_OTHER_DEVICES.keys():
+                self.devices[device_name] = device_info
+                self.other_devices[device_name] = device_info
 
     def device_names_by_container(self, container_name):
         """Return a list of devices in a certain container.
@@ -383,7 +378,7 @@ class CasperFpga(object):
     def get_config_file_info(self):
         """
         """
-        host_dict = self._read_system_info_from_host(device=77777)
+        host_dict = self._read_design_info_from_host(device=77777)
         info = {'name': host_dict['77777']['system'], 'build_time': host_dict['77777']['builddate']}
         #TODO conversion to time python understands
         return info
@@ -399,17 +394,17 @@ class CasperFpga(object):
         if (filename is None) and (fpg_info is None):
             raise RuntimeError('Either filename or parsed fpg data must be given.')
         if filename is not None:
-            device_info, coreinfo_devices = parse_fpg(filename)
+            device_dict, memorymap_dict = parse_fpg(filename)
         else:
-            device_info = fpg_info[0]
-            coreinfo_devices = fpg_info[1]
+            device_dict = fpg_info[0]
+            memorymap_dict = fpg_info[1]
         try:
-            self.system_info.update(device_info['77777'])
+            self.system_info.update(device_dict['77777'])
         except KeyError:
             LOGGER.warn('No sys info key in design info!')
         # reset current devices and create new ones from the new design information
         self.__reset_device_info()
-        self.__create_memory_devices(device_info, coreinfo_devices)
-        self.__create_other_devices(device_info)
+        self.__create_memory_devices(device_dict, memorymap_dict)
+        self.__create_other_devices(device_dict)
 
 # end
