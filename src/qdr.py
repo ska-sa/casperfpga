@@ -105,8 +105,8 @@ class Qdr(Memory):
                                                        'show_format': 'off'})
         self.memory = self.which_qdr + '_memory'
         LOGGER.debug('New Qdr %s', self)
-        # TODO
-        # Link QDR ctrl register properly
+
+        # TODO - Link QDR ctrl register to self.registers properly
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict):

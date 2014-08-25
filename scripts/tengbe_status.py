@@ -15,6 +15,8 @@ import time
 import argparse
 import casperfpga.scroll as scroll
 from casperfpga import utils
+from casperfpga import katcp_fpga
+from casperfpga import dcp_fpga
 
 logger = logging.getLogger(__name__)
 #logging.basicConfig(level=logging.INFO)
@@ -24,16 +26,21 @@ parser = argparse.ArgumentParser(description='Display TenGBE interface informati
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(dest='hosts', type=str, action='store',
                     help='comma-delimited list of hosts')
-parser.add_argument('-p', '--polltime', dest='polltime', action='store',
-                    default=1, type=int,
+parser.add_argument('-p', '--polltime', dest='polltime', action='store', default=1, type=int,
                     help='time at which to poll data, in seconds')
+parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
+                    help='katcp (default) or dcp?')
 args = parser.parse_args()
 polltime = args.polltime
 
-hosts = args.hosts.lstrip().rstrip().replace(' ', '').split(',')
+if args.comms == 'katcp':
+    HOSTCLASS = katcp_fpga.KatcpFpga
+else:
+    HOSTCLASS = dcp_fpga.DcpFpga
 
 # create the devices and connect to them
-fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
+host_list = args.hosts.lstrip().rstrip().replace(' ', '').split(',')
+fpgas = utils.threaded_create_fpgas_from_hosts(HOSTCLASS, host_list)
 utils.threaded_fpga_function(fpgas, 10, 'test_connection')
 utils.threaded_fpga_function(fpgas, 10, 'get_system_information')
 for fpga in fpgas:
@@ -43,9 +50,9 @@ for fpga in fpgas:
     print '%s: found %i 10gbe core%s.' % (fpga.host, numgbes, '' if numgbes == 1 else 's')
 
 
-# noinspection PyShadowingNames
 def get_gbe_data(fpga):
-    """Get 10gbe data counters from the fpga.
+    """
+    Get 10gbe data counters from the fpga.
     """
     returndata = {}
     for gbecore in fpga.tengbes:
@@ -53,25 +60,24 @@ def get_gbe_data(fpga):
     return returndata
 
 
-# noinspection PyShadowingNames
 def get_tap_data(fpga):
-    """What is says on the tin.
+    """
+    What it says on the tin.
     """
     data = {}
     for gbecore in fpga.tengbes.names():
         data[gbecore] = fpga.tengbes[gbecore].tap_info()
     return data
 
-# get tap data
-tap_data = {}
-for fpga in fpgas:
-    tap_data[fpga.host] = get_tap_data(fpga)
+# get gbe and tap data
+tap_data = utils.threaded_fpga_operation(fpgas, get_tap_data)
+gbe_data = utils.threaded_fpga_operation(fpgas, get_gbe_data)
 
 # work out tables for each fpga
 fpga_headers = []
 master_list = []
 for cnt, fpga in enumerate(fpgas):
-    gbedata = get_gbe_data(fpga)
+    gbedata = gbe_data[fpga.host]
     gbe0 = gbedata.keys()[0]
     core0_regs = [key.replace(gbe0, 'gbe') for key in gbedata[gbe0].keys()]
     if cnt == 0:
@@ -142,8 +148,9 @@ try:
             else:
                 scroller.set_ypos(1)
                 scroller.set_ylimits(ymin=1)
+            gbe_data = utils.threaded_fpga_operation(fpgas, get_gbe_data)
             for ctr, fpga in enumerate(fpgas):
-                fpga_data = get_gbe_data(fpga)
+                fpga_data = gbe_data[fpga.host]
                 scroller.add_line(fpga.host)
                 for core, core_data in fpga_data.items():
                     fpga_data[core]['tap_running'] =\

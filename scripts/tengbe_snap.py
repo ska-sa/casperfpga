@@ -14,10 +14,12 @@ import logging
 import time
 import argparse
 
+from casperfpga import tengbe
+from casperfpga import katcp_fpga
+from casperfpga import dcp_fpga
+
 logger = logging.getLogger(__name__)
 #logging.basicConfig(level=logging.INFO)
-
-from casperfpga import KatcpClientFpga, tengbe
 
 parser = argparse.ArgumentParser(description='Display the contents of an FPGA''s 10Gbe buffers.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -38,10 +40,17 @@ parser.add_argument('-s', '--spead', dest='spead', action='store_true',
 parser.add_argument('--hex', dest='hex', action='store_true',
                     default=False,
                     help='show numbers in hex')
+parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
+                    help='katcp (default) or dcp?')
 args = parser.parse_args()
 
+if args.comms == 'katcp':
+    HOSTCLASS = katcp_fpga.KatcpFpga
+else:
+    HOSTCLASS = dcp_fpga.DcpFpga
+
 # create the device and connect to it
-fpga = KatcpClientFpga(args.hostname, 7147)
+fpga = HOSTCLASS(args.hostname, 7147)
 time.sleep(0.2)
 if not fpga.is_connected():
     fpga.connect()

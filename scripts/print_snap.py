@@ -11,7 +11,8 @@ Created on Fri Jan  3 10:40:53 2014
 """
 import argparse
 
-from casperfpga import KatcpClientFpga
+from casperfpga import katcp_fpga
+from casperfpga import dcp_fpga
 
 # if __name__ == '__main__':
 #     print 'mainfunc'
@@ -38,10 +39,17 @@ parser.add_argument('-e', '--manvalid', dest='manvalid', action='store_true',
 parser.add_argument('-c', '--circcap', dest='circcap', action='store_true',
                     default=False,
                     help='select circular capture mode')
+parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
+                    help='katcp (default) or dcp?')
 parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
                     default=False,
                     help='show debug output')
 args = parser.parse_args()
+
+if args.comms == 'katcp':
+    HOSTCLASS = katcp_fpga.KatcpFpga
+else:
+    HOSTCLASS = dcp_fpga.DcpFpga
 
 if args.verbose:
     import logging
@@ -49,7 +57,7 @@ if args.verbose:
     logging.basicConfig(level=logging.INFO)
 
 # create the device and connect to it
-fpga = KatcpClientFpga(args.hostname, 7147)
+fpga = HOSTCLASS(args.hostname, 7147)
 fpga.test_connection()
 fpga.get_system_information()
 

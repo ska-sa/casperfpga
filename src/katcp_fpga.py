@@ -253,6 +253,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :param wait_complete: wait for the transaction to complete, return after upload if False
         :return:
         """
+        LOGGER.info('Uploading %s to %s, programming when done' % (filename, self.host))
+
         # does the file that is to be uploaded exist on the local filesystem?
         os.path.getsize(filename)
 
@@ -404,6 +406,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :param device: can specify a device name if you don't want everything
         :return: a dictionary of metadata
         """
+        LOGGER.debug('Reading designinfo from %s' % self.host)
         if device is None:
             reply, informs = self.katcprequest(name='meta', request_timeout=self._timeout, require_ok=True)
         else:
@@ -427,6 +430,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         Get the equivalent of coreinfo.tab from the host using KATCP listdev commands.
         :return:
         """
+        LOGGER.debug('Reading coreinfo from %s' % self.host)
         memorymap_dict = {}
         listdev_size = self.listdev(getsize=True)
         listdev_address = self.listdev(getaddress=True)

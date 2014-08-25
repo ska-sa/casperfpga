@@ -5,8 +5,6 @@ import Queue
 import time
 import logging
 
-from casperfpga import CasperFpga
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -36,6 +34,7 @@ def parse_fpg(filename):
     :param filename: the name of the fpg file to parse
     :return: device info dictionary, memory map info (coreinfo.tab) dictionary
     """
+    LOGGER.debug('Parsing file %s for system information' % filename)
     if filename is not None:
         fptr = open(filename, 'r')
         firstline = fptr.readline().strip().rstrip('\n')
@@ -111,7 +110,10 @@ def program_fpgas(fpga_list, progfile, timeout=10):
 def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=10):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
-    :param host_list:
+    :param fpga_class: the class to instantiate - KatcpFpga or DcpFpga
+    :param host_list: a comma-seperated list of hosts
+    :param port: the port on which to do network comms
+    :param timeout: how long to wait, in seconds
     :return:
     """
     def makefpga(resultq, host):
@@ -186,6 +188,8 @@ def threaded_fpga_operation(fpga_list, job_function, num_threads=-1, *job_args):
     if job_function is None:
         raise RuntimeError("No job_function? Not allowed!")
 
+    from casperfpga import CasperFpga
+
     class CorrWorker(threading.Thread):
         def __init__(self, request_q, result_q, job_func, *jfunc_args):
             """
@@ -228,7 +232,7 @@ def threaded_fpga_operation(fpga_list, job_function, num_threads=-1, *job_args):
     # put the fpgas into a Thread-safe Queue
     for fpga_ in fpga_list:
         if not isinstance(fpga_, CasperFpga):
-            raise TypeError('Currently this function only supports KatcpClientFpga objects.')
+            raise TypeError('Currently this function only supports CasperFpga objects.')
         request_queue.put(fpga_)
     # make as many worker threads a specified and start them off
     workers = [CorrWorker(request_queue, result_queue, job_function, *job_args) for _ in range(0, num_threads)]
