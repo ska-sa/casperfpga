@@ -153,15 +153,14 @@ class Qdr(Memory):
         if step == 0:
             return
         if step > 0:
-            self.ctrl_reg.write_int(0xffffffff, blindwrite=True, offset=7)
+            self.ctrl_reg.write_int(0xffffffff, blindwrite=True, word_offset=7)
         else:
-            self.ctrl_reg.write_int(0, blindwrite=True, offset=7)
+            self.ctrl_reg.write_int(0, blindwrite=True, word_offset=7)
         for _ in range(abs(step)):
-            self.ctrl_reg.write_int(0, blindwrite=True, offset=offset)
-            self.ctrl_reg.write_int(0, blindwrite=True, offset=5)
-            self.ctrl_reg.write_int(0xffffffff & bitmask, blindwrite=True,
-                                    offset=offset)
-            self.ctrl_reg.write_int(offset_mask, blindwrite=True, offset=5)
+            self.ctrl_reg.write_int(0, blindwrite=True, word_offset=offset)
+            self.ctrl_reg.write_int(0, blindwrite=True, word_offset=5)
+            self.ctrl_reg.write_int(0xffffffff & bitmask, blindwrite=True, word_offset=offset)
+            self.ctrl_reg.write_int(offset_mask, blindwrite=True, word_offset=5)
 
     def _delay_out_step(self, bitmask, step):
         """Steps all OUT bits in bitmask by 'step' number of taps.
@@ -179,12 +178,12 @@ class Qdr(Memory):
         if step == 0:
             return
         elif step > 0:
-            self.ctrl_reg.write_int(0xffffffff, blindwrite=True, offset=7)
+            self.ctrl_reg.write_int(0xffffffff, blindwrite=True, word_offset=7)
         elif step < 0:
-            self.ctrl_reg.write_int(0, blindwrite=True, offset=7)
+            self.ctrl_reg.write_int(0, blindwrite=True, word_offset=7)
         for _ in range(abs(step)):
-            self.ctrl_reg.write_int(0, blindwrite=True, offset=5)
-            self.ctrl_reg.write_int(1 << 8, blindwrite=True, offset=5)
+            self.ctrl_reg.write_int(0, blindwrite=True, word_offset=5)
+            self.ctrl_reg.write_int(1 << 8, blindwrite=True, word_offset=5)
 
     def _delay_clk_get(self):
         """Gets the current value for the clk delay.

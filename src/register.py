@@ -86,10 +86,10 @@ class Register(Memory):
     def read_uint(self, **kwargs):
         return self.parent.read_uint(self.name, **kwargs)
 
-    def write_int(self, uintvalue, blindwrite=False, offset=0):
+    def write_int(self, uintvalue, blindwrite=False, word_offset=0):
         """Write an unsigned integer to this device using the fpga client.
         """
-        self.parent.write_int(device_name=self.name, integer=uintvalue, blindwrite=blindwrite, offset=offset)
+        self.parent.write_int(device_name=self.name, integer=uintvalue, blindwrite=blindwrite, word_offset=word_offset)
 
     def write(self, **kwargs):
         # write fields in a register, using keyword arguments
