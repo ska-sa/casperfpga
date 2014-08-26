@@ -27,7 +27,7 @@ def calibrate_all_qdrs(fpga_list, timeout):
     :param timeout: how long to wait
     :return: a dictionary containing the calibration status of all the FPGAs in the list.
     """
-    return threaded_fpga_operation(fpga_list, calibrate_qdrs, -1, timeout)
+    return threaded_fpga_operation(fpga_list, calibrate_qdrs, timeout * len(fpga_list), timeout)
 
 
 def calibrate_qdrs(fpgahost, timeout=10):

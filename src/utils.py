@@ -140,7 +140,7 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=1
     return fpgas
 
 
-def threaded_fpga_function(fpga_list, timeout, function_name, *function_args):
+def threaded_fpga_function(fpga_list, function_name, timeout=10, *function_args):
     """
     Thread the running of any KatcpClientFpga function on a list of KatcpClientFpga objects.
     Much faster.

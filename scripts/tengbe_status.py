@@ -50,8 +50,8 @@ hosts = utils.parse_hosts(args.hosts)
 if len(hosts) == 0:
     raise RuntimeError('No good carrying on without hosts.')
 fpgas = utils.threaded_create_fpgas_from_hosts(HOSTCLASS, hosts)
-utils.threaded_fpga_function(fpgas, 10, 'test_connection')
-utils.threaded_fpga_function(fpgas, 10, 'get_system_information')
+utils.threaded_fpga_function(fpgas, 'test_connection')
+utils.threaded_fpga_function(fpgas, 'get_system_information')
 for fpga in fpgas:
     numgbes = len(fpga.tengbes)
     if numgbes < 1:
