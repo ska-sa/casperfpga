@@ -20,30 +20,23 @@ from casperfpga import dcp_fpga
 parser = argparse.ArgumentParser(description='Print any snapblock(s) on a FPGA.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(dest='hostname', type=str, action='store',
-                    help='the hostname of the digitiser')
-parser.add_argument('-l', '--listsnaps', dest='listsnaps', action='store_true',
-                    default=False,
+                    help='the hostname of the FPGA')
+parser.add_argument('-l', '--listsnaps', dest='listsnaps', action='store_true', default=False,
                     help='list snap blocks on this device')
-parser.add_argument('-n', '--numrows', dest='numrows', action='store',
-                    default=-1, type=int,
+parser.add_argument('-n', '--numrows', dest='numrows', action='store', default=-1, type=int,
                     help='the number of rows to print, -1 for all')
-parser.add_argument('-s', '--snap', dest='snap', action='store',
-                    default='', type=str,
+parser.add_argument('-s', '--snap', dest='snap', action='store', default='', type=str,
                     help='the snap to query, all for ALL of them!')
-parser.add_argument('-t', '--mantrig', dest='mantrig', action='store_true',
-                    default=False,
+parser.add_argument('-t', '--mantrig', dest='mantrig', action='store_true', default=False,
                     help='manually trigger the snapshot')
-parser.add_argument('-e', '--manvalid', dest='manvalid', action='store_true',
-                    default=False,
+parser.add_argument('-e', '--manvalid', dest='manvalid', action='store_true', default=False,
                     help='manually enable the snapshot valid')
-parser.add_argument('-c', '--circcap', dest='circcap', action='store_true',
-                    default=False,
+parser.add_argument('-c', '--circcap', dest='circcap', action='store_true', default=False,
                     help='select circular capture mode')
 parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
                     help='katcp (default) or dcp?')
-parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
-                    default=False,
-                    help='show debug output')
+parser.add_argument('--loglevel', dest='log_level', action='store', default='',
+                    help='log level to use, default None, options INFO, DEBUG, ERROR')
 args = parser.parse_args()
 
 if args.comms == 'katcp':
@@ -51,10 +44,13 @@ if args.comms == 'katcp':
 else:
     HOSTCLASS = dcp_fpga.DcpFpga
 
-if args.verbose:
+if args.log_level != '':
     import logging
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(level=logging.INFO)
+    log_level = args.log_level.strip()
+    try:
+        logging.basicConfig(level=eval('logging.%s' % log_level))
+    except AttributeError:
+        raise RuntimeError('No such log level: %s' % log_level)
 
 # create the device and connect to it
 fpga = HOSTCLASS(args.hostname, 7147)

@@ -10,28 +10,35 @@ Created on Fri Jan  3 10:40:53 2014
 @author: paulp
 """
 import sys
-import logging
 import time
 import argparse
+import signal
+
 import casperfpga.scroll as scroll
 from casperfpga import utils
 from casperfpga import katcp_fpga
 from casperfpga import dcp_fpga
 
-logger = logging.getLogger(__name__)
-#logging.basicConfig(level=logging.INFO)
-
-
 parser = argparse.ArgumentParser(description='Display TenGBE interface information about a MeerKAT fpga host.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(dest='hosts', type=str, action='store',
-                    help='comma-delimited list of hosts')
+                    help='comma-delimited list of hosts, or a corr2 config file')
 parser.add_argument('-p', '--polltime', dest='polltime', action='store', default=1, type=int,
                     help='time at which to poll data, in seconds')
 parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
                     help='katcp (default) or dcp?')
+parser.add_argument('--loglevel', dest='log_level', action='store', default='',
+                    help='log level to use, default None, options INFO, DEBUG, ERROR')
 args = parser.parse_args()
 polltime = args.polltime
+
+if args.log_level != '':
+    import logging
+    log_level = args.log_level.strip()
+    try:
+        logging.basicConfig(level=eval('logging.%s' % log_level))
+    except AttributeError:
+        raise RuntimeError('No such log level: %s' % log_level)
 
 if args.comms == 'katcp':
     HOSTCLASS = katcp_fpga.KatcpFpga
@@ -39,8 +46,10 @@ else:
     HOSTCLASS = dcp_fpga.DcpFpga
 
 # create the devices and connect to them
-host_list = args.hosts.lstrip().rstrip().replace(' ', '').split(',')
-fpgas = utils.threaded_create_fpgas_from_hosts(HOSTCLASS, host_list)
+hosts = utils.parse_hosts(args.hosts)
+if len(hosts) == 0:
+    raise RuntimeError('No good carrying on without hosts.')
+fpgas = utils.threaded_create_fpgas_from_hosts(HOSTCLASS, hosts)
 utils.threaded_fpga_function(fpgas, 10, 'test_connection')
 utils.threaded_fpga_function(fpgas, 10, 'get_system_information')
 for fpga in fpgas:
@@ -99,8 +108,6 @@ if all_the_same:
 fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr', 'gbe_rxerrctr',
                  'gbe_rxbadctr', 'gbe_txerrctr', 'gbe_txfullctr', 'gbe_txofctr',
                  'gbe_txctr', 'gbe_txvldctr']]
-
-import signal
 
 
 # noinspection PyShadowingNames

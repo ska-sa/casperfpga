@@ -116,22 +116,27 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=1
     :param timeout: how long to wait, in seconds
     :return:
     """
-    def makefpga(resultq, host):
-        resultq.put_nowait(fpga_class(host, port))
-
-    results = Queue.Queue(maxsize=len(host_list))
+    num_hosts = len(host_list)
+    result_queue = Queue.Queue(maxsize=num_hosts)
     thread_list = []
     for host_ in host_list:
-        thread = threading.Thread(target=makefpga, args=(results, host_))
+        thread = threading.Thread(target=lambda rqueue, hostname: rqueue.put_nowait(fpga_class(hostname, port)),
+                                  args=(result_queue, host_))
         thread.daemon = True
         thread.start()
         thread_list.append(thread)
     for thread_ in thread_list:
         thread_.join(timeout)
     fpgas = []
-    while not results.empty():
-        result = results.get()
+    stime = time.time()
+    while (not len(fpgas) == num_hosts) and (time.time() - stime < timeout):
+        if result_queue.empty():
+            time.sleep(0.1)
+        result = result_queue.get()
         fpgas.append(result)
+    if len(fpgas) != num_hosts:
+        print fpgas
+        raise RuntimeError('Given %d hosts, only made %d %ss' % (num_hosts, len(fpgas), fpga_class))
     return fpgas
 
 
@@ -148,23 +153,30 @@ def threaded_fpga_function(fpga_list, timeout, function_name, *function_args):
     def dofunc(resultq, fpga):
         rv = eval('fpga.%s' % function_name)(*function_args)
         resultq.put_nowait((fpga.host, rv))
-    results = Queue.Queue(maxsize=len(fpga_list))
+    num_fpgas = len(fpga_list)
+    result_queue = Queue.Queue(maxsize=num_fpgas)
     thread_list = []
     for fpga_ in fpga_list:
-        thread = threading.Thread(target=dofunc, args=(results, fpga_))
+        thread = threading.Thread(target=dofunc, args=(result_queue, fpga_))
         thread.daemon = True
         thread.start()
         thread_list.append(thread)
     for thread_ in thread_list:
         thread_.join(timeout)
     returnval = {}
-    while not results.empty():
-        result = results.get()
+    stime = time.time()
+    while (not len(returnval) == num_fpgas) and (time.time() - stime < timeout):
+        if result_queue.empty():
+            time.sleep(0.1)
+        result = result_queue.get()
         returnval[result[0]] = result[1]
+    if len(returnval) != num_fpgas:
+        print returnval
+        raise RuntimeError('Given %d FPGAs, only got %d results, must have timed out.' % (num_fpgas, len(returnval)))
     return returnval
 
 
-def threaded_fpga_operation(fpga_list, job_function, num_threads=-1, *job_args):
+def threaded_fpga_operation(fpga_list, job_function, timeout=10, *job_args):
     """
     Run any function on a list of CasperFpga objects in a specified number of threads.
     :param fpga_list: list of CasperFpga objects
@@ -188,6 +200,7 @@ def threaded_fpga_operation(fpga_list, job_function, num_threads=-1, *job_args):
     if job_function is None:
         raise RuntimeError("No job_function? Not allowed!")
 
+    num_fpgas = len(fpga_list)
     from casperfpga import CasperFpga
 
     class CorrWorker(threading.Thread):
@@ -225,8 +238,6 @@ def threaded_fpga_operation(fpga_list, job_function, num_threads=-1, *job_args):
                 except Queue.Empty:
                     done = True
 
-    if num_threads == -1:
-        num_threads = len(fpga_list)
     request_queue = Queue.Queue()
     result_queue = Queue.Queue()
     # put the fpgas into a Thread-safe Queue
@@ -234,19 +245,23 @@ def threaded_fpga_operation(fpga_list, job_function, num_threads=-1, *job_args):
         if not isinstance(fpga_, CasperFpga):
             raise TypeError('Currently this function only supports CasperFpga objects.')
         request_queue.put(fpga_)
-    # make as many worker threads a specified and start them off
-    workers = [CorrWorker(request_queue, result_queue, job_function, *job_args) for _ in range(0, num_threads)]
-    for w in workers:
-        w.daemon = True
-        w.start()
+    # make as many worker threads as specified and start them off
+    workers = [CorrWorker(request_queue, result_queue, job_function, *job_args) for _ in range(0, num_fpgas)]
+    for worker in workers:
+        worker.daemon = True
+        worker.start()
     # join the last one to wait for completion
-    request_queue.join()
+    request_queue.join(timeout)
     # format the result into a dictionary by host
-    rv = {}
-    while not result_queue.empty():
+    returnval = {}
+    stime = time.time()
+    while (not len(returnval) == num_fpgas) and (time.time() - stime < timeout):
         result = result_queue.get()
-        rv[result[0]] = result[1]
-    return rv
+        returnval[result[0]] = result[1]
+    if len(returnval) != num_fpgas:
+        print returnval
+        raise RuntimeError('Given %d FPGAs, only got %d results, must have timed out.' % (num_fpgas, len(returnval)))
+    return returnval
 
 
 def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
@@ -258,7 +273,8 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
     :param request_args: the arguments to the request, as a list
     :return: a dictionary, keyed by hostname, of result dictionaries containing reply and informs
     """
-    reply_queue = Queue.Queue(maxsize=len(fpga_list))
+    num_fpgas = len(fpga_list)
+    reply_queue = Queue.Queue(maxsize=num_fpgas)
     requests = {}
     replies = {}
 
@@ -268,7 +284,7 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         reply_queue.put_nowait([host, req_id])
 
     # start the requests
-    LOGGER.debug('Send request(%s) to %i hosts.' % (request, len(fpga_list)))
+    LOGGER.debug('Send request(%s) to %i hosts.' % (request, num_fpgas))
     lock = threading.Lock()
     for fpga_ in fpga_list:
         lock.acquire()
@@ -287,7 +303,7 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
             timedout = True
             break
         replies[it[0]] = it[1]
-        if len(replies) == len(fpga_list):
+        if len(replies) == num_fpgas:
             done = True
     if timedout:
         LOGGER.error('non_blocking_request timeout after %is.' % timeout)
@@ -295,7 +311,7 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         raise RuntimeError('non_blocking_request timeout after %is.' % timeout)
 
     # process the replies
-    rv = {}
+    returnval = {}
     for fpga_ in fpga_list:
         try:
             request_id = replies[fpga_.host]
@@ -311,6 +327,6 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         for inf in informs:
             informlist.append(inf.arguments)
         frv['informs'] = informlist
-        rv[fpga_.host] = frv
+        returnval[fpga_.host] = frv
         fpga_.nb_pop_request_by_id(request_id)
-    return rv
+    return returnval

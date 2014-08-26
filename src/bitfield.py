@@ -65,6 +65,9 @@ class Bitfield(object):
             bs.subcon.subcons = bs.subcon.subcons + (newfield,)
         self.bitstruct = bs
 
+    def field_names(self):
+        return self._fields.keys()
+
     def field_get_by_name(self, fieldname):
         """Get a field from this bitfield by its name.
         """

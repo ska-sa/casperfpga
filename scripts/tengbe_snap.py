@@ -10,16 +10,12 @@ Created on Fri Jan  3 10:40:53 2014
 @author: paulp
 """
 import sys
-import logging
 import time
 import argparse
 
 from casperfpga import tengbe
 from casperfpga import katcp_fpga
 from casperfpga import dcp_fpga
-
-logger = logging.getLogger(__name__)
-#logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser(description='Display the contents of an FPGA''s 10Gbe buffers.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -42,7 +38,17 @@ parser.add_argument('--hex', dest='hex', action='store_true',
                     help='show numbers in hex')
 parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
                     help='katcp (default) or dcp?')
+parser.add_argument('--loglevel', dest='log_level', action='store', default='',
+                    help='log level to use, default None, options INFO, DEBUG, ERROR')
 args = parser.parse_args()
+
+if args.log_level != '':
+    import logging
+    log_level = args.log_level.strip()
+    try:
+        logging.basicConfig(level=eval('logging.%s' % log_level))
+    except AttributeError:
+        raise RuntimeError('No such log level: %s' % log_level)
 
 if args.comms == 'katcp':
     HOSTCLASS = katcp_fpga.KatcpFpga

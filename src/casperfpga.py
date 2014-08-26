@@ -96,12 +96,8 @@ class CasperFpga(object):
         self.other_devices = {}
 
         # containers
-        self.registers = AttributeContainer()
-        self.snapshots = AttributeContainer()
-        self.sbrams = AttributeContainer()
-        self.tengbes = AttributeContainer()
-        self.katadcs = AttributeContainer()
-        self.qdrs = AttributeContainer()
+        for container_ in CASPER_MEMORY_DEVICES.values():
+            setattr(self, container_['container'], AttributeContainer())
 
         # hold misc information about the bof file, program time, etc
         self.system_info = {}
@@ -256,18 +252,6 @@ class CasperFpga(object):
         LOGGER.debug('write_int %8x to register %s at word offset %d okay%s.'
                      % (integer, device_name, word_offset, ' (blind)' if blindwrite else ''))
 
-    def estimate_board_clock(self):
-        """
-        Estimate the FPGA clock, in Mhz
-        :return: FPGA clock rate, in Mhz
-        """
-        firstpass = self.read_uint('sys_clkcounter')
-        time.sleep(2)
-        secondpass = self.read_uint('sys_clkcounter')
-        if firstpass > secondpass:
-            secondpass += 2**32
-        return (secondpass - firstpass) / 2000000.
-
     def get_rcs(self, rcs_block_name='rcs'):
         """Retrieves and decodes a revision control block."""
         raise NotImplementedError
@@ -402,5 +386,16 @@ class CasperFpga(object):
         self.__reset_device_info()
         self.__create_memory_devices(device_dict, memorymap_dict)
         self.__create_other_devices(device_dict)
+
+    def estimate_fpga_clock(self):
+        """
+        Get the estimated clock of the running FPGA, in Mhz.
+        """
+        firstpass = self.read_uint('sys_clkcounter')
+        time.sleep(2.0)
+        secondpass = self.read_uint('sys_clkcounter')
+        if firstpass > secondpass:
+            secondpass = secondpass + (2**32)
+        return (secondpass - firstpass) / 2000000.0
 
 # end
