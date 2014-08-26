@@ -120,20 +120,20 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=1
     result_queue = Queue.Queue(maxsize=num_hosts)
     thread_list = []
     for host_ in host_list:
-        thread = threading.Thread(target=lambda rqueue, hostname: rqueue.put_nowait(fpga_class(hostname, port)),
-                                  args=(result_queue, host_))
+        thread = threading.Thread(target=lambda hostname: result_queue.put_nowait(fpga_class(hostname, port)),
+                                  args=(host_,))
         thread.daemon = True
         thread.start()
         thread_list.append(thread)
     for thread_ in thread_list:
         thread_.join(timeout)
     fpgas = []
-    stime = time.time()
-    while (not len(fpgas) == num_hosts) and (time.time() - stime < timeout):
-        if result_queue.empty():
-            time.sleep(0.1)
-        result = result_queue.get()
-        fpgas.append(result)
+    while True:
+        try:
+            result = result_queue.get_nowait()
+            fpgas.append(result)
+        except Queue.Empty:
+            break
     if len(fpgas) != num_hosts:
         print fpgas
         raise RuntimeError('Given %d hosts, only made %d %ss' % (num_hosts, len(fpgas), fpga_class))
@@ -164,24 +164,23 @@ def threaded_fpga_function(fpga_list, function_name, timeout=10, *function_args)
     for thread_ in thread_list:
         thread_.join(timeout)
     returnval = {}
-    stime = time.time()
-    while (not len(returnval) == num_fpgas) and (time.time() - stime < timeout):
-        if result_queue.empty():
-            time.sleep(0.1)
-        result = result_queue.get()
-        returnval[result[0]] = result[1]
+    while True:
+        try:
+            result = result_queue.get_nowait()
+            returnval[result[0]] = result[1]
+        except Queue.Empty:
+            break
     if len(returnval) != num_fpgas:
         print returnval
         raise RuntimeError('Given %d FPGAs, only got %d results, must have timed out.' % (num_fpgas, len(returnval)))
     return returnval
 
 
-def threaded_fpga_operation(fpga_list, job_function, timeout=10, *job_args):
+def threaded_fpga_operation(fpga_list, job_function, *job_args):
     """
     Run any function on a list of CasperFpga objects in a specified number of threads.
     :param fpga_list: list of CasperFpga objects
     :param job_function: the function to be run - MUST take the FpgaClient object as its first argument
-    :param num_threads: how many threads should be used. Default is one per list item
     :param job_args: further arugments for the job_function
     :return: a dictionary, keyed by hostname, of the results from the function
     """
@@ -205,14 +204,6 @@ def threaded_fpga_operation(fpga_list, job_function, timeout=10, *job_args):
 
     class CorrWorker(threading.Thread):
         def __init__(self, request_q, result_q, job_func, *jfunc_args):
-            """
-            A thread that does a job on an FPGA - i.e. calls a function on an FPGA.
-            :param request_q:
-            :param result_q:
-            :param job_func:
-            :param jfunc_args:
-            :return:
-            """
             self.request_queue = request_q
             self.result_queue = result_q
             self.job = job_func
@@ -223,41 +214,36 @@ def threaded_fpga_operation(fpga_list, job_function, timeout=10, *job_args):
             done = False
             while not done:
                 try:
-                    # get a job from the queue - in this case, get a fpga host from the queue
-                    request_host = self.request_queue.get(block=False)
-                    # do some work - run the job function on the host
+                    request_host = self.request_queue.get_nowait()
                     try:
-                        res = self.job(request_host, *self.job_args)
+                        result_ = self.job(request_host, *self.job_args)
                     except Exception as exc:
                         errstr = "Job %s internal error: %s, %s" % (self.job.func_name, type(exc), exc)
-                        res = RuntimeError(errstr)
-                    # put the result on the result queue
-                    self.result_queue.put((request_host.host, res))
-                    # and notify done
+                        result_ = RuntimeError(errstr)
+                    self.result_queue.put_nowait((request_host.host, result_))
                     self.request_queue.task_done()
                 except Queue.Empty:
                     done = True
 
     request_queue = Queue.Queue()
     result_queue = Queue.Queue()
-    # put the fpgas into a Thread-safe Queue
     for fpga_ in fpga_list:
         if not isinstance(fpga_, CasperFpga):
             raise TypeError('Currently this function only supports CasperFpga objects.')
-        request_queue.put(fpga_)
-    # make as many worker threads as specified and start them off
+        request_queue.put_nowait(fpga_)
+    # make as many consumer/worker threads as specified and start them off
     workers = [CorrWorker(request_queue, result_queue, job_function, *job_args) for _ in range(0, num_fpgas)]
-    for worker in workers:
-        worker.daemon = True
-        worker.start()
-    # join the last one to wait for completion
-    request_queue.join(timeout)
-    # format the result into a dictionary by host
+    for worker_ in workers:
+        worker_.daemon = True
+        worker_.start()
+    request_queue.join()  # join the last one to wait for completion
     returnval = {}
-    stime = time.time()
-    while (not len(returnval) == num_fpgas) and (time.time() - stime < timeout):
-        result = result_queue.get()
-        returnval[result[0]] = result[1]
+    while True:
+        try:
+            result = result_queue.get_nowait()
+            returnval[result[0]] = result[1]
+        except Queue.Empty:
+            break
     if len(returnval) != num_fpgas:
         print returnval
         raise RuntimeError('Given %d FPGAs, only got %d results, must have timed out.' % (num_fpgas, len(returnval)))
