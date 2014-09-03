@@ -382,6 +382,8 @@ class CasperFpga(object):
             self.system_info.update(device_dict['77777'])
         except KeyError:
             LOGGER.warn('No sys info key in design info!')
+        # add system registers
+        device_dict.update(self.__add_sys_registers())
         # reset current devices and create new ones from the new design information
         self.__reset_device_info()
         self.__create_memory_devices(device_dict, memorymap_dict)
@@ -397,5 +399,17 @@ class CasperFpga(object):
         if firstpass > secondpass:
             secondpass = secondpass + (2**32)
         return (secondpass - firstpass) / 2000000.0
+
+    @staticmethod
+    def __add_sys_registers():
+        standard_reg = {'tag': 'xps:sw_reg', 'mode': 'one value', 'io_dir': 'To Processor',
+                        'io_delay': '1', 'sample_period': '1', 'sim_port': 'off', 'show_format': 'off',
+                        'names': 'reg', 'bitwidths': '32', 'arith_types': '0', 'bin_pts': '0'}
+        sys_registers = {'sys_board_id': standard_reg.copy(),
+                         'sys_rev': standard_reg.copy(),
+                         'sys_rev_rcs': standard_reg.copy(),
+                         'sys_scratchpad': standard_reg.copy(),
+                         'sys_clkcounter': standard_reg.copy()}
+        return sys_registers
 
 # end
