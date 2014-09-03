@@ -171,7 +171,8 @@ class Scroll(object):
         return strs, stre, strx, stry, yposition
 
     def draw_screen(self, data=None):
-        """Draw the screen using the provided data
+        """
+        Draw the screen using the provided data
         TODO: ylimits, xlimits, proper line counts in the status
         """
         self._screen.clear()
@@ -182,6 +183,9 @@ class Scroll(object):
         top_line = 0
         for sline in self._sbuffer:
             (strs, stre, strx, stry, yposition) = self._calculate_screen_pos(sline, yposition)
+            # if we want to put the string outside the right-hand edge of the terminal, bail
+            if strx >= self._xmax:
+                continue
             drawstring = sline.data[strs:stre]
             if self._debugging:
                 drawstring += '_(%d,%d,[%d:%d])' % (strx, stry, strs, stre)
@@ -192,7 +196,9 @@ class Scroll(object):
                     self._screen.addstr(stry, strx, drawstring, *sline.line_attributes)
                     top_line = self._offset_y - yposition
             except Exception, e:
-                e.args = ('(%d,%d)_%s - ' % (stry, strx, drawstring) + e.args[0], )
+                e.args = ('strs(%d) stre(%d) strx(%d) stry(%d) xmax(%d) ymax(%d)_\'%s\' - ' % (strs, stre, strx, stry,
+                                                                                               self._xmax, self._ymax,
+                                                                                               drawstring) + e.args[0],)
                 raise
             if yposition + self._offset_y >= self._ymax - 2:
                 break
