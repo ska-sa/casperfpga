@@ -47,10 +47,10 @@ class Register(Memory):
         vstr = ''
         for k, v in self.last_values:
             vstr += '%s(%d)' % (k, v)
-        return '%s, %i, %s' % (self.name, self.width, vstr)
+        return '%s@0x%08x, %i, %s' % (self.name, self.address, self.width, vstr)
 
     def __repr__(self):
-        return '%s:%s' % (self.__class__.__name__, self.name)
+        return '%s:%s@0x%08x' % (self.__class__.__name__, self.name, self.address)
 
     def info(self):
         """Return a string with information about this Register instance.
