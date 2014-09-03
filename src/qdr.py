@@ -15,54 +15,8 @@ from utils import threaded_fpga_operation
 #LOGGER = logging.getLogger(__name__)
 LOGGER = logging.getLogger('qdr')
 
-calibration_data = [[0xAAAAAAAA, 0x55555555] * 16, [0, 0, 0xFFFFFFFF, 0, 0, 0, 0, 0], numpy.arange(256) << 0,
+CALIBRATION_DATA = [[0xAAAAAAAA, 0x55555555] * 16, [0, 0, 0xFFFFFFFF, 0, 0, 0, 0, 0], numpy.arange(256) << 0,
                     numpy.arange(256) << 8, numpy.arange(256) << 16, numpy.arange(256) << 24]
-
-
-def calibrate_all_qdrs(fpga_list, timeout):
-    """
-    Software calibrate all the QDRs on a list of FPGAs.
-    Threaded to save time.
-    :param fpga_list: a List of CASPER FPGAs
-    :param timeout: how long to wait
-    :return: a dictionary containing the calibration status of all the FPGAs in the list.
-    """
-    return threaded_fpga_operation(fpga_list, calibrate_qdrs, timeout * len(fpga_list), timeout)
-
-
-def calibrate_qdrs(fpgahost, timeout=10):
-    """
-    Do a threaded calibrate on the FPGA's QDRs, to save time.
-    :param fpgahost:
-    :return:
-    """
-    if len(fpgahost.qdrs) == 0:
-        return False, {}
-
-    import Queue
-    import threading
-    import time
-
-    def calqdr(resultq, qdrobj):
-        try:
-            qdrobj.calibrate()
-            resultq.put_nowait((qdrobj.name, True))
-        except RuntimeError:
-            resultq.put_nowait((qdrobj.name, False))
-
-    results = Queue.Queue(maxsize=len(fpgahost.qdrs))
-    for qdr in fpgahost.qdrs:
-        thread = threading.Thread(target=calqdr, args=(results, qdr))
-        thread.daemon = True
-        thread.start()
-    stime = time.time()
-    while (not results.full()) and (time.time() - stime < timeout):
-        spin = True
-    rv = {}
-    while not results.empty():
-        result = results.get()
-        rv[result[0]] = result[1]
-    return {fpgahost.host: rv}
 
 
 def _find_cal_area(area):
@@ -197,7 +151,7 @@ class Qdr(Memory):
         """Checks calibration on a qdr. Raises an exception if it failed.
         """
         pattern_fail = 0
-        for pattern in calibration_data:
+        for pattern in CALIBRATION_DATA:
             self.parent.blindwrite(self.memory, struct.pack('>%iL' % len(pattern), *pattern))
             data = self.parent.read(self.memory, len(pattern) * 4)
             if len(data) != len(pattern) * 4:
