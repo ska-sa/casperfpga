@@ -18,6 +18,11 @@ import casperfpga.scroll as scroll
 from casperfpga import utils
 from casperfpga import katcp_fpga
 from casperfpga import dcp_fpga
+try:
+    import corr2
+    got_corr2 = True
+except ImportError:
+    got_corr2 = False
 
 parser = argparse.ArgumentParser(description='Display TenGBE interface information about a MeerKAT fpga host.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -46,7 +51,10 @@ else:
     HOSTCLASS = dcp_fpga.DcpFpga
 
 # create the devices and connect to them
-hosts = utils.parse_hosts(args.hosts)
+if got_corr2:
+    hosts = corr2.utils.parse_hosts(args.hosts)
+else:
+    hosts = args.hosts.strip().replace(' ', '').split(',')
 if len(hosts) == 0:
     raise RuntimeError('No good carrying on without hosts.')
 fpgas = utils.threaded_create_fpgas_from_hosts(HOSTCLASS, hosts)
@@ -181,13 +189,11 @@ try:
             scroller.draw_screen()
             last_refresh = time.time()
 except Exception, e:
-    for fpga in fpgas:
-        fpga.disconnect()
+    utils.threaded_fpga_function(fpgas, 'disconnect')
     scroll.screen_teardown()
     raise
 
 # handle exits cleanly
-for fpga in fpgas:
-    fpga.disconnect()
+utils.threaded_fpga_function(fpgas, 'disconnect')
 scroll.screen_teardown()
 # end

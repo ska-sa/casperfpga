@@ -160,8 +160,9 @@ class TenGbe(Memory):
         self.core_details = None
         self.snaps = {'tx': None, 'rx': None}
         self.registers = {'tx': [], 'rx': []}
-        if self.parent.is_connected():
-            self._check()
+        # TODO
+        # if self.parent.is_connected():
+        #     self._check()
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
@@ -215,7 +216,8 @@ class TenGbe(Memory):
                     LOGGER.error('Incorrect snap %s under tengbe block %s', snapshot.name, self.name)
 
     def _check(self):
-        """Does this device exist on the parent?
+        """
+        Does this device exist on the parent and it is accessible?
         """
         self.parent.read(self.name, 1)
 
@@ -614,5 +616,8 @@ class TenGbe(Memory):
                 print '%02x' % val,
             print ''
         print '------------------------'
+
+
+# some helper functions
 
 # end
