@@ -140,7 +140,7 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=1
     return fpgas
 
 
-def threaded_fpga_function(fpga_list, function_name, timeout=10, *function_args):
+def threaded_fpga_function(fpga_list, function_name, timeout=10, *function_args, **function_kwargs):
     """
     Thread the running of any KatcpClientFpga function on a list of KatcpClientFpga objects.
     Much faster.
@@ -151,7 +151,7 @@ def threaded_fpga_function(fpga_list, function_name, timeout=10, *function_args)
     :return:
     """
     def dofunc(resultq, fpga):
-        rv = eval('fpga.%s' % function_name)(*function_args)
+        rv = eval('fpga.%s' % function_name)(*function_args, **function_kwargs)
         resultq.put_nowait((fpga.host, rv))
     num_fpgas = len(fpga_list)
     result_queue = Queue.Queue(maxsize=num_fpgas)
@@ -176,7 +176,7 @@ def threaded_fpga_function(fpga_list, function_name, timeout=10, *function_args)
     return returnval
 
 
-def threaded_fpga_operation(fpga_list, job_function, *job_args):
+def threaded_fpga_operation(fpga_list, job_function, *job_args, **job_kwargs):
     """
     Run any function on a list of CasperFpga objects in a specified number of threads.
     :param fpga_list: list of CasperFpga objects
@@ -203,11 +203,12 @@ def threaded_fpga_operation(fpga_list, job_function, *job_args):
     from casperfpga import CasperFpga
 
     class CorrWorker(threading.Thread):
-        def __init__(self, request_q, result_q, job_func, *jfunc_args):
+        def __init__(self, request_q, result_q, job_func, *jfunc_args, **jfunc_kwargs):
             self.request_queue = request_q
             self.result_queue = result_q
             self.job = job_func
             self.job_args = jfunc_args
+            self.job_kwargs = jfunc_kwargs
             threading.Thread.__init__(self)
 
         def run(self):
@@ -216,7 +217,7 @@ def threaded_fpga_operation(fpga_list, job_function, *job_args):
                 try:
                     request_host = self.request_queue.get_nowait()
                     try:
-                        result_ = self.job(request_host, *self.job_args)
+                        result_ = self.job(request_host, *self.job_args, **self.job_kwargs)
                     except Exception as exc:
                         errstr = "Job %s internal error: %s, %s" % (self.job.func_name, type(exc), exc)
                         result_ = RuntimeError(errstr)
@@ -232,7 +233,7 @@ def threaded_fpga_operation(fpga_list, job_function, *job_args):
             raise TypeError('Currently this function only supports CasperFpga objects.')
         request_queue.put_nowait(fpga_)
     # make as many consumer/worker threads as specified and start them off
-    workers = [CorrWorker(request_queue, result_queue, job_function, *job_args) for _ in range(0, num_fpgas)]
+    workers = [CorrWorker(request_queue, result_queue, job_function, *job_args, **job_kwargs) for _ in range(0, num_fpgas)]
     for worker_ in workers:
         worker_.daemon = True
         worker_.start()
