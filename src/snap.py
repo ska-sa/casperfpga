@@ -126,7 +126,7 @@ class Snap(Memory):
                 extra_info['bin_pts'] = '[0]'
             self.control_registers['extra_value']['register'].process_info(extra_info)
 
-    def _arm(self, man_trig=False, man_valid=False, offset=-1, circular_capture=False):
+    def arm(self, man_trig=False, man_valid=False, offset=-1, circular_capture=False):
         """Arm the snapshot block.
         """
         if offset >= 0:
@@ -176,7 +176,7 @@ class Snap(Memory):
         circular_capture = getkwarg('circular_capture', False)
         arm = getkwarg('arm', True)
         if arm:
-            self._arm(man_trig=man_trig, man_valid=man_valid, offset=offset, circular_capture=circular_capture)
+            self.arm(man_trig=man_trig, man_valid=man_valid, offset=offset, circular_capture=circular_capture)
         # wait
         done = False
         start_time = time.time()
