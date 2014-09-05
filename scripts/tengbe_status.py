@@ -58,8 +58,8 @@ else:
 if len(hosts) == 0:
     raise RuntimeError('No good carrying on without hosts.')
 fpgas = utils.threaded_create_fpgas_from_hosts(HOSTCLASS, hosts)
-utils.threaded_fpga_function(fpgas, 'test_connection')
-utils.threaded_fpga_function(fpgas, 'get_system_information')
+utils.threaded_fpga_function(fpgas, 10, 'test_connection')
+utils.threaded_fpga_function(fpgas, 15, 'get_system_information')
 for fpga in fpgas:
     numgbes = len(fpga.tengbes)
     if numgbes < 1:
@@ -87,8 +87,8 @@ def get_tap_data(fpga):
     return data
 
 # get gbe and tap data
-tap_data = utils.threaded_fpga_operation(fpgas, get_tap_data)
-gbe_data = utils.threaded_fpga_operation(fpgas, get_gbe_data)
+tap_data = utils.threaded_fpga_operation(fpgas, 10, get_tap_data)
+gbe_data = utils.threaded_fpga_operation(fpgas, 10, get_gbe_data)
 
 # work out tables for each fpga
 fpga_headers = []
@@ -163,7 +163,7 @@ try:
             else:
                 scroller.set_ypos(1)
                 scroller.set_ylimits(ymin=1)
-            gbe_data = utils.threaded_fpga_operation(fpgas, get_gbe_data)
+            gbe_data = utils.threaded_fpga_operation(fpgas, 10, get_gbe_data)
             for ctr, fpga in enumerate(fpgas):
                 fpga_data = gbe_data[fpga.host]
                 scroller.add_line(fpga.host)
@@ -189,11 +189,11 @@ try:
             scroller.draw_screen()
             last_refresh = time.time()
 except Exception, e:
-    utils.threaded_fpga_function(fpgas, 'disconnect')
+    utils.threaded_fpga_function(fpgas, 10, 'disconnect')
     scroll.screen_teardown()
     raise
 
 # handle exits cleanly
-utils.threaded_fpga_function(fpgas, 'disconnect')
+utils.threaded_fpga_function(fpgas, 10, 'disconnect')
 scroll.screen_teardown()
 # end

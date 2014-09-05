@@ -10,7 +10,6 @@ import struct
 import register
 
 from memory import Memory
-from utils import threaded_fpga_operation
 
 #LOGGER = logging.getLogger(__name__)
 LOGGER = logging.getLogger('qdr')
