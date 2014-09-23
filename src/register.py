@@ -139,7 +139,7 @@ class Register(Memory):
         elif 'name' in self.block_info.keys():
             # oldest
             LOGGER.error('Old registers are deprecated!')
-            self.field_add(bitfield.Field('', 0, 32, 0, 0))
+            self.field_add(bitfield.Field('reg', 0, 32, 0, 0))
         else:
             LOGGER.error('That is a seriously old register - please swap it out!')
             LOGGER.debug(self)
@@ -149,7 +149,20 @@ class Register(Memory):
     def _process_info_current(self):
         # current one
         def clean_fields(fstr):
-            return fstr.replace('[', '').replace(']', '').rstrip().lstrip().split(' ')
+            _fstr = fstr.replace('[', '').replace(']', '').strip().replace(', ', ',').replace('  ', ' ')
+            if (_fstr.find(' ') > -1) and (_fstr.find(',') > -1):
+                LOGGER.error('Parameter string %s contains spaces and commas as delimiters. This is confusing.', fstr)
+            if _fstr.find(' ') > -1:
+                _flist = _fstr.split(' ')
+            else:
+                _flist = _fstr.split(',')
+            _rv = []
+            for _fname in _flist:
+                if _fname.strip() == '':
+                    LOGGER.DEBUG('Throwing away empty field in register %s' % self.name)
+                else:
+                    _rv.append(_fname)
+            return _rv
         # a single value may have been used for width, type or binary point
         field_names = clean_fields(self.block_info['names'])
         field_widths = clean_fields(self.block_info['bitwidths'])

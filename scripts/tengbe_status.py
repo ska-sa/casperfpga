@@ -105,13 +105,13 @@ for cnt, fpga in enumerate(fpgas):
             raise RuntimeError('Not all GBE cores for FPGA %s have the same support registers. Problem.', fpga.host)
     fpga_headers.append(core0_regs)
 
-all_the_same = True
-for cnt, fpga in enumerate(fpgas):
-    if sorted(master_list) != sorted(fpga_headers[cnt]):
-        all_the_same = False
-        raise RuntimeWarning('Warning: GBE cores across given hosts are NOT configured the same!')
-if all_the_same:
-    fpga_headers = [fpga_headers[0]]
+# all_the_same = True
+# for cnt, fpga in enumerate(fpgas):
+#     if sorted(master_list) != sorted(fpga_headers[cnt]):
+#         all_the_same = False
+#         raise RuntimeWarning('Warning: GBE cores across given hosts are NOT configured the same!')
+# if all_the_same:
+#     fpga_headers = [fpga_headers[0]]
 
 fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr', 'gbe_rxerrctr',
                  'gbe_rxbadctr', 'gbe_txerrctr', 'gbe_txfullctr', 'gbe_txofctr',

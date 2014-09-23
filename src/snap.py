@@ -65,21 +65,26 @@ class Snap(Memory):
         :type self: Snap
         :param info: device information dictionary containing Simulink block information
         """
+        def clean_fields(fstr):
+            _fstr = fstr.replace('[', '').replace(']', '').strip().replace(', ', ',').replace('  ', ' ')
+            if (_fstr.find(' ') > -1) and (_fstr.find(',') > -1):
+                LOGGER.error('Parameter string %s contains spaces and commas as delimiters. This is confusing.', fstr)
+            if _fstr.find(' ') > -1:
+                _flist = _fstr.split(' ')
+            else:
+                _flist = _fstr.split(',')
+            _rv = []
+            for _fname in _flist:
+                if _fname.strip() == '':
+                    LOGGER.DEBUG('Throwing away empty field in snapshot %s' % self.name)
+                else:
+                    _rv.append(_fname)
+            return _rv
         self.block_info = info
         if self.width != int(info['snap_data_width']):
             raise ValueError('Snap and matched bitsnap widths do not match.')
         if self.length != pow(2, int(info['snap_nsamples'])) * (self.width/8):
             raise ValueError('Snap and matched bitsnap lengths do not match.')
-
-        def clean_fields(fstr):
-            _fstr = fstr.replace('[', '').replace(']', '').rstrip().lstrip().replace(', ', ',')
-            if (_fstr.find(' ') > -1) and (_fstr.find(',') > -1):
-                LOGGER.error('Parameter string %s contains spaces and commas as delimiters. This is confusing.', fstr)
-            if _fstr.find(' ') > -1:
-                return _fstr.split(' ')
-            else:
-                return _fstr.split(',')
-
         field_names = clean_fields(info['io_names'])
         field_widths = clean_fields(info['io_widths'])
         field_types = clean_fields(info['io_types'])

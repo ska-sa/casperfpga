@@ -17,6 +17,9 @@ class Bitfield(object):
             self.fields_add(fields)
         LOGGER.debug('New Bitfield(%s) with %i fields', self.name, len(self._fields))
 
+    # def __dir__(self):
+    #     return self._fields.keys()
+
     def fields_clear(self):
         """Reset the fields in this bitstruct.
         """
@@ -68,6 +71,9 @@ class Bitfield(object):
     def field_names(self):
         return self._fields.keys()
 
+    def names(self):
+        return self._fields.keys()
+
     def field_get_by_name(self, fieldname):
         """Get a field from this bitfield by its name.
         """
@@ -108,6 +114,7 @@ class Field(object):
         """
         if not isinstance(numtype, int):
             raise TypeError('Type must be an integer.')
+        assert name.strip() != '', 'Cannot have a Field with empty name?!'
         self.name = name
         self.numtype = numtype
         self.width = width
