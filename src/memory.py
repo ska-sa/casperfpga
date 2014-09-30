@@ -24,12 +24,15 @@ def bin2fp(bits, mantissa=8, exponent=7, signed=False):
             return float(bits) / (2 ** exponent)
     if exponent >= mantissa:
         raise TypeError('Unsupported fixed format: %i.%i' % (mantissa, exponent))
-    return float(bits - (1 << mantissa)) / (2**exponent)
+    if bits >= 2**(mantissa-1):
+        rnum = float(bits - (1 << mantissa)) / (2**exponent)
+    else:
+        rnum = float(bits) / (2**exponent)
+    return rnum
 
 
 class Memory(bitfield.Bitfield):
-    """
-    Memory on an FPGA
+    """Memory on an FPGA
     """
     def __init__(self, name, width, address, length):
         """
