@@ -15,22 +15,16 @@ def bin2fp(bits, mantissa=8, exponent=7, signed=False):
     """Convert a raw fixed-point number to a float based on a given
     mantissa and exponent.
     """
+    if bits == 0:
+        return 0
     if not signed:
         if exponent == 0:
             return long(bits)
         else:
             return float(bits) / (2 ** exponent)
-
-    if (mantissa > 32) or (exponent >= mantissa):
-        raise TypeError('Unsupported fixed format: %i.%i' % (mantissa,
-                                                                       exponent))
-    shift = 32 - mantissa
-    bits <<= shift
-    # mantissa = mantissa + shift
-    exponent += shift
-    if signed:
-        return float(numpy_signed(bits)) / (2 ** exponent)
-    return float(numpy_unsigned(bits)) / (2 ** exponent)
+    if exponent >= mantissa:
+        raise TypeError('Unsupported fixed format: %i.%i' % (mantissa, exponent))
+    return float(bits - (1 << mantissa)) / (2**exponent)
 
 
 class Memory(bitfield.Bitfield):
@@ -101,7 +95,6 @@ class Memory(bitfield.Bitfield):
         """
         if not(isinstance(rawdata, str) or isinstance(rawdata, buffer)):
             raise TypeError('self.read_raw returning incorrect datatype. Must be str or buffer.')
-        #large_unsigned_detected = False
         repeater = construct.GreedyRange(self.bitstruct)
         parsed = repeater.parse(rawdata)
         processed = {}
@@ -115,11 +108,11 @@ class Memory(bitfield.Bitfield):
 #                    if field.width <= 32:
                     val = bin2fp(bits=data[field.name], mantissa=field.width, exponent=field.binary_pt, signed=False)
                 elif field.numtype == 1:
-                    if field.width <= 32:
-                        val = bin2fp(bits=data[field.name], mantissa=field.width, exponent=field.binary_pt, signed=True)
-                    else:
-                        large_unsigned_detected = True
-                        val = data[field.name]
+                    # if field.width <= 32:
+                    val = bin2fp(bits=data[field.name], mantissa=field.width, exponent=field.binary_pt, signed=True)
+                    # else:
+                    #     large_unsigned_detected = True
+                    #     val = data[field.name]
                 elif field.numtype == 2:
                     val = int(data[field.name])
                 else:
