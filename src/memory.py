@@ -105,14 +105,9 @@ class Memory(bitfield.Bitfield):
             for field in self._fields.itervalues():
                 val = None
                 if field.numtype == 0:
-#                    if field.width <= 32:
                     val = bin2fp(bits=data[field.name], mantissa=field.width, exponent=field.binary_pt, signed=False)
                 elif field.numtype == 1:
-                    # if field.width <= 32:
                     val = bin2fp(bits=data[field.name], mantissa=field.width, exponent=field.binary_pt, signed=True)
-                    # else:
-                    #     large_unsigned_detected = True
-                    #     val = data[field.name]
                 elif field.numtype == 2:
                     val = int(data[field.name])
                 else:
