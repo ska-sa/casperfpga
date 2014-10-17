@@ -30,6 +30,8 @@ parser.add_argument(dest='hosts', type=str, action='store',
                     help='comma-delimited list of hosts, or a corr2 config file')
 parser.add_argument('-p', '--polltime', dest='polltime', action='store', default=1, type=int,
                     help='time at which to poll data, in seconds')
+parser.add_argument('-r', '--reset', dest='resetctrs', action='store_true', default=False,
+                    help='reset the GBE debug counters')
 parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
                     help='katcp (default) or dcp?')
 parser.add_argument('--loglevel', dest='log_level', action='store', default='',
@@ -66,6 +68,19 @@ for fpga in fpgas:
         raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
     print '%s: found %i 10gbe core%s.' % (fpga.host, numgbes, '' if numgbes == 1 else 's')
 
+if args.resetctrs:
+    def reset_gbe_debug(fpga_):
+        control_fields = fpga_.registers.control.field_names()
+        if 'gbe_debug_rst' in control_fields:
+            fpga_.registers.control.write(gbe_debug_rst='pulse')
+        elif 'gbe_cnt_rst' in control_fields:
+            fpga_.registers.control.write(gbe_cnt_rst='pulse')
+        else:
+            utils.threaded_fpga_function(fpgas, 10, 'disconnect')
+            print control_fields
+            raise RuntimeError('Could not find GBE debug reset field.')
+    utils.threaded_fpga_operation(fpgas, 10, reset_gbe_debug)
+
 
 def get_gbe_data(fpga):
     """
@@ -89,6 +104,9 @@ def get_tap_data(fpga):
 # get gbe and tap data
 tap_data = utils.threaded_fpga_operation(fpgas, 10, get_tap_data)
 gbe_data = utils.threaded_fpga_operation(fpgas, 10, get_gbe_data)
+# print gbe_data['roach020956']['gbe0'].keys()
+# utils.threaded_fpga_function(fpgas, 10, 'disconnect')
+# sys.exit()
 
 # work out tables for each fpga
 fpga_headers = []

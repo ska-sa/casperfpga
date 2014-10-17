@@ -109,6 +109,11 @@ class Snap(Memory):
                 controlreg['register'] = reg
             except KeyError:
                 pass
+
+        # set up the control register fields
+
+
+
         if (self.control_registers['control']['register'] is None) or\
                 (self.control_registers['status']['register'] is None):
             raise RuntimeError('Critical control registers for snap %s missing.' % self.name)
@@ -136,9 +141,13 @@ class Snap(Memory):
         """
         if offset >= 0:
             self.control_registers['trig_offset']['register'].write_int(offset)
-        self.control_registers['control']['register'].write_int((0 + (man_trig << 1) + (man_valid << 2) +
+        self.control_registers['control']['register'].write_int((0 +
+                                                                 (man_trig << 1) +
+                                                                 (man_valid << 2) +
                                                                  (circular_capture << 3)))
-        self.control_registers['control']['register'].write_int((1 + (man_trig << 1) + (man_valid << 2) +
+        self.control_registers['control']['register'].write_int((1 +
+                                                                 (man_trig << 1) +
+                                                                 (man_valid << 2) +
                                                                  (circular_capture << 3)))
 
     def print_snap(self, limit_lines=-1, man_valid=False, man_trig=False, circular_capture=False):
