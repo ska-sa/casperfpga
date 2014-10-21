@@ -109,11 +109,7 @@ class Snap(Memory):
                 controlreg['register'] = reg
             except KeyError:
                 pass
-
         # set up the control register fields
-
-
-
         if (self.control_registers['control']['register'] is None) or\
                 (self.control_registers['status']['register'] is None):
             raise RuntimeError('Critical control registers for snap %s missing.' % self.name)
@@ -168,6 +164,7 @@ class Snap(Memory):
         """Override Memory.read to handle the extra value register.
         """
         rawdata, rawtime = self.read_raw(**kwargs)
+        # processed = self._process_data_no_construct(rawdata['data'])
         processed = self._process_data(rawdata['data'])
         if 'offset' in rawdata.keys():
             offset = rawdata['offset']

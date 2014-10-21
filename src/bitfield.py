@@ -50,15 +50,16 @@ class Bitfield(object):
         self._update_bitstruct()
 
     def _update_bitstruct(self):
-        """Update this Bitfield's bitstruct after a field has been modified.
+        """
+        Update this Bitfield's bitstruct after a field has been modified.
         """
         # need it msb -> lsb
-#        print 100 * '#'
+        # print 100 * '#'
         fields = sorted(self._fields.itervalues(), key=lambda x: x.offset, reverse=True)
         field_width_sum = sum(f.width for f in self._fields.itervalues())
-#        print fields
-#        print field_width_sum
-#        print 100 * '#'
+        # print fields
+        # print field_width_sum
+        # print 100 * '#'
         bs = construct.BitStruct(self.name, construct.Padding(self.width - field_width_sum))
         for f in fields:
             if f.width == 1:

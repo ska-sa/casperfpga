@@ -4,26 +4,54 @@ busses. Normally via KATCP.
 """
 
 import logging
-import construct
-from numpy import int32 as numpy_signed, uint32 as numpy_unsigned
 import bitfield
+import struct
 
 LOGGER = logging.getLogger(__name__)
 
 
-def bin2fp(bits, mantissa=8, exponent=7, signed=False):
-    """Convert a raw fixed-point number to a float based on a given
+def bin2fp(raw_word, bitwidth, bin_pt, signed):
+    """
+    Convert a raw number based on supplied characteristics.
+    :param raw_word: the number to convert
+    :param bitwidth: its width in bits
+    :param bin_pt: the location of the binary point
+    :param signed: whether it is signed or not
+    :return: the formatted number, long, float or int
+    """
+    word_masked = raw_word & ((2**bitwidth)-1)
+    if signed and (word_masked >= 2**(bitwidth-1)):
+        word_masked -= 2**bitwidth
+    if bin_pt == 0:
+        if bitwidth <= 63:
+            return int(word_masked)
+        else:
+            return long(word_masked)
+    else:
+        quotient = word_masked / (2**bin_pt)
+        rem = word_masked - (quotient * (2**bin_pt))
+        return quotient + (float(rem) / (2**bin_pt))
+    raise RuntimeError
+
+
+def bin2fp_old(bits, mantissa=8, exponent=7, signed=False):
+    """
+    Convert a raw fixed-point number to a float based on a given
     mantissa and exponent.
     """
     if bits == 0:
         return 0
-    if not signed:
-        if exponent == 0:
-            return long(bits)
-        else:
-            return float(bits) / (2 ** exponent)
     if exponent >= mantissa:
         raise TypeError('Unsupported fixed format: %i.%i' % (mantissa, exponent))
+    if not signed:
+        if exponent == 0:
+            if mantissa <= 63:
+                return int(bits)
+            else:
+                # print bits, mantissa, exponent
+                return long(bits)
+        else:
+            return float(bits) / (2**exponent)
     if bits >= 2**(mantissa-1):
         rnum = float(bits - (1 << mantissa)) / (2**exponent)
     else:
@@ -32,7 +60,8 @@ def bin2fp(bits, mantissa=8, exponent=7, signed=False):
 
 
 class Memory(bitfield.Bitfield):
-    """Memory on an FPGA
+    """
+    Memory on an FPGA
     """
     def __init__(self, name, width, address, length):
         """
@@ -92,10 +121,42 @@ class Memory(bitfield.Bitfield):
     def write_raw(self, uintvalue):
         raise RuntimeError('Must be implemented by subclass.')
 
+    # def _process_data_no_construct(self, rawdata):
     def _process_data(self, rawdata):
+        """
+        Process raw data according to this memory's bitfield setup. Does not use construct, just struct
+        and iterate through. Faster than construct. Who knew?
+        """
+        if not(isinstance(rawdata, str) or isinstance(rawdata, buffer)):
+            raise TypeError('self.read_raw returning incorrect datatype. Must be str or buffer.')
+        fbytes = struct.unpack('%iB' % self.length, rawdata)
+        width_bytes = self.width / 8
+        memory_words = []
+        for wordctr in range(0, len(fbytes) / width_bytes):
+            startindex = wordctr * width_bytes
+            wordl = 0
+            for bytectr in range(0, width_bytes):
+                byte = fbytes[startindex + width_bytes - (bytectr + 1)]
+                wordl |= byte << (bytectr * 8)
+                # print '\t%d: bytel: 0x%02X, wordl: 0x%X' % (bytectr, byte, wordl)
+            memory_words.append(wordl)
+        # now we have all the words as longs, so carry on
+        processed = {}
+        for field in self._fields.itervalues():
+            processed[field.name] = []
+        for ctr, word in enumerate(memory_words):
+            for field in self._fields.itervalues():
+                word_shift = word >> field.offset
+                word_done = bin2fp(word_shift, field.width, field.binary_pt, field.numtype == 1)
+                processed[field.name].append(word_done)
+        return processed
+
+    def _process_data_old(self, rawdata):
         """
         Process raw data according to this memory's bitfield setup.
         """
+        raise DeprecationWarning
+        import construct
         if not(isinstance(rawdata, str) or isinstance(rawdata, buffer)):
             raise TypeError('self.read_raw returning incorrect datatype. Must be str or buffer.')
         repeater = construct.GreedyRange(self.bitstruct)
@@ -103,7 +164,7 @@ class Memory(bitfield.Bitfield):
         processed = {}
         for field in self._fields.itervalues():
             processed[field.name] = []
-        large_unsigned_detected = False
+        large_signed_detected = False
         for data in parsed:
             for field in self._fields.itervalues():
                 val = None
@@ -119,6 +180,6 @@ class Memory(bitfield.Bitfield):
                     processed[field.name].append(val)
                 else:
                     raise RuntimeError(('Could not create value for field', field))
-        if large_unsigned_detected:
+        if large_signed_detected:
             LOGGER.warn('Signed numbers larger than 32-bits detected! Raw values returned.')
         return processed
