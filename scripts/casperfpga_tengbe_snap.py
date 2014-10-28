@@ -110,7 +110,6 @@ def decode_spead_header(header_data):
             'num_headers': num_headers,
             'flavour': '%s,%s' % ((spead_addr_width * 8) + (spead_id_width * 8), (spead_addr_width * 8))}
 
-
 def process_spead_word(current_spead_info, data, pkt_counter):
     if pkt_counter == 1:
         spead_header = decode_spead_header(data)
@@ -218,6 +217,7 @@ def decode_spead(spead_data, eof_data=None):
         pkt_counter += 1
     return spead_packets
 
+# read the snap block based on the direction chosen
 if args.direction == 'tx':
     key_order = ['led_tx', 'eof', 'valid', 'tx_full', 'tx_over', 'link_up', 'ip', 'data']
     data_key = 'data'
@@ -231,7 +231,6 @@ else:
     eof_key = 'eof_in'
     coredata = fpga.tengbes[args.core].read_rxsnap()
 
-# read the snap block
 spead_info = {}
 packet_counter = 1
 for ctr in range(0, len(coredata[coredata.keys()[0]])):
