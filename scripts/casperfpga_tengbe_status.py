@@ -26,7 +26,7 @@ except ImportError:
 
 parser = argparse.ArgumentParser(description='Display TenGBE interface information about a MeerKAT fpga host.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument(dest='hosts', type=str, action='store',
+parser.add_argument('--hosts', dest='hosts', type=str, action='store', default='',
                     help='comma-delimited list of hosts, or a corr2 config file')
 parser.add_argument('-p', '--polltime', dest='polltime', action='store', default=1, type=int,
                     help='time at which to poll data, in seconds')
@@ -54,6 +54,9 @@ else:
 
 # create the devices and connect to them
 if got_corr2:
+    import os
+    if 'CORR2INI' in os.environ.keys() and args.hosts == '':
+        args.hosts = os.environ['CORR2INI']
     hosts = corr2.utils.parse_hosts(args.hosts)
 else:
     hosts = args.hosts.strip().replace(' ', '').split(',')
