@@ -139,15 +139,13 @@ fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr', 'gbe_rxerrctr'
                  'gbe_txctr', 'gbe_txvldctr']]
 
 
-# noinspection PyShadowingNames
-def signal_handler(sig, frame):
+def exit_gracefully(sig, frame):
     print sig, frame
-    for fpga in fpgas:
-        fpga.disconnect()
     scroll.screen_teardown()
+    utils.threaded_fpga_function(fpgas, 10, 'disconnect')
     sys.exit(0)
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGHUP, signal_handler)
+signal.signal(signal.SIGINT, exit_gracefully)
+signal.signal(signal.SIGHUP, exit_gracefully)
 
 # set up the curses scroll screen
 scroller = scroll.Scroll(debug=False)
@@ -209,12 +207,11 @@ try:
                             start_pos += pos_increment
             scroller.draw_screen()
             last_refresh = time.time()
+        else:
+            time.sleep(0.1)
 except Exception, e:
-    utils.threaded_fpga_function(fpgas, 10, 'disconnect')
-    scroll.screen_teardown()
+    exit_gracefully(None, None)
     raise
 
-# handle exits cleanly
-utils.threaded_fpga_function(fpgas, 10, 'disconnect')
-scroll.screen_teardown()
+exit_gracefully(None, None)
 # end
