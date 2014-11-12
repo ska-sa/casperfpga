@@ -253,7 +253,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :param wait_complete: wait for the transaction to complete, return after upload if False
         :return:
         """
-        LOGGER.info('Uploading %s to %s, programming when done' % (filename, self.host))
+        LOGGER.info('Uploading %s to host %s, programming when done' % (filename, self.host))
 
         # does the file that is to be uploaded exist on the local filesystem?
         os.path.getsize(filename)
@@ -266,9 +266,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
                 if result[0].arguments[0] == katcp.Message.OK:
                     result_queue.put('')
                 else:
-                    result_queue.put('Request to client returned, but not Message.OK.')
+                    result_queue.put('Request to client %s returned, but not Message.OK.' % self.host)
             except:
-                result_queue.put('Request to client failed.')
+                result_queue.put('Request to client %s failed.' % self.host)
 
         if port == -1:
             port = random.randint(2000, 2500)
@@ -282,7 +282,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         request_thread.join()
         request_result = request_queue.get()
         if request_result != '':
-            raise RuntimeError('progremote request(%s) failed' % request_result)
+            raise RuntimeError('progremote request(%s) on host %s failed' % (request_result, self.host))
 
         # start the upload thread and join
         upload_queue = Queue.Queue()
@@ -304,8 +304,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             try:
                 inf = unhandled_informs_queue.get(block=True, timeout=timeout)
             except Queue.Empty:
-                LOGGER.error('No programming informs yet. Odd?')
-                raise RuntimeError('No programming informs yet.')
+                LOGGER.error('No programming informs on host %s yet. Odd?' % self.host)
+                raise RuntimeError('No programming informs yet on host %s.' % self.host)
             if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
                 done = True
         self.unhandled_inform_handler = None
