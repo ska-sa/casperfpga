@@ -95,8 +95,12 @@ class Snap(Memory):
         field_bps.reverse()
         self.fields_clear()
         for n, fn in enumerate(field_names):
-            field = bitfield.Field(name=fn, numtype=int(field_types[n]), width=int(field_widths[n]),
-                                   binary_pt=int(field_bps[n]), lsb_offset=-1)
+            try:
+                bitwidth = int(field_widths[n])
+            except ValueError:
+                bitwidth = eval(field_widths[n])
+            field = bitfield.Field(name=fn, numtype=int(field_types[n]), width=bitwidth,
+                                       binary_pt=int(field_bps[n]), lsb_offset=-1)
             self.field_add(field, auto_offset=True)
 
     def _link_control_registers(self, raw_device_info):
