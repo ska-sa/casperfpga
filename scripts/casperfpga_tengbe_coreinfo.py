@@ -19,9 +19,8 @@ from casperfpga import katcp_fpga
 from casperfpga import dcp_fpga
 try:
     import corr2
-    got_corr2 = True
 except ImportError:
-    got_corr2 = False
+    corr2 = None
 
 parser = argparse.ArgumentParser(description='Display TenGBE interface information about a MeerKAT fpga host.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -53,7 +52,7 @@ else:
     HOSTCLASS = dcp_fpga.DcpFpga
 
 # create the devices and connect to them
-if got_corr2:
+if corr2 is not None:
     import os
     if 'CORR2INI' in os.environ.keys() and args.hosts == '':
         args.hosts = os.environ['CORR2INI']
