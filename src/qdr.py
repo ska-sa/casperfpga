@@ -241,17 +241,31 @@ class Qdr(Memory):
             cal_area=find_cal_area(bit_cal[bit])
             if cal_area[0]<4:
                 raise RuntimeError('Could not find a robust calibration setting for QDR %s' % self.name)
-            cal_steps[bit]=sum(cal_area[1:3])/2
+            # original was 1/2
+            # cal_steps[bit]=sum(cal_area[1:3])/2
+            # cal_steps[bit]=sum(cal_area[1:3])/3
+            cal_steps[bit]=sum(cal_area[1:3])/4
             if (verbosity > 1):
                 print 'Selected tap for bit %i: %i'%(bit,cal_steps[bit])
-        #since we don't have access to bits 32-36, we guess the number of taps required based on the other bits:
-        median_taps=numpy.median(cal_steps)
-        if verbosity>1:
-            print "Median taps: %i"%median_taps
-        for bit in range(32,36):
-            cal_steps[bit]=median_taps
-            if (verbosity > 1):
-                print 'Selected tap for bit %i: %i'%(bit,cal_steps[bit])
+
+        # since we don't have access to bits 32-36, we guess the number of taps required based on the other bits:
+        # MEDIAN
+        median_taps = numpy.median(cal_steps)
+        if verbosity > 1:
+            print "Median taps: %i" % median_taps
+        for bit in range(32, 36):
+            cal_steps[bit] = median_taps
+            if verbosity > 1:
+                print 'Selected tap for bit %i: %i' % (bit, cal_steps[bit])
+        # # MEAN
+        # mean_taps = numpy.mean(cal_steps)
+        # if verbosity > 1:
+        #     print "Mean taps: %i" % mean_taps
+        # for bit in range(32, 36):
+        #     cal_steps[bit] = mean_taps
+        #     if verbosity > 1:
+        #         print 'Selected tap for bit %i: %i' % (bit, cal_steps[bit])
+
         return cal_steps
 
     def apply_cals(self,in_delays,out_delays,clk_delay,verbosity=0):
