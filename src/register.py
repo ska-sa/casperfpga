@@ -142,8 +142,8 @@ class Register(Memory):
             self.field_add(bitfield.Field('reg', 0, 32, 0, 0))
         else:
             LOGGER.error('That is a seriously old register - please swap it out!')
-            LOGGER.debug(self)
-            LOGGER.debug(self.block_info)
+            LOGGER.error(self)
+            LOGGER.error(self.block_info)
             raise RuntimeError('Unknown Register type.')
 
     def _process_info_current(self):
