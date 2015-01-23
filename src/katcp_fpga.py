@@ -54,7 +54,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         self._timeout = timeout
         if connect:
             self.connect()
-        LOGGER.info('%s:%s created%s.', self.host, port, ' & daemon started' if connect else '')
+        LOGGER.info('%s:%s created%s.' % (self.host, port, ' & daemon started' if connect else ''))
 
     def connect(self, timeout=1):
         """
@@ -67,7 +67,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             self.wait_connected(timeout)
         if not self.is_connected():
             raise RuntimeError('Could not connect to KATCP server %s' % self.host)
-        LOGGER.info('%s: connection established', self.host)
+        LOGGER.info('%s: connection established' % self.host)
 
     def disconnect(self):
         """
@@ -76,7 +76,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         """
         super(KatcpFpga, self).stop()
         self.join(timeout=self._timeout)
-        LOGGER.info('%s: disconnected', self.host)
+        LOGGER.info('%s: disconnected' % self.host)
 
     def katcprequest(self, name, request_timeout=-1.0, require_ok=True, request_args=()):
         """
@@ -206,8 +206,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         if filename is None:
             filename = self.system_info['program_filename']
         elif filename != self.system_info['program_filename']:
-            LOGGER.error('Programming filename %s, configured programming filename %s', filename,
-                         self.system_info['program_filename'])
+            LOGGER.error('Programming filename %s, configured programming filename %s'
+                         % (filename, self.system_info['program_filename']))
         unhandled_informs = []
 
         # set the unhandled informs callback
@@ -230,7 +230,6 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             raise RuntimeError('%s: progdev request %s failed.' % (self.host, filename))
         self.get_system_information()
         LOGGER.info('%s: programmed %s okay.' % (self.host, filename))
-        return
 
     def deprogram(self):
         """
@@ -242,7 +241,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             super(KatcpFpga, self).deprogram()
         else:
             raise RuntimeError('Could not deprogram FPGA, katcp request failed!')
-        LOGGER.info('%s: deprogrammed okay', self.host)
+        LOGGER.info('%s: deprogrammed okay' % self.host)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10, wait_complete=True):
         """

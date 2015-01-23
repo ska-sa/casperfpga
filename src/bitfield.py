@@ -15,7 +15,7 @@ class Bitfield(object):
         self.bitstruct = None
         if fields is not None:
             self.fields_add(fields)
-        LOGGER.debug('New Bitfield(%s) with %i fields', self.name, len(self._fields))
+        LOGGER.debug('New Bitfield(%s) with %i fields' % (self.name, len(self._fields)))
 
     # def __dir__(self):
     #     return self._fields.keys()

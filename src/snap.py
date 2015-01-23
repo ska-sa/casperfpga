@@ -22,7 +22,7 @@ class Snap(Memory):
                                   'trig_offset':    {'register': None, 'name': self.name + '_trig_offset'},
                                   'extra_value':    {'register': None, 'name': self.name + '_val'},
                                   'tr_en_cnt':      {'register': None, 'name': self.name + '_tr_en_cnt'}}
-        LOGGER.debug('New Snap %s', self)
+        LOGGER.debug('New Snap %s' % self)
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
@@ -68,7 +68,7 @@ class Snap(Memory):
         def clean_fields(fstr):
             _fstr = fstr.replace('[', '').replace(']', '').strip().replace(', ', ',').replace('  ', ' ')
             if (_fstr.find(' ') > -1) and (_fstr.find(',') > -1):
-                LOGGER.error('Parameter string %s contains spaces and commas as delimiters. This is confusing.', fstr)
+                LOGGER.error('Parameter string %s contains spaces and commas as delimiters. This is confusing.' % fstr)
             if _fstr.find(' ') > -1:
                 _flist = _fstr.split(' ')
             else:

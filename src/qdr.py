@@ -11,8 +11,7 @@ import register
 
 from memory import Memory
 
-#LOGGER = logging.getLogger(__name__)
-LOGGER = logging.getLogger('qdr')
+LOGGER = logging.getLogger(__name__)
 
 CAL_DATA = [
                 [0xAAAAAAAA,0x55555555,0xAAAAAAAA,0x55555555,0xAAAAAAAA,0x55555555,
@@ -69,7 +68,7 @@ class Qdr(Memory):
         self.memory = self.which_qdr + '_memory'
         self.control_mem = self.which_qdr + '_ctrl'
         # self.qdr_cal()
-        LOGGER.debug('New Qdr %s', self)
+        LOGGER.debug('New Qdr %s' % self)
         # TODO - Link QDR ctrl register to self.registers properly
 
     @classmethod
@@ -109,9 +108,7 @@ class Qdr(Memory):
         Reset the QDR controller by toggling the lsb of the control register.
         Sets all taps to zero (all IO delays reset).
         """
-
-        LOGGER.info('qdr reset')
-
+        LOGGER.debug('qdr reset')
         self.ctrl_reg.write_int(1, blindwrite=True)
         self.ctrl_reg.write_int(0, blindwrite=True)
 

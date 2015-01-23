@@ -89,7 +89,7 @@ class AsyncRequester(object):
            """
         if len(self._nb_requests) == self._nb_max_requests:
             oldreq = self.nb_pop_oldest_request()
-            LOGGER.debug("Request list full, removing oldest one(%s,%s).", oldreq.request, oldreq.request_id)
+            LOGGER.debug('Request list full, removing oldest one(%s,%s).' % (oldreq.request, oldreq.request_id))
         request_id = self.nb_get_next_request_id()
         self.nb_add_request(request, request_id, inform_cb, reply_cb)
         request_msg = Message.request(request, *args)
@@ -120,7 +120,7 @@ class AsyncRequest(object):
     def got_reply(self, reply_message):
         if not reply_message.name == self.request:
             error_string = 'rx reply(%s) does not match request(%s)' % (reply_message.name, self.request)
-            print error_string
+            LOGGER.error(error_string)
             raise RuntimeError(error_string)
         self.reply = reply_message
         self.reply_time = time.time()
@@ -129,12 +129,12 @@ class AsyncRequest(object):
 
     def got_inform(self, inform_message):
         if self.reply is not None:
-            LOGGER.error('Received inform for message(%s,%s) after reply. Invalid?', self.request, self.request_id)
-            raise RuntimeError('Received inform for message(%s,%s) after reply. Invalid?' % (self.request,
-                                                                                             self.request_id))
+            LOGGER.error('Received inform for message(%s,%s) after reply. Invalid?' % (self.request, self.request_id))
+            raise RuntimeError('Received inform for message(%s,%s) after reply. Invalid?'
+                               % (self.request, self.request_id))
         if not inform_message.name == self.request:
             error_string = 'rx inform(%s) does not match request(%s)' % (inform_message.name, self.request)
-            print error_string
+            LOGGER.error(error_string)
             raise RuntimeError(error_string)
         self.informs.append(inform_message)
         self.inform_times.append(time.time())

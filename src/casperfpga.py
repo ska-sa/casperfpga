@@ -17,7 +17,6 @@ import qdr
 from attribute_container import AttributeContainer
 from utils import parse_fpg
 
-
 LOGGER = logging.getLogger(__name__)
 
 # known CASPER memory-accessible  devices and their associated classes and containers
@@ -57,11 +56,13 @@ class CasperFpga(object):
     """
     def __init__(self, host):
         """
-        Constructor.
+
+        :param host: the hostname of this CasperFpga
+        :return:
         """
         self.host = host
         self.__reset_device_info()
-        LOGGER.debug('%s: now a CasperFpga')
+        LOGGER.debug('%s: now a CasperFpga' % self.host)
 
     def read(self, device_name, size, offset=0):
         raise NotImplementedError
@@ -118,7 +119,7 @@ class CasperFpga(object):
 #            return {self.memory_devices[r].name: self.memory_devices[r] for r in self.memory_devices_memory['register']['items']}
 #        return object.__getattribute__(self, name)
 
-    def read_dram(self, size, offset=0, verbose=False):
+    def read_dram(self, size, offset=0):
         """
         Reads data from a ROACH's DRAM. Reads are done up to 1MB at a time.
         The 64MB indirect address register is automatically incremented as necessary.
@@ -127,7 +128,6 @@ class CasperFpga(object):
         Uses bulkread internally.
         :param size: amount of data to read, in bytes
         :param offset: offset at which to read, in bytes
-        :param verbose: print extra information
         :return: binary data string
         """
         data = []
@@ -136,27 +136,23 @@ class CasperFpga(object):
 
         dram_indirect_page_size = (64*1024*1024)
         #read_chunk_size = (1024*1024)
-        if verbose:
-            print 'Reading a total of %8i bytes from offset %8i...' % (size, offset)
+        LOGGER.debug('Reading a total of %8i bytes from offset %8i...' % (size, offset))
         while n_reads < size:
             dram_page = (offset + n_reads) / dram_indirect_page_size
             local_offset = (offset + n_reads) % dram_indirect_page_size
             #local_reads = min(read_chunk_size, size-n_reads, dram_indirect_page_size-(offset%dram_indirect_page_size))
             local_reads = min(size - n_reads, dram_indirect_page_size - (offset % dram_indirect_page_size))
-            if verbose:
-                print 'Reading %8i bytes from indirect address %4i at local offset %8i...'\
-                      % (local_reads, dram_page, local_offset),
             if last_dram_page != dram_page:
                 self.write_int('dram_controller', dram_page)
                 last_dram_page = dram_page
             local_data = (self.bulkread('dram_memory', local_reads, local_offset))
             data.append(local_data)
-            if verbose:
-                print 'done.'
+            LOGGER.debug('Reading %8i bytes from indirect address %4i at local offset %8i... done.'
+                         % (local_reads, dram_page, local_offset))
             n_reads += local_reads
         return ''.join(data)
 
-    def write_dram(self, data, offset=0, verbose=False):
+    def write_dram(self, data, offset=0):
         """
         Writes data to a ROACH's DRAM. Writes are done up to 512KiB at a time.
         The 64MB indirect address register is automatically incremented as necessary.
@@ -164,7 +160,6 @@ class CasperFpga(object):
         register.
         :param data: packed binary string data to write
         :param offset: the offset at which to write
-        :param verbose: print extra information
         :return:
         """
         size = len(data)
@@ -173,17 +168,15 @@ class CasperFpga(object):
 
         dram_indirect_page_size = (64*1024*1024)
         write_chunk_size = (1024*512)
-        if verbose:
-            print 'writing a total of %8i bytes from offset %8i...' % (size, offset)
+        LOGGER.debug('writing a total of %8i bytes from offset %8i...' % (size, offset))
 
         while n_writes < size:
             dram_page = (offset+n_writes)/dram_indirect_page_size
             local_offset = (offset+n_writes) % dram_indirect_page_size
             local_writes = min(write_chunk_size, size-n_writes,
                                dram_indirect_page_size-(offset % dram_indirect_page_size))
-            if verbose:
-                print 'Writing %8i bytes from indirect address %4i at local offset %8i...'\
-                      % (local_writes, dram_page, local_offset)
+            LOGGER.debug('Writing %8i bytes from indirect address %4i at local offset %8i...'
+                         % (local_writes, dram_page, local_offset))
             if last_dram_page != dram_page:
                 self.write_int('dram_controller', dram_page)
                 last_dram_page = dram_page
@@ -205,7 +198,8 @@ class CasperFpga(object):
             unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
             unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
             LOGGER.error('%s: verification of write to %s at offset %d failed. Wrote 0x%08x... '
-                         'but got back 0x%08x...' % (self.host, device_name, offset, unpacked_wrdata, unpacked_rddata))
+                         'but got back 0x%08x...' % (self.host, device_name, offset,
+                                                     unpacked_wrdata, unpacked_rddata))
             raise ValueError('%s: verification of write to %s at offset %d failed. Wrote 0x%08x... '
                              'but got back 0x%08x...' % (self.host, device_name, offset,
                                                          unpacked_wrdata, unpacked_rddata))

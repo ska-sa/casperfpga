@@ -79,7 +79,7 @@ class Memory(bitfield.Bitfield):
         self.address = address
         self.length = length
         self.block_info = {}
-        LOGGER.debug('New Memory %s', self)
+        LOGGER.debug('New Memory %s' % self)
 
     def __str__(self):
         return '%s%s: %ibits * %i, fields[%s]' % (self.name, '' if self.address == -1 else '@0x%08x',

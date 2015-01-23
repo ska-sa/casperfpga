@@ -22,7 +22,7 @@ class KatAdc(Memory):
         super(KatAdc, self).__init__(name=name, width=32, address=address, length=length)
         self.parent = parent
         self.block_info = device_info
-        LOGGER.debug('New KatAdc %s', self.name)
+        LOGGER.debug('New KatAdc %s' % self.name)
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict):

@@ -137,10 +137,10 @@ class TenGbe(Memory):
         :param device_info:
         :return:
         """
+        self.mac, self.ip_address, self.port = None, None, None
         super(TenGbe, self).__init__(name=name, width=32, address=address, length=length)
         self.parent = parent
         self.block_info = device_info
-        self.mac, self.ip_address, self.port = None, None, None
         if device_info is not None:
             fabric_ip = device_info['fab_ip']
             if fabric_ip.find('(2^24) + ') != -1:
@@ -185,6 +185,12 @@ class TenGbe(Memory):
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.name)
 
+    def __str__(self):
+        """
+        String representation of this 10Gbe interface.
+        """
+        return '%s: MAC(%s) IP(%s) Port(%s)' % (self.name, str(self.mac), str(self.ip_address), str(self.port))
+
     def setup(self, mac, ipaddress, port):
         self.mac = Mac(mac)
         self.ip_address = IpAddress(ipaddress)
@@ -203,7 +209,7 @@ class TenGbe(Memory):
                     self.registers['rx'].append(register.name)
                 else:
                     if not (name.find('txs_') == 0 or name.find('rxs_') == 0):
-                        LOGGER.warn('Funny register name %s under tengbe block %s', register.name, self.name)
+                        LOGGER.warn('Funny register name %s under tengbe block %s' % (register.name, self.name))
         self.snaps = {'tx': None, 'rx': None}
         for snapshot in self.parent.snapshots:
             if snapshot.name.find(self.name + '_') == 0:
@@ -213,18 +219,13 @@ class TenGbe(Memory):
                 elif name == 'rxs_ss':
                     self.snaps['rx'] = snapshot.name
                 else:
-                    LOGGER.error('Incorrect snap %s under tengbe block %s', snapshot.name, self.name)
+                    LOGGER.error('Incorrect snap %s under tengbe block %s' % (snapshot.name, self.name))
 
     def _check(self):
         """
         Does this device exist on the parent and it is accessible?
         """
         self.parent.read(self.name, 1)
-
-    def __str__(self):
-        """String representation of this 10Gbe interface.
-        """
-        return '%s: MAC(%s) IP(%s) Port(%s)' % (self.name, str(self.mac), str(self.ip_address), str(self.port))
 
     def read_txsnap(self):
         return self.parent.memory_devices[self.name + '_txs_ss'].read(timeout=10)['data']
@@ -284,9 +285,9 @@ class TenGbe(Memory):
         if restart:
             self.tap_stop()
         if self.tap_running():
-            LOGGER.info("Tap already running on %s.", str(self))
+            LOGGER.info('Tap already running on %s.' % str(self))
             return
-        LOGGER.info("Starting tap driver instance for %s.", str(self))
+        LOGGER.info('Starting tap driver instance for %s.' % str(self))
         reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=-1, require_ok=True,
                                             request_args=(self.name, self.name, str(self.ip_address),
                                                           str(self.port), str(self.mac), ))
@@ -299,11 +300,11 @@ class TenGbe(Memory):
         """
         if not self.tap_running():
             return
-        LOGGER.info("Stopping tap driver instance for %s.", str(self))
+        LOGGER.info('Stopping tap driver instance for %s.' % str(self))
         reply, _ = self.parent.katcprequest(name="tap-stop", request_timeout=-1, require_ok=True,
                                             request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError("Failure stopping tap device for %s." % str(self))
+            raise RuntimeError('Failure stopping tap device for %s.' % str(self))
 
     def tap_info(self):
         """Get info on the tap instance running on this interface.
@@ -315,7 +316,7 @@ class TenGbe(Memory):
             uninforms.append(msg)
 
         self.parent.unhandled_inform_handler = handle_inform
-        _, informs = self.parent.katcprequest(name="tap-info", request_timeout=-1, require_ok=False,
+        _, informs = self.parent.katcprequest(name='tap-info', request_timeout=-1, require_ok=False,
                                               request_args=(self.name, ))
         self.parent.unhandled_inform_handler = None
         # process the tap-info

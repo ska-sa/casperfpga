@@ -18,7 +18,7 @@ class Register(Memory):
         self.last_values = {}
         Memory.__init__(self, name=name, width=32, address=address, length=4)
         self.process_info(device_info)
-        LOGGER.debug('New Register %s', self)
+        LOGGER.debug('New Register %s' % self)
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
@@ -35,6 +35,7 @@ class Register(Memory):
                 address, length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
                 break
         if address == -1 or length == -1:
+            LOGGER.error(memorymap_dict)
             print memorymap_dict
             raise RuntimeError('Could not find address or length for Register %s' % device_name)
         return cls(parent, device_name, address=address, device_info=device_info)
@@ -94,7 +95,7 @@ class Register(Memory):
     def write(self, **kwargs):
         # write fields in a register, using keyword arguments
         if len(kwargs) == 0:
-            LOGGER.info('%s: no keyword args given, exiting.', self.name)
+            LOGGER.info('%s: no keyword args given, exiting.' % self.name)
             return
         current_values = self.read()['data']
 #        for key, value in current_values.iteritems():
@@ -105,19 +106,19 @@ class Register(Memory):
             if k not in current_values.keys():
                 raise RuntimeError('Attempting to write field %s, doesn\'t exist.' % k)
             if kwargs[k] == 'pulse':
-                LOGGER.debug('Pulsing field %s (%i -> %i)', k, current_values[k], not current_values[k])
+                LOGGER.debug('Pulsing field %s (%i -> %i)' % (k, current_values[k], not current_values[k]))
                 pulse[k] = current_values[k]
                 current_values[k] = not current_values[k]
                 changes = True
             elif kwargs[k] == 'toggle':
-                LOGGER.debug('Toggling field %s (%i -> %i)', k, current_values[k], not current_values[k])
+                LOGGER.debug('Toggling field %s (%i -> %i)' % (k, current_values[k], not current_values[k]))
                 current_values[k] = not current_values[k]
                 changes = True
             else:
                 if current_values[k] != kwargs[k]:
                     changes = True
                     current_values[k] = kwargs[k]
-                    LOGGER.debug('%s: writing %i to field %s', self.name, kwargs[k], k)
+                    LOGGER.debug('%s: writing %i to field %s' % (self.name, kwargs[k], k))
         if changes:
             unpacked = struct.unpack('>I', self.bitstruct.build(construct.Container(**current_values)))[0]
             self.write_raw(unpacked)
@@ -151,7 +152,7 @@ class Register(Memory):
         def clean_fields(fstr):
             _fstr = fstr.replace('[', '').replace(']', '').strip().replace(', ', ',').replace('  ', ' ')
             if (_fstr.find(' ') > -1) and (_fstr.find(',') > -1):
-                LOGGER.error('Parameter string %s contains spaces and commas as delimiters. This is confusing.', fstr)
+                LOGGER.error('Parameter string %s contains spaces and commas as delimiters. This is confusing.' % fstr)
             if _fstr.find(' ') > -1:
                 _flist = _fstr.split(' ')
             else:

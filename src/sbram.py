@@ -11,7 +11,7 @@ class Sbram(Memory):
         super(Sbram, self).__init__(name=name, width=32, address=address, length=length)
         self.parent = parent
         self.block_info = device_info
-        LOGGER.debug('New Sbram %s', self.__str__())
+        LOGGER.debug('New Sbram %s' % self.__str__())
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
