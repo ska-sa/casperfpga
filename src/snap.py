@@ -151,7 +151,13 @@ class Snap(Memory):
                                                                  (circular_capture << 3)))
 
     def print_snap(self, limit_lines=-1, man_valid=False, man_trig=False, circular_capture=False):
-        """Read and print a snap block.
+        """
+        Read and print a snap block.
+        :param limit_lines: limit the number of lines to print
+        :param man_valid: read the snap block with a man valid
+        :param man_trig: read the snap block with a man trigger
+        :param circular_capture: enable circular capture on the read command
+        :return:
         """
         snapdata = self.read(man_valid=man_valid, man_trig=man_trig, circular_capture=circular_capture)
         for ctr in range(0, len(snapdata['data'][snapdata['data'].keys()[0]])):
@@ -251,3 +257,4 @@ class Snap(Memory):
 
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.name)
+
