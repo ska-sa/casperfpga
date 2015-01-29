@@ -252,7 +252,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :param wait_complete: wait for the transaction to complete, return after upload if False
         :return:
         """
-        LOGGER.info('Uploading %s to host %s, programming when done' % (filename, self.host))
+        LOGGER.info('%s: uploading %s, programming when done' % (self.host, filename))
 
         # does the file that is to be uploaded exist on the local filesystem?
         os.path.getsize(filename)
@@ -307,6 +307,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
                 raise RuntimeError('No programming informs yet on host %s.' % self.host)
             if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
                 done = True
+        LOGGER.info('%s: programming done.' % self.host)
         self.unhandled_inform_handler = None
         self._timeout = old_timeout
         self.system_info['last_programmed'] = filename
