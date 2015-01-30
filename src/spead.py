@@ -5,12 +5,6 @@ import logging
 
 LOGGER = logging.getLogger(__name__)
 
-# SPEAD_EXPECTED_VERSION = 4
-# SPEAD_EXPECTED_FLAVOUR = '64,48'
-# SPEAD_EXPECTED_DATA_LEN = 640
-# SPEAD_EXPECTED_NUM_HDRS = 5 + 4
-# EXPECTED_10GBE_PKT_LEN = SPEAD_EXPECTED_DATA_LEN + SPEAD_EXPECTED_NUM_HDRS
-
 
 def decode_spead_magic_word(word64, required_version=None, required_flavour=None, required_numheaders=None):
     """
@@ -117,12 +111,15 @@ class SpeadPacket(object):
         if pktlen != expected_length:
             raise RuntimeError('Packet is not the expected length: %i != %i' % (pktlen, expected_length))
         if pktlen*8 != packet_length:
-            raise RuntimeError('Packet is not the same length as indicated in the SPEAD header: %i != %i' % (
-                pktlen*8, packet_length))
+            raise RuntimeError('Packet is not the same length as indicated in the SPEAD header: %i != %i' %
+                               (pktlen*8, packet_length))
         obj = cls(headers, pktdata)
         return obj
 
-    def get_strings(self):
+    def get_strings(self, headers_only=False, hex_nums=False):
+        """
+        Get a list of the string representation of this packet.
+        """
         rv = []
         for hdr_id, hdr_value in self.headers.items():
             if hdr_id == 0x0000:
@@ -131,32 +128,23 @@ class SpeadPacket(object):
                     self.headers[0]['flavour'],
                     self.headers[0]['num_headers'],))
             else:
-                if hex:
+                if hex_nums:
                     rv.append('header 0x%04x: 0x%x' % (hdr_id, hdr_value))
                 else:
                     rv.append('header 0x%04x: %i' % (hdr_id, hdr_value))
+        if headers_only:
+            return rv
         for dataword in self.data:
             rv.append('%i' % dataword)
         return rv
 
-    def print_packet(self, headers_only=False, hex=False):
-        for hdr_id, hdr_value in self.headers.items():
-            if hdr_id == 0x0000:
-                print 'header 0x0000: version(%i) flavour(%s) num_headers(%i)' % (
-                    self.headers[0]['version'],
-                    self.headers[0]['flavour'],
-                    self.headers[0]['num_headers'],)
-            else:
-                if hex:
-                    print 'header 0x%04x: 0x%x' % (hdr_id, hdr_value)
-                else:
-                    print 'header 0x%04x: %i' % (hdr_id, hdr_value)
-        if not headers_only:
-            for dataword in self.data:
-                if hex:
-                    print '0x%x' % dataword
-                else:
-                    print '%i' % dataword
+    def print_packet(self, headers_only=False, hex_nums=False):
+        """
+        Print a representation of the packet.
+        """
+        for string in self.get_strings(headers_only, hex_nums):
+            print string
+
 
 class SpeadProcessor(object):
     """
@@ -173,6 +161,9 @@ class SpeadProcessor(object):
         self.expected_packet_length = packet_length
 
     def process_data(self, data_packets):
+        """
+        Create SpeadPacket objects from a list of data packets.
+        """
         for pkt in data_packets:
             spead_pkt = SpeadPacket.from_data(pkt, self.version, self.flavour, self.expected_num_headers,
                                               self.expected_packet_length)
