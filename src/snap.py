@@ -180,7 +180,7 @@ class Snap(Memory):
         :param timeout
         """
         for kkey in kwargs.keys():
-            if kkey not in ['circular_capture', 'man_trig', 'man_valid', 'offset', 'timeout']:
+            if kkey not in ['circular_capture', 'man_trig', 'man_valid', 'offset', 'timeout', 'arm']:
                 raise RuntimeError('Invalid option for snap read: %s' % kkey)
         rawdata, rawtime = self.read_raw(**kwargs)
         # processed = self._process_data_no_construct(rawdata['data'])
