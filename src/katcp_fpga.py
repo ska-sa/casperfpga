@@ -54,7 +54,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         self._timeout = timeout
         if connect:
             self.connect()
-        LOGGER.info('%s:%s created%s.' % (self.host, port, ' & daemon started' if connect else ''))
+        LOGGER.info('%s:%s created%s.' % (self.host, port, ' & connected' if connect else ''))
 
     def connect(self, timeout=1):
         """
