@@ -64,8 +64,10 @@ class Register(Memory):
         return '%s(%i,[%s])' % (self.name, self.width, fstring)
 
     def read(self, **kwargs):
-        """Memory.read returns a list for all bitfields, so just put those
-        values into single values."""
+        """
+        Memory.read returns a list for all bitfields, so just put those
+        values into single values.
+        """
         memdata = Memory.read(self, **kwargs)
         results = memdata['data']
         timestamp = memdata['timestamp']
@@ -79,21 +81,27 @@ class Register(Memory):
         rawdata = self.parent.read(device_name=self.name, size=4, offset=0*4)
         return rawdata, time.time()
 
-    def write_raw(self, data):
-        """Use the katcp_client_fpga write integer function.
+    def write_raw(self, data, blindwrite=False):
         """
-        self.parent.write_int(self.name, data)
+        Use the katcp_client_fpga write integer function.
+        """
+        self.parent.write_int(self.name, data, blindwrite=blindwrite)
 
     def read_uint(self, **kwargs):
         return self.parent.read_uint(self.name, **kwargs)
 
     def write_int(self, uintvalue, blindwrite=False, word_offset=0):
-        """Write an unsigned integer to this device using the fpga client.
+        """
+        Write an unsigned integer to this device using the fpga client.
         """
         self.parent.write_int(device_name=self.name, integer=uintvalue, blindwrite=blindwrite, word_offset=word_offset)
 
-    def write(self, **kwargs):
-        # write fields in a register, using keyword arguments
+    def _write_common(self, **kwargs):
+        # TODO - make read before write optional - otherwise just write the whole word based on last-known values
+        """
+        :param kwargs:
+        :return:
+        """
         if len(kwargs) == 0:
             LOGGER.info('%s: no keyword args given, exiting.' % self.name)
             return
@@ -119,6 +127,27 @@ class Register(Memory):
                     changes = True
                     current_values[k] = kwargs[k]
                     LOGGER.debug('%s: writing %i to field %s' % (self.name, kwargs[k], k))
+        return changes, current_values, pulse
+
+    def blindwrite(self, **kwargs):
+        """
+        As write, but without checking the result
+        :return:
+        """
+        (changes, current_values, pulse) = self._write_common(**kwargs)
+        if changes:
+            unpacked = struct.unpack('>I', self.bitstruct.build(construct.Container(**current_values)))[0]
+            self.write_raw(unpacked, blindwrite=True)
+        if len(pulse) > 0:
+            self.blindwrite(**pulse)
+
+    def write(self, **kwargs):
+        """
+        Write fields in a register, using keyword arguments for fields
+        :param kwargs:
+        :return:
+        """
+        (changes, current_values, pulse) = self._write_common(**kwargs)
         if changes:
             unpacked = struct.unpack('>I', self.bitstruct.build(construct.Container(**current_values)))[0]
             self.write_raw(unpacked)
