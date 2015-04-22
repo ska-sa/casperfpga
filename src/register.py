@@ -90,7 +90,8 @@ class Register(Memory):
     def write_int(self, uintvalue, blindwrite=False, word_offset=0):
         """Write an unsigned integer to this device using the fpga client.
         """
-        self.parent.write_int(device_name=self.name, integer=uintvalue, blindwrite=blindwrite, word_offset=word_offset)
+        self.parent.write_int(device_name=self.name, integer=uintvalue,
+                              blindwrite=blindwrite, word_offset=word_offset)
 
     def write(self, **kwargs):
         # write fields in a register, using keyword arguments
@@ -106,12 +107,14 @@ class Register(Memory):
             if k not in current_values.keys():
                 raise RuntimeError('Attempting to write field %s, doesn\'t exist.' % k)
             if kwargs[k] == 'pulse':
-                LOGGER.debug('Pulsing field %s (%i -> %i)' % (k, current_values[k], not current_values[k]))
+                LOGGER.debug('Pulsing field %s (%i -> %i)' % (
+                    k, current_values[k], not current_values[k]))
                 pulse[k] = current_values[k]
                 current_values[k] = not current_values[k]
                 changes = True
             elif kwargs[k] == 'toggle':
-                LOGGER.debug('Toggling field %s (%i -> %i)' % (k, current_values[k], not current_values[k]))
+                LOGGER.debug('Toggling field %s (%i -> %i)' % (
+                    k, current_values[k], not current_values[k]))
                 current_values[k] = not current_values[k]
                 changes = True
             else:
@@ -120,7 +123,8 @@ class Register(Memory):
                     current_values[k] = kwargs[k]
                     LOGGER.debug('%s: writing %i to field %s' % (self.name, kwargs[k], k))
         if changes:
-            unpacked = struct.unpack('>I', self.bitstruct.build(construct.Container(**current_values)))[0]
+            unpacked = struct.unpack(
+                '>I', self.bitstruct.build(construct.Container(**current_values)))[0]
             self.write_raw(unpacked)
         if len(pulse) > 0:
             self.write(**pulse)
