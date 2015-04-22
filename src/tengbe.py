@@ -20,7 +20,7 @@ class Mac(object):
         mac_int = None
         if isinstance(mac, Mac):
             mac_str = str(mac)
-        elif isinstance(mac, str):
+        elif isinstance(mac, basestring):
             mac_str = mac
         elif isinstance(mac, int):
             mac_int = mac
@@ -51,7 +51,7 @@ class IpAddress(object):
         ip_int = None
         if isinstance(ip, IpAddress):
             ip_str = str(ip)
-        elif isinstance(ip, str):
+        elif isinstance(ip, basestring):
             ip_str = ip
         elif isinstance(ip, int):
             ip_int = ip
