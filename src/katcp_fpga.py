@@ -38,6 +38,8 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
         upload_socket.send(open(filename).read())
     except:
         result_queue.put('Could not send file to upload port.')
+    finally:
+        LOGGER.info('%s: upload thread for host %s complete' % (time.time(), targethost))
     result_queue.put('')
     return
 
