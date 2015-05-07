@@ -30,7 +30,8 @@ class Register(Memory):
         address, length_bytes = -1, -1
         for mem_name in memorymap_dict.keys():
             if mem_name == device_name:
-                address, length_bytes = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                address, length_bytes = (memorymap_dict[mem_name]['address'],
+                                         memorymap_dict[mem_name]['bytes'])
                 break
         if address == -1 or length_bytes == -1:
             LOGGER.error(memorymap_dict)
@@ -111,19 +112,23 @@ class Register(Memory):
         pulse = {}
         for k in kwargs.keys():
             if kwargs[k] == 'pulse':
-                LOGGER.debug('%s: pulsing field %s (%i -> %i)' % (self.name, k, new_values[k], not new_values[k]))
+                LOGGER.debug('%s: pulsing field %s (%i -> %i)' % (
+                    self.name, k, new_values[k], not new_values[k]))
                 pulse[k] = new_values[k]
                 new_values[k] = not new_values[k]
             elif kwargs[k] == 'toggle':
-                LOGGER.debug('%s: toggling field %s (%i -> %i)' % (self.name, k, new_values[k], not new_values[k]))
+                LOGGER.debug('%s: toggling field %s (%i -> %i)' % (
+                    self.name, k, new_values[k], not new_values[k]))
                 new_values[k] = not new_values[k]
             else:
                 new_values[k] = kwargs[k]
-                LOGGER.debug('%s: writing %.5f to field %s' % (self.name, new_values[k], k))
+                LOGGER.debug('%s: writing %.5f to field %s' % (
+                    self.name, new_values[k], k))
         # pack the values into a 32-bit integer
         fixed_int = 0
         for _f in self._fields.values():
-            _intval = fp2fixed_int(new_values[_f.name], _f.width_bits, _f.binary_pt, _f.numtype == 1)
+            _intval = fp2fixed_int(
+                new_values[_f.name], _f.width_bits, _f.binary_pt, _f.numtype == 1)
             fixed_int |= (_intval << _f.offset)
         return fixed_int, pulse
 
@@ -177,7 +182,9 @@ class Register(Memory):
         def clean_fields(fstr):
             _fstr = fstr.replace('[', '').replace(']', '').strip().replace(', ', ',').replace('  ', ' ')
             if (_fstr.find(' ') > -1) and (_fstr.find(',') > -1):
-                LOGGER.error('Parameter string %s contains spaces and commas as delimiters. This is confusing.' % fstr)
+                LOGGER.error(
+                    'Parameter string %s contains spaces and commas as delimiters. '
+                    'This is confusing.' % fstr)
             if _fstr.find(' ') > -1:
                 _flist = _fstr.split(' ')
             else:

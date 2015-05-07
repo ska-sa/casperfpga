@@ -126,8 +126,9 @@ class Memory(bitfield.Bitfield):
         LOGGER.debug('New Memory %s' % str(self))
 
     def __str__(self):
-        return '%s%s: %ibits * %i, fields[%s]' % (self.name, '' if self.address == -1 else '@0x%08x' % self.address,
-                                                  self.width_bits, self.length_in_words(), self.fields_string_get())
+        return '%s%s: %ibits * %i, fields[%s]' % (
+            self.name, '' if self.address == -1 else '@0x%08x' % self.address,
+            self.width_bits, self.length_in_words(), self.fields_string_get())
 
     def length_in_words(self):
         """

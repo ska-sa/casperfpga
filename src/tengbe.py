@@ -149,19 +149,24 @@ class TenGbe(Memory):
         :return:
         """
         self.mac, self.ip_address, self.port = None, None, None
-        super(TenGbe, self).__init__(name=name, width_bits=32, address=address, length_bytes=length_bytes)
+        super(TenGbe, self).__init__(name=name, width_bits=32, address=address,
+                                     length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
         if device_info is not None:
             fabric_ip = device_info['fab_ip']
             if fabric_ip.find('(2^24) + ') != -1:
-                device_info['fab_ip'] = fabric_ip.replace('*(2^24) + ', '.').replace('*(2^16) + ', '.').\
-                    replace('*(2^8) + ', '.').replace('*(2^0)', '')
+                device_info['fab_ip'] = (fabric_ip.replace('*(2^24) + ', '.')
+                                         .replace('*(2^16) + ', '.')
+                                         .replace('*(2^8) + ', '.')
+                                         .replace('*(2^0)', ''))
             fabric_mac = device_info['fab_mac']
             if fabric_mac.find('hex2dec') != -1:
                 fabric_mac = fabric_mac.replace('hex2dec(\'', '').replace('\')', '')
-                device_info['fab_mac'] = fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' + fabric_mac[4:6] + ':' +\
-                    fabric_mac[6:8] + ':' + fabric_mac[8:10] + ':' + fabric_mac[10:]
+                device_info['fab_mac'] = (
+                    fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' +
+                    fabric_mac[4:6] + ':' + fabric_mac[6:8] + ':' +
+                    fabric_mac[8:10] + ':' + fabric_mac[10:])
             mac = device_info['fab_mac']
             ip_address = device_info['fab_ip']
             port = device_info['fab_udp']

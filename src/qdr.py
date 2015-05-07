@@ -55,16 +55,18 @@ class Qdr(Memory):
         """
         Make the QDR instance, given a parent, name and info from Simulink.
         """
-        super(Qdr, self).__init__(name=name, width_bits=32, address=address, length_bytes=length_bytes)
+        super(Qdr, self).__init__(
+            name=name, width_bits=32, address=address, length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
         self.which_qdr = self.block_info['which_qdr']
-        self.ctrl_reg = register.Register(self.parent, self.which_qdr+'_ctrl', address=ctrlreg_address,
-                                          device_info={'tag': 'xps:sw_reg', 'mode': 'one\_value',
-                                                       'io_dir': 'From\_Processor', 'io_delay': '0',
-                                                       'sample_period': '1', 'names': 'reg', 'bitwidths': '32',
-                                                       'arith_types': '0', 'bin_pts': '0', 'sim_port': 'on',
-                                                       'show_format': 'off'})
+        self.ctrl_reg = register.Register(
+            self.parent, self.which_qdr+'_ctrl', address=ctrlreg_address,
+            device_info={'tag': 'xps:sw_reg', 'mode': 'one\_value',
+                         'io_dir': 'From\_Processor', 'io_delay': '0',
+                         'sample_period': '1', 'names': 'reg', 'bitwidths': '32',
+                         'arith_types': '0', 'bin_pts': '0', 'sim_port': 'on',
+                         'show_format': 'off'})
         self.memory = self.which_qdr + '_memory'
         self.control_mem = self.which_qdr + '_ctrl'
         # self.qdr_cal()

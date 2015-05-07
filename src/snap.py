@@ -16,12 +16,14 @@ class Snap(Memory):
         super(Snap, self).__init__(name=name, width_bits=width_bits, address=address, length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
-        self.field_add(bitfield.Field(name='data', numtype=0, width_bits=self.width_bits, binary_pt=0, lsb_offset=0))
-        self.control_registers = {'control':        {'register': None, 'name': self.name + '_ctrl'},
-                                  'status':         {'register': None, 'name': self.name + '_status'},
-                                  'trig_offset':    {'register': None, 'name': self.name + '_trig_offset'},
-                                  'extra_value':    {'register': None, 'name': self.name + '_val'},
-                                  'tr_en_cnt':      {'register': None, 'name': self.name + '_tr_en_cnt'}}
+        self.field_add(bitfield.Field(
+            name='data', numtype=0, width_bits=self.width_bits, binary_pt=0, lsb_offset=0))
+        self.control_registers = {
+            'control':        {'register': None, 'name': self.name + '_ctrl'},
+            'status':         {'register': None, 'name': self.name + '_status'},
+            'trig_offset':    {'register': None, 'name': self.name + '_trig_offset'},
+            'extra_value':    {'register': None, 'name': self.name + '_val'},
+            'tr_en_cnt':      {'register': None, 'name': self.name + '_tr_en_cnt'}}
         LOGGER.debug('New Snap %s' % self)
 
     @classmethod
@@ -43,8 +45,11 @@ class Snap(Memory):
         if length_bytes == -1:
             length_bytes = num_bytes
         if length_bytes != num_bytes:
-            raise RuntimeError('%s has mask length_bytes %d bytes, but mem map length_bytes %d bytes' % (device_name, num_bytes, length_bytes))
-        return cls(parent, device_name, width_bits=word_bits, address=address, length_bytes=length_bytes, device_info=device_info)
+            raise RuntimeError(
+                '%s has mask length_bytes %d bytes, but mem map length_bytes %d bytes' % (
+                    device_name, num_bytes, length_bytes))
+        return cls(parent, device_name, width_bits=word_bits, address=address,
+                   length_bytes=length_bytes, device_info=device_info)
 
     def post_create_update(self, raw_system_info):
         """Update the device with information not available at creation.
@@ -244,8 +249,8 @@ class Snap(Memory):
         if bram_dmp['offset'] < 0:
             bram_dmp['offset'] = 0
         if bram_dmp['length'] != self.length_bytes:
-            raise RuntimeError('%s.read_uint() - expected %i bytes, got %i'
-                              % (self.name, self.length_bytes, bram_dmp['length'] / (self.width_bits / 8)))
+            raise RuntimeError('%s.read_uint() - expected %i bytes, got %i' % (
+                self.name, self.length_bytes, bram_dmp['length'] / (self.width_bits / 8)))
         # read the extra value
         if self.control_registers['extra_value']['register'] is not None:
             bram_dmp['extra_value'] = self.control_registers['extra_value']['register'].read()
