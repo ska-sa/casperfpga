@@ -51,11 +51,11 @@ class Qdr(Memory):
     """
     Qdr memory on an FPGA.
     """
-    def __init__(self, parent, name, address, length, device_info, ctrlreg_address):
+    def __init__(self, parent, name, address, length_bytes, device_info, ctrlreg_address):
         """
         Make the QDR instance, given a parent, name and info from Simulink.
         """
-        super(Qdr, self).__init__(name=name, width=32, address=address, length=length)
+        super(Qdr, self).__init__(name=name, width_bits=32, address=address, length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
         self.which_qdr = self.block_info['which_qdr']
