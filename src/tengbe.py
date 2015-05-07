@@ -138,30 +138,35 @@ class TenGbe(Memory):
     To do with the CASPER ten GBE yellow block implemented on FPGAs,
     and interfaced-to via KATCP memory reads/writes.
     """
-    def __init__(self, parent, name, address, length, device_info=None):
+    def __init__(self, parent, name, address, length_bytes, device_info=None):
         """
 
         :param parent:
         :param name:
         :param address:
-        :param length:
+        :param length_bytes:
         :param device_info:
         :return:
         """
         self.mac, self.ip_address, self.port = None, None, None
-        super(TenGbe, self).__init__(name=name, width=32, address=address, length=length)
+        super(TenGbe, self).__init__(name=name, width_bits=32, address=address,
+                                     length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
         if device_info is not None:
             fabric_ip = device_info['fab_ip']
             if fabric_ip.find('(2^24) + ') != -1:
-                device_info['fab_ip'] = fabric_ip.replace('*(2^24) + ', '.').replace('*(2^16) + ', '.').\
-                    replace('*(2^8) + ', '.').replace('*(2^0)', '')
+                device_info['fab_ip'] = (fabric_ip.replace('*(2^24) + ', '.')
+                                         .replace('*(2^16) + ', '.')
+                                         .replace('*(2^8) + ', '.')
+                                         .replace('*(2^0)', ''))
             fabric_mac = device_info['fab_mac']
             if fabric_mac.find('hex2dec') != -1:
                 fabric_mac = fabric_mac.replace('hex2dec(\'', '').replace('\')', '')
-                device_info['fab_mac'] = fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' + fabric_mac[4:6] + ':' +\
-                    fabric_mac[6:8] + ':' + fabric_mac[8:10] + ':' + fabric_mac[10:]
+                device_info['fab_mac'] = (
+                    fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' +
+                    fabric_mac[4:6] + ':' + fabric_mac[6:8] + ':' +
+                    fabric_mac[8:10] + ':' + fabric_mac[10:])
             mac = device_info['fab_mac']
             ip_address = device_info['fab_ip']
             port = device_info['fab_udp']
@@ -184,14 +189,14 @@ class TenGbe(Memory):
         :param memorymap_dict: a dictionary containing the device memory map
         :return: a TenGbe object
         """
-        address, length = -1, -1
+        address, length_bytes = -1, -1
         for mem_name in memorymap_dict.keys():
             if mem_name == device_name:
-                address, length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                address, length_bytes = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
                 break
-        if address == -1 or length == -1:
+        if address == -1 or length_bytes == -1:
             raise RuntimeError('Could not find address or length for TenGbe %s' % device_name)
-        return cls(parent, device_name, address, length, device_info)
+        return cls(parent, device_name, address, length_bytes, device_info)
 
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.name)
