@@ -93,12 +93,12 @@ class Register(Memory):
         :param kwargs: the field names and values to write
         :return:
         """
-        if len(kwargs.keys()) == 0:
+        if len(kwargs) == 0:
             LOGGER.info('%s: no keyword args given, exiting.' % self.name)
             return
         _read_necessary = False
         new_values = {_field: None for _field in self.field_names()}
-        for k in kwargs.keys():
+        for k in kwargs:
             if kwargs[k] in ['pulse', 'toggle']:
                 _read_necessary = True
             new_values[k] = kwargs[k]
@@ -109,7 +109,7 @@ class Register(Memory):
             # LOGGER.debug('A read of register %s is necessary' % self.name)
             new_values = self.read()['data']
         pulse = {}
-        for k in kwargs.keys():
+        for k in kwargs:
             if kwargs[k] == 'pulse':
                 LOGGER.debug('%s: pulsing field %s (%i -> %i)' % (self.name, k, new_values[k], not new_values[k]))
                 pulse[k] = new_values[k]
