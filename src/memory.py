@@ -44,13 +44,10 @@ def fp2fixed_int(num, bitwidth, bin_pt, signed):
     _format = '%s%i.%i' % ('fix' if signed else 'ufix', bitwidth, bin_pt)
     LOGGER.debug('Converting %f to %s' % (num, _format))
     if bin_pt >= bitwidth:
-        LOGGER.error('    Cannot have bin_pt >= bitwidth')
         raise ValueError('Cannot have bin_pt >= bitwidth')
     if bin_pt < 0:
-        LOGGER.error('    bin_pt < 0 makes no sense')
         raise ValueError('bin_pt < 0 makes no sense')
     if (not signed) and (num < 0):
-        LOGGER.error('    Cannot represent %f in %s' % (num, _format))
         raise ValueError('Cannot represent %f in %s' % (num, _format))
     if num == 0:
         return 0
@@ -64,12 +61,9 @@ def fp2fixed_int(num, bitwidth, bin_pt, signed):
     num = abs(num)
     left = int(num)
     if left > left_limits[1]:
-        LOGGER.error('    Cannot represent %f in %s' % (_original_num, _format))
         raise ValueError('Cannot represent %f in %s' % (_original_num, _format))
     right = int(round((abs(num) % 1) * (2**bin_pt)))
     assert left >= 0 and right >= 0
-    # _ls = numpy.binary_repr(left, width=left_bits)
-    # _rs = '' if bin_pt == 0 else numpy.binary_repr(right, width=bin_pt)
     _lsbin = bin(left)[2:]
     _lsbin = '0'*(left_bits-len(_lsbin)) + _lsbin
     if bin_pt == 0:
@@ -77,7 +71,6 @@ def fp2fixed_int(num, bitwidth, bin_pt, signed):
     else:
         _rsbin = bin(right)[2:]
         _rsbin = '0'*(bin_pt-len(_rsbin)) + _rsbin
-    # rv = int(_ls + _rs, 2)
     rv = int(_lsbin + _rsbin, 2)
     if negnum:
         rv = 2**bitwidth - rv

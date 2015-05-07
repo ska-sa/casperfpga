@@ -5,7 +5,7 @@ LOGGER = logging.getLogger(__name__)
 
 class Bitfield(object):
     """
-    Describes a chunk of memory that consists of a number of Field.
+    Describes a chunk of memory that consists of a number of Fields.
     """
     def __init__(self, name, width_bits, fields=None):
         self.name = name
@@ -88,10 +88,12 @@ class Field(object):
         """
         Initialise a Field object.
         :param name: The name of the field
-        :param numtype: A numerical description of the type - 0 is unsigned, 1 is signed 2's comp and 2 is boolean
+        :param numtype: A numerical description of the type:
+                        0 is unsigned, 1 is signed 2's comp and 2 is boolean
         :param width: The width of the field, in bits
         :param binary_pt: The binary point position, in bits
-        :param lsb_offset: The offset in the memory field, in bits - -1 means it hasn't been set yet.
+        :param lsb_offset: The offset in the memory field, in bits:
+                           -1 means it hasn't been set yet.
         :return:
         """
         if not isinstance(numtype, int):
@@ -104,7 +106,8 @@ class Field(object):
         self.offset = lsb_offset
 
     def __str__(self):
-        return '%s(%i,%i,%i,%i)' % (self.name, self.offset, self.width_bits, self.binary_pt, self.numtype)
+        return '%s(%i,%i,%i,%i)' % (self.name, self.offset, self.width_bits,
+                                    self.binary_pt, self.numtype)
 
     def __repr__(self):
         return str(self)
