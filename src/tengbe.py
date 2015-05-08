@@ -42,6 +42,7 @@ class Mac(object):
             value = int(byte_str, base=16)
             mac += value << offset
             offset -= 8
+        return mac
 
     def __init__(self, mac):
         mac_str = None
@@ -55,11 +56,11 @@ class Mac(object):
         if (mac_str is None) and (mac_int is None):
             raise ValueError('Cannot make a MAC with no value.')
         elif mac_str is not None:
-            self.mac_str = mac_str
             self.mac_int = self.str2mac(mac_str)
+            self.mac_str = mac_str
         elif mac_int is not None:
-            self.mac_int = mac_int
             self.mac_str = self.mac2str(mac_int)
+            self.mac_int = mac_int
 
     def packed(self):
         mac = [0, 0]
@@ -114,11 +115,11 @@ class IpAddress(object):
         if (ip_str is None) and (ip_int is None):
             raise ValueError('Cannot make an IP with no value.')
         elif ip_str is not None:
-            self.ip_str = ip_str
             self.ip_int = self.str2ip(ip_str)
+            self.ip_str = ip_str
         elif ip_int is not None:
-            self.ip_int = ip_int
             self.ip_str = self.ip2str(ip_int)
+            self.ip_int = ip_int
 
     def packed(self):
         ip = []
