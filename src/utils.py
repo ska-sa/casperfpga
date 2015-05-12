@@ -140,35 +140,63 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=1
     return fpgas
 
 
-def threaded_fpga_function(fpga_list, timeout, function_name, *function_args, **function_kwargs):
+def _check_target_func(target_function):
+    if isinstance(target_function, basestring):
+        return target_function, (), {}
+    try:
+        len(target_function)
+    except TypeError:
+        return target_function, (), {}
+    if len(target_function) == 3:
+        return target_function
+    elif len(target_function) == 1:
+        target_function = (target_function[0], (), {})
+    elif len(target_function) == 2:
+        target_function = (target_function[0], target_function[1], {})
+    else:
+        raise RuntimeError('target_function tuple too long? - (name, (), {})')
+    return target_function
+
+
+def threaded_fpga_function(fpga_list, timeout, target_function):
     """
     Thread the running of any KatcpClientFpga function on a list of KatcpClientFpga objects.
     Much faster.
     :param fpgas: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
-    :param function_name: the KatcpClientFpga function to run e.g. 'disconnect' for fpgaobj.disconnect()
-    :param function_args: arguments to the function
-    :param **function_kwargs: keyword arguments to the function
+    :param target_function: a tuple with three parts:
+                            1. string, the KatcpClientFpga function to
+                               run e.g. 'disconnect' for fpgaobj.disconnect()
+                            2. tuple, the arguments to the function
+                            3. dict, the keyword arguments to the function
+                            e.g. (func_name, (1,2,), {'another_arg': 3})
     :return: a dictionary of the results, keyed on hostname
     """
+    target_function = _check_target_func(target_function)
+
     def dofunc(fpga, *args, **kwargs):
-        rv = eval('fpga.%s' % function_name)(*args, **kwargs)
+        rv = eval('fpga.%s' % target_function[0])(*args, **kwargs)
         return rv
-    return threaded_fpga_operation(fpga_list, timeout, dofunc, *function_args, **function_kwargs)
+    return threaded_fpga_operation(fpga_list, timeout, (dofunc, target_function[1], target_function[2]))
 
 
-def threaded_fpga_operation(fpga_list, timeout, job_function, *job_args, **job_kwargs):
+def threaded_fpga_operation(fpga_list, timeout, target_function):
     """
     Thread any operation against many FPGA objects
     :param fpgas: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
-    :param job_function: the function object that must be run - MUST take FPGA object as first argument
-    :param job_args: a dictionary, keyed by hostname, of the results from the function
-    :param **job_kwargs: keyword arguments to the function
+    :param target_function: a tuple with three parts:
+                            1. reference, the function object that must be
+                               run - MUST take FPGA object as first argument
+                            2. tuple, the arguments to the function
+                            3. dict, the keyword arguments to the function
+                            e.g. (func_name, (1,2,), {'another_arg': 3})
     :return: a dictionary of the results, keyed on hostname
     """
+    target_function = _check_target_func(target_function)
+
     def jobfunc(resultq, fpga):
-        rv = job_function(fpga, *job_args, **job_kwargs)
+        rv = target_function[0](fpga, *target_function[1], **target_function[2])
         resultq.put_nowait((fpga.host, rv))
     num_fpgas = len(fpga_list)
     result_queue = Queue.Queue(maxsize=num_fpgas)

@@ -38,6 +38,8 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
         upload_socket.send(open(filename).read())
     except:
         result_queue.put('Could not send file to upload port.')
+    finally:
+        LOGGER.info('%s: upload thread for host %s complete' % (time.time(), targethost))
     result_queue.put('')
     return
 
@@ -73,7 +75,14 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
                 # Old style
                 self.start(daemon=True)
             self.wait_connected(timeout)
-        if not self.is_connected():
+        # check that an actual katcp command gets through
+        got_ping = False
+        _stime = time.time()
+        while time.time() < _stime + timeout:
+            if self.ping():
+                got_ping = True
+                break
+        if not got_ping:
             raise RuntimeError('Could not connect to KATCP server %s' % self.host)
         LOGGER.info('%s: connection established' % self.host)
 
@@ -211,11 +220,16 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :return:
         """
         # TODO - The logic here is for broken TCPBORPHSERVER - needs to be fixed.
+        if 'program_filename' in self.system_info.keys():
+            if filename is None:
+                filename = self.system_info['program_filename']
+            elif filename != self.system_info['program_filename']:
+                LOGGER.error('Programming filename %s, configured programming filename %s'
+                             % (filename, self.system_info['program_filename']))
         if filename is None:
-            filename = self.system_info['program_filename']
-        elif filename != self.system_info['program_filename']:
-            LOGGER.error('Programming filename %s, configured programming filename %s'
-                         % (filename, self.system_info['program_filename']))
+            LOGGER.error('Cannot program with no filename given. Exiting.')
+            raise RuntimeError('Cannot program with no filename given. Exiting.')
+
         unhandled_informs = []
 
         # set the unhandled informs callback
