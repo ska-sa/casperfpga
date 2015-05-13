@@ -211,6 +211,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :return:
         """
         # TODO - The logic here is for broken TCPBORPHSERVER - needs to be fixed.
+        # Maybe I've fixed it now? - JNS
         if filename is None:
             filename = self.system_info['program_filename']
         elif filename != self.system_info['program_filename']:
@@ -220,23 +221,31 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
 
         # set the unhandled informs callback
         self.unhandled_inform_handler = lambda msg: unhandled_informs.append(msg)
-        reply, _ = self.katcprequest(name='progdev', request_timeout=10, request_args=(filename, ))
+        reply, informs = self.katcprequest(name='progdev', request_timeout=10, request_args=(filename, ))
         self.unhandled_inform_handler = None
         if reply.arguments[0] == 'ok':
             complete_okay = False
             for inf in unhandled_informs:
                 if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
                     complete_okay = True
-            if not complete_okay:
-                LOGGER.error('%s: programming %s failed.' % (self.host, filename))
-                for inf in unhandled_informs:
-                    LOGGER.debug(inf)
-                raise RuntimeError('%s: programming %s failed.' % (self.host, filename))
+            if not complete_okay: # Modify to do an extra check
+                reply, _ = self.katcprequest(name='status', request_timeout=1)
+                # Not sure whether 1 second is a good timeout here
+                if reply.arguments[0] == 'ok':
+                    complete_okay = True
+                else:
+                    LOGGER.error('%s: programming %s failed.' % (self.host, filename))
+                    for inf in unhandled_informs:
+                        LOGGER.debug(inf)
+                    raise RuntimeError('%s: programming %s failed.' % (self.host, filename))
             self.system_info['last_programmed'] = filename
         else:
             LOGGER.error('%s: progdev request %s failed.' % (self.host, filename))
             raise RuntimeError('%s: progdev request %s failed.' % (self.host, filename))
-        self.get_system_information()
+        if filename[-3:] == 'fpg':
+            self.get_system_information()
+        else:
+            LOGGER.info('%s is not an fpg file, could not parse system information.'%(filename))
         LOGGER.info('%s: programmed %s okay.' % (self.host, filename))
 
     def deprogram(self):
