@@ -221,7 +221,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
 
         # set the unhandled informs callback
         self.unhandled_inform_handler = lambda msg: unhandled_informs.append(msg)
-        reply, informs = self.katcprequest(name='progdev', request_timeout=10, request_args=(filename, ))
+        reply, _ = self.katcprequest(name='progdev', request_timeout=10, request_args=(filename, ))
         self.unhandled_inform_handler = None
         if reply.arguments[0] == 'ok':
             complete_okay = False
