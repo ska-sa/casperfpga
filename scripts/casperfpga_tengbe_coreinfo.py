@@ -9,10 +9,7 @@ Created on Fri Jan  3 10:40:53 2014
 
 @author: paulp
 """
-import sys
-import time
 import argparse
-import signal
 
 from casperfpga import utils
 from casperfpga import katcp_fpga
