@@ -12,6 +12,8 @@ from utils import parse_fpg, create_meta_dictionary
 
 LOGGER = logging.getLogger(__name__)
 
+class KatcpRequestError(RuntimeError):
+    """Exception that is raised when a KATCP request fails when it should not"""
 
 def sendfile(filename, targethost, port, result_queue, timeout=2):
     """
@@ -103,8 +105,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         request = katcp.Message.request(name, *request_args)
         reply, informs = self.blocking_request(request, timeout=request_timeout)
         if (reply.arguments[0] != katcp.Message.OK) and require_ok:
-            raise RuntimeError('Request %s on host %s failed.\n\tRequest: %s\n\tReply: %s' %
-                               (request.name, self.host, request, reply))
+            raise KatcpRequestError(
+                'Request %s on host %s failed.\n\tRequest: %s\n\tReply: %s' %
+                (request.name, self.host, request, reply))
         return reply, informs
 
     def listdev(self, getsize=False, getaddress=False):
@@ -249,13 +252,40 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         """
         Deprogram the FPGA.
         :return:
+
+        Unsubscribes all active tap devices from any multicast groups to avoid confusing
+        switch IGMP snoop tables.
         """
-        reply, _ = self.katcprequest(name='progdev')
-        if reply.arguments[0] == 'ok':
+        try:
+            self._unsubscribe_all_taps()
+            time.sleep(0.05)    # Sleep a little to give roach kernel time to send IGMP
+                                # multicast unsubscibe message(s) before deprogramming
+                                # which would kill the tap devices
+            reply, _ = self.katcprequest(name='progdev', require_ok=True)
             super(KatcpFpga, self).deprogram()
-        else:
-            raise RuntimeError('Could not deprogram FPGA, katcp request failed!')
-        LOGGER.info('%s: deprogrammed okay' % self.host)
+            LOGGER.info('%s: deprogrammed okay' % self.host)
+        except KatcpRequestError as exc:
+            LOGGER.exception('Could not deprogram FPGA {}, katcp request failed:'
+                             .format(self.host))
+            raise RuntimeError('Could not deprogram FPGA: {}'.format(exc))
+
+    def _unsubscribe_all_taps(self):
+        reply, informs = self.katcprequest(name='tap-info', require_ok=True)
+        taps = [inform.arguments[0] for inform in informs]
+        for tap in taps:
+            fake_group = '239.0.0.1'
+            # TODO 2015-05-14 (NM) We need to use a fake group until a newer version of
+            # the roach firmware is released that takes a no-parameter
+            # ?tap-multicast-remove request to unsubscribe all groups. In the mean time a
+            # bug in the implementation will result in all groups being unsubscribed
+            # irrespective of the parameter to ?tap-multicast-remove. This TODO should be
+            # fixed in case an even later firmware release starts properly honouring this
+            # parameters.
+            reply, _ = self.katcprequest(name='tap-multicast-remove',
+                                        request_args=(tap, fake_group))
+            if not reply.reply_ok():
+                LOGGER.warn('Could not unsubscribe tap {} from multicast groups '
+                            'on FPGA {}'.format(tap, self.host))
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10, wait_complete=True):
         """
