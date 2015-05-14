@@ -38,11 +38,17 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
         upload_socket.send(open(filename).read())
     except:
         result_queue.put('Could not send file to upload port.')
+    finally:
+        LOGGER.info('%s: upload thread for host %s complete' % (time.time(), targethost))
     result_queue.put('')
     return
 
 
-class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
+# class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
+class KatcpFpga(katcp.AsyncClient):
+
+    #TODO - new interface to work with tornado katcp implementation
+
 
     def __init__(self, host, port=7147, timeout=2.0, connect=True):
         async_requester.AsyncRequester.__init__(self, host, self.callback_request, max_requests=100)
@@ -73,7 +79,14 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
                 # Old style
                 self.start(daemon=True)
             self.wait_connected(timeout)
-        if not self.is_connected():
+        # check that an actual katcp command gets through
+        got_ping = False
+        _stime = time.time()
+        while time.time() < _stime + timeout:
+            if self.ping():
+                got_ping = True
+                break
+        if not got_ping:
             raise RuntimeError('Could not connect to KATCP server %s' % self.host)
         LOGGER.info('%s: connection established' % self.host)
 
@@ -211,11 +224,17 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :return:
         """
         # TODO - The logic here is for broken TCPBORPHSERVER - needs to be fixed.
+        # Maybe I've fixed it now? - JNS
+        if 'program_filename' in self.system_info.keys():
+            if filename is None:
+                filename = self.system_info['program_filename']
+            elif filename != self.system_info['program_filename']:
+                LOGGER.error('Programming filename %s, configured programming filename %s'
+                             % (filename, self.system_info['program_filename']))
         if filename is None:
-            filename = self.system_info['program_filename']
-        elif filename != self.system_info['program_filename']:
-            LOGGER.error('Programming filename %s, configured programming filename %s'
-                         % (filename, self.system_info['program_filename']))
+            LOGGER.error('Cannot program with no filename given. Exiting.')
+            raise RuntimeError('Cannot program with no filename given. Exiting.')
+
         unhandled_informs = []
 
         # set the unhandled informs callback
@@ -227,16 +246,24 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             for inf in unhandled_informs:
                 if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
                     complete_okay = True
-            if not complete_okay:
-                LOGGER.error('%s: programming %s failed.' % (self.host, filename))
-                for inf in unhandled_informs:
-                    LOGGER.debug(inf)
-                raise RuntimeError('%s: programming %s failed.' % (self.host, filename))
+            if not complete_okay: # Modify to do an extra check
+                reply, _ = self.katcprequest(name='status', request_timeout=1)
+                # Not sure whether 1 second is a good timeout here
+                if reply.arguments[0] == 'ok':
+                    complete_okay = True
+                else:
+                    LOGGER.error('%s: programming %s failed.' % (self.host, filename))
+                    for inf in unhandled_informs:
+                        LOGGER.debug(inf)
+                    raise RuntimeError('%s: programming %s failed.' % (self.host, filename))
             self.system_info['last_programmed'] = filename
         else:
             LOGGER.error('%s: progdev request %s failed.' % (self.host, filename))
             raise RuntimeError('%s: progdev request %s failed.' % (self.host, filename))
-        self.get_system_information()
+        if filename[-3:] == 'fpg':
+            self.get_system_information()
+        else:
+            LOGGER.info('%s is not an fpg file, could not parse system information.'%(filename))
         LOGGER.info('%s: programmed %s okay.' % (self.host, filename))
 
     def deprogram(self):
