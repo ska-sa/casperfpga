@@ -226,7 +226,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             elif filename != self.system_info['program_filename']:
                 LOGGER.error('Programming filename %s, configured programming filename %s'
                              % (filename, self.system_info['program_filename']))
-                # Why is this error instead of info or at least warning?
+                # This doesn't seem as though it should really be an error...
         if filename is None:
             LOGGER.error('Cannot program with no filename given. Exiting.')
             raise RuntimeError('Cannot program with no filename given. Exiting.')
