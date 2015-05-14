@@ -44,11 +44,7 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     return
 
 
-# class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
-class KatcpFpga(katcp.AsyncClient):
-
-    #TODO - new interface to work with tornado katcp implementation
-
+class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
 
     def __init__(self, host, port=7147, timeout=2.0, connect=True):
         async_requester.AsyncRequester.__init__(self, host, self.callback_request, max_requests=100)
