@@ -224,13 +224,13 @@ class KatcpFpga(katcp.AsyncClient):
         :return:
         """
         # TODO - The logic here is for broken TCPBORPHSERVER - needs to be fixed.
-        # Maybe I've fixed it now? - JNS
         if 'program_filename' in self.system_info.keys():
             if filename is None:
                 filename = self.system_info['program_filename']
             elif filename != self.system_info['program_filename']:
                 LOGGER.error('Programming filename %s, configured programming filename %s'
                              % (filename, self.system_info['program_filename']))
+                # Why is this error instead of info or at least warning?
         if filename is None:
             LOGGER.error('Cannot program with no filename given. Exiting.')
             raise RuntimeError('Cannot program with no filename given. Exiting.')
