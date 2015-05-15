@@ -67,7 +67,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :return:
         """
         if not self.is_connected():
-            # Implement backward / forwards compabitlity for change in daemonization APIs
+            # Implement backward / forwards compatibility for change in daemonization APIs
             # in upstream katcp package.
             try:
                 # New style
