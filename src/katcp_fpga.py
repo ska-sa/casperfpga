@@ -67,7 +67,15 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :return:
         """
         if not self.is_connected():
-            self.start(daemon=True)
+            # Implement backward / forwards compabitlity for change in daemonization APIs
+            # in upstream katcp package.
+            try:
+                # New style
+                self.setDaemon(True)
+                self.start()
+            except AttributeError:
+                # Old style
+                self.start(daemon=True)
             self.wait_connected(timeout)
         # check that an actual katcp command gets through
         got_ping = False
