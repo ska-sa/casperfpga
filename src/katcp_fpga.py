@@ -203,7 +203,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
     def bulkread(self, device_name, size, offset=0):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
-        Uses much fast bulkread katcp command which returns data in pages
+        Uses much faster bulkread katcp command which returns data in pages
         using informs rather than one read reply, which has significant buffering
         overhead on the ROACH.
         :param device_name: name of the memory device from which to read
@@ -303,6 +303,16 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             if not reply.reply_ok():
                 LOGGER.warn('Could not unsubscribe tap {} from multicast groups '
                             'on FPGA {}'.format(tap, self.host))
+
+    def set_igmp_version(self, version):
+        """Sets version of IGMP multicast protocol to use
+        :param version: IGMP protocol version, 0 for kernel default, 1, 2 or 3
+
+        Note: won't work if config keep file is present since the needed ?igmp-version
+        request won't exist on the KATCP interface.
+        """
+        reply, _ = self.katcprequest(name='igmp-version', request_args=(version, ),
+                                     require_ok=True)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10, wait_complete=True):
         """
