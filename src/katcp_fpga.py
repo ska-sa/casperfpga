@@ -290,16 +290,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         reply, informs = self.katcprequest(name='tap-info', require_ok=True)
         taps = [inform.arguments[0] for inform in informs]
         for tap in taps:
-            fake_group = '239.0.0.1'
-            # TODO 2015-05-14 (NM) We need to use a fake group until a newer version of
-            # the roach firmware is released that takes a no-parameter
-            # ?tap-multicast-remove request to unsubscribe all groups. In the mean time a
-            # bug in the implementation will result in all groups being unsubscribed
-            # irrespective of the parameter to ?tap-multicast-remove. This TODO should be
-            # fixed in case an even later firmware release starts properly honouring this
-            # parameters.
             reply, _ = self.katcprequest(name='tap-multicast-remove',
-                                        request_args=(tap, fake_group))
+                                        request_args=(tap,))
             if not reply.reply_ok():
                 LOGGER.warn('Could not unsubscribe tap {} from multicast groups '
                             'on FPGA {}'.format(tap, self.host))
