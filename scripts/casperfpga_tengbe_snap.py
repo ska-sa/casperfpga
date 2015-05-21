@@ -116,7 +116,7 @@ for ctr in range(0, len(coredata[coredata.keys()[0]])):
                 display_key = 'src_ip'
             else:
                 raise RuntimeError('Unknown IP key?')
-            print '%s(%s)' % (display_key, tengbe.ip2str(coredata[key][ctr])), '\t',
+            print '%s(%s)' % (display_key, str(tengbe.IpAddress(coredata[key][ctr]))), '\t',
         elif (key == data_key) and args.spead:
             # new_spead_info, spead_stringdata = process_spead_word(spead_info, coredata[data_key][ctr], packet_counter)
             # if new_spead_info is not None:
