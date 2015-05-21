@@ -275,6 +275,31 @@ class TenGbe(Memory):
                 results[reg] = self.parent.memory_devices[reg].read()
         return results
 
+    def tx_okay(self,wait_time=1):
+        """
+        Is this gbe block okay?
+        :return: True/False
+        """
+        try:
+            result0 = self.read_tx_counters()
+            time.sleep(wait_time) # what number is best?
+            result1 = self.read_tx_counters()
+            # if debug register are implemented
+            # check if errors are not changing
+            assert result0[self.name+'_txfullctr']['data']['reg'] == result1[self.name+'_txfullctr']['data']['reg']
+            assert result0[self.name+'_txofctr']['data']['reg'] == result1[self.name+'_txofctr']['data']['reg']
+            assert result0[self.name+'_txerrctr']['data']['reg'] == result1[self.name+'_txerrctr']['data']['reg']
+            # check increment
+            assert result1[self.name+'_txctr']['data']['reg'] - result0[self.name+'_txctr']['data']['reg'] > 0
+            assert result1[self.name+'_txvldctr']['data']['reg'] - result0[self.name+'_txvldctr']['data']['reg'] > 0
+        except KeyError:
+            raise RuntimeError('Gbe block {} does not have the necessary registers to check TX status.'.format(self.name))
+        except:
+            LOGGER.info('Gbe block %s tx_okay() - FALSE.' % self.name)
+            return False
+        LOGGER.info('Gbe block %s tx_okay() - TRUE.' % self.name)
+        return True
+
     #def read_raw(self,  **kwargs):
     #    # size is in bytes
     #    data = self.parent.read(device_name = self.name, size = self.width/8, offset = 0)
