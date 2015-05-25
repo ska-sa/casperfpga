@@ -6,6 +6,7 @@ Created on Feb 28, 2013
 
 import logging
 import struct
+import time
 
 from memory import Memory
 
@@ -286,14 +287,20 @@ class TenGbe(Memory):
             result1 = self.read_tx_counters()
             # if debug register are implemented
             # check if errors are not changing
-            assert result0[self.name+'_txfullctr']['data']['reg'] == result1[self.name+'_txfullctr']['data']['reg']
-            assert result0[self.name+'_txofctr']['data']['reg'] == result1[self.name+'_txofctr']['data']['reg']
-            assert result0[self.name+'_txerrctr']['data']['reg'] == result1[self.name+'_txerrctr']['data']['reg']
+            assert (result0[self.name+'_txfullctr']['data']['reg'] ==
+                    result1[self.name+'_txfullctr']['data']['reg'])
+            assert (result0[self.name+'_txofctr']['data']['reg'] ==
+                    result1[self.name+'_txofctr']['data']['reg'])
+            assert (result0[self.name+'_txerrctr']['data']['reg'] ==
+                    result1[self.name+'_txerrctr']['data']['reg'])
             # check increment
-            assert result1[self.name+'_txctr']['data']['reg'] - result0[self.name+'_txctr']['data']['reg'] > 0
-            assert result1[self.name+'_txvldctr']['data']['reg'] - result0[self.name+'_txvldctr']['data']['reg'] > 0
+            assert (result1[self.name+'_txctr']['data']['reg'] -
+                    result0[self.name+'_txctr']['data']['reg'] > 0)
+            assert (result1[self.name+'_txvldctr']['data']['reg'] -
+                    result0[self.name+'_txvldctr']['data']['reg'] > 0)
         except KeyError:
-            raise RuntimeError('Gbe block {} does not have the necessary registers to check TX status.'.format(self.name))
+            raise RuntimeError('Gbe block {} does not have the necessary '
+                               'registers to check TX status.'.format(self.name))
         except:
             LOGGER.info('Gbe block %s tx_okay() - FALSE.' % self.name)
             return False
