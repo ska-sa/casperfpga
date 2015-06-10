@@ -22,7 +22,7 @@ LOGGER = logging.getLogger(__name__)
 # known CASPER memory-accessible  devices and their associated classes and containers
 CASPER_MEMORY_DEVICES = {
     'xps:bram':         {'class': sbram.Sbram,          'container': 'sbrams'},
-    'xps:katadc':       {'class': katadc.KatAdc,        'container': 'katadcs'},
+    #'xps:katadc':       {'class': katadc.KatAdc,        'container': 'katadcs'},
     'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs'},
     'xps:sw_reg':       {'class': register.Register,    'container': 'registers'},
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes'},
@@ -47,7 +47,9 @@ CASPER_OTHER_DEVICES = {
     'casper:spead_unpack':          'spead_unpack',
     'casper:vacc':                  'vacc',
     'casper:xeng':                  'xeng',
-    'xps:xsg':                      'xps',}
+    'xps:xsg':                      'xps',
+    'xps:katadc':                   'katadc',
+}
 
 
 class CasperFpga(object):
