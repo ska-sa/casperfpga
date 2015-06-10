@@ -545,9 +545,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
                 time.sleep(1)
                 result1 = self.katcprequest('phywatch', request_args=arg)
                 assert result0[0].reply_ok()  # useful?
-                difference = (int(result1[0].arguments[1].replace('0x', ''), base=16) -
-                              int(result0[0].arguments[1].replace('0x', ''), base=16))
-                assert difference != 0 and difference > 0
+                assert (int(result1[0].arguments[1].replace('0x', ''), base=16) -
+                        int(result0[0].arguments[1].replace('0x', ''), base=16)) != 0
             except:
                 LOGGER.info('Host %s check_phy_counter failed on PHY %s - FALSE.' % (self.host, arg))
                 return False
