@@ -537,4 +537,20 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         if self.unhandled_inform_handler is not None:
             self.unhandled_inform_handler(msg)
 
+    def check_phy_counter(self):
+        request_args = ((0, 0), (0, 1), (1, 0), (1, 1))
+        for arg in request_args:
+            try:
+                result0 = self.katcprequest('phywatch', request_args=arg)
+                time.sleep(1)
+                result1 = self.katcprequest('phywatch', request_args=arg)
+                assert result0[0].reply_ok()  # useful?
+                difference = (int(result1[0].arguments[1].replace('0x', ''), base=16) -
+                              int(result0[0].arguments[1].replace('0x', ''), base=16))
+                assert difference != 0 and difference > 0
+            except:
+                LOGGER.info('Host %s check_phy_counter failed on PHY %s - FALSE.' % (self.host, arg))
+                return False
+            LOGGER.info('Host %s check_phy_counter - TRUE.' % self.host)
+            return True
 # end
