@@ -301,7 +301,7 @@ class TenGbe(Memory):
         except KeyError:
             raise RuntimeError('Gbe block {} does not have the necessary '
                                'registers to check TX status.'.format(self.name))
-        except:
+        except AssertionError:
             LOGGER.info('Gbe block %s tx_okay() - FALSE.' % self.name)
             return False
         LOGGER.info('Gbe block %s tx_okay() - TRUE.' % self.name)
