@@ -540,16 +540,14 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
     def check_phy_counter(self):
         request_args = ((0, 0), (0, 1), (1, 0), (1, 1))
         for arg in request_args:
-            try:
-                result0 = self.katcprequest('phywatch', request_args=arg)
-                time.sleep(1)
-                result1 = self.katcprequest('phywatch', request_args=arg)
-                assert result0[0].reply_ok()  # useful?
-                assert (int(result1[0].arguments[1].replace('0x', ''), base=16) -
-                        int(result0[0].arguments[1].replace('0x', ''), base=16)) != 0
-            except:
+            result0 = self.katcprequest('phywatch', request_args=arg)
+            time.sleep(1)
+            result1 = self.katcprequest('phywatch', request_args=arg)
+            if (int(result1[0].arguments[1].replace('0x', ''), base=16) -
+                int(result0[0].arguments[1].replace('0x', ''), base=16)) != 0:
+                LOGGER.info('Host %s check_phy_counter - TRUE.' % self.host)
+                return True
+            else:
                 LOGGER.info('Host %s check_phy_counter failed on PHY %s - FALSE.' % (self.host, arg))
                 return False
-            LOGGER.info('Host %s check_phy_counter - TRUE.' % self.host)
-            return True
 # end
