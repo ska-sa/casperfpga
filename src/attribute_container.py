@@ -6,8 +6,7 @@ class AttributeContainer(object):
     """
 
     def __init__(self):
-        self._next_item = 0
-        self._items = []
+        self.clear()
 
     def __getitem__(self, item_to_get):
         """
@@ -40,6 +39,11 @@ class AttributeContainer(object):
 
     def next(self):  # Python 2 compat
         return self.__next__()
+
+    def clear(self):
+        self.__dict__.clear()
+        self._next_item = 0
+        self._items = []
 
     def names(self):
         return self._items

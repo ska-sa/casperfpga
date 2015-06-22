@@ -111,32 +111,19 @@ gbe_data = utils.threaded_fpga_operation(fpgas, 10, get_gbe_data)
 # sys.exit()
 
 # work out tables for each fpga
-fpga_headers = []
-master_list = []
-for cnt, fpga in enumerate(fpgas):
+fpga_headers = ['tap_running', 'ip']
+for fpga in fpgas:
     gbedata = gbe_data[fpga.host]
-    gbe0 = gbedata.keys()[0]
-    core0_regs = [key.replace(gbe0, 'gbe') for key in gbedata[gbe0].keys()]
-    if cnt == 0:
-        master_list = core0_regs[:]
     for core in gbedata:
         core_regs = [key.replace(core, 'gbe') for key in gbedata[core].keys()]
-        if sorted(core0_regs) != sorted(core_regs):
-            raise RuntimeError('Not all GBE cores for FPGA %s have the same support registers. Problem.', fpga.host)
-    fpga_headers.append(core0_regs)
-
-# all_the_same = True
-# for cnt, fpga in enumerate(fpgas):
-#     if sorted(master_list) != sorted(fpga_headers[cnt]):
-#         all_the_same = False
-#         raise RuntimeWarning('Warning: GBE cores across given hosts are NOT configured the same!')
-# if all_the_same:
-#     fpga_headers = [fpga_headers[0]]
+        for reg in core_regs:
+            if reg not in fpga_headers:
+                fpga_headers.append(reg)
+fpga_headers = [fpga_headers]
 
 fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr', 'gbe_rxerrctr',
                  'gbe_rxbadctr', 'gbe_txerrctr', 'gbe_txfullctr', 'gbe_txofctr',
                  'gbe_txctr', 'gbe_txvldctr']]
-
 
 def exit_gracefully(sig, frame):
     print sig, frame

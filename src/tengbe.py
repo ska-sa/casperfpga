@@ -6,6 +6,7 @@ Created on Feb 28, 2013
 
 import logging
 import struct
+import time
 
 from memory import Memory
 
@@ -13,25 +14,54 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Mac(object):
-    """A MAC address.
     """
+    A MAC address.
+    """
+
+    @staticmethod
+    def mac2str(mac):
+        """
+        Convert a MAC in integer form to a human-readable string.
+        """
+        mac_pieces = [(mac & ((1 << 48) - (1 << 40))) >> 40, (mac & ((1 << 40) - (1 << 32))) >> 32,
+                      (mac & ((1 << 32) - (1 << 24))) >> 24, (mac & ((1 << 24) - (1 << 16))) >> 16,
+                      (mac & ((1 << 16) - (1 << 8))) >> 8, (mac & ((1 << 8) - (1 << 0))) >> 0]
+        return '%02X:%02X:%02X:%02X:%02X:%02X' % (mac_pieces[0], mac_pieces[1],
+                                                  mac_pieces[2], mac_pieces[3],
+                                                  mac_pieces[4], mac_pieces[5])
+
+    @staticmethod
+    def str2mac(mac_str):
+        """
+        Convert a human-readable MAC string to an integer.
+        """
+        mac = 0
+        if mac_str.count(':') != 5:
+            raise RuntimeError('A MAC address must be of the form xx:xx:xx:xx:xx:xx')
+        offset = 40
+        for byte_str in mac_str.split(':'):
+            value = int(byte_str, base=16)
+            mac += value << offset
+            offset -= 8
+        return mac
+
     def __init__(self, mac):
         mac_str = None
         mac_int = None
         if isinstance(mac, Mac):
             mac_str = str(mac)
-        elif isinstance(mac, str):
+        elif isinstance(mac, basestring):
             mac_str = mac
         elif isinstance(mac, int):
             mac_int = mac
         if (mac_str is None) and (mac_int is None):
             raise ValueError('Cannot make a MAC with no value.')
         elif mac_str is not None:
+            self.mac_int = self.str2mac(mac_str)
             self.mac_str = mac_str
-            self.mac_int = str2mac(mac_str)
         elif mac_int is not None:
+            self.mac_str = self.mac2str(mac_int)
             self.mac_int = mac_int
-            self.mac_str = mac2str(mac_int)
 
     def packed(self):
         mac = [0, 0]
@@ -39,30 +69,58 @@ class Mac(object):
             mac.extend([int(byte, base=16)])
         return struct.pack('>8B', *mac)
 
+    def __int__(self):
+        return self.mac_int
+
     def __str__(self):
         return self.mac_str
 
 
 class IpAddress(object):
-    """An IP address.
     """
+    An IP address.
+    """
+    @staticmethod
+    def ip2str(ip_addr):
+        """
+        Convert an IP in integer form to a human-readable string.
+        """
+        ip_pieces = [ip_addr / (2 ** 24), ip_addr % (2 ** 24) / (2 ** 16), ip_addr % (2 ** 16) / (2 ** 8),
+                     ip_addr % (2 ** 8)]
+        return '%i.%i.%i.%i' % (ip_pieces[0], ip_pieces[1], ip_pieces[2], ip_pieces[3])
+
+    @staticmethod
+    def str2ip(ip_str):
+        """
+        Convert a human-readable IP string to an integer.
+        """
+        ip_addr = 0
+        if ip_str.count('.') != 3:
+            raise RuntimeError('An IP address must be of the form xxx.xxx.xxx.xxx')
+        offset = 24
+        for octet in ip_str.split('.'):
+            value = int(octet)
+            ip_addr += value << offset
+            offset -= 8
+        return ip_addr
+
     def __init__(self, ip):
         ip_str = None
         ip_int = None
         if isinstance(ip, IpAddress):
             ip_str = str(ip)
-        elif isinstance(ip, str):
+        elif isinstance(ip, basestring):
             ip_str = ip
         elif isinstance(ip, int):
             ip_int = ip
         if (ip_str is None) and (ip_int is None):
             raise ValueError('Cannot make an IP with no value.')
         elif ip_str is not None:
+            self.ip_int = self.str2ip(ip_str)
             self.ip_str = ip_str
-            self.ip_int = str2ip(ip_str)
         elif ip_int is not None:
+            self.ip_str = self.ip2str(ip_int)
             self.ip_int = ip_int
-            self.ip_str = ip2str(ip_int)
 
     def packed(self):
         ip = []
@@ -70,56 +128,11 @@ class IpAddress(object):
             ip.extend([int(byte, base=10)])
         return struct.pack('>4B', *ip)
 
+    def __int__(self):
+        return self.ip_int
+
     def __str__(self):
         return self.ip_str
-
-
-def mac2str(mac):
-    """Convert a MAC in integer form to a human-readable string.
-    """
-    mac_pieces = [(mac & ((1 << 48) - (1 << 40))) >> 40, (mac & ((1 << 40) - (1 << 32))) >> 32,
-                  (mac & ((1 << 32) - (1 << 24))) >> 24, (mac & ((1 << 24) - (1 << 16))) >> 16,
-                  (mac & ((1 << 16) - (1 << 8))) >> 8, (mac & ((1 << 8) - (1 << 0))) >> 0]
-    return "%02X:%02X:%02X:%02X:%02X:%02X" % (mac_pieces[0], mac_pieces[1],
-                                              mac_pieces[2], mac_pieces[3],
-                                              mac_pieces[4], mac_pieces[5])
-
-
-def str2mac(mac_str):
-    """Convert a human-readable MAC string to an integer.
-    """
-    mac = 0
-    if mac_str.count(':') != 5:
-        raise RuntimeError('A MAC address must be of the form xx:xx:xx:xx:xx:xx')
-    offset = 40
-    for byte_str in mac_str.split(':'):
-        value = int(byte_str, base=16)
-        mac += value << offset
-        offset -= 8
-    return mac
-
-
-def ip2str(ip_addr):
-    """Convert an IP in integer form to a human-readable string.
-    """
-    ip_pieces = [ip_addr / (2 ** 24), ip_addr % (2 ** 24) / (2 ** 16), ip_addr % (2 ** 16) / (2 ** 8),
-                 ip_addr % (2 ** 8)]
-    return "%i.%i.%i.%i" % (ip_pieces[0], ip_pieces[1],
-                            ip_pieces[2], ip_pieces[3])
-
-
-def str2ip(ip_str):
-    """Convert a human-readable IP string to an integer.
-    """
-    ip_addr = 0
-    if ip_str.count('.') != 3:
-        raise RuntimeError('An IP address must be of the form xxx.xxx.xxx.xxx')
-    offset = 24
-    for octet in ip_str.split('.'):
-        value = int(octet)
-        ip_addr += value << offset
-        offset -= 8
-    return ip_addr
 
 
 class TenGbe(Memory):
@@ -127,30 +140,35 @@ class TenGbe(Memory):
     To do with the CASPER ten GBE yellow block implemented on FPGAs,
     and interfaced-to via KATCP memory reads/writes.
     """
-    def __init__(self, parent, name, address, length, device_info=None):
+    def __init__(self, parent, name, address, length_bytes, device_info=None):
         """
 
         :param parent:
         :param name:
         :param address:
-        :param length:
+        :param length_bytes:
         :param device_info:
         :return:
         """
         self.mac, self.ip_address, self.port = None, None, None
-        super(TenGbe, self).__init__(name=name, width=32, address=address, length=length)
+        super(TenGbe, self).__init__(name=name, width_bits=32, address=address,
+                                     length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
         if device_info is not None:
             fabric_ip = device_info['fab_ip']
             if fabric_ip.find('(2^24) + ') != -1:
-                device_info['fab_ip'] = fabric_ip.replace('*(2^24) + ', '.').replace('*(2^16) + ', '.').\
-                    replace('*(2^8) + ', '.').replace('*(2^0)', '')
+                device_info['fab_ip'] = (fabric_ip.replace('*(2^24) + ', '.')
+                                         .replace('*(2^16) + ', '.')
+                                         .replace('*(2^8) + ', '.')
+                                         .replace('*(2^0)', ''))
             fabric_mac = device_info['fab_mac']
             if fabric_mac.find('hex2dec') != -1:
                 fabric_mac = fabric_mac.replace('hex2dec(\'', '').replace('\')', '')
-                device_info['fab_mac'] = fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' + fabric_mac[4:6] + ':' +\
-                    fabric_mac[6:8] + ':' + fabric_mac[8:10] + ':' + fabric_mac[10:]
+                device_info['fab_mac'] = (
+                    fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' +
+                    fabric_mac[4:6] + ':' + fabric_mac[6:8] + ':' +
+                    fabric_mac[8:10] + ':' + fabric_mac[10:])
             mac = device_info['fab_mac']
             ip_address = device_info['fab_ip']
             port = device_info['fab_udp']
@@ -173,14 +191,14 @@ class TenGbe(Memory):
         :param memorymap_dict: a dictionary containing the device memory map
         :return: a TenGbe object
         """
-        address, length = -1, -1
+        address, length_bytes = -1, -1
         for mem_name in memorymap_dict.keys():
             if mem_name == device_name:
-                address, length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                address, length_bytes = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
                 break
-        if address == -1 or length == -1:
+        if address == -1 or length_bytes == -1:
             raise RuntimeError('Could not find address or length for TenGbe %s' % device_name)
-        return cls(parent, device_name, address, length, device_info)
+        return cls(parent, device_name, address, length_bytes, device_info)
 
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.name)
@@ -257,6 +275,30 @@ class TenGbe(Memory):
             for reg in self.registers[direction]:
                 results[reg] = self.parent.memory_devices[reg].read()
         return results
+
+    def tx_okay(self, wait_time=1):
+        """
+        Is this gbe block okay?
+        :return: True/False
+        """
+        result0 = self.read_tx_counters()
+        time.sleep(wait_time)  # what number is best?
+        result1 = self.read_tx_counters()
+        if ((result0[self.name+'_txfullctr']['data']['reg'] ==
+            result1[self.name+'_txfullctr']['data']['reg']) and
+            (result0[self.name+'_txofctr']['data']['reg'] ==
+            result1[self.name+'_txofctr']['data']['reg']) and
+            (result0[self.name+'_txerrctr']['data']['reg'] ==
+            result1[self.name+'_txerrctr']['data']['reg']) and
+            (result1[self.name+'_txctr']['data']['reg'] -
+            result0[self.name+'_txctr']['data']['reg'] > 0) and
+            (result1[self.name+'_txvldctr']['data']['reg'] -
+            result0[self.name+'_txvldctr']['data']['reg'] > 0)):
+            LOGGER.info('Gbe block %s tx_okay() - TRUE.' % self.name)
+            return True
+        else:
+            LOGGER.info('Gbe block %s tx_okay() - FALSE.' % self.name)
+            return False
 
     #def read_raw(self,  **kwargs):
     #    # size is in bytes

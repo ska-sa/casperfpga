@@ -11,17 +11,19 @@ class Snap(Memory):
     """
     Snap blocks are triggered/controlled blocks of RAM on FPGAs.
     """
-    def __init__(self, parent, name, width, address, length, device_info=None):
+    def __init__(self, parent, name, width_bits, address, length_bytes, device_info=None):
 
-        super(Snap, self).__init__(name=name, width=width, address=address, length=length)
+        super(Snap, self).__init__(name=name, width_bits=width_bits, address=address, length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
-        self.field_add(bitfield.Field(name='data', numtype=0, width=self.width, binary_pt=0, lsb_offset=0))
-        self.control_registers = {'control':        {'register': None, 'name': self.name + '_ctrl'},
-                                  'status':         {'register': None, 'name': self.name + '_status'},
-                                  'trig_offset':    {'register': None, 'name': self.name + '_trig_offset'},
-                                  'extra_value':    {'register': None, 'name': self.name + '_val'},
-                                  'tr_en_cnt':      {'register': None, 'name': self.name + '_tr_en_cnt'}}
+        self.field_add(bitfield.Field(
+            name='data', numtype=0, width_bits=self.width_bits, binary_pt=0, lsb_offset=0))
+        self.control_registers = {
+            'control':        {'register': None, 'name': self.name + '_ctrl'},
+            'status':         {'register': None, 'name': self.name + '_status'},
+            'trig_offset':    {'register': None, 'name': self.name + '_trig_offset'},
+            'extra_value':    {'register': None, 'name': self.name + '_val'},
+            'tr_en_cnt':      {'register': None, 'name': self.name + '_tr_en_cnt'}}
         LOGGER.debug('New Snap %s' % self)
 
     @classmethod
@@ -33,18 +35,21 @@ class Snap(Memory):
         :param memorymap_dict: a dictionary containing the device memory map
         :return: a Snap object
         """
-        address, length = -1, -1
+        address, length_bytes = -1, -1
         for mem_name in memorymap_dict.keys():
             if mem_name == device_name + '_bram':
-                address, length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                address, length_bytes = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
                 break
         word_bits = int(device_info['data_width'])
         num_bytes = pow(2, int(device_info['nsamples'])) * (word_bits/8)
-        if length == -1:
-            length = num_bytes
-        if length != num_bytes:
-            raise RuntimeError('%s has mask length %d bytes, but mem map length %d bytes' % (device_name, num_bytes, length))
-        return cls(parent, device_name, width=word_bits, address=address, length=length, device_info=device_info)
+        if length_bytes == -1:
+            length_bytes = num_bytes
+        if length_bytes != num_bytes:
+            raise RuntimeError(
+                '%s has mask length_bytes %d bytes, but mem map length_bytes %d bytes' % (
+                    device_name, num_bytes, length_bytes))
+        return cls(parent, device_name, width_bits=word_bits, address=address,
+                   length_bytes=length_bytes, device_info=device_info)
 
     def post_create_update(self, raw_system_info):
         """Update the device with information not available at creation.
@@ -81,9 +86,9 @@ class Snap(Memory):
                     _rv.append(_fname)
             return _rv
         self.block_info = info
-        if self.width != int(info['snap_data_width']):
+        if self.width_bits != int(info['snap_data_width']):
             raise ValueError('Snap and matched bitsnap widths do not match.')
-        if self.length != pow(2, int(info['snap_nsamples'])) * (self.width/8):
+        if self.length_bytes != pow(2, int(info['snap_nsamples'])) * (self.width_bits/8):
             raise ValueError('Snap and matched bitsnap lengths do not match.')
         field_names = clean_fields(info['io_names'])
         field_widths = clean_fields(info['io_widths'])
@@ -99,7 +104,7 @@ class Snap(Memory):
                 bitwidth = int(field_widths[n])
             except ValueError:
                 bitwidth = eval(field_widths[n])
-            field = bitfield.Field(name=fn, numtype=int(field_types[n]), width=bitwidth,
+            field = bitfield.Field(name=fn, numtype=int(field_types[n]), width_bits=bitwidth,
                                        binary_pt=int(field_bps[n]), lsb_offset=-1)
             self.field_add(field, auto_offset=True)
 
@@ -243,9 +248,9 @@ class Snap(Memory):
         bram_dmp['offset'] += offset
         if bram_dmp['offset'] < 0:
             bram_dmp['offset'] = 0
-        if bram_dmp['length'] != self.length:
-            raise RuntimeError('%s.read_uint() - expected %i bytes, got %i'
-                              % (self.name, self.length, bram_dmp['length'] / (self.width / 8)))
+        if bram_dmp['length'] != self.length_bytes:
+            raise RuntimeError('%s.read_uint() - expected %i bytes, got %i' % (
+                self.name, self.length_bytes, bram_dmp['length'] / (self.width_bits / 8)))
         # read the extra value
         if self.control_registers['extra_value']['register'] is not None:
             bram_dmp['extra_value'] = self.control_registers['extra_value']['register'].read()
