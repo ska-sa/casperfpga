@@ -548,6 +548,6 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
                 LOGGER.info('Host %s check_phy_counter - TRUE.' % self.host)
                 return True
             else:
-                LOGGER.info('Host %s check_phy_counter failed on PHY %s - FALSE.' % (self.host, arg))
+                LOGGER.error('Host %s check_phy_counter failed on PHY %s - FALSE.' % (self.host, arg))
                 return False
 # end
