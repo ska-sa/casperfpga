@@ -297,7 +297,7 @@ class TenGbe(Memory):
             LOGGER.info('Gbe block %s tx_okay() - TRUE.' % self.name)
             return True
         else:
-            LOGGER.info('Gbe block %s tx_okay() - FALSE.' % self.name)
+            LOGGER.error('Gbe block %s tx_okay() - FALSE.' % self.name)
             return False
 
     #def read_raw(self,  **kwargs):
