@@ -283,41 +283,54 @@ class TenGbe(Memory):
         :return: True/False
         """
         result0 = self.read_tx_counters()
-        time.sleep(wait_time)  # what number is best?
+        time.sleep(wait_time)
         result1 = self.read_tx_counters()
         finish = []
-        for key in result0.keys():
-            if key[7:10] == 'err':
-                if result0[key]['data']['reg'] == result1[key]['data']['reg']:
-                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
-                    finish.append(1)
+        optional = [self.name+'_txfullctr', self.name+'_txofctr', self.name+'_txvldctr']
+        non_optional = [self.name+'_txerrctr', self.name+'_txctr']
+        if all(x in result0.keys() for x in non_optional):
+            for key in non_optional:
+                if key == self.name+'_txerrctr':
+                    if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                        finish.append(1)
+                    else:
+                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        finish.append(0)
+                else:  # self.name+'_txctr'
+                    if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
+                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                        finish.append(1)
+                    else:
+                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        finish.append(0)
+            for key in optional:
+                if key == self.name+'_txfullctr' and key in result0.keys():
+                    if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                        finish.append(1)
+                    else:
+                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        finish.append(0)
+                elif key == self.name+'_txofctr' and key in result0.keys():
+                    if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                        finish.append(1)
+                    else:
+                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        finish.append(0)
+                elif key == self.name+'_txvldctr' and key in result0.keys():
+                    if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
+                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                        finish.append(1)
+                    else:
+                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        finish.append(0)
                 else:
-                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
-                    finish.append(0)
-            elif key[7:10] == 'ctr':
-                if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
-                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
-                    finish.append(1)
-                else:
-                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
-                    finish.append(0)
-            elif key[7:10] == 'ful':
-                if result0[key]['data']['reg'] == result1[key]['data']['reg']:
-                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
-                else:
-                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
-            elif key[7:9] == 'of':
-                if result0[key]['data']['reg'] == result1[key]['data']['reg']:
-                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
-                else:
-                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
-            elif key[7:10] == 'vld':
-                if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
-                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
-                else:
-                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
-            else:
-                LOGGER.warn('Register %s in tengbe block %s not implemented' % (key, self.name))
+                    LOGGER.warn('Register %s in Gbe block %s not implemented' % (key, self.name))
+        else:
+            finish.append(0)
+            LOGGER.error('Missing registers in Gbe block %s' % self.name)
         if all(f == 1 for f in finish):
             LOGGER.info('Gbe block %s tx_okay() - TRUE.' % self.name)
             return True
