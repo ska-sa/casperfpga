@@ -279,21 +279,46 @@ class TenGbe(Memory):
     def tx_okay(self, wait_time=1):
         """
         Is this gbe block okay?
+        i.e. _txctr incrementing and _txerrctr not incrementing
         :return: True/False
         """
         result0 = self.read_tx_counters()
         time.sleep(wait_time)  # what number is best?
         result1 = self.read_tx_counters()
-        if ((result0[self.name+'_txfullctr']['data']['reg'] ==
-            result1[self.name+'_txfullctr']['data']['reg']) and
-            (result0[self.name+'_txofctr']['data']['reg'] ==
-            result1[self.name+'_txofctr']['data']['reg']) and
-            (result0[self.name+'_txerrctr']['data']['reg'] ==
-            result1[self.name+'_txerrctr']['data']['reg']) and
-            (result1[self.name+'_txctr']['data']['reg'] -
-            result0[self.name+'_txctr']['data']['reg'] > 0) and
-            (result1[self.name+'_txvldctr']['data']['reg'] -
-            result0[self.name+'_txvldctr']['data']['reg'] > 0)):
+        finish = []
+        for key in result0.keys():
+            if key[7:10] == 'err':
+                if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
+                    finish.append(1)
+                else:
+                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
+                    finish.append(0)
+            elif key[7:10] == 'ctr':
+                if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
+                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
+                    finish.append(1)
+                else:
+                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
+                    finish.append(0)
+            elif key[7:10] == 'ful':
+                if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
+                else:
+                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
+            elif key[7:9] == 'of':
+                if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
+                else:
+                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
+            elif key[7:10] == 'vld':
+                if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
+                    LOGGER.info('Register %s in tengbe block %s ok - TRUE' % (key, self.name))
+                else:
+                    LOGGER.error('Register %s in tengbe block %s ok - FALSE' % (key, self.name))
+            else:
+                LOGGER.warn('Register %s in tengbe block %s not implemented' % (key, self.name))
+        if all(f == 1 for f in finish):
             LOGGER.info('Gbe block %s tx_okay() - TRUE.' % self.name)
             return True
         else:
