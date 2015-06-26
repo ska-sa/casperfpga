@@ -263,3 +263,31 @@ class Snap(Memory):
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.name)
 
+    @staticmethod
+    def packetise_snapdata(data, eof_key='eof', packet_length=-1):
+        """
+        Use the given EOF key to packetise a dictionary of snap data
+        :param data: a dictionary containing snap block data
+        :param eof_key: the key used to identify the packet boundaries
+        :param packet_length: check the length of the packets against
+        this as they are created (in 64-bit words)
+        :return: a list of packets
+        """
+        class PacketLengthError(Exception):
+            pass
+        _current_packet = {}
+        _packets = []
+        for _ctr in range(0, len(data[eof_key])):
+            for key in data.keys():
+                if key not in _current_packet.keys():
+                    _current_packet[key] = []
+                _current_packet[key].append(data[key][_ctr])
+            if _current_packet[eof_key][-1]:
+                if packet_length != -1:
+                    if len(_current_packet[eof_key]) != packet_length:
+                        raise PacketLengthError('Expected {}, '
+                                                'got {}'.format(packet_length,
+                                                                len(_current_packet[eof_key])))
+                _packets.append(_current_packet)
+                _current_packet = {}
+        return _packets
