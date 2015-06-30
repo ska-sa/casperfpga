@@ -279,31 +279,48 @@ class TenGbe(Memory):
     def tx_okay(self, wait_time=1):
         """
         Is this gbe block okay?
+        i.e. _txctr incrementing and _txerrctr not incrementing
         :return: True/False
         """
-        try:
-            result0 = self.read_tx_counters()
-            time.sleep(wait_time) # what number is best?
-            result1 = self.read_tx_counters()
-            # if debug register are implemented
-            # check if errors are not changing
-            assert (result0[self.name+'_txfullctr']['data']['reg'] ==
-                    result1[self.name+'_txfullctr']['data']['reg'])
-            assert (result0[self.name+'_txofctr']['data']['reg'] ==
-                    result1[self.name+'_txofctr']['data']['reg'])
-            assert (result0[self.name+'_txerrctr']['data']['reg'] ==
-                    result1[self.name+'_txerrctr']['data']['reg'])
-            # check increment
-            assert (result1[self.name+'_txctr']['data']['reg'] -
-                    result0[self.name+'_txctr']['data']['reg'] > 0)
-            assert (result1[self.name+'_txvldctr']['data']['reg'] -
-                    result0[self.name+'_txvldctr']['data']['reg'] > 0)
-        except KeyError:
-            raise RuntimeError('Gbe block {} does not have the necessary '
-                               'registers to check TX status.'.format(self.name))
-        except AssertionError:
-            LOGGER.info('Gbe block %s tx_okay() - FALSE.' % self.name)
-            return False
+        result0 = self.read_tx_counters()
+        time.sleep(wait_time)
+        result1 = self.read_tx_counters()
+        optional = [self.name+'_txfullctr', self.name+'_txofctr', self.name+'_txvldctr']
+        non_optional = [self.name+'_txerrctr', self.name+'_txctr']
+        if all(x in result0.keys() for x in non_optional):
+            if result0[self.name+'_txerrctr']['data']['reg'] == result1[self.name+'_txerrctr']['data']['reg']:
+                LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (self.name+'_txerrctr', self.name))
+            else:
+                LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (self.name+'_txerrctr', self.name))
+                return False
+            if (result0[self.name+'_txctr']['data']['reg'] - result1[self.name+'_txctr']['data']['reg']) > 0:
+                LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (self.name+'_txctr', self.name))
+            else:
+                LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (self.name+'_txctr', self.name))
+                return False
+            for key in optional:
+                if key == self.name+'_txfullctr' and key in result0.keys():
+                    if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                    else:
+                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        return False
+                elif key == self.name+'_txofctr' and key in result0.keys():
+                    if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                    else:
+                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        return False
+                elif key == self.name+'_txvldctr' and key in result0.keys():
+                    if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
+                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                    else:
+                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        return False
+                else:
+                    LOGGER.warn('Register %s in Gbe block %s not implemented' % (key, self.name))
+        else:
+            LOGGER.error('Missing registers in Gbe block %s' % self.name)
         LOGGER.info('Gbe block %s tx_okay() - TRUE.' % self.name)
         return True
 
@@ -348,7 +365,6 @@ class TenGbe(Memory):
                                             request_args=(self.name,"mode","-1" ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('Failure re-enabling ARP on %s.' % str(self))
-
 
     def tap_start(self, restart=False):
         """Program a 10GbE device and start the TAP driver.
@@ -423,17 +439,6 @@ class TenGbe(Memory):
                                             require_ok=True, request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError("Failure requesting ARP reload for tap device %s." % str(self))
-
-# == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-# NOT NEEDED
-#     def multicast_send(self, ip_str):
-#         reply, informs = self.parent.katcprequest("tap-multicast-add", self.parent._timeout, self.name, 'send',
-#                                                   str2ip(ip_str))
-#         if reply.arguments[0] == 'ok':
-#             return
-#         else:
-#             raise RuntimeError("Failed adding multicast destination address %s to tap device %s" % (str2ip(ip_str)))
-# == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
 
     def multicast_receive(self, ip_str, group_size):
         """Send a request to KATCP to have this tap instance send a multicast group join request.
