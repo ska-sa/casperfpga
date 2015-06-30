@@ -12,6 +12,11 @@ from utils import parse_fpg, create_meta_dictionary
 
 LOGGER = logging.getLogger(__name__)
 
+# monkey-patch the maximum katcp message size
+if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
+    setattr(katcp.CallbackClient, 'MAX_MSG_SIZE',
+            katcp.CallbackClient.MAX_MSG_SIZE * 2)
+
 class KatcpRequestError(RuntimeError):
     """Exception that is raised when a KATCP request fails when it should not"""
 

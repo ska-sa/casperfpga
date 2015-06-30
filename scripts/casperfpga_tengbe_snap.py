@@ -3,9 +3,7 @@
 # pylint: disable-msg=C0103
 # pylint: disable-msg=C0301
 """
-View the status of a given digitiser.
-
-Created on Fri Jan  3 10:40:53 2014
+View the contents of a TenGBE RX or TX snapblock.
 
 @author: paulp
 """
@@ -17,7 +15,7 @@ from casperfpga import tengbe
 from casperfpga import katcp_fpga
 from casperfpga import dcp_fpga
 from casperfpga import spead as casperspead
-from casperfpga import utils as casperutils
+from casperfpga import snap as caspersnap
 
 parser = argparse.ArgumentParser(description='Display the contents of an FPGA''s 10Gbe buffers.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -32,9 +30,23 @@ parser.add_argument('-c', '--core', dest='core', action='store',
 parser.add_argument('-d', '--direction', dest='direction', action='store',
                     default='tx', type=str,
                     help='tx or rx stream')
+
 parser.add_argument('-s', '--spead', dest='spead', action='store_true',
                     default=False,
                     help='try and decode spead in this 10Gbe stream')
+parser.add_argument('--spead_check', dest='spead_check', action='store_true',
+                    default=False, help='Check SPEAD packet format against '
+                                        'supplied values.')
+parser.add_argument('--spead_version', dest='spead_version', action='store',
+                    default=4, type=int, help='SPEAD version to use')
+parser.add_argument('--spead_flavour', dest='spead_flavour', action='store',
+                    default='64,48', type=str, help='SPEAD flavour to use')
+parser.add_argument('--spead_packetlen', dest='spead_packetlen', action='store',
+                    default=640, type=int,
+                    help='SPEAD packet length (data portion only) to expect')
+parser.add_argument('--spead_numheaders', dest='spead_numheaders', action='store',
+                    default=8, type=int, help='number of SPEAD headers to expect')
+
 parser.add_argument('--hex', dest='hex', action='store_true',
                     default=False,
                     help='show numbers in hex')
@@ -88,14 +100,27 @@ else:
     ip_key = 'ip_in'
     eof_key = 'eof_in'
     coredata = fpga.tengbes[args.core].read_rxsnap()
-
 fpga.disconnect()
 
 if args.spead:
-    spead_processor = casperspead.SpeadProcessor(4, '64,48', 640, 8)
-    gbe_packets = casperutils.packetise_snapdata(coredata, eof_key)
+    if args.spead_check:
+        spead_processor = casperspead.SpeadProcessor(args.spead_version,
+                                                     args.spead_flavour,
+                                                     args.spead_packetlen,
+                                                     args.spead_numheaders)
+        expected_packet_length = args.spead_packetlen + args.spead_numheaders + 1
+    else:
+        spead_processor = casperspead.SpeadProcessor(None, None, None, None)
+        expected_packet_length = -1
+
+    gbe_packets = caspersnap.Snap.packetise_snapdata(coredata, eof_key)
     gbe_data = []
     for pkt in gbe_packets:
+        if (expected_packet_length > -1) and (
+                    len(pkt[data_key]) != expected_packet_length):
+            raise RuntimeError('Gbe packet not correct length - '
+                               'should be {}. is {}'.format(expected_packet_length,
+                                                            len(pkt[data_key])))
         gbe_data.append(pkt[data_key])
     spead_processor.process_data(gbe_data)
     spead_data = []
@@ -104,7 +129,7 @@ if args.spead:
     coredata[data_key] = spead_data
 
 packet_counter = 0
-for ctr in range(0, len(coredata[coredata.keys()[0]])):
+for ctr in range(0, len(coredata[data_key])):
     if coredata[eof_key][ctr-1]:
         packet_counter = 0
     print '%5d,%3d' % (ctr, packet_counter),
@@ -118,14 +143,7 @@ for ctr in range(0, len(coredata[coredata.keys()[0]])):
                 raise RuntimeError('Unknown IP key?')
             print '%s(%s)' % (display_key, str(tengbe.IpAddress(coredata[key][ctr]))), '\t',
         elif (key == data_key) and args.spead:
-            # new_spead_info, spead_stringdata = process_spead_word(spead_info, coredata[data_key][ctr], packet_counter)
-            # if new_spead_info is not None:
-            #     spead_info = new_spead_info.copy()
-            try:
-                print '%s(%s)' % (key, coredata[data_key][ctr]), '\t',
-            except IndexError:
-
-                print '%s(spead_pkt_incomplete)\t' % key,
+            print '%s(%s)' % (key, coredata[data_key][ctr]), '\t',
         else:
             if args.hex:
                 print '%s(0x%X)' % (key, coredata[key][ctr]), '\t',
