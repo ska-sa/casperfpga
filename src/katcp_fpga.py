@@ -12,6 +12,11 @@ from utils import parse_fpg, create_meta_dictionary
 
 LOGGER = logging.getLogger(__name__)
 
+# monkey-patch the maximum katcp message size
+if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
+    setattr(katcp.CallbackClient, 'MAX_MSG_SIZE',
+            katcp.CallbackClient.MAX_MSG_SIZE * 2)
+
 class KatcpRequestError(RuntimeError):
     """Exception that is raised when a KATCP request fails when it should not"""
 
@@ -537,4 +542,17 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         if self.unhandled_inform_handler is not None:
             self.unhandled_inform_handler(msg)
 
+    def check_phy_counter(self):
+        request_args = ((0, 0), (0, 1), (1, 0), (1, 1))
+        for arg in request_args:
+            result0 = self.katcprequest('phywatch', request_args=arg)
+            time.sleep(1)
+            result1 = self.katcprequest('phywatch', request_args=arg)
+            if (int(result1[0].arguments[1].replace('0x', ''), base=16) -
+                int(result0[0].arguments[1].replace('0x', ''), base=16)) != 0:
+                LOGGER.info('Host %s check_phy_counter - TRUE.' % self.host)
+                return True
+            else:
+                LOGGER.error('Host %s check_phy_counter failed on PHY %s - FALSE.' % (self.host, arg))
+                return False
 # end

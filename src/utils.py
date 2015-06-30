@@ -290,22 +290,3 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         fpga_.nb_pop_request_by_id(request_id)
     return returnval
 
-
-def packetise_snapdata(data, eof_key='eof'):
-    """
-    Use the given EOF key to packetise a dictionary of snap data
-    :param data: a dictionary containing snap block data
-    :param eof_key: the key used to identify the packet boundaries
-    :return: a list of packets
-    """
-    _current_packet = {}
-    _packets = []
-    for _ctr in range(0, len(data[eof_key])):
-        for key in data.keys():
-            if key not in _current_packet.keys():
-                _current_packet[key] = []
-            _current_packet[key].append(data[key][_ctr])
-        if _current_packet[eof_key][-1]:
-            _packets.append(_current_packet)
-            _current_packet = {}
-    return _packets

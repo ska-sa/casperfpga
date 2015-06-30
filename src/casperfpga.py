@@ -10,9 +10,7 @@ import time
 import register
 import sbram
 import snap
-import katadc
 import tengbe
-import memory
 import qdr
 from attribute_container import AttributeContainer
 from utils import parse_fpg
@@ -22,7 +20,6 @@ LOGGER = logging.getLogger(__name__)
 # known CASPER memory-accessible  devices and their associated classes and containers
 CASPER_MEMORY_DEVICES = {
     'xps:bram':         {'class': sbram.Sbram,          'container': 'sbrams'},
-    'xps:katadc':       {'class': katadc.KatAdc,        'container': 'katadcs'},
     'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs'},
     'xps:sw_reg':       {'class': register.Register,    'container': 'registers'},
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes'},
@@ -47,7 +44,9 @@ CASPER_OTHER_DEVICES = {
     'casper:spead_unpack':          'spead_unpack',
     'casper:vacc':                  'vacc',
     'casper:xeng':                  'xeng',
-    'xps:xsg':                      'xps',}
+    'xps:xsg':                      'xps',
+    'xps:katadc':                   'katadc',
+}
 
 
 class CasperFpga(object):
@@ -102,6 +101,7 @@ class CasperFpga(object):
 
         # hold misc information about the bof file, program time, etc
         self.system_info = {}
+        self.rcs_info = {}
 
     def test_connection(self):
         """
@@ -349,14 +349,6 @@ class CasperFpga(object):
         """
         return getattr(self, container)
 
-    def get_config_file_info(self):
-        """
-        """
-        host_dict = self._read_design_info_from_host(device=77777)
-        info = {'name': host_dict['77777']['system'], 'build_time': host_dict['77777']['builddate']}
-        #TODO conversion to time python understands
-        return info
-
     def get_system_information(self, filename=None, fpg_info=None):
         """
         Get information about the design running on the FPGA.
@@ -372,16 +364,22 @@ class CasperFpga(object):
         else:
             device_dict = fpg_info[0]
             memorymap_dict = fpg_info[1]
-        try:
-            self.system_info.update(device_dict['77777'])
-        except KeyError:
-            LOGGER.warn('No sys info key in design info!')
         # add system registers
         device_dict.update(self.__add_sys_registers())
         # reset current devices and create new ones from the new design information
         self.__reset_device_info()
         self.__create_memory_devices(device_dict, memorymap_dict)
         self.__create_other_devices(device_dict)
+        # populate some system information
+        try:
+            self.system_info.update(device_dict['77777'])
+        except KeyError:
+            LOGGER.warn('No sys info key in design info!')
+        # and RCS information if included
+        if '77777_git' in device_dict:
+            self.rcs_info['git'] = device_dict['77777_git']
+        if '77777_svn' in device_dict:
+            self.rcs_info['svn'] = device_dict['77777_svn']
 
     def estimate_fpga_clock(self):
         """
@@ -391,7 +389,7 @@ class CasperFpga(object):
         time.sleep(2.0)
         secondpass = self.read_uint('sys_clkcounter')
         if firstpass > secondpass:
-            secondpass = secondpass + (2**32)
+            secondpass += (2**32)
         return (secondpass - firstpass) / 2000000.0
 
     @staticmethod

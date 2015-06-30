@@ -341,6 +341,31 @@ class TenGbe(Memory):
 #        self.parent.write(self.name, self.ip_address.packed(), ip_location)
 #        #self.parent.write_int(self.name, self.port, offset = port_location)
 
+    def dhcp_start(self):
+        """Configure this interface, then start a DHCP client on ALL interfaces"""
+        if self.mac == None:
+            self.mac='0' #TODO get MAC from EEPROM serial number and assign here
+        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=15, require_ok=True,
+                                            request_args=(self.name, self.name, '0.0.0.0',
+                                                          str(self.port), str(self.mac), ))
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError('Failure starting tap driver instance for %s.' % str(self))
+    
+        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1, require_ok=True,
+                                            request_args=(self.name, "mode","0" ))
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError('Failure disabling ARP on %s.' % str(self))
+
+        reply, _ = self.parent.katcprequest(name="tap-dhcp", request_timeout=15, require_ok=True,
+                                            request_args=(self.name, ))
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError('Failure starting DHCP client instance for %s.' % str(self))
+
+        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1, require_ok=True,
+                                            request_args=(self.name,"mode","-1" ))
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError('Failure re-enabling ARP on %s.' % str(self))
+
     def tap_start(self, restart=False):
         """Program a 10GbE device and start the TAP driver.
         @param self  This object.
@@ -414,17 +439,6 @@ class TenGbe(Memory):
                                             require_ok=True, request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError("Failure requesting ARP reload for tap device %s." % str(self))
-
-# == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-# NOT NEEDED
-#     def multicast_send(self, ip_str):
-#         reply, informs = self.parent.katcprequest("tap-multicast-add", self.parent._timeout, self.name, 'send',
-#                                                   str2ip(ip_str))
-#         if reply.arguments[0] == 'ok':
-#             return
-#         else:
-#             raise RuntimeError("Failed adding multicast destination address %s to tap device %s" % (str2ip(ip_str)))
-# == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
 
     def multicast_receive(self, ip_str, group_size):
         """Send a request to KATCP to have this tap instance send a multicast group join request.

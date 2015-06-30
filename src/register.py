@@ -100,6 +100,8 @@ class Register(Memory):
         _read_necessary = False
         new_values = {_field: None for _field in self.field_names()}
         for k in kwargs:
+            if k not in new_values:
+                raise ValueError('Field {} not found in register {}'.format(k, self.name))
             if kwargs[k] in ['pulse', 'toggle']:
                 _read_necessary = True
             new_values[k] = kwargs[k]
