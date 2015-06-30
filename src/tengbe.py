@@ -276,7 +276,7 @@ class TenGbe(Memory):
                 results[reg] = self.parent.memory_devices[reg].read()
         return results
 
-    def tx_okay(self,wait_time=1):
+    def tx_okay(self, wait_time=1):
         """
         Is this gbe block okay?
         :return: True/False

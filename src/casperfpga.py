@@ -10,9 +10,7 @@ import time
 import register
 import sbram
 import snap
-import katadc
 import tengbe
-import memory
 import qdr
 from attribute_container import AttributeContainer
 from utils import parse_fpg
