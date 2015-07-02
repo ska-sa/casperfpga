@@ -46,7 +46,8 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     except:
         result_queue.put('Could not send file to upload port.')
     finally:
-        LOGGER.info('%s: upload thread for host %s complete' % (time.time(), targethost))
+        LOGGER.info('%s: upload thread complete at %.3f' %
+                    (targethost, time.time()))
     result_queue.put('')
     return
 
@@ -63,7 +64,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         self._timeout = timeout
         if connect:
             self.connect()
-        LOGGER.info('%s:%s created%s.' % (self.host, port, ' & connected' if connect else ''))
+        LOGGER.info('%s: port(%s) created%s.' % (self.host, port,
+                                                 ' & connected' if connect else ''))
 
     def connect(self, timeout=1):
         """
@@ -232,18 +234,20 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             if filename is None:
                 filename = self.system_info['program_filename']
             elif filename != self.system_info['program_filename']:
-                LOGGER.error('Programming filename %s, configured programming filename %s'
-                             % (filename, self.system_info['program_filename']))
+                LOGGER.error('%s: programming filename %s, configured programming '
+                             'filename %s' %
+                             (self.host, filename, self.system_info['program_filename']))
                 # This doesn't seem as though it should really be an error...
         if filename is None:
-            LOGGER.error('Cannot program with no filename given. Exiting.')
+            LOGGER.error('%s: cannot program with no filename given. Exiting.' % self.host)
             raise RuntimeError('Cannot program with no filename given. Exiting.')
 
         unhandled_informs = []
 
         # set the unhandled informs callback
         self.unhandled_inform_handler = lambda msg: unhandled_informs.append(msg)
-        reply, _ = self.katcprequest(name='progdev', request_timeout=10, request_args=(filename, ))
+        reply, _ = self.katcprequest(name='progdev', request_timeout=10,
+                                     request_args=(filename, ))
         self.unhandled_inform_handler = None
         if reply.arguments[0] == 'ok':
             complete_okay = False
@@ -267,7 +271,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         if filename[-3:] == 'fpg':
             self.get_system_information()
         else:
-            LOGGER.info('%s is not an fpg file, could not parse system information.'%(filename))
+            LOGGER.info('%s: %s is not an fpg file, could not parse '
+                        'system information.' % (self.host, filename))
         LOGGER.info('%s: programmed %s okay.' % (self.host, filename))
 
     def deprogram(self):
@@ -287,9 +292,10 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             super(KatcpFpga, self).deprogram()
             LOGGER.info('%s: deprogrammed okay' % self.host)
         except KatcpRequestError as exc:
-            LOGGER.exception('Could not deprogram FPGA {}, katcp request failed:'
+            LOGGER.exception('{}: could not deprogram FPGA, katcp request failed:'
                              .format(self.host))
-            raise RuntimeError('Could not deprogram FPGA: {}'.format(exc))
+            raise RuntimeError('{}: could not deprogram '
+                               'FPGA - {}'.format(self.host, exc))
 
     def _unsubscribe_all_taps(self):
         reply, informs = self.katcprequest(name='tap-info', require_ok=True)
@@ -298,8 +304,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             reply, _ = self.katcprequest(name='tap-multicast-remove',
                                         request_args=(tap,))
             if not reply.reply_ok():
-                LOGGER.warn('Could not unsubscribe tap {} from multicast groups '
-                            'on FPGA {}'.format(tap, self.host))
+                LOGGER.warn('{}: could not unsubscribe tap {} from multicast groups '
+                            'on FPGA'.format(self.host, tap))
 
     def set_igmp_version(self, version):
         """Sets version of IGMP multicast protocol to use
@@ -371,8 +377,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             try:
                 inf = unhandled_informs_queue.get(block=True, timeout=timeout)
             except Queue.Empty:
-                LOGGER.error('No programming informs on host %s yet. Odd?' % self.host)
-                raise RuntimeError('No programming informs yet on host %s.' % self.host)
+                LOGGER.error('%s: no programming informs yet. Odd?' % self.host)
+                raise RuntimeError('%s: no programming informs yet.' % self.host)
             if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
                 done = True
         LOGGER.info('%s: programming done.' % self.host)
@@ -474,7 +480,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         :param device: can specify a device name if you don't want everything
         :return: a dictionary of metadata
         """
-        LOGGER.debug('Reading designinfo from %s' % self.host)
+        LOGGER.debug('%s: reading designinfo' % self.host)
         if device is None:
             reply, informs = self.katcprequest(name='meta', request_timeout=self._timeout, require_ok=True)
         else:
@@ -498,7 +504,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         Get the equivalent of coreinfo.tab from the host using KATCP listdev commands.
         :return:
         """
-        LOGGER.debug('Reading coreinfo from %s' % self.host)
+        LOGGER.debug('%s: reading coreinfo' % self.host)
         memorymap_dict = {}
         listdev_size = self.listdev(getsize=True)
         listdev_address = self.listdev(getaddress=True)
@@ -550,9 +556,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
             result1 = self.katcprequest('phywatch', request_args=arg)
             if (int(result1[0].arguments[1].replace('0x', ''), base=16) -
                 int(result0[0].arguments[1].replace('0x', ''), base=16)) != 0:
-                LOGGER.info('Host %s check_phy_counter - TRUE.' % self.host)
+                LOGGER.info('%s: check_phy_counter - TRUE.' % self.host)
                 return True
             else:
-                LOGGER.error('Host %s check_phy_counter failed on PHY %s - FALSE.' % (self.host, arg))
+                LOGGER.error('%s: check_phy_counter failed on PHY %s - FALSE.' % (self.host, arg))
                 return False
 # end

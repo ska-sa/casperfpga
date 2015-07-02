@@ -136,7 +136,8 @@ class CasperFpga(object):
 
         dram_indirect_page_size = (64*1024*1024)
         #read_chunk_size = (1024*1024)
-        LOGGER.debug('Reading a total of %8i bytes from offset %8i...' % (size, offset))
+        LOGGER.debug('%s: reading a total of %8i bytes from offset %8i...' %
+                     (self.host, size, offset))
         while n_reads < size:
             dram_page = (offset + n_reads) / dram_indirect_page_size
             local_offset = (offset + n_reads) % dram_indirect_page_size
@@ -147,8 +148,9 @@ class CasperFpga(object):
                 last_dram_page = dram_page
             local_data = (self.bulkread('dram_memory', local_reads, local_offset))
             data.append(local_data)
-            LOGGER.debug('Reading %8i bytes from indirect address %4i at local offset %8i... done.'
-                         % (local_reads, dram_page, local_offset))
+            LOGGER.debug('%s: reading %8i bytes from indirect '
+                         'address %4i at local offset %8i... done.' %
+                         (self.host, local_reads, dram_page, local_offset))
             n_reads += local_reads
         return ''.join(data)
 
@@ -168,15 +170,16 @@ class CasperFpga(object):
 
         dram_indirect_page_size = (64*1024*1024)
         write_chunk_size = (1024*512)
-        LOGGER.debug('writing a total of %8i bytes from offset %8i...' % (size, offset))
+        LOGGER.debug('%s: writing a total of %8i bytes from offset %8i...' %
+                     (self.host, size, offset))
 
         while n_writes < size:
             dram_page = (offset+n_writes)/dram_indirect_page_size
             local_offset = (offset+n_writes) % dram_indirect_page_size
             local_writes = min(write_chunk_size, size-n_writes,
                                dram_indirect_page_size-(offset % dram_indirect_page_size))
-            LOGGER.debug('Writing %8i bytes from indirect address %4i at local offset %8i...'
-                         % (local_writes, dram_page, local_offset))
+            LOGGER.debug('%s: writing %8i bytes from indirect address %4i at local offset %8i...' %
+                         (self.host, local_writes, dram_page, local_offset))
             if last_dram_page != dram_page:
                 self.write_int('dram_controller', dram_page)
                 last_dram_page = dram_page
@@ -243,8 +246,9 @@ class CasperFpga(object):
             self.blindwrite(device_name, data, word_offset*4)
         else:
             self.write(device_name, data, word_offset*4)
-        LOGGER.debug('write_int %8x to register %s at word offset %d okay%s.'
-                     % (integer, device_name, word_offset, ' (blind)' if blindwrite else ''))
+        LOGGER.debug('%s: write_int %8x to register %s at word offset %d okay%s.' %
+                     (self.host, integer, device_name,
+                      word_offset, ' (blind)' if blindwrite else ''))
 
     def get_rcs(self, rcs_block_name='rcs'):
         """Retrieves and decodes a revision control block."""
@@ -374,7 +378,7 @@ class CasperFpga(object):
         try:
             self.system_info.update(device_dict['77777'])
         except KeyError:
-            LOGGER.warn('No sys info key in design info!')
+            LOGGER.warn('%s: no sys info key in design info!' % self.host)
         # and RCS information if included
         if '77777_git' in device_dict:
             self.rcs_info['git'] = device_dict['77777_git']
