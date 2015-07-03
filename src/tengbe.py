@@ -227,7 +227,8 @@ class TenGbe(Memory):
                     self.registers['rx'].append(register.name)
                 else:
                     if not (name.find('txs_') == 0 or name.find('rxs_') == 0):
-                        LOGGER.warn('Funny register name %s under tengbe block %s' % (register.name, self.name))
+                        LOGGER.warn('%s: odd register name %s under tengbe '
+                                    'block' % (self.name, register.name))
         self.snaps = {'tx': None, 'rx': None}
         for snapshot in self.parent.snapshots:
             if snapshot.name.find(self.name + '_') == 0:
@@ -237,7 +238,10 @@ class TenGbe(Memory):
                 elif name == 'rxs_ss':
                     self.snaps['rx'] = snapshot.name
                 else:
-                    LOGGER.error('Incorrect snap %s under tengbe block %s' % (snapshot.name, self.name))
+                    errmsg = '%s: incorrect snap %s under tengbe ' \
+                             'block' % (self.name, snapshot.name)
+                    LOGGER.error(errmsg)
+                    raise RuntimeError(errmsg)
 
     def _check(self):
         """
@@ -288,40 +292,43 @@ class TenGbe(Memory):
         optional = [self.name+'_txfullctr', self.name+'_txofctr', self.name+'_txvldctr']
         non_optional = [self.name+'_txerrctr', self.name+'_txctr']
         if all(x in result0.keys() for x in non_optional):
-            if result0[self.name+'_txerrctr']['data']['reg'] == result1[self.name+'_txerrctr']['data']['reg']:
-                LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (self.name+'_txerrctr', self.name))
+            key = self.name+'_txerrctr'
+            if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
             else:
-                LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (self.name+'_txerrctr', self.name))
+                LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
                 return False
-            if (result0[self.name+'_txctr']['data']['reg'] - result1[self.name+'_txctr']['data']['reg']) > 0:
-                LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (self.name+'_txctr', self.name))
+            key = self.name+'_txctr'
+            if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
+                LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
             else:
-                LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (self.name+'_txctr', self.name))
+                LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
                 return False
             for key in optional:
                 if key == self.name+'_txfullctr' and key in result0.keys():
                     if result0[key]['data']['reg'] == result1[key]['data']['reg']:
-                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                        LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
                     else:
-                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
                         return False
                 elif key == self.name+'_txofctr' and key in result0.keys():
                     if result0[key]['data']['reg'] == result1[key]['data']['reg']:
-                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                        LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
                     else:
-                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
                         return False
                 elif key == self.name+'_txvldctr' and key in result0.keys():
                     if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
-                        LOGGER.info('Register %s in Gbe block %s ok - TRUE' % (key, self.name))
+                        LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
                     else:
-                        LOGGER.error('Register %s in Gbe block %s ok - FALSE' % (key, self.name))
+                        LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
                         return False
                 else:
-                    LOGGER.warn('Register %s in Gbe block %s not implemented' % (key, self.name))
+                    LOGGER.warn('%s: %s not implemented' % (self.name, key))
         else:
-            LOGGER.error('Missing registers in Gbe block %s' % self.name)
-        LOGGER.info('Gbe block %s tx_okay() - TRUE.' % self.name)
+            LOGGER.error('%s: missing registers in Gbe block %s' % self.name)
+            return False
+        LOGGER.info('%s: tx_okay() - TRUE.' % self.name)
         return True
 
     #def read_raw(self,  **kwargs):
@@ -343,47 +350,52 @@ class TenGbe(Memory):
 
     def dhcp_start(self):
         """Configure this interface, then start a DHCP client on ALL interfaces"""
-        if self.mac == None:
-            self.mac='0' #TODO get MAC from EEPROM serial number and assign here
-        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=15, require_ok=True,
+        if self.mac is None:
+            # TODO get MAC from EEPROM serial number and assign here
+            self.mac = '0'
+        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=15,
+                                            require_ok=True,
                                             request_args=(self.name, self.name, '0.0.0.0',
                                                           str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('Failure starting tap driver instance for %s.' % str(self))
+            raise RuntimeError('%s: failure starting tap driver.' % self.name)
     
-        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1, require_ok=True,
-                                            request_args=(self.name, "mode","0" ))
+        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
+                                            require_ok=True,
+                                            request_args=(self.name, "mode", "0"))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('Failure disabling ARP on %s.' % str(self))
+            raise RuntimeError('%s: failure disabling ARP.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-dhcp", request_timeout=15, require_ok=True,
+        reply, _ = self.parent.katcprequest(name="tap-dhcp", request_timeout=15,
+                                            require_ok=True,
                                             request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('Failure starting DHCP client instance for %s.' % str(self))
+            raise RuntimeError('%s: failure starting DHCP client.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1, require_ok=True,
-                                            request_args=(self.name,"mode","-1" ))
+        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
+                                            require_ok=True,
+                                            request_args=(self.name,"mode", "-1"))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('Failure re-enabling ARP on %s.' % str(self))
+            raise RuntimeError('%s: failure re-enabling ARP.' % self.name)
 
     def tap_start(self, restart=False):
         """Program a 10GbE device and start the TAP driver.
         @param self  This object.
         """
         if len(self.name) > 8:
-            raise NameError('Tap device identifier must be shorter than 9 characters.\
-            You specified %s for device %s.' % (self.name, self.name))
+            raise NameError('%s: tap device identifier must be shorter than 9 '
+                            'characters..' % self.name)
         if restart:
             self.tap_stop()
         if self.tap_running():
-            LOGGER.info('Tap already running on %s.' % str(self))
+            LOGGER.info('%s: tap already running.' % self.name)
             return
-        LOGGER.info('Starting tap driver instance for %s.' % str(self))
+        LOGGER.info('%s: starting tap driver.' % self.name)
         reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=-1, require_ok=True,
                                             request_args=(self.name, self.name, str(self.ip_address),
                                                           str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('Failure starting tap driver instance for %s.' % str(self))
+            raise RuntimeError('%s: failure starting tap driver.' % self.name)
 
     def tap_stop(self):
         """Stop a TAP driver.
@@ -391,11 +403,11 @@ class TenGbe(Memory):
         """
         if not self.tap_running():
             return
-        LOGGER.info('Stopping tap driver instance for %s.' % str(self))
+        LOGGER.info('%s: stopping tap driver.' % self.name)
         reply, _ = self.parent.katcprequest(name="tap-stop", request_timeout=-1, require_ok=True,
                                             request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('Failure stopping tap device for %s.' % str(self))
+            raise RuntimeError('%s: failure stopping tap device.' % self.name)
 
     def tap_info(self):
         """Get info on the tap instance running on this interface.
@@ -416,10 +428,10 @@ class TenGbe(Memory):
         elif len(informs) == 0:
             return {'name': '', 'ip': ''}
         else:
-            raise RuntimeError('Invalid return from tap-info?')
+            raise RuntimeError('%s: invalid return from tap-info?' % self.name)
         # TODO - this request should return okay if the tap isn't running - it shouldn't fail
-        #if reply.arguments[0] != 'ok':
-        #    log_runtime_error(LOGGER, "Failure getting tap info for device %s." % str(self))
+        # if reply.arguments[0] != 'ok':
+        #     log_runtime_error(LOGGER, "Failure getting tap info for device %s." % str(self))
 
     def tap_running(self):
         """Determine if an instance if tap is already running on for this Ten GBE interface.
@@ -454,13 +466,16 @@ class TenGbe(Memory):
         mcast_group_string = ip_str
         try:
             reply, _ = self.parent.katcprequest("tap-multicast-add", -1, True,
-                                                request_args=(self.name, 'recv', mcast_group_string, ))
+                                                request_args=(self.name, 'recv',
+                                                              mcast_group_string, ))
         except:
-            raise RuntimeError("tap-multicast-add does not seem to be supported on %s" % self.parent.host)
+            raise RuntimeError("%s: tap-multicast-add does not seem to be "
+                               "supported on %s" % (self.name, self.parent.host))
         if reply.arguments[0] == 'ok':
             return
         else:
-            raise RuntimeError("Failed adding multicast receive %s to tap device %s" % (mcast_group_string, self.name))
+            raise RuntimeError("%s: failed adding multicast receive %s to "
+                               "tap device." % (self.name, mcast_group_string))
 
     def multicast_remove(self, ip_str):
         """Send a request to be removed from a multicast group.
@@ -469,13 +484,16 @@ class TenGbe(Memory):
         """
         try:
             reply, _ = self.parent.katcprequest("tap-multicast-remove", -1, True,
-                                                request_args=(self.name, str2ip(ip_str), ))
+                                                request_args=(self.name,
+                                                              IpAddress.str2ip(ip_str), ))
         except:
-            raise RuntimeError("tap-multicast-remove does not seem to be supported on %s" % self.parent.host)
+            raise RuntimeError("%s: tap-multicast-remove does not seem to "
+                               "be supported on %s" % (self.name, self.parent.host))
         if reply.arguments[0] == 'ok':
             return
         else:
-            raise RuntimeError('Failed removing multicast address %s to tap device' % (str2ip(ip_str)))
+            raise RuntimeError('%s: failed removing multicast address %s '
+                               'from tap device' % (self.name, IpAddress.str2ip(ip_str)))
 
     def get_10gbe_core_details(self, read_arp=False, read_cpu=False):
         """
