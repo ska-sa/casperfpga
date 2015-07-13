@@ -54,7 +54,7 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
 
 class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
 
-    def __init__(self, host, port=7147, timeout=5.0, connect=True):
+    def __init__(self, host, port=7147, timeout=2.0, connect=True):
         async_requester.AsyncRequester.__init__(self, host, self.callback_request, max_requests=100)
         katcp.CallbackClient.__init__(self, host, port, tb_limit=20, timeout=timeout,
                                       logger=LOGGER, auto_reconnect=True)
@@ -482,9 +482,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         """
         LOGGER.debug('%s: reading designinfo' % self.host)
         if device is None:
-            reply, informs = self.katcprequest(name='meta', request_timeout=self._timeout, require_ok=True)
+            reply, informs = self.katcprequest(name='meta', request_timeout=5.0, require_ok=True)
         else:
-            reply, informs = self.katcprequest(name='meta', request_timeout=self._timeout, require_ok=True,
+            reply, informs = self.katcprequest(name='meta', request_timeout=5.0, require_ok=True,
                                                request_args=(device, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('Could not read meta information from %s' % self.host)
