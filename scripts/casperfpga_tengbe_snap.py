@@ -116,8 +116,8 @@ if args.spead:
     gbe_packets = caspersnap.Snap.packetise_snapdata(coredata, eof_key)
     gbe_data = []
     for pkt in gbe_packets:
-        if (expected_packet_length > -1) and (
-                    len(pkt[data_key]) != expected_packet_length):
+        if (expected_packet_length > -1) and \
+                (len(pkt[data_key]) != expected_packet_length):
             raise RuntimeError('Gbe packet not correct length - '
                                'should be {}. is {}'.format(expected_packet_length,
                                                             len(pkt[data_key])))
