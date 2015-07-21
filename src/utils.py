@@ -75,35 +75,21 @@ def program_fpgas(fpga_list, progfile, timeout=10):
     :return: <nothing>
     """
     stime = time.time()
-    chilltime = 0.1
-    waiting = []
+    new_dict = {}
+    new_list = []
     for fpga in fpga_list:
         try:
             len(fpga)
         except TypeError:
-            fpga.upload_to_ram_and_program(progfile, wait_complete=False)
-            waiting.append(fpga)
+            _tuple = (fpga, progfile)
         else:
-            fpga[0].upload_to_ram_and_program(fpga[1], wait_complete=False)
-            waiting.append(fpga[0])
-    starttime = time.time()
-    while time.time() - starttime < timeout:
-        donelist = []
-        for fpga in waiting:
-            if fpga.is_running():
-                donelist.append(fpga)
-        for done in donelist:
-            waiting.pop(waiting.index(done))
-        if len(waiting) > 0:
-            time.sleep(chilltime)
-        else:
-            break
-    if len(waiting) > 0:
-        errstr = ''
-        for waiting_ in waiting:
-            errstr += waiting_.host + ', '
-        LOGGER.error('FPGAs did not complete programming in %.2f seconds: %s' % (timeout, errstr))
-        raise RuntimeError('Timed out waiting for FPGA programming to complete.')
+            _tuple = (fpga[0], fpga[1])
+        new_dict[_tuple[0].host] = _tuple[1]
+        new_list.append(_tuple[0])
+
+    def _prog_fpga(_fpga):
+        _fpga.upload_to_ram_and_program(new_dict[_fpga.host])
+    threaded_fpga_operation(fpga_list=new_list, timeout=timeout, target_function=(_prog_fpga,))
     LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (len(fpga_list), time.time() - stime))
 
 
