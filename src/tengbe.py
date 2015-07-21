@@ -364,7 +364,7 @@ class TenGbe(Memory):
                                                           str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting tap driver.' % self.name)
-    
+
         reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
                                             require_ok=True,
                                             request_args=(self.name, "mode", "0"))
