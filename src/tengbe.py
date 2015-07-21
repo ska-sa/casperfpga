@@ -75,6 +75,9 @@ class Mac(object):
     def __str__(self):
         return self.mac_str
 
+    def __repr__(self):
+        return 'Mac(%s)' % self.__str__()
+
 
 class IpAddress(object):
     """
@@ -134,6 +137,8 @@ class IpAddress(object):
     def __str__(self):
         return self.ip_str
 
+    def __repr__(self):
+        return 'IpAddress(%s)' % self.__str__()
 
 class TenGbe(Memory):
     """
@@ -374,9 +379,12 @@ class TenGbe(Memory):
 
         reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
                                             require_ok=True,
-                                            request_args=(self.name,"mode", "-1"))
+                                            request_args=(self.name, "mode", "-1"))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure re-enabling ARP.' % self.name)
+
+        # it looks like the command completed without error, so update the basic core details
+        self.get_10gbe_core_details()
 
     def tap_start(self, restart=False):
         """Program a 10GbE device and start the TAP driver.
@@ -553,11 +561,14 @@ class TenGbe(Memory):
         """
         returnval = {}
         port_dump = list(struct.unpack('>16384B', self.parent.read(self.name, 16384)))
-        returnval['ip_prefix'] = '%3d.%3d.%3d.' % (port_dump[0x10], port_dump[0x11], port_dump[0x12])
-        returnval['ip'] = [port_dump[0x10], port_dump[0x11], port_dump[0x12], port_dump[0x13]]
-        returnval['mac'] = [port_dump[0x02], port_dump[0x03], port_dump[0x04], port_dump[0x05], port_dump[0x06],
-                            port_dump[0x07]]
-        returnval['gateway_ip'] = [port_dump[0x0c], port_dump[0x0d], port_dump[0x0e], port_dump[0x0f]]
+        returnval['ip_prefix'] = '%i.%i.%i.' % (port_dump[0x10], port_dump[0x11], port_dump[0x12])
+        returnval['ip'] = IpAddress('%i.%i.%i.%i' % (port_dump[0x10], port_dump[0x11],
+                                                     port_dump[0x12], port_dump[0x13]))
+        returnval['mac'] = Mac('%i:%i:%i:%i:%i:%i' % (port_dump[0x02], port_dump[0x03],
+                                                      port_dump[0x04], port_dump[0x05],
+                                                      port_dump[0x06], port_dump[0x07]))
+        returnval['gateway_ip'] = IpAddress('%i.%i.%i.%i' % (port_dump[0x0c], port_dump[0x0d],
+                                                             port_dump[0x0e], port_dump[0x0f]))
         returnval['fabric_port'] = ((port_dump[0x22] << 8) + (port_dump[0x23]))
         returnval['fabric_en'] = bool(port_dump[0x21] & 1)
         returnval['xaui_lane_sync'] = [bool(port_dump[0x27] & 4), bool(port_dump[0x27] & 8),
