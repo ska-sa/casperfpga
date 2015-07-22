@@ -75,35 +75,21 @@ def program_fpgas(fpga_list, progfile, timeout=10):
     :return: <nothing>
     """
     stime = time.time()
-    chilltime = 0.1
-    waiting = []
+    new_dict = {}
+    new_list = []
     for fpga in fpga_list:
         try:
             len(fpga)
         except TypeError:
-            fpga.upload_to_ram_and_program(progfile, wait_complete=False)
-            waiting.append(fpga)
+            _tuple = (fpga, progfile)
         else:
-            fpga[0].upload_to_ram_and_program(fpga[1], wait_complete=False)
-            waiting.append(fpga[0])
-    starttime = time.time()
-    while time.time() - starttime < timeout:
-        donelist = []
-        for fpga in waiting:
-            if fpga.is_running():
-                donelist.append(fpga)
-        for done in donelist:
-            waiting.pop(waiting.index(done))
-        if len(waiting) > 0:
-            time.sleep(chilltime)
-        else:
-            break
-    if len(waiting) > 0:
-        errstr = ''
-        for waiting_ in waiting:
-            errstr += waiting_.host + ', '
-        LOGGER.error('FPGAs did not complete programming in %.2f seconds: %s' % (timeout, errstr))
-        raise RuntimeError('Timed out waiting for FPGA programming to complete.')
+            _tuple = (fpga[0], fpga[1])
+        new_dict[_tuple[0].host] = _tuple[1]
+        new_list.append(_tuple[0])
+
+    def _prog_fpga(_fpga):
+        _fpga.upload_to_ram_and_program(new_dict[_fpga.host])
+    threaded_fpga_operation(fpga_list=new_list, timeout=timeout, target_function=(_prog_fpga,))
     LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (len(fpga_list), time.time() - stime))
 
 
@@ -140,35 +126,63 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=1
     return fpgas
 
 
-def threaded_fpga_function(fpga_list, timeout, function_name, *function_args, **function_kwargs):
+def _check_target_func(target_function):
+    if isinstance(target_function, basestring):
+        return target_function, (), {}
+    try:
+        len(target_function)
+    except TypeError:
+        return target_function, (), {}
+    if len(target_function) == 3:
+        return target_function
+    elif len(target_function) == 1:
+        target_function = (target_function[0], (), {})
+    elif len(target_function) == 2:
+        target_function = (target_function[0], target_function[1], {})
+    else:
+        raise RuntimeError('target_function tuple too long? - (name, (), {})')
+    return target_function
+
+
+def threaded_fpga_function(fpga_list, timeout, target_function):
     """
     Thread the running of any KatcpClientFpga function on a list of KatcpClientFpga objects.
     Much faster.
     :param fpgas: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
-    :param function_name: the KatcpClientFpga function to run e.g. 'disconnect' for fpgaobj.disconnect()
-    :param function_args: arguments to the function
-    :param **function_kwargs: keyword arguments to the function
+    :param target_function: a tuple with three parts:
+                            1. string, the KatcpClientFpga function to
+                               run e.g. 'disconnect' for fpgaobj.disconnect()
+                            2. tuple, the arguments to the function
+                            3. dict, the keyword arguments to the function
+                            e.g. (func_name, (1,2,), {'another_arg': 3})
     :return: a dictionary of the results, keyed on hostname
     """
+    target_function = _check_target_func(target_function)
+
     def dofunc(fpga, *args, **kwargs):
-        rv = eval('fpga.%s' % function_name)(*args, **kwargs)
+        rv = eval('fpga.%s' % target_function[0])(*args, **kwargs)
         return rv
-    return threaded_fpga_operation(fpga_list, timeout, dofunc, *function_args, **function_kwargs)
+    return threaded_fpga_operation(fpga_list, timeout, (dofunc, target_function[1], target_function[2]))
 
 
-def threaded_fpga_operation(fpga_list, timeout, job_function, *job_args, **job_kwargs):
+def threaded_fpga_operation(fpga_list, timeout, target_function):
     """
     Thread any operation against many FPGA objects
     :param fpgas: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
-    :param job_function: the function object that must be run - MUST take FPGA object as first argument
-    :param job_args: a dictionary, keyed by hostname, of the results from the function
-    :param **job_kwargs: keyword arguments to the function
+    :param target_function: a tuple with three parts:
+                            1. reference, the function object that must be
+                               run - MUST take FPGA object as first argument
+                            2. tuple, the arguments to the function
+                            3. dict, the keyword arguments to the function
+                            e.g. (func_name, (1,2,), {'another_arg': 3})
     :return: a dictionary of the results, keyed on hostname
     """
+    target_function = _check_target_func(target_function)
+
     def jobfunc(resultq, fpga):
-        rv = job_function(fpga, *job_args, **job_kwargs)
+        rv = target_function[0](fpga, *target_function[1], **target_function[2])
         resultq.put_nowait((fpga.host, rv))
     num_fpgas = len(fpga_list)
     result_queue = Queue.Queue(maxsize=num_fpgas)
@@ -262,22 +276,3 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         fpga_.nb_pop_request_by_id(request_id)
     return returnval
 
-
-def packetise_snapdata(data, eof_key='eof'):
-    """
-    Use the given EOF key to packetise a dictionary of snap data
-    :param data: a dictionary containing snap block data
-    :param eof_key: the key used to identify the packet boundaries
-    :return: a list of packets
-    """
-    _current_packet = {}
-    _packets = []
-    for _ctr in range(0, len(data[eof_key])):
-        for key in data.keys():
-            if key not in _current_packet.keys():
-                _current_packet[key] = []
-            _current_packet[key].append(data[key][_ctr])
-        if _current_packet[eof_key][-1]:
-            _packets.append(_current_packet)
-            _current_packet = {}
-    return _packets

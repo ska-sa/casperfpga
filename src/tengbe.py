@@ -6,6 +6,7 @@ Created on Feb 28, 2013
 
 import logging
 import struct
+import time
 
 from memory import Memory
 
@@ -13,25 +14,54 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Mac(object):
-    """A MAC address.
     """
+    A MAC address.
+    """
+
+    @staticmethod
+    def mac2str(mac):
+        """
+        Convert a MAC in integer form to a human-readable string.
+        """
+        mac_pieces = [(mac & ((1 << 48) - (1 << 40))) >> 40, (mac & ((1 << 40) - (1 << 32))) >> 32,
+                      (mac & ((1 << 32) - (1 << 24))) >> 24, (mac & ((1 << 24) - (1 << 16))) >> 16,
+                      (mac & ((1 << 16) - (1 << 8))) >> 8, (mac & ((1 << 8) - (1 << 0))) >> 0]
+        return '%02X:%02X:%02X:%02X:%02X:%02X' % (mac_pieces[0], mac_pieces[1],
+                                                  mac_pieces[2], mac_pieces[3],
+                                                  mac_pieces[4], mac_pieces[5])
+
+    @staticmethod
+    def str2mac(mac_str):
+        """
+        Convert a human-readable MAC string to an integer.
+        """
+        mac = 0
+        if mac_str.count(':') != 5:
+            raise RuntimeError('A MAC address must be of the form xx:xx:xx:xx:xx:xx')
+        offset = 40
+        for byte_str in mac_str.split(':'):
+            value = int(byte_str, base=16)
+            mac += value << offset
+            offset -= 8
+        return mac
+
     def __init__(self, mac):
         mac_str = None
         mac_int = None
         if isinstance(mac, Mac):
             mac_str = str(mac)
-        elif isinstance(mac, str):
+        elif isinstance(mac, basestring):
             mac_str = mac
         elif isinstance(mac, int):
             mac_int = mac
         if (mac_str is None) and (mac_int is None):
             raise ValueError('Cannot make a MAC with no value.')
         elif mac_str is not None:
+            self.mac_int = self.str2mac(mac_str)
             self.mac_str = mac_str
-            self.mac_int = str2mac(mac_str)
         elif mac_int is not None:
+            self.mac_str = self.mac2str(mac_int)
             self.mac_int = mac_int
-            self.mac_str = mac2str(mac_int)
 
     def packed(self):
         mac = [0, 0]
@@ -39,30 +69,61 @@ class Mac(object):
             mac.extend([int(byte, base=16)])
         return struct.pack('>8B', *mac)
 
+    def __int__(self):
+        return self.mac_int
+
     def __str__(self):
         return self.mac_str
 
+    def __repr__(self):
+        return 'Mac(%s)' % self.__str__()
+
 
 class IpAddress(object):
-    """An IP address.
     """
+    An IP address.
+    """
+    @staticmethod
+    def ip2str(ip_addr):
+        """
+        Convert an IP in integer form to a human-readable string.
+        """
+        ip_pieces = [ip_addr / (2 ** 24), ip_addr % (2 ** 24) / (2 ** 16), ip_addr % (2 ** 16) / (2 ** 8),
+                     ip_addr % (2 ** 8)]
+        return '%i.%i.%i.%i' % (ip_pieces[0], ip_pieces[1], ip_pieces[2], ip_pieces[3])
+
+    @staticmethod
+    def str2ip(ip_str):
+        """
+        Convert a human-readable IP string to an integer.
+        """
+        ip_addr = 0
+        if ip_str.count('.') != 3:
+            raise RuntimeError('An IP address must be of the form xxx.xxx.xxx.xxx')
+        offset = 24
+        for octet in ip_str.split('.'):
+            value = int(octet)
+            ip_addr += value << offset
+            offset -= 8
+        return ip_addr
+
     def __init__(self, ip):
         ip_str = None
         ip_int = None
         if isinstance(ip, IpAddress):
             ip_str = str(ip)
-        elif isinstance(ip, str):
+        elif isinstance(ip, basestring):
             ip_str = ip
         elif isinstance(ip, int):
             ip_int = ip
         if (ip_str is None) and (ip_int is None):
             raise ValueError('Cannot make an IP with no value.')
         elif ip_str is not None:
+            self.ip_int = self.str2ip(ip_str)
             self.ip_str = ip_str
-            self.ip_int = str2ip(ip_str)
         elif ip_int is not None:
+            self.ip_str = self.ip2str(ip_int)
             self.ip_int = ip_int
-            self.ip_str = ip2str(ip_int)
 
     def packed(self):
         ip = []
@@ -70,87 +131,49 @@ class IpAddress(object):
             ip.extend([int(byte, base=10)])
         return struct.pack('>4B', *ip)
 
+    def __int__(self):
+        return self.ip_int
+
     def __str__(self):
         return self.ip_str
 
-
-def mac2str(mac):
-    """Convert a MAC in integer form to a human-readable string.
-    """
-    mac_pieces = [(mac & ((1 << 48) - (1 << 40))) >> 40, (mac & ((1 << 40) - (1 << 32))) >> 32,
-                  (mac & ((1 << 32) - (1 << 24))) >> 24, (mac & ((1 << 24) - (1 << 16))) >> 16,
-                  (mac & ((1 << 16) - (1 << 8))) >> 8, (mac & ((1 << 8) - (1 << 0))) >> 0]
-    return "%02X:%02X:%02X:%02X:%02X:%02X" % (mac_pieces[0], mac_pieces[1],
-                                              mac_pieces[2], mac_pieces[3],
-                                              mac_pieces[4], mac_pieces[5])
-
-
-def str2mac(mac_str):
-    """Convert a human-readable MAC string to an integer.
-    """
-    mac = 0
-    if mac_str.count(':') != 5:
-        raise RuntimeError('A MAC address must be of the form xx:xx:xx:xx:xx:xx')
-    offset = 40
-    for byte_str in mac_str.split(':'):
-        value = int(byte_str, base=16)
-        mac += value << offset
-        offset -= 8
-    return mac
-
-
-def ip2str(ip_addr):
-    """Convert an IP in integer form to a human-readable string.
-    """
-    ip_pieces = [ip_addr / (2 ** 24), ip_addr % (2 ** 24) / (2 ** 16), ip_addr % (2 ** 16) / (2 ** 8),
-                 ip_addr % (2 ** 8)]
-    return "%i.%i.%i.%i" % (ip_pieces[0], ip_pieces[1],
-                            ip_pieces[2], ip_pieces[3])
-
-
-def str2ip(ip_str):
-    """Convert a human-readable IP string to an integer.
-    """
-    ip_addr = 0
-    if ip_str.count('.') != 3:
-        raise RuntimeError('An IP address must be of the form xxx.xxx.xxx.xxx')
-    offset = 24
-    for octet in ip_str.split('.'):
-        value = int(octet)
-        ip_addr += value << offset
-        offset -= 8
-    return ip_addr
-
+    def __repr__(self):
+        return 'IpAddress(%s)' % self.__str__()
 
 class TenGbe(Memory):
     """
     To do with the CASPER ten GBE yellow block implemented on FPGAs,
     and interfaced-to via KATCP memory reads/writes.
     """
-    def __init__(self, parent, name, address, length, device_info=None):
+    def __init__(self, parent, name, address, length_bytes, device_info=None):
         """
 
         :param parent:
         :param name:
         :param address:
-        :param length:
+        :param length_bytes:
         :param device_info:
         :return:
         """
         self.mac, self.ip_address, self.port = None, None, None
-        super(TenGbe, self).__init__(name=name, width=32, address=address, length=length)
+        super(TenGbe, self).__init__(name=name, width_bits=32, address=address,
+                                     length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
         if device_info is not None:
             fabric_ip = device_info['fab_ip']
             if fabric_ip.find('(2^24) + ') != -1:
-                device_info['fab_ip'] = fabric_ip.replace('*(2^24) + ', '.').replace('*(2^16) + ', '.').\
-                    replace('*(2^8) + ', '.').replace('*(2^0)', '')
+                device_info['fab_ip'] = (fabric_ip.replace('*(2^24) + ', '.')
+                                         .replace('*(2^16) + ', '.')
+                                         .replace('*(2^8) + ', '.')
+                                         .replace('*(2^0)', ''))
             fabric_mac = device_info['fab_mac']
             if fabric_mac.find('hex2dec') != -1:
                 fabric_mac = fabric_mac.replace('hex2dec(\'', '').replace('\')', '')
-                device_info['fab_mac'] = fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' + fabric_mac[4:6] + ':' +\
-                    fabric_mac[6:8] + ':' + fabric_mac[8:10] + ':' + fabric_mac[10:]
+                device_info['fab_mac'] = (
+                    fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' +
+                    fabric_mac[4:6] + ':' + fabric_mac[6:8] + ':' +
+                    fabric_mac[8:10] + ':' + fabric_mac[10:])
             mac = device_info['fab_mac']
             ip_address = device_info['fab_ip']
             port = device_info['fab_udp']
@@ -173,14 +196,14 @@ class TenGbe(Memory):
         :param memorymap_dict: a dictionary containing the device memory map
         :return: a TenGbe object
         """
-        address, length = -1, -1
+        address, length_bytes = -1, -1
         for mem_name in memorymap_dict.keys():
             if mem_name == device_name:
-                address, length = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
+                address, length_bytes = memorymap_dict[mem_name]['address'], memorymap_dict[mem_name]['bytes']
                 break
-        if address == -1 or length == -1:
+        if address == -1 or length_bytes == -1:
             raise RuntimeError('Could not find address or length for TenGbe %s' % device_name)
-        return cls(parent, device_name, address, length, device_info)
+        return cls(parent, device_name, address, length_bytes, device_info)
 
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.name)
@@ -209,7 +232,8 @@ class TenGbe(Memory):
                     self.registers['rx'].append(register.name)
                 else:
                     if not (name.find('txs_') == 0 or name.find('rxs_') == 0):
-                        LOGGER.warn('Funny register name %s under tengbe block %s' % (register.name, self.name))
+                        LOGGER.warn('%s: odd register name %s under tengbe '
+                                    'block' % (self.name, register.name))
         self.snaps = {'tx': None, 'rx': None}
         for snapshot in self.parent.snapshots:
             if snapshot.name.find(self.name + '_') == 0:
@@ -219,7 +243,10 @@ class TenGbe(Memory):
                 elif name == 'rxs_ss':
                     self.snaps['rx'] = snapshot.name
                 else:
-                    LOGGER.error('Incorrect snap %s under tengbe block %s' % (snapshot.name, self.name))
+                    errmsg = '%s: incorrect snap %s under tengbe ' \
+                             'block' % (self.name, snapshot.name)
+                    LOGGER.error(errmsg)
+                    raise RuntimeError(errmsg)
 
     def _check(self):
         """
@@ -258,6 +285,57 @@ class TenGbe(Memory):
                 results[reg] = self.parent.memory_devices[reg].read()
         return results
 
+    def tx_okay(self, wait_time=1):
+        """
+        Is this gbe block okay?
+        i.e. _txctr incrementing and _txerrctr not incrementing
+        :return: True/False
+        """
+        result0 = self.read_tx_counters()
+        time.sleep(wait_time)
+        result1 = self.read_tx_counters()
+        optional = [self.name+'_txfullctr', self.name+'_txofctr', self.name+'_txvldctr']
+        non_optional = [self.name+'_txerrctr', self.name+'_txctr']
+        if all(x in result0.keys() for x in non_optional):
+            key = self.name+'_txerrctr'
+            if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
+            else:
+                LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
+                return False
+            key = self.name+'_txctr'
+            if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
+                LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
+            else:
+                LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
+                return False
+            for key in optional:
+                if key == self.name+'_txfullctr' and key in result0.keys():
+                    if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                        LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
+                    else:
+                        LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
+                        return False
+                elif key == self.name+'_txofctr' and key in result0.keys():
+                    if result0[key]['data']['reg'] == result1[key]['data']['reg']:
+                        LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
+                    else:
+                        LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
+                        return False
+                elif key == self.name+'_txvldctr' and key in result0.keys():
+                    if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
+                        LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
+                    else:
+                        LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
+                        return False
+                else:
+                    LOGGER.warn('%s: %s not implemented' % (self.name, key))
+        else:
+            LOGGER.error('%s: missing registers in Gbe block %s' % self.name)
+            return False
+        LOGGER.info('%s: tx_okay() - TRUE.' % self.name)
+        return True
+
     #def read_raw(self,  **kwargs):
     #    # size is in bytes
     #    data = self.parent.read(device_name = self.name, size = self.width/8, offset = 0)
@@ -275,24 +353,57 @@ class TenGbe(Memory):
 #        self.parent.write(self.name, self.ip_address.packed(), ip_location)
 #        #self.parent.write_int(self.name, self.port, offset = port_location)
 
+    def dhcp_start(self):
+        """Configure this interface, then start a DHCP client on ALL interfaces"""
+        if self.mac is None:
+            # TODO get MAC from EEPROM serial number and assign here
+            self.mac = '0'
+        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=15,
+                                            require_ok=True,
+                                            request_args=(self.name, self.name, '0.0.0.0',
+                                                          str(self.port), str(self.mac), ))
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError('%s: failure starting tap driver.' % self.name)
+
+        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
+                                            require_ok=True,
+                                            request_args=(self.name, "mode", "0"))
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError('%s: failure disabling ARP.' % self.name)
+
+        reply, _ = self.parent.katcprequest(name="tap-dhcp", request_timeout=15,
+                                            require_ok=True,
+                                            request_args=(self.name, ))
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError('%s: failure starting DHCP client.' % self.name)
+
+        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
+                                            require_ok=True,
+                                            request_args=(self.name, "mode", "-1"))
+        if reply.arguments[0] != 'ok':
+            raise RuntimeError('%s: failure re-enabling ARP.' % self.name)
+
+        # it looks like the command completed without error, so update the basic core details
+        self.get_10gbe_core_details()
+
     def tap_start(self, restart=False):
         """Program a 10GbE device and start the TAP driver.
         @param self  This object.
         """
         if len(self.name) > 8:
-            raise NameError('Tap device identifier must be shorter than 9 characters.\
-            You specified %s for device %s.' % (self.name, self.name))
+            raise NameError('%s: tap device identifier must be shorter than 9 '
+                            'characters..' % self.name)
         if restart:
             self.tap_stop()
         if self.tap_running():
-            LOGGER.info('Tap already running on %s.' % str(self))
+            LOGGER.info('%s: tap already running.' % self.name)
             return
-        LOGGER.info('Starting tap driver instance for %s.' % str(self))
+        LOGGER.info('%s: starting tap driver.' % self.name)
         reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=-1, require_ok=True,
                                             request_args=(self.name, self.name, str(self.ip_address),
                                                           str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('Failure starting tap driver instance for %s.' % str(self))
+            raise RuntimeError('%s: failure starting tap driver.' % self.name)
 
     def tap_stop(self):
         """Stop a TAP driver.
@@ -300,11 +411,11 @@ class TenGbe(Memory):
         """
         if not self.tap_running():
             return
-        LOGGER.info('Stopping tap driver instance for %s.' % str(self))
+        LOGGER.info('%s: stopping tap driver.' % self.name)
         reply, _ = self.parent.katcprequest(name="tap-stop", request_timeout=-1, require_ok=True,
                                             request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('Failure stopping tap device for %s.' % str(self))
+            raise RuntimeError('%s: failure stopping tap device.' % self.name)
 
     def tap_info(self):
         """Get info on the tap instance running on this interface.
@@ -325,10 +436,10 @@ class TenGbe(Memory):
         elif len(informs) == 0:
             return {'name': '', 'ip': ''}
         else:
-            raise RuntimeError('Invalid return from tap-info?')
+            raise RuntimeError('%s: invalid return from tap-info?' % self.name)
         # TODO - this request should return okay if the tap isn't running - it shouldn't fail
-        #if reply.arguments[0] != 'ok':
-        #    log_runtime_error(LOGGER, "Failure getting tap info for device %s." % str(self))
+        # if reply.arguments[0] != 'ok':
+        #     log_runtime_error(LOGGER, "Failure getting tap info for device %s." % str(self))
 
     def tap_running(self):
         """Determine if an instance if tap is already running on for this Ten GBE interface.
@@ -349,17 +460,6 @@ class TenGbe(Memory):
         if reply.arguments[0] != 'ok':
             raise RuntimeError("Failure requesting ARP reload for tap device %s." % str(self))
 
-# == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-# NOT NEEDED
-#     def multicast_send(self, ip_str):
-#         reply, informs = self.parent.katcprequest("tap-multicast-add", self.parent._timeout, self.name, 'send',
-#                                                   str2ip(ip_str))
-#         if reply.arguments[0] == 'ok':
-#             return
-#         else:
-#             raise RuntimeError("Failed adding multicast destination address %s to tap device %s" % (str2ip(ip_str)))
-# == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == == ==
-
     def multicast_receive(self, ip_str, group_size):
         """Send a request to KATCP to have this tap instance send a multicast group join request.
         @param self  This object.
@@ -374,13 +474,16 @@ class TenGbe(Memory):
         mcast_group_string = ip_str
         try:
             reply, _ = self.parent.katcprequest("tap-multicast-add", -1, True,
-                                                request_args=(self.name, 'recv', mcast_group_string, ))
+                                                request_args=(self.name, 'recv',
+                                                              mcast_group_string, ))
         except:
-            raise RuntimeError("tap-multicast-add does not seem to be supported on %s" % self.parent.host)
+            raise RuntimeError("%s: tap-multicast-add does not seem to be "
+                               "supported on %s" % (self.name, self.parent.host))
         if reply.arguments[0] == 'ok':
             return
         else:
-            raise RuntimeError("Failed adding multicast receive %s to tap device %s" % (mcast_group_string, self.name))
+            raise RuntimeError("%s: failed adding multicast receive %s to "
+                               "tap device." % (self.name, mcast_group_string))
 
     def multicast_remove(self, ip_str):
         """Send a request to be removed from a multicast group.
@@ -389,13 +492,16 @@ class TenGbe(Memory):
         """
         try:
             reply, _ = self.parent.katcprequest("tap-multicast-remove", -1, True,
-                                                request_args=(self.name, str2ip(ip_str), ))
+                                                request_args=(self.name,
+                                                              IpAddress.str2ip(ip_str), ))
         except:
-            raise RuntimeError("tap-multicast-remove does not seem to be supported on %s" % self.parent.host)
+            raise RuntimeError("%s: tap-multicast-remove does not seem to "
+                               "be supported on %s" % (self.name, self.parent.host))
         if reply.arguments[0] == 'ok':
             return
         else:
-            raise RuntimeError('Failed removing multicast address %s to tap device' % (str2ip(ip_str)))
+            raise RuntimeError('%s: failed removing multicast address %s '
+                               'from tap device' % (self.name, IpAddress.str2ip(ip_str)))
 
     def get_10gbe_core_details(self, read_arp=False, read_cpu=False):
         """
@@ -455,11 +561,14 @@ class TenGbe(Memory):
         """
         returnval = {}
         port_dump = list(struct.unpack('>16384B', self.parent.read(self.name, 16384)))
-        returnval['ip_prefix'] = '%3d.%3d.%3d.' % (port_dump[0x10], port_dump[0x11], port_dump[0x12])
-        returnval['ip'] = [port_dump[0x10], port_dump[0x11], port_dump[0x12], port_dump[0x13]]
-        returnval['mac'] = [port_dump[0x02], port_dump[0x03], port_dump[0x04], port_dump[0x05], port_dump[0x06],
-                            port_dump[0x07]]
-        returnval['gateway_ip'] = [port_dump[0x0c], port_dump[0x0d], port_dump[0x0e], port_dump[0x0f]]
+        returnval['ip_prefix'] = '%i.%i.%i.' % (port_dump[0x10], port_dump[0x11], port_dump[0x12])
+        returnval['ip'] = IpAddress('%i.%i.%i.%i' % (port_dump[0x10], port_dump[0x11],
+                                                     port_dump[0x12], port_dump[0x13]))
+        returnval['mac'] = Mac('%i:%i:%i:%i:%i:%i' % (port_dump[0x02], port_dump[0x03],
+                                                      port_dump[0x04], port_dump[0x05],
+                                                      port_dump[0x06], port_dump[0x07]))
+        returnval['gateway_ip'] = IpAddress('%i.%i.%i.%i' % (port_dump[0x0c], port_dump[0x0d],
+                                                             port_dump[0x0e], port_dump[0x0f]))
         returnval['fabric_port'] = ((port_dump[0x22] << 8) + (port_dump[0x23]))
         returnval['fabric_en'] = bool(port_dump[0x21] & 1)
         returnval['xaui_lane_sync'] = [bool(port_dump[0x27] & 4), bool(port_dump[0x27] & 8),
