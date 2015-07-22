@@ -17,8 +17,10 @@ if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
     setattr(katcp.CallbackClient, 'MAX_MSG_SIZE',
             katcp.CallbackClient.MAX_MSG_SIZE * 10)
 
+
 class KatcpRequestError(RuntimeError):
     """Exception that is raised when a KATCP request fails when it should not"""
+
 
 def sendfile(filename, targethost, port, result_queue, timeout=2):
     """
