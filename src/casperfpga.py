@@ -23,7 +23,8 @@ CASPER_MEMORY_DEVICES = {
     'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs'},
     'xps:sw_reg':       {'class': register.Register,    'container': 'registers'},
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes'},
-    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots'},}
+    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots'},
+}
 
 
 # other devices - blocks that aren't memory devices, but about which we'd like to know

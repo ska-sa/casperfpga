@@ -40,6 +40,15 @@ class AttributeContainer(object):
     def next(self):  # Python 2 compat
         return self.__next__()
 
+    def remove_attribute(self, attribute):
+        """
+        Remove an attribute from this container by name.
+        :param attribute: the name of the attribute to remove
+        :return:
+        """
+        self._items.pop(self._items.index(attribute))
+        self.__delattr__(attribute)
+
     def clear(self):
         self.__dict__.clear()
         self._next_item = 0
