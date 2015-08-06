@@ -140,6 +140,7 @@ class IpAddress(object):
     def __repr__(self):
         return 'IpAddress(%s)' % self.__str__()
 
+
 class TenGbe(Memory):
     """
     To do with the CASPER ten GBE yellow block implemented on FPGAs,
@@ -358,7 +359,7 @@ class TenGbe(Memory):
         if self.mac is None:
             # TODO get MAC from EEPROM serial number and assign here
             self.mac = '0'
-        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=15,
+        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=5,
                                             require_ok=True,
                                             request_args=(self.name, self.name, '0.0.0.0',
                                                           str(self.port), str(self.mac), ))
@@ -371,7 +372,7 @@ class TenGbe(Memory):
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure disabling ARP.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-dhcp", request_timeout=15,
+        reply, _ = self.parent.katcprequest(name="tap-dhcp", request_timeout=30,
                                             require_ok=True,
                                             request_args=(self.name, ))
         if reply.arguments[0] != 'ok':

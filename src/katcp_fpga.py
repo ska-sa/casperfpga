@@ -17,8 +17,10 @@ if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
     setattr(katcp.CallbackClient, 'MAX_MSG_SIZE',
             katcp.CallbackClient.MAX_MSG_SIZE * 10)
 
+
 class KatcpRequestError(RuntimeError):
     """Exception that is raised when a KATCP request fails when it should not"""
+
 
 def sendfile(filename, targethost, port, result_queue, timeout=2):
     """
@@ -54,7 +56,7 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
 
 class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
 
-    def __init__(self, host, port=7147, timeout=5.0, connect=True):
+    def __init__(self, host, port=7147, timeout=40.0, connect=True):
         async_requester.AsyncRequester.__init__(self, host, self.callback_request, max_requests=100)
         katcp.CallbackClient.__init__(self, host, port, tb_limit=20, timeout=timeout,
                                       logger=LOGGER, auto_reconnect=True)
