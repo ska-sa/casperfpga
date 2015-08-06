@@ -484,9 +484,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         """
         LOGGER.debug('%s: reading designinfo' % self.host)
         if device is None:
-            reply, informs = self.katcprequest(name='meta', request_timeout=5.0, require_ok=True)
+            reply, informs = self.katcprequest(name='meta', request_timeout=10.0, require_ok=True)
         else:
-            reply, informs = self.katcprequest(name='meta', request_timeout=5.0, require_ok=True,
+            reply, informs = self.katcprequest(name='meta', request_timeout=10.0, require_ok=True,
                                                request_args=(device, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('Could not read meta information from %s' % self.host)
