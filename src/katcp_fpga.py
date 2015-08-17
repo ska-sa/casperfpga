@@ -5,6 +5,8 @@ import os
 import threading
 import Queue
 import random
+import socket
+
 
 import async_requester
 from casperfpga import CasperFpga
@@ -31,7 +33,6 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     :param result_queue: the result of the upload, nothing '' indicates success
     :return:
     """
-    import socket
     upload_socket = socket.socket()
     stime = time.time()
     connected = False
@@ -47,11 +48,12 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
         upload_socket.send(open(filename).read())
     except:
         result_queue.put('Could not send file to upload port.')
+    else:
+        result_queue.put('')
     finally:
         LOGGER.info('%s: upload thread complete at %.3f' %
                     (targethost, time.time()))
-    result_queue.put('')
-    return
+
 
 
 class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
@@ -344,6 +346,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
                     result_queue.put('Request to client %s returned, but not Message.OK.' % self.host)
             except:
                 result_queue.put('Request to client %s failed.' % self.host)
+            finally:
+                LOGGER.debug('progremote thread done')
 
         if port == -1:
             port = random.randint(2000, 2500)
