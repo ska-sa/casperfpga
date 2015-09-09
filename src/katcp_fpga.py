@@ -21,7 +21,15 @@ if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
 
 
 class KatcpRequestError(RuntimeError):
-    """Exception that is raised when a KATCP request fails when it should not"""
+    """An error occurred processing a KATCP request."""
+
+
+class KatcpRequestInvalid(RuntimeError):
+    """An invalid KATCP request was made."""
+
+
+class KatcpRequestFail(RuntimeError):
+    """A valid KATCP request failed."""
 
 
 def sendfile(filename, targethost, port, result_queue, timeout=2):
@@ -53,7 +61,6 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     finally:
         LOGGER.info('%s: upload thread complete at %.3f' %
                     (targethost, time.time()))
-
 
 
 class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
@@ -124,9 +131,21 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         request = katcp.Message.request(name, *request_args)
         reply, informs = self.blocking_request(request, timeout=request_timeout)
         if (reply.arguments[0] != katcp.Message.OK) and require_ok:
-            raise KatcpRequestError(
-                'Request %s on host %s failed.\n\tRequest: %s\n\tReply: %s' %
-                (request.name, self.host, request, reply))
+            if reply.arguments[0] == katcp.Message.FAIL:
+                raise KatcpRequestFail(
+                    'Request %s on host %s failed.\n\t'
+                    'Request: %s\n\tReply: %s' %
+                    (request.name, self.host, request, reply))
+            elif reply.arguments[0] == katcp.Message.INVALID:
+                raise KatcpRequestInvalid(
+                    'Invalid katcp request %s on host %s.\n\t'
+                    'Request: %s\n\tReply: %s' %
+                    (request.name, self.host, request, reply))
+            else:
+                raise KatcpRequestError(
+                    'Unknown error processing request %s on host '
+                    '%s.\n\tRequest: %s\n\tReply: %s' %
+                    (request.name, self.host, request, reply))
         return reply, informs
 
     def listdev(self, getsize=False, getaddress=False):

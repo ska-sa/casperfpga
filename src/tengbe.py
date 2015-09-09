@@ -473,13 +473,9 @@ class TenGbe(Memory):
 
         # mcast_group_string = ip_str + '+' + str(group_size)
         mcast_group_string = ip_str
-        try:
-            reply, _ = self.parent.katcprequest("tap-multicast-add", -1, True,
-                                                request_args=(self.name, 'recv',
-                                                              mcast_group_string, ))
-        except:
-            raise RuntimeError("%s: tap-multicast-add does not seem to be "
-                               "supported on %s" % (self.name, self.parent.host))
+        reply, _ = self.parent.katcprequest("tap-multicast-add", -1, True,
+                                            request_args=(self.name, 'recv',
+                                                          mcast_group_string, ))
         if reply.arguments[0] == 'ok':
             return
         else:
