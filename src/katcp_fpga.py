@@ -65,7 +65,7 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
 
 class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
 
-    def __init__(self, host, port=7147, timeout=30.0, connect=True):
+    def __init__(self, host, port=7147, timeout=20.0, connect=True):
         async_requester.AsyncRequester.__init__(self, host, self.callback_request, max_requests=100)
         katcp.CallbackClient.__init__(self, host, port, tb_limit=20, timeout=timeout,
                                       logger=LOGGER, auto_reconnect=True)
@@ -127,7 +127,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         """
         # TODO raise sensible errors
         if request_timeout == -1:
-            request_timeout = self._timeout
+            request_timeout = 30.0
         request = katcp.Message.request(name, *request_args)
         reply, informs = self.blocking_request(request, timeout=request_timeout)
         if (reply.arguments[0] != katcp.Message.OK) and require_ok:
