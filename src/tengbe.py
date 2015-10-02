@@ -63,6 +63,20 @@ class Mac(object):
             self.mac_str = self.mac2str(mac_int)
             self.mac_int = mac_int
 
+    @classmethod
+    def from_roach_hostname(cls, hostname, port_num):
+        """
+        Make a MAC address object from a ROACH hostname
+        """
+        if not hostname.startswith('roach'):
+            raise RuntimeError('Only hostnames beginning with'
+                               'roach supported: %s' % hostname)
+        digits = hostname.replace('roach', '')
+        serial = [int(digits[ctr:ctr+2], 16) for ctr in range(0, 6, 2)]
+        mac_str = 'fe:00:%02x:%02x:%02x:%02x' % (serial[0], serial[1],
+                                                 serial[2], port_num)
+        return cls(mac_str)
+
     def packed(self):
         mac = [0, 0]
         for byte in self.mac_str.split(':'):
@@ -355,7 +369,9 @@ class TenGbe(Memory):
 #        #self.parent.write_int(self.name, self.port, offset = port_location)
 
     def dhcp_start(self):
-        """Configure this interface, then start a DHCP client on ALL interfaces"""
+        """
+        Configure this interface, then start a DHCP client on ALL interfaces.
+        """
         if self.mac is None:
             # TODO get MAC from EEPROM serial number and assign here
             self.mac = '0'
@@ -500,40 +516,46 @@ class TenGbe(Memory):
             raise RuntimeError('%s: failed removing multicast address %s '
                                'from tap device' % (self.name, IpAddress.str2ip(ip_str)))
 
+    def _fabric_enable_disable(self, target_val):
+        word_bytes = list(struct.unpack('>4B', self.parent.read(self.name, 4, 0x20)))
+        if word_bytes[1] == target_val:
+            return
+        word_bytes[1] = target_val
+        word_packed = struct.pack('>4B', *word_bytes)
+        self.parent.write(self.name, word_packed, 0x20)
+
     def fabric_enable(self):
         """
         Enable the core fabric
         :return:
         """
-        _original = self.parent.read_uint(self.name, 0x20)
-        if (_original >> 8) & 0x01:
-            return
-        _enable = 0x1 << 8
-        self.parent.write_int(self.name, _original | _enable, 0x20)
+        self._fabric_enable_disable(1)
 
     def fabric_disable(self):
         """
         Enable the core fabric
         :return:
         """
-        _original = self.parent.read_uint(self.name, 0x20)
-        if not ((_original >> 8) & 0x01):
-            return
-        _enable = (0xffff << 16) | 0xff
-        self.parent.write_int(self.name, _original & _enable, 0x20)
+        self._fabric_enable_disable(0)
 
     def fabric_soft_reset_toggle(self):
         """
         Toggle the fabric soft reset
         :return:
         """
-        _original = self.parent.read_uint(self.name, 0x20)
-        _off = _original & (0xffffff << 8)
-        _on = _original | 0x1
-        if _original & 0x01:
-            self.parent.write_int(self.name, _off, 0x20)
-        self.parent.write_int(self.name, _on, 0x20)
-        self.parent.write_int(self.name, _off, 0x20)
+        word_bytes = list(struct.unpack('>4B', self.parent.read(self.name, 4, 0x20)))
+
+        def write_val(val):
+            word_bytes[0] = val
+            word_packed = struct.pack('>4B', *word_bytes)
+            if val == 0:
+                self.parent.write(self.name, word_packed, 0x20)
+            else:
+                self.parent.blindwrite(self.name, word_packed, 0x20)
+        if word_bytes[0] == 1:
+            write_val(0)
+        write_val(1)
+        write_val(0)
 
     def get_10gbe_core_details(self, read_arp=False, read_cpu=False):
         """
