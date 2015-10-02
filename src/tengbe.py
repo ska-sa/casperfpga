@@ -500,6 +500,41 @@ class TenGbe(Memory):
             raise RuntimeError('%s: failed removing multicast address %s '
                                'from tap device' % (self.name, IpAddress.str2ip(ip_str)))
 
+    def fabric_enable(self):
+        """
+        Enable the core fabric
+        :return:
+        """
+        _original = self.parent.read_uint(self.name, 0x20)
+        if (_original >> 8) & 0x01:
+            return
+        _enable = 0x1 << 8
+        self.parent.write_int(self.name, _original | _enable, 0x20)
+
+    def fabric_disable(self):
+        """
+        Enable the core fabric
+        :return:
+        """
+        _original = self.parent.read_uint(self.name, 0x20)
+        if not ((_original >> 8) & 0x01):
+            return
+        _enable = (0xffff << 16) | 0xff
+        self.parent.write_int(self.name, _original & _enable, 0x20)
+
+    def fabric_soft_reset_toggle(self):
+        """
+        Toggle the fabric soft reset
+        :return:
+        """
+        _original = self.parent.read_uint(self.name, 0x20)
+        _off = _original & (0xffffff << 8)
+        _on = _original | 0x1
+        if _original & 0x01:
+            self.parent.write_int(self.name, _off, 0x20)
+        self.parent.write_int(self.name, _on, 0x20)
+        self.parent.write_int(self.name, _off, 0x20)
+
     def get_10gbe_core_details(self, read_arp=False, read_cpu=False):
         """
         Get 10GbE core details.
