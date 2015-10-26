@@ -23,7 +23,8 @@ CASPER_MEMORY_DEVICES = {
     'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs'},
     'xps:sw_reg':       {'class': register.Register,    'container': 'registers'},
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes'},
-    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots'},}
+    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots'},
+}
 
 
 # other devices - blocks that aren't memory devices, but about which we'd like to know
@@ -260,13 +261,13 @@ class CasperFpga(object):
             rv['compile_timestamp'] = lib & ((2 ** 31)-1)
         else:
             if lib & (1 << 30):
-                #type is svn
+                # type is svn
                 rv['lib_rcs_type'] = 'svn'
             else:
-                #type is git
+                # type is git
                 rv['lib_rcs_type'] = 'git'
             if lib & (1 << 28):
-                #dirty bit
+                # dirty bit
                 rv['lib_dirty'] = True
             else:
                 rv['lib_dirty'] = False
@@ -275,13 +276,13 @@ class CasperFpga(object):
             rv['app_last_modified'] = app & ((2 ** 31)-1)
         else:
             if app & (1 << 30):
-                #type is svn
+                # type is svn
                 rv['app_rcs_type'] = 'svn'
             else:
-                #type is git
+                # type is git
                 rv['app_rcs_type'] = 'git'
             if app & (1 << 28):
-                #dirty bit
+                # dirty bit
                 rv['app_dirty'] = True
             else:
                 rv['lib_dirty'] = False

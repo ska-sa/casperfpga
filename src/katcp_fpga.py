@@ -5,6 +5,8 @@ import os
 import threading
 import Queue
 import random
+import socket
+
 
 import async_requester
 from casperfpga import CasperFpga
@@ -17,8 +19,18 @@ if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
     setattr(katcp.CallbackClient, 'MAX_MSG_SIZE',
             katcp.CallbackClient.MAX_MSG_SIZE * 10)
 
+
 class KatcpRequestError(RuntimeError):
-    """Exception that is raised when a KATCP request fails when it should not"""
+    """An error occurred processing a KATCP request."""
+
+
+class KatcpRequestInvalid(RuntimeError):
+    """An invalid KATCP request was made."""
+
+
+class KatcpRequestFail(RuntimeError):
+    """A valid KATCP request failed."""
+
 
 def sendfile(filename, targethost, port, result_queue, timeout=2):
     """
@@ -29,7 +41,6 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     :param result_queue: the result of the upload, nothing '' indicates success
     :return:
     """
-    import socket
     upload_socket = socket.socket()
     stime = time.time()
     connected = False
@@ -45,16 +56,16 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
         upload_socket.send(open(filename).read())
     except:
         result_queue.put('Could not send file to upload port.')
+    else:
+        result_queue.put('')
     finally:
         LOGGER.info('%s: upload thread complete at %.3f' %
                     (targethost, time.time()))
-    result_queue.put('')
-    return
 
 
 class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient):
 
-    def __init__(self, host, port=7147, timeout=5.0, connect=True):
+    def __init__(self, host, port=7147, timeout=20.0, connect=True):
         async_requester.AsyncRequester.__init__(self, host, self.callback_request, max_requests=100)
         katcp.CallbackClient.__init__(self, host, port, tb_limit=20, timeout=timeout,
                                       logger=LOGGER, auto_reconnect=True)
@@ -120,9 +131,21 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         request = katcp.Message.request(name, *request_args)
         reply, informs = self.blocking_request(request, timeout=request_timeout)
         if (reply.arguments[0] != katcp.Message.OK) and require_ok:
-            raise KatcpRequestError(
-                'Request %s on host %s failed.\n\tRequest: %s\n\tReply: %s' %
-                (request.name, self.host, request, reply))
+            if reply.arguments[0] == katcp.Message.FAIL:
+                raise KatcpRequestFail(
+                    'Request %s on host %s failed.\n\t'
+                    'Request: %s\n\tReply: %s' %
+                    (request.name, self.host, request, reply))
+            elif reply.arguments[0] == katcp.Message.INVALID:
+                raise KatcpRequestInvalid(
+                    'Invalid katcp request %s on host %s.\n\t'
+                    'Request: %s\n\tReply: %s' %
+                    (request.name, self.host, request, reply))
+            else:
+                raise KatcpRequestError(
+                    'Unknown error processing request %s on host '
+                    '%s.\n\tRequest: %s\n\tReply: %s' %
+                    (request.name, self.host, request, reply))
         return reply, informs
 
     def listdev(self, getsize=False, getaddress=False):
@@ -342,6 +365,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
                     result_queue.put('Request to client %s returned, but not Message.OK.' % self.host)
             except:
                 result_queue.put('Request to client %s failed.' % self.host)
+            finally:
+                LOGGER.debug('progremote thread done')
 
         if port == -1:
             port = random.randint(2000, 2500)
@@ -482,9 +507,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester, katcp.CallbackClient
         """
         LOGGER.debug('%s: reading designinfo' % self.host)
         if device is None:
-            reply, informs = self.katcprequest(name='meta', request_timeout=5.0, require_ok=True)
+            reply, informs = self.katcprequest(name='meta', request_timeout=10.0, require_ok=True)
         else:
-            reply, informs = self.katcprequest(name='meta', request_timeout=5.0, require_ok=True,
+            reply, informs = self.katcprequest(name='meta', request_timeout=10.0, require_ok=True,
                                                request_args=(device, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('Could not read meta information from %s' % self.host)

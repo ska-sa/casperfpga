@@ -294,7 +294,9 @@ class Qdr(Memory):
 
     def qdr_cal(self, fail_hard=True, verbosity=0):
         """
-        Calibrates a QDR controller, stepping input delays and (if that fails) output delays. Returns True if calibrated, raises a runtime exception if it doesn't.
+        Calibrates a QDR controller, stepping input delays and (if that fails)
+        output delays. Returns True if calibrated, raises a runtime
+        exception if it doesn't.
         :param verbosity:
         :return:
         """

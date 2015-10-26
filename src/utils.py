@@ -205,7 +205,8 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
             break
     if len(returnval) != num_fpgas:
         print returnval
-        raise RuntimeError('Given %d FPGAs, only got %d results, must have timed out.' % (num_fpgas, len(returnval)))
+        raise RuntimeError('Given %d FPGAs, only got %d results, must '
+                           'have timed out.' % (num_fpgas, len(returnval)))
     return returnval
 
 
