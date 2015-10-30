@@ -7,6 +7,7 @@ busses. Normally via KATCP.
 import logging
 import bitfield
 import struct
+import numpy as np
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,10 +60,13 @@ def fp2fixed_int(num, bitwidth, bin_pt, signed):
     negnum = num < 0
     _original_num = num
     num = abs(num)
-    left = int(num)
+    right,left = np.modf(num)
+    left = int(left)
+    right = int(right*(2**bin_pt))
+    #left = int(num)
     if left > left_limits[1]:
         raise ValueError('Cannot represent %f in %s' % (_original_num, _format))
-    right = int(round((abs(num) % 1) * (2**bin_pt)))
+    #right = int(round((abs(num) % 1) * (2**bin_pt)))
     assert left >= 0 and right >= 0
     _lsbin = bin(left)[2:]
     _lsbin = '0'*(left_bits-len(_lsbin)) + _lsbin
