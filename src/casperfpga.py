@@ -17,18 +17,19 @@ from utils import parse_fpg
 
 LOGGER = logging.getLogger(__name__)
 
-# known CASPER memory-accessible  devices and their associated classes and containers
+# known CASPER memory-accessible devices and their associated
+# classes and containers
 CASPER_MEMORY_DEVICES = {
-    'xps:bram':         {'class': sbram.Sbram,          'container': 'sbrams'},
-    'xps:qdr':          {'class': qdr.Qdr,              'container': 'qdrs'},
-    'xps:sw_reg':       {'class': register.Register,    'container': 'registers'},
-    'xps:tengbe_v2':    {'class': tengbe.TenGbe,        'container': 'tengbes'},
-    'casper:snapshot':  {'class': snap.Snap,            'container': 'snapshots'},
+    'xps:bram':         {'class': sbram.Sbram,       'container': 'sbrams'},
+    'xps:qdr':          {'class': qdr.Qdr,           'container': 'qdrs'},
+    'xps:sw_reg':       {'class': register.Register, 'container': 'registers'},
+    'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'tengbes'},
+    'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
 }
 
 
-# other devices - blocks that aren't memory devices, but about which we'd like to know
-# tagged in the simulink diagram
+# other devices - blocks that aren't memory devices, but about which we'd
+# like to know tagged in the simulink diagram
 CASPER_OTHER_DEVICES = {
     'casper:bitsnap':               'bitsnap',
     'casper:dec_fir':               'dec_fir',
@@ -79,7 +80,8 @@ class CasperFpga(object):
 
     def deprogram(self):
         """
-        The child class will deprogram the FPGA, we just reset out device information
+        The child class will deprogram the FPGA, we just reset out
+        device information
         :return:
         """
         self.__reset_device_info()
@@ -106,13 +108,14 @@ class CasperFpga(object):
 
     def test_connection(self):
         """
-        Write to and read from the scratchpad to test the connection to the FPGA.
+        Write to and read from the scratchpad to test the connection to the FPGA
         """
         for val in [0xa5a5a5, 0x000000]:
             self.write_int('sys_scratchpad', val)
             rval = self.read_int('sys_scratchpad')
             if rval != val:
-                raise RuntimeError('%s: cannot write scratchpad? %i != %i' % (self.host, rval, val))
+                raise RuntimeError('%s: cannot write scratchpad? %i != %i' %
+                                   (self.host, rval, val))
         return True
 
 #    def __getattribute__(self, name):
@@ -136,13 +139,13 @@ class CasperFpga(object):
         last_dram_page = -1
 
         dram_indirect_page_size = (64*1024*1024)
-        #read_chunk_size = (1024*1024)
+        # read_chunk_size = (1024*1024)
         LOGGER.debug('%s: reading a total of %8i bytes from offset %8i...' %
                      (self.host, size, offset))
         while n_reads < size:
             dram_page = (offset + n_reads) / dram_indirect_page_size
             local_offset = (offset + n_reads) % dram_indirect_page_size
-            #local_reads = min(read_chunk_size, size-n_reads, dram_indirect_page_size-(offset%dram_indirect_page_size))
+            # local_reads = min(read_chunk_size, size-n_reads, dram_indirect_page_size-(offset%dram_indirect_page_size))
             local_reads = min(size - n_reads, dram_indirect_page_size - (offset % dram_indirect_page_size))
             if last_dram_page != dram_page:
                 self.write_int('dram_controller', dram_page)
@@ -201,12 +204,14 @@ class CasperFpga(object):
         if new_data != data:
             unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
             unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
-            LOGGER.error('%s: verification of write to %s at offset %d failed. Wrote 0x%08x... '
-                         'but got back 0x%08x...' % (self.host, device_name, offset,
-                                                     unpacked_wrdata, unpacked_rddata))
-            raise ValueError('%s: verification of write to %s at offset %d failed. Wrote 0x%08x... '
-                             'but got back 0x%08x...' % (self.host, device_name, offset,
-                                                         unpacked_wrdata, unpacked_rddata))
+            LOGGER.error('%s: verification of write to %s at offset %d failed. '
+                         'Wrote 0x%08x... but got back 0x%08x...' %
+                         (self.host, device_name, offset,
+                          unpacked_wrdata, unpacked_rddata))
+            raise ValueError('%s: verification of write to %s at offset %d '
+                             'failed. Wrote 0x%08x... but got back 0x%08x...' %
+                             (self.host, device_name, offset,
+                              unpacked_wrdata, unpacked_rddata))
 
     def read_int(self, device_name, word_offset=0):
         """
@@ -247,47 +252,50 @@ class CasperFpga(object):
             self.blindwrite(device_name, data, word_offset*4)
         else:
             self.write(device_name, data, word_offset*4)
-        LOGGER.debug('%s: write_int %8x to register %s at word offset %d okay%s.' %
-                     (self.host, integer, device_name,
-                      word_offset, ' (blind)' if blindwrite else ''))
+        LOGGER.debug('%s: write_int %8x to register %s at word offset %d '
+                     'okay%s.' % (self.host, integer, device_name,
+                                  word_offset,
+                                  ' (blind)' if blindwrite else ''))
 
-    def get_rcs(self, rcs_block_name='rcs'):
-        """Retrieves and decodes a revision control block."""
-        raise NotImplementedError
-        rv = {'user': self.read_uint(rcs_block_name + '_user')}
-        app = self.read_uint(rcs_block_name+'_app')
-        lib = self.read_uint(rcs_block_name+'_lib')
-        if lib & (1 << 31):
-            rv['compile_timestamp'] = lib & ((2 ** 31)-1)
-        else:
-            if lib & (1 << 30):
-                # type is svn
-                rv['lib_rcs_type'] = 'svn'
-            else:
-                # type is git
-                rv['lib_rcs_type'] = 'git'
-            if lib & (1 << 28):
-                # dirty bit
-                rv['lib_dirty'] = True
-            else:
-                rv['lib_dirty'] = False
-            rv['lib_rev'] = lib & ((2 ** 28)-1)
-        if app & (1 << 31):
-            rv['app_last_modified'] = app & ((2 ** 31)-1)
-        else:
-            if app & (1 << 30):
-                # type is svn
-                rv['app_rcs_type'] = 'svn'
-            else:
-                # type is git
-                rv['app_rcs_type'] = 'git'
-            if app & (1 << 28):
-                # dirty bit
-                rv['app_dirty'] = True
-            else:
-                rv['lib_dirty'] = False
-            rv['app_rev'] = app & ((2 ** 28)-1)
-        return rv
+    # def get_rcs(self, rcs_block_name='rcs'):
+    #     """
+    #     Retrieves and decodes a revision control block.
+    #     """
+    #     raise NotImplementedError
+    #     rv = {'user': self.read_uint(rcs_block_name + '_user')}
+    #     app = self.read_uint(rcs_block_name+'_app')
+    #     lib = self.read_uint(rcs_block_name+'_lib')
+    #     if lib & (1 << 31):
+    #         rv['compile_timestamp'] = lib & ((2 ** 31)-1)
+    #     else:
+    #         if lib & (1 << 30):
+    #             # type is svn
+    #             rv['lib_rcs_type'] = 'svn'
+    #         else:
+    #             # type is git
+    #             rv['lib_rcs_type'] = 'git'
+    #         if lib & (1 << 28):
+    #             # dirty bit
+    #             rv['lib_dirty'] = True
+    #         else:
+    #             rv['lib_dirty'] = False
+    #         rv['lib_rev'] = lib & ((2 ** 28)-1)
+    #     if app & (1 << 31):
+    #         rv['app_last_modified'] = app & ((2 ** 31)-1)
+    #     else:
+    #         if app & (1 << 30):
+    #             # type is svn
+    #             rv['app_rcs_type'] = 'svn'
+    #         else:
+    #             # type is git
+    #             rv['app_rcs_type'] = 'git'
+    #         if app & (1 << 28):
+    #             # dirty bit
+    #             rv['app_dirty'] = True
+    #         else:
+    #             rv['lib_dirty'] = False
+    #         rv['app_rev'] = app & ((2 ** 28)-1)
+    #     return rv
 
     def __create_memory_devices(self, device_dict, memorymap_dict):
         """
