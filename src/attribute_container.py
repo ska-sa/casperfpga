@@ -1,4 +1,5 @@
 __author__ = 'paulp'
+import threading
 
 
 class AttributeContainer(object):
@@ -25,20 +26,7 @@ class AttributeContainer(object):
         object.__setattr__(self, name, value)
 
     def __iter__(self):
-        return self
-
-    def __next__(self):
-        try:
-            item_name = self._items[self._next_item]
-        except:
-            self._next_item = 0
-            raise StopIteration
-        else:
-            self._next_item += 1
-            return getattr(self, item_name)
-
-    def next(self):  # Python 2 compat
-        return self.__next__()
+        return (getattr(self, n) for n in self._items)
 
     def remove_attribute(self, attribute):
         """
