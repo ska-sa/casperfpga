@@ -1,12 +1,8 @@
-__author__ = 'paulp'
-import threading
-
-
 class AttributeContainer(object):
     """An iterable class to make registers, snapshots, etc more accessible.
     """
-
     def __init__(self):
+        self._items = []
         self.clear()
 
     def __getitem__(self, item_to_get):
@@ -19,8 +15,7 @@ class AttributeContainer(object):
 
     def __setattr__(self, name, value):
         try:
-            if name != '_next_item':
-                self._items.append(name)
+            self._items.append(name)
         except AttributeError:
             pass
         object.__setattr__(self, name, value)
@@ -39,7 +34,6 @@ class AttributeContainer(object):
 
     def clear(self):
         self.__dict__.clear()
-        self._next_item = 0
         self._items = []
 
     def names(self):
@@ -53,6 +47,5 @@ class AttributeContainer(object):
 
     def __repr__(self):
         keys = self.__dict__.keys()
-        keys.pop(keys.index('_next_item'))
         keys.pop(keys.index('_items'))
         return str(keys)
