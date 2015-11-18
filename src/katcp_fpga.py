@@ -100,7 +100,10 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
             except AttributeError:
                 # Old style
                 self.start(daemon=True)
-            self.wait_connected(timeout)
+            connected = self.wait_connected(timeout)
+            if not connected:
+                raise RuntimeError('Connection to {} not established witin {}s'
+                                   .format(self.bind_address_string, timeout))
         # check that an actual katcp command gets through
         got_ping = False
         _stime = time.time()
