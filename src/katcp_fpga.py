@@ -84,12 +84,16 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         LOGGER.info('%s: port(%s) created%s.' %
                     (self.host, port,' & connected' if connect else ''))
 
-    def connect(self, timeout=1):
+    def connect(self, timeout=None):
         """
         Establish a connection to the KATCP server on the device.
-        :param timeout: How many seconds should we wait?
+        :param timeout: How many seconds should we wait? Use instance default
+                        if None.
         :return:
+
         """
+        if timeout is None:
+            timeout = self._timeout
         if not self.is_connected():
             # Implement backward / forwards compatibility for change in
             # daemonization APIs in upstream katcp package.
