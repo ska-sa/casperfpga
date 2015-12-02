@@ -247,7 +247,13 @@ class CasperFpga(object):
         # careful of packing input data into 32 bit - check range: if
         # negative, must be signed int; if positive over 2^16, must be unsigned
         # int.
-        data = struct.pack('>i' if integer < 0 else '>I', integer)
+        try:
+            data = struct.pack('>i' if integer < 0 else '>I', integer)
+        except Exception as ve:
+            LOGGER.error('Writing integer %i failed with error %s' % (
+                integer, ve.message))
+            raise ValueError('Writing integer %i failed with error %s' % (
+                integer, ve.message))
         if blindwrite:
             self.blindwrite(device_name, data, word_offset*4)
         else:

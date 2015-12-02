@@ -40,7 +40,8 @@ def fp2fixed_int(num, bitwidth, bin_pt, signed):
     """
     Convert a given float to an integer representation of the fixed-point number
     described by the params.
-    Provides the same output as a Xilinx block in Simulink would if you cast it to an unsigned int.
+    Provides the same output as a Xilinx block in Simulink would if you cast
+    it to an unsigned int.
     """
     _format = '%s%i.%i' % ('fix' if signed else 'ufix', bitwidth, bin_pt)
     LOGGER.debug('Converting %f to %s' % (num, _format))
@@ -60,13 +61,13 @@ def fp2fixed_int(num, bitwidth, bin_pt, signed):
     negnum = num < 0
     _original_num = num
     num = abs(num)
-    right,left = np.modf(num)
+    right, left = np.modf(num)
     left = int(left)
     right = int(right*(2**bin_pt))
-    #left = int(num)
+    # left = int(num)
     if left > left_limits[1]:
         raise ValueError('Cannot represent %f in %s' % (_original_num, _format))
-    #right = int(round((abs(num) % 1) * (2**bin_pt)))
+    # right = int(round((abs(num) % 1) * (2**bin_pt)))
     assert left >= 0 and right >= 0
     _lsbin = bin(left)[2:]
     _lsbin = '0'*(left_bits-len(_lsbin)) + _lsbin
