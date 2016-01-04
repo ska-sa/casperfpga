@@ -69,7 +69,9 @@ def parse_fpg(filename):
 
 def pull_info_from_fpg(fpg_file, parameter):
     """
-    Pull available parameters from .fpg file
+    Pull available parameters about x-engine or f-engine from .fpg file.
+    Available options for x-engine: 'x_fpga_clock', 'xeng_outbits', 'xeng_accumulation_len'
+    Available options for f-engine: 'n_chans', 'quant_format', 'spead_flavour'
     :param fpg_file: bit file path
     :param parameter: parameter string
     :return: pattern value (string)
