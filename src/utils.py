@@ -67,6 +67,42 @@ def parse_fpg(filename):
     return create_meta_dictionary(metalist), memorydict
 
 
+def pull_info_from_fpg(fpg_file, parameter):
+    """
+    Pull available parameters about x-engine or f-engine from .fpg file.
+    Available options for x-engine: 'x_fpga_clock', 'xeng_outbits', 'xeng_accumulation_len'
+    Available options for f-engine: 'n_chans', 'quant_format', 'spead_flavour'
+    :param fpg_file: bit file path
+    :param parameter: parameter string
+    :return: pattern value (string)
+    """
+    match = []
+    fpg_dict = parse_fpg(fpg_file)
+    if parameter == 'x_fpga_clock':
+        match = str(int(fpg_dict[0]['XSG_core_config']['clk_rate'])*10**6)
+    if parameter == 'xeng_outbits':
+        match = fpg_dict[0]['sys0_vacc']['n_bits']
+    if parameter == 'xeng_accumulation_len':
+        match = fpg_dict[0]['sys0_xeng']['acc_len']
+    if parameter == 'spead_flavour':
+        match1 = fpg_dict[0]['pack_spead_pack0']['spead_msw']
+        match2 = fpg_dict[0]['pack_spead_pack0']['spead_lsw']
+        s = ','
+        match = s.join([match1, match2])
+    if parameter == 'quant_format':
+        match1 = fpg_dict[0]['snap_quant0']['io_widths']
+        match2 = fpg_dict[0]['snap_quant0']['io_bps']
+        s = '.'
+        match = s.join([match1[1], match2[1]])
+    if parameter == 'n_chans':
+        match1 = int(fpg_dict[0]['pfb_fft_wideband_real_fft_biplex_real_4x']['fftsize'])
+        match2 = int(fpg_dict[0]['pfb_fft_wideband_real_fft_biplex_real_4x']['n_inputs'])
+        match = match2*2**match1
+    if match is []:
+        raise RuntimeError('Parameter %s does not match any field in fpg file.' % parameter)
+    return match
+
+
 def program_fpgas(fpga_list, progfile, timeout=10):
     """
     Program more than one FPGA at the same time.

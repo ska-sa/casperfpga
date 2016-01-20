@@ -1,11 +1,8 @@
-__author__ = 'paulp'
-
-
 class AttributeContainer(object):
     """An iterable class to make registers, snapshots, etc more accessible.
     """
-
     def __init__(self):
+        self._items = []
         self.clear()
 
     def __getitem__(self, item_to_get):
@@ -18,27 +15,13 @@ class AttributeContainer(object):
 
     def __setattr__(self, name, value):
         try:
-            if name != '_next_item':
-                self._items.append(name)
+            self._items.append(name)
         except AttributeError:
             pass
         object.__setattr__(self, name, value)
 
     def __iter__(self):
-        return self
-
-    def __next__(self):
-        try:
-            item_name = self._items[self._next_item]
-        except:
-            self._next_item = 0
-            raise StopIteration
-        else:
-            self._next_item += 1
-            return getattr(self, item_name)
-
-    def next(self):  # Python 2 compat
-        return self.__next__()
+        return (getattr(self, n) for n in self._items)
 
     def remove_attribute(self, attribute):
         """
@@ -51,7 +34,6 @@ class AttributeContainer(object):
 
     def clear(self):
         self.__dict__.clear()
-        self._next_item = 0
         self._items = []
 
     def names(self):
@@ -65,6 +47,5 @@ class AttributeContainer(object):
 
     def __repr__(self):
         keys = self.__dict__.keys()
-        keys.pop(keys.index('_next_item'))
         keys.pop(keys.index('_items'))
         return str(keys)
