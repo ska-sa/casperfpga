@@ -23,18 +23,25 @@ try:
 except ImportError:
     corr2 = None
 
-parser = argparse.ArgumentParser(description='Display TenGBE interface information about a MeerKAT fpga host.',
-                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--hosts', dest='hosts', type=str, action='store', default='',
-                    help='comma-delimited list of hosts, or a corr2 config file')
-parser.add_argument('-p', '--polltime', dest='polltime', action='store', default=1, type=int,
-                    help='time at which to poll data, in seconds')
-parser.add_argument('-r', '--reset', dest='resetctrs', action='store_true', default=False,
-                    help='reset the GBE debug counters')
-parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
-                    help='katcp (default) or dcp?')
-parser.add_argument('--loglevel', dest='log_level', action='store', default='',
-                    help='log level to use, default None, options INFO, DEBUG, ERROR')
+parser = argparse.ArgumentParser(
+    description='Display TenGBE interface information about a MeerKAT '
+                'fpga host.',
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument(
+    '--hosts', dest='hosts', type=str, action='store', default='',
+    help='comma-delimited list of hosts, or a corr2 config file')
+parser.add_argument(
+    '-p', '--polltime', dest='polltime', action='store', default=1, type=int,
+    help='time at which to poll data, in seconds')
+parser.add_argument(
+    '-r', '--reset', dest='resetctrs', action='store_true', default=False,
+    help='reset the GBE debug counters')
+parser.add_argument(
+    '--comms', dest='comms', action='store', default='katcp', type=str,
+    help='katcp (default) or dcp?')
+parser.add_argument(
+    '--loglevel', dest='log_level', action='store', default='',
+    help='log level to use, default None, options INFO, DEBUG, ERROR')
 args = parser.parse_args()
 polltime = args.polltime
 
@@ -68,7 +75,8 @@ for fpga in fpgas:
     numgbes = len(fpga.tengbes)
     if numgbes < 1:
         raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
-    print '%s: found %i 10gbe core%s.' % (fpga.host, numgbes, '' if numgbes == 1 else 's')
+    print '%s: found %i 10gbe core%s.' % (
+        fpga.host, numgbes, '' if numgbes == 1 else 's')
 
 if args.resetctrs:
     def reset_gbe_debug(fpga_):
@@ -121,9 +129,10 @@ for fpga in fpgas:
                 fpga_headers.append(reg)
 fpga_headers = [fpga_headers]
 
-fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr', 'gbe_rxerrctr',
-                 'gbe_rxbadctr', 'gbe_txerrctr', 'gbe_txfullctr', 'gbe_txofctr',
-                 'gbe_txctr', 'gbe_txvldctr']]
+fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr',
+                 'gbe_rxerrctr', 'gbe_rxbadctr', 'gbe_txerrctr',
+                 'gbe_txfullctr', 'gbe_txofctr', 'gbe_txctr', 'gbe_txvldctr']]
+
 
 def exit_gracefully(sig, frame):
     print sig, frame
@@ -146,22 +155,25 @@ try:
         if keypress == -1:
             break
         elif keypress > 0:
-#            if character == 'c':
-#                for f in fpgas:
-#                    f.reset_counters()
+            # if character == 'c':
+            #     for f in fpgas:
+            #         f.reset_counters()
             scroller.draw_screen()
         if time.time() > last_refresh + polltime:
             scroller.clear_buffer()
-            scroller.add_line('Polling %i host%s every %s - %is elapsed.' %
-                              (len(fpgas), '' if len(fpgas) == 1 else 's',
-                               'second' if polltime == 1 else ('%i seconds' % polltime),
-                               time.time() - STARTTIME), 0, 0, absolute=True)
+            scroller.add_line(
+                'Polling %i host%s every %s - %is elapsed.' % (
+                    len(fpgas),
+                    '' if len(fpgas) == 1 else 's',
+                    'second' if polltime == 1 else ('%i seconds' % polltime),
+                    time.time() - STARTTIME), 0, 0, absolute=True)
             start_pos = 20
             pos_increment = 15
             if len(fpga_headers) == 1:
                 scroller.add_line('Host', 0, 1, absolute=True)
                 for reg in fpga_headers[0]:
-                    scroller.add_line(reg.rjust(pos_increment), start_pos, 1, absolute=True)
+                    scroller.add_line(
+                        reg.rjust(pos_increment), start_pos, 1, absolute=True)
                     start_pos += pos_increment
                 scroller.set_ypos(newpos=2)
                 scroller.set_ylimits(ymin=2)
@@ -173,23 +185,32 @@ try:
                 fpga_data = gbe_data[fpga.host]
                 scroller.add_line(fpga.host)
                 for core, core_data in fpga_data.items():
-                    fpga_data[core]['tap_running'] =\
-                        {'data': {'reg': False if tap_data[fpga.host][core]['name'] == '' else True}}
-                    fpga_data[core]['ip'] = {'data': {'reg': tap_data[fpga.host][core]['ip']}}
+                    fpga_data[core]['tap_running'] = {
+                        'data': {
+                            'reg': not(tap_data[fpga.host][core]['name'] == '')
+                        }
+                    }
+                    fpga_data[core]['ip'] = {
+                        'data': {
+                            'reg': tap_data[fpga.host][core]['ip']
+                        }
+                    }
                     start_pos = 20
                     scroller.add_line(core, 5)
                     for header_register in fpga_headers[0]:
-                        core_register_name = header_register.replace('gbe', core)
+                        core_regname = header_register.replace('gbe', core)
                         if start_pos < 200:
-                            if core_register_name in core_data.keys():
-                                if not isinstance(core_data[core_register_name]['data']['reg'], str):
-                                    regval = '%d' % core_data[core_register_name]['data']['reg']
+                            if core_regname in core_data.keys():
+                                if not isinstance(core_data[core_regname]['data']['reg'], str):
+                                    regval = '%d' % core_data[core_regname]['data']['reg']
                                 else:
-                                    regval = core_data[core_register_name]['data']['reg']
+                                    regval = core_data[core_regname]['data']['reg']
                             else:
                                 regval = 'n/a'
                             # all on the same line
-                            scroller.add_line(regval.rjust(pos_increment), start_pos, scroller.get_current_line() - 1)
+                            scroller.add_line(regval.rjust(pos_increment),
+                                              start_pos,
+                                              scroller.get_current_line() - 1)
                             start_pos += pos_increment
             scroller.draw_screen()
             last_refresh = time.time()

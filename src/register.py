@@ -10,18 +10,21 @@ class Register(Memory):
     """
     A CASPER register on an FPGA.
     """
-    def __init__(self, parent, name, address, device_info=None, auto_update=False):
+    def __init__(self, parent, name, address, device_info=None,
+                 auto_update=False):
         self.auto_update = auto_update
         self.parent = parent
         self.last_values = {}
-        Memory.__init__(self, name=name, width_bits=32, address=address, length_bytes=4)
+        Memory.__init__(self, name=name, width_bits=32,
+                        address=address, length_bytes=4)
         self.process_info(device_info)
         LOGGER.debug('New Register %s' % self)
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
         """
-        Process device info and the memory map to get all necessary info and return a Register instance.
+        Process device info and the memory map to get all necessary info and
+        return a Register instance.
         :param device_name: the unique device name
         :param device_info: information about this device
         :param memorymap_dict: a dictionary containing the device memory map
@@ -36,8 +39,10 @@ class Register(Memory):
         if address == -1 or length_bytes == -1:
             LOGGER.error(memorymap_dict)
             print memorymap_dict
-            raise RuntimeError('Could not find address or length for Register %s' % device_name)
-        return cls(parent, device_name, address=address, device_info=device_info)
+            raise RuntimeError('Could not find address or length for '
+                               'Register %s' % device_name)
+        return cls(parent, device_name, address=address,
+                   device_info=device_info)
 
     def info(self):
         """
@@ -86,7 +91,8 @@ class Register(Memory):
         """
         Write an unsigned integer to this device using the fpga client.
         """
-        self.parent.write_int(device_name=self.name, integer=uintvalue, blindwrite=blindwrite, word_offset=word_offset)
+        self.parent.write_int(device_name=self.name, integer=uintvalue,
+                              blindwrite=blindwrite, word_offset=word_offset)
 
     def _write_common(self, **kwargs):
         """
@@ -101,8 +107,8 @@ class Register(Memory):
         new_values = {_field: None for _field in self.field_names()}
         for k in kwargs:
             if k not in new_values:
-                raise ValueError('Field {} not found in register {} on '
-                                 'host {}'.format(k, self.name, self.parent.host))
+                raise ValueError('Field {} not found in register {} on host '
+                                 '{}'.format(k, self.name, self.parent.host))
             if kwargs[k] in ['pulse', 'toggle']:
                 _read_necessary = True
             new_values[k] = kwargs[k]
@@ -130,8 +136,8 @@ class Register(Memory):
         # pack the values into a 32-bit integer
         fixed_int = 0
         for _f in self._fields.values():
-            _intval = fp2fixed_int(
-                new_values[_f.name], _f.width_bits, _f.binary_pt, _f.numtype == 1)
+            _intval = fp2fixed_int(new_values[_f.name], _f.width_bits,
+                                   _f.binary_pt, _f.numtype == 1)
             fixed_int |= (_intval << _f.offset)
         return fixed_int, pulse
 
@@ -164,7 +170,8 @@ class Register(Memory):
             return
         self.block_info = info
         self.fields_clear()
-        if 'mode' in self.block_info.keys():
+        # current and current-but-one have names field
+        if 'names' in self.block_info.keys():
             self._process_info_current()
         elif 'numios' in self.block_info.keys():
             # aborted tabbed one
@@ -174,7 +181,8 @@ class Register(Memory):
             LOGGER.error('Old registers are deprecated!')
             self.field_add(bitfield.Field('reg', 0, 32, 0, 0))
         else:
-            LOGGER.error('That is a seriously old register - please swap it out!')
+            LOGGER.error('That is a seriously old register - please swap it '
+                         'out!')
             LOGGER.error(self)
             LOGGER.error(self.block_info)
             self.field_add(bitfield.Field('reg', 0, 32, 0, 0))
@@ -182,61 +190,41 @@ class Register(Memory):
 
     def _process_info_current(self):
         # current one
-        def clean_fields(fstr):
-            _fstr = fstr.replace('[', '').replace(']', '').strip().replace(', ', ',').replace('  ', ' ')
-            if (_fstr.find(' ') > -1) and (_fstr.find(',') > -1):
-                LOGGER.error(
-                    'Parameter string %s contains spaces and commas as delimiters. '
-                    'This is confusing.' % fstr)
-            if _fstr.find(' ') > -1:
-                _flist = _fstr.split(' ')
-            else:
-                _flist = _fstr.split(',')
-            _rv = []
-            for _fname in _flist:
-                if _fname.strip() == '':
-                    LOGGER.DEBUG('Throwing away empty field in register %s' % self.name)
-                else:
-                    _rv.append(_fname)
-            return _rv
+        clean_fields = bitfield.clean_fields
         # a single value may have been used for width, type or binary point
-        field_names = clean_fields(self.block_info['names'])
-        field_widths = clean_fields(self.block_info['bitwidths'])
-        field_types = clean_fields(self.block_info['arith_types'])
-        field_bin_pts = clean_fields(self.block_info['bin_pts'])
-        field_names.reverse()
-        field_widths.reverse()
-        field_types.reverse()
-        field_bin_pts.reverse()
-        # convert the number-based fields to integers
-        for avar in [field_widths, field_bin_pts, field_types]:
-            for index, value in enumerate(avar):
+        fields = {'names': clean_fields(self.name, 'register',
+                                        self.block_info['names']),
+                  'widths': clean_fields(self.name, 'register',
+                                         self.block_info['bitwidths']),
+                  'types': clean_fields(self.name, 'register',
+                                        self.block_info['arith_types']),
+                  'bps': clean_fields(self.name, 'register',
+                                      self.block_info['bin_pts'])}
+        fields['names'].reverse()
+        fields['widths'].reverse()
+        fields['types'].reverse()
+        fields['bps'].reverse()
+        len_names = len(fields['names'])
+        for fld in ['widths', 'types', 'bps']:
+            # convert the number-based fields to integers
+            for n, val in enumerate(fields[fld]):
                 try:
-                    intvalue = int(value)
+                    intvalue = int(val)
                 except ValueError:
-                    intvalue = eval(value)
-                avar[index] = intvalue
-        num_fields = len(field_names)
-        if self.block_info['mode'] == 'fields of equal size':
-            for avar in [field_widths, field_bin_pts, field_types]:
-                if len(avar) != 1:
-                    raise RuntimeError('register %s has equal size fields set, field parameters != 1?', self.name)
-                avar[:] = num_fields * avar
-        elif self.block_info['mode'] == 'fields of arbitrary size':
-            if num_fields == 1:
-                if (len(field_widths) != 1) or (len(field_types) != 1) or (len(field_bin_pts) != 1):
-                    raise RuntimeError('register %s has equal size fields set, unequal field parameters?', self.name)
-            else:
-                for avar in [field_widths, field_bin_pts, field_types]:
-                    len_avar = len(avar)
-                    if len_avar != num_fields:
-                        if len_avar == 1:
-                            avar[:] = num_fields * avar
-                        else:
-                            raise RuntimeError('register %s: number of fields is %s, given %s', self.name, num_fields,
-                                               len_avar)
-        for ctr, name in enumerate(field_names):
-            field = bitfield.Field(name, field_types[ctr], field_widths[ctr], field_bin_pts[ctr], -1)
+                    intvalue = eval(val)
+                fields[fld][n] = intvalue
+            # accommodate new snapshots where the fields may have length one
+            len_fld = len(fields[fld])
+            if len_fld != len_names:
+                if len_fld != 1:
+                    raise RuntimeError('%i names, but %i %s?' % (
+                        len_names, len_fld, fld))
+                fields[fld] = [fields[fld][0]] * len_names
+        # construct the fields and add them to this BitField
+        for ctr, name in enumerate(fields['names']):
+            field = bitfield.Field(name, fields['types'][ctr],
+                                   fields['widths'][ctr],
+                                   fields['bps'][ctr], -1)
             self.field_add(field, auto_offset=True)
 
     def _process_info_tabbed(self):

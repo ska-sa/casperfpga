@@ -3,6 +3,33 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 
+def clean_fields(parent_name, parent_type, field_str):
+    """
+    Take the Simulink string for a field and return a list
+    :param parent_name: the BitField that will run this
+    :param parent_type: register, snapshot, etc
+    :param field_str: the string to be parsed
+    :return:
+    """
+    _fstr = field_str.replace('[', '').replace(']', '')
+    _fstr = _fstr.strip().replace(', ', ',').replace('  ', ' ')
+    if (_fstr.find(' ') > -1) and (_fstr.find(',') > -1):
+        LOGGER.error('Parameter string %s contains spaces and commas '
+                     'as delimiters. This is confusing.' % field_str)
+    if _fstr.find(' ') > -1:
+        _flist = _fstr.split(' ')
+    else:
+        _flist = _fstr.split(',')
+    _rv = []
+    for _fname in _flist:
+        if _fname.strip() == '':
+            LOGGER.DEBUG('Throwing away empty field in %s %s' % (
+                parent_type, parent_name))
+        else:
+            _rv.append(_fname)
+    return _rv
+
+
 class Bitfield(object):
     """
     Describes a chunk of memory that consists of a number of Fields.
@@ -13,7 +40,8 @@ class Bitfield(object):
         self._fields = {}
         if fields is not None:
             self.fields_add(fields)
-        LOGGER.debug('New Bitfield(%s) with %i fields' % (self.name, len(self._fields)))
+        LOGGER.debug('New Bitfield(%s) with %i fields' % (self.name,
+                                                          len(self._fields)))
 
     # def __dir__(self):
     #     return self._fields.keys()

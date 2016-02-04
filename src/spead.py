@@ -5,9 +5,10 @@ import logging
 
 LOGGER = logging.getLogger(__name__)
 
+
 class SpeadPacket(object):
     """
-    A Spead Packet. Headers and data.
+    A Spead packet. Headers and data.
     """
 
     class SpeadPacketError(Exception):
@@ -88,6 +89,9 @@ class SpeadPacket(object):
         return hdr_id, hdr_data
 
     def __init__(self, headers=None, data=None):
+        """
+        Create a new SpeadPacket object
+        """
         self.headers = headers if headers is not None else {}
         self.data = data if data is not None else []
 
@@ -188,10 +192,21 @@ class SpeadProcessor(object):
         """
         Create SpeadPacket objects from a list of data packets.
         """
+        if len(data_packets) == 0:
+            return
         for pkt in data_packets:
-            spead_pkt = SpeadPacket.from_data(pkt, self.version, self.flavour,
+            try:
+                pkt_data = pkt['data']
+                pkt_ip = pkt['ip']
+            except TypeError:
+                pkt_data = pkt
+                pkt_ip = None
+            spead_pkt = SpeadPacket.from_data(pkt_data,
+                                              self.version, self.flavour,
                                               self.expected_num_headers,
                                               self.expected_packet_length)
+            if pkt_ip is not None:
+                spead_pkt.ip = pkt_ip
             self.packets.append(spead_pkt)
 
 # def process_spead_word(current_spead_info, data, pkt_counter):
