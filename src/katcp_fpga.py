@@ -286,7 +286,6 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                          supported by the device. e.g. fpg, bof, bin
         :return:
         """
-        # TODO - The logic here is for broken TCPBORPHSERVER - needs to be fixed.
         if 'program_filename' in self.system_info.keys():
             if filename is None:
                 filename = self.system_info['program_filename']
@@ -295,7 +294,6 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                              'programming filename %s' %
                              (self.host, filename,
                               self.system_info['program_filename']))
-                # This doesn't seem as though it should really be an error...
         if filename is None:
             LOGGER.error('%s: cannot program with no filename given. '
                          'Exiting.' % self.host)

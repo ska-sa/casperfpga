@@ -52,7 +52,11 @@ def parse_fpg(filename):
             done = True
         elif line.startswith('?meta'):
             line = line.replace('\_', ' ').replace('?meta ', '').replace('\n', '').lstrip().rstrip()
-            name, tag, param, value = line.split('\t')
+            try:
+                name, tag, param, value = line.split('\t')
+            except ValueError:
+                name, tag, param, value, value2 = line.split(' ')
+                # I'm only slightly concerned with this approac in that in line 54, \_ was replaced with space.
             name = name.replace('/', '_')
             metalist.append((name, tag, param, value))
         elif line.startswith('?register'):
