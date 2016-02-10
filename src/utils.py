@@ -40,28 +40,38 @@ def parse_fpg(filename):
         firstline = fptr.readline().strip().rstrip('\n')
         if firstline != '#!/bin/kcpfpg':
             fptr.close()
-            raise RuntimeError('%s does not look like an fpg file we can parse.' % filename)
+            raise RuntimeError('%s does not look like an fpg file we can '
+                               'parse.' % filename)
     else:
         raise IOError('No such file %s' % filename)
     memorydict = {}
     metalist = []
-    done = False
-    while not done:
+    while True:
         line = fptr.readline().strip().rstrip('\n')
         if line.lstrip().rstrip() == '?quit':
-            done = True
+            break
         elif line.startswith('?meta'):
-            line = line.replace('\_', ' ').replace('?meta ', '').replace('\n', '').lstrip().rstrip()
+            # some versions of mlib_devel may mistakenly have put spaces
+            # as delimiters where tabs should have been used. Rectify that
+            # here.
+            line = line.replace(' ', '\t')
+            LOGGER.warn('An old version of mlib_devel generated %s. Please'
+                        'update.' % filename)
+            # and carry on as usual.
+            line = line.replace('\_', ' ').replace('?meta ', '')
+            line = line.replace('\n', '').lstrip().rstrip()
             name, tag, param, value = line.split('\t')
             name = name.replace('/', '_')
             metalist.append((name, tag, param, value))
         elif line.startswith('?register'):
-            register = line.replace('\_', ' ').replace('?register ', '').replace('\n', '').lstrip().rstrip()
+            register = line.replace('\_', ' ').replace('?register ', '')
+            register = register.replace('\n', '').lstrip().rstrip()
             name, address, size_bytes = register.split(' ')
             address = int(address, 16)
             size_bytes = int(size_bytes, 16)
             if name in memorydict.keys():
-                raise RuntimeError('%s: mem device %s already in dictionary' % (filename, name))
+                raise RuntimeError('%s: mem device %s already in '
+                                   'dictionary' % (filename, name))
             memorydict[name] = {'address': address, 'bytes': size_bytes}
     fptr.close()
     return create_meta_dictionary(metalist), memorydict
