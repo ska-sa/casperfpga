@@ -63,7 +63,7 @@ def parse_fpg(filename):
             lineSplit = line.split('\t')
             name = lineSplit[0]
             tag = lineSplit[1]
-            param = linesplit[2]
+            param = lineSplit[2]
             value = lineSplit[3:][0] if len(lineSplit[3:]) == 1 else ' '.join(lineSplit[3:])
             #name, tag, param, value = line.split('\t')
             name = name.replace('/', '_')
