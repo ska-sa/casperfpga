@@ -346,7 +346,7 @@ class TenGbe(Memory):
                 else:
                     LOGGER.warn('%s: %s not implemented' % (self.name, key))
         else:
-            LOGGER.error('%s: missing registers in Gbe block %s' % self.name)
+            LOGGER.error('%s: missing registers in gbe block' % self.name)
             return False
         LOGGER.info('%s: tx_okay() - TRUE.' % self.name)
         return True
@@ -517,6 +517,7 @@ class TenGbe(Memory):
                                'from tap device' % (self.name, IpAddress.str2ip(ip_str)))
 
     def _fabric_enable_disable(self, target_val):
+        # 0x20 or (0x20 / 4)? What was the /4 for?
         word_bytes = list(struct.unpack('>4B', self.parent.read(self.name, 4, 0x20)))
         if word_bytes[1] == target_val:
             return
