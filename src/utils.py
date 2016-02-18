@@ -55,12 +55,17 @@ def parse_fpg(filename):
             # as delimiters where tabs should have been used. Rectify that
             # here.
             line = line.replace(' ', '\t')
-            LOGGER.warn('An old version of mlib_devel generated %s. Please'
+            LOGGER.warn('An old version of mlib_devel generated %s. Please '
                         'update.' % filename)
             # and carry on as usual.
-            line = line.replace('\_', ' ').replace('?meta ', '')
+            line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
-            name, tag, param, value = line.split('\t')
+            lineSplit = line.split('\t')
+            name = lineSplit[0]
+            tag = lineSplit[1]
+            param = lineSplit[2]
+            value = lineSplit[3:][0] if len(lineSplit[3:]) == 1 else ' '.join(lineSplit[3:])
+            #name, tag, param, value = line.split('\t')
             name = name.replace('/', '_')
             metalist.append((name, tag, param, value))
         elif line.startswith('?register'):
