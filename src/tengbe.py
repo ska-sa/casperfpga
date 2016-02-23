@@ -174,6 +174,7 @@ class TenGbe(Memory):
         super(TenGbe, self).__init__(name=name, width_bits=32, address=address,
                                      length_bytes=length_bytes)
         self.parent = parent
+        self.fullname = self.parent.host + ':' + self.name
         self.block_info = device_info
         if device_info is not None:
             fabric_ip = device_info['fab_ip']
@@ -193,7 +194,7 @@ class TenGbe(Memory):
             ip_address = device_info['fab_ip']
             port = device_info['fab_udp']
         if mac is None or ip_address is None or port is None:
-            raise ValueError('10Gbe interface \'%s\' must have mac, ip and port.' % self.name)
+            raise ValueError('%s: 10Gbe interface must have mac, ip and port.' % self.fullname)
         self.setup(mac, ip_address, port)
         self.core_details = None
         self.snaps = {'tx': None, 'rx': None}
@@ -248,7 +249,7 @@ class TenGbe(Memory):
                 else:
                     if not (name.find('txs_') == 0 or name.find('rxs_') == 0):
                         LOGGER.warn('%s: odd register name %s under tengbe '
-                                    'block' % (self.name, register.name))
+                                    'block' % (self.fullname, register.name))
         self.snaps = {'tx': None, 'rx': None}
         for snapshot in self.parent.snapshots:
             if snapshot.name.find(self.name + '_') == 0:
@@ -259,7 +260,7 @@ class TenGbe(Memory):
                     self.snaps['rx'] = snapshot.name
                 else:
                     errmsg = '%s: incorrect snap %s under tengbe ' \
-                             'block' % (self.name, snapshot.name)
+                             'block' % (self.fullname, snapshot.name)
                     LOGGER.error(errmsg)
                     raise RuntimeError(errmsg)
 
@@ -306,50 +307,53 @@ class TenGbe(Memory):
         i.e. _txctr incrementing and _txerrctr not incrementing
         :return: True/False
         """
-        result0 = self.read_tx_counters()
-        time.sleep(wait_time)
-        result1 = self.read_tx_counters()
-        optional = [self.name+'_txfullctr', self.name+'_txofctr', self.name+'_txvldctr']
-        non_optional = [self.name+'_txerrctr', self.name+'_txctr']
-        if all(x in result0.keys() for x in non_optional):
-            key = self.name+'_txerrctr'
-            if result0[key]['data']['reg'] == result1[key]['data']['reg']:
-                LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
-            else:
-                LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
+        TOTAL_TRIES = 2
+
+        def _runtest():
+            result0 = self.read_tx_counters()
+            # does the required tx counter exist?
+            if self.name+'_txctr' not in result0.keys():
+                LOGGER.error('%s: missing registers in gbe block' % 
+                             self.fullname)
                 return False
+            time.sleep(wait_time)
+            result1 = self.read_tx_counters()
+            # check that the tx counter is ticking over
             key = self.name+'_txctr'
-            if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
-                LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
-            else:
-                LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
+            if (result0[key]['data']['reg'] == result1[key]['data']['reg']):
+                LOGGER.error('%s: %s ok - FALSE' % (self.fullname, key))
                 return False
+            else:
+                LOGGER.debug('%s: %s ok - TRUE' % (self.fullname, key))
+            optional = [self.name+'_txfullctr', self.name+'_txofctr',
+                        self.name+'_txvldctr', self.name+'_txerrctr']
             for key in optional:
-                if key == self.name+'_txfullctr' and key in result0.keys():
-                    if result0[key]['data']['reg'] == result1[key]['data']['reg']:
-                        LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
+                if key not in result0.keys():
+                    LOGGER.debug('%s: %s not implemented' % (self.fullname, key))
+                    continue
+                res0 = result0[key]['data']['reg']
+                res1 = result1[key]['data']['reg']
+                key_suffix = key.replace(self.name, '')
+                if key_suffix in ['_txerrctr', '_txfullctr', '_txofctr']:
+                    if res0 == res1:
+                        LOGGER.debug('%s: %s ok - TRUE' % (self.fullname, key))
                     else:
-                        LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
+                        LOGGER.error('%s: %s ok - FALSE' % (self.fullname, key))
                         return False
-                elif key == self.name+'_txofctr' and key in result0.keys():
-                    if result0[key]['data']['reg'] == result1[key]['data']['reg']:
-                        LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
+                elif key_suffix == '_txvldctr':
+                    if res0 != res1:
+                        LOGGER.debug('%s: %s ok - TRUE' % (self.fullname, key))
                     else:
-                        LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
+                        LOGGER.error('%s: %s ok - FALSE' % (self.fullname, key))
                         return False
-                elif key == self.name+'_txvldctr' and key in result0.keys():
-                    if (result0[key]['data']['reg'] - result1[key]['data']['reg']) > 0:
-                        LOGGER.debug('%s: %s ok - TRUE' % (self.name, key))
-                    else:
-                        LOGGER.error('%s: %s ok - FALSE' % (self.name, key))
-                        return False
-                else:
-                    LOGGER.warn('%s: %s not implemented' % (self.name, key))
-        else:
-            LOGGER.error('%s: missing registers in gbe block' % self.name)
-            return False
-        LOGGER.info('%s: tx_okay() - TRUE.' % self.name)
-        return True
+            LOGGER.info('%s: tx_okay() - TRUE.' % self.fullname)
+            return True
+        for tries in range(TOTAL_TRIES):
+            if _runtest():
+                return True
+        LOGGER.error('%s: tx_okay() - FALSE.' % self.fullname)
+        return False
+
 
     #def read_raw(self,  **kwargs):
     #    # size is in bytes
@@ -409,18 +413,19 @@ class TenGbe(Memory):
         """
         if len(self.name) > 8:
             raise NameError('%s: tap device identifier must be shorter than 9 '
-                            'characters..' % self.name)
+                            'characters..' % self.fullname)
         if restart:
             self.tap_stop()
         if self.tap_running():
-            LOGGER.info('%s: tap already running.' % self.name)
+            LOGGER.info('%s: tap already running.' % self.fullname)
             return
-        LOGGER.info('%s: starting tap driver.' % self.name)
+        LOGGER.info('%s: starting tap driver.' % self.fullname)
         reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=-1, require_ok=True,
                                             request_args=(self.name, self.name, str(self.ip_address),
                                                           str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('%s: failure starting tap driver.' % self.name)
+            raise RuntimeError('%s: failure starting tap driver.' %
+                               self.fullname)
 
     def tap_stop(self):
         """Stop a TAP driver.
@@ -428,11 +433,11 @@ class TenGbe(Memory):
         """
         if not self.tap_running():
             return
-        LOGGER.info('%s: stopping tap driver.' % self.name)
+        LOGGER.info('%s: stopping tap driver.' % self.fullname)
         reply, _ = self.parent.katcprequest(name="tap-stop", request_timeout=-1, require_ok=True,
                                             request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('%s: failure stopping tap device.' % self.name)
+            raise RuntimeError('%s: failure stopping tap device.' % self.fullname)
 
     def tap_info(self):
         """Get info on the tap instance running on this interface.
@@ -453,7 +458,8 @@ class TenGbe(Memory):
         elif len(informs) == 0:
             return {'name': '', 'ip': ''}
         else:
-            raise RuntimeError('%s: invalid return from tap-info?' % self.name)
+            raise RuntimeError('%s: invalid return from tap-info?' %
+                               self.fullname)
         # TODO - this request should return okay if the tap isn't running - it shouldn't fail
         # if reply.arguments[0] != 'ok':
         #     log_runtime_error(LOGGER, "Failure getting tap info for device %s." % str(self))
@@ -496,7 +502,8 @@ class TenGbe(Memory):
             return
         else:
             raise RuntimeError("%s: failed adding multicast receive %s to "
-                               "tap device." % (self.name, mcast_group_string))
+                               "tap device." % (self.fullname,
+                                                mcast_group_string))
 
     def multicast_remove(self, ip_str):
         """Send a request to be removed from a multicast group.
@@ -509,12 +516,14 @@ class TenGbe(Memory):
                                                               IpAddress.str2ip(ip_str), ))
         except:
             raise RuntimeError("%s: tap-multicast-remove does not seem to "
-                               "be supported on %s" % (self.name, self.parent.host))
+                               "be supported on %s" % (self.fullname,
+                                                       self.parent.host))
         if reply.arguments[0] == 'ok':
             return
         else:
             raise RuntimeError('%s: failed removing multicast address %s '
-                               'from tap device' % (self.name, IpAddress.str2ip(ip_str)))
+                               'from tap device' % (self.fullname,
+                                                    IpAddress.str2ip(ip_str)))
 
     def _fabric_enable_disable(self, target_val):
         # 0x20 or (0x20 / 4)? What was the /4 for?
@@ -688,7 +697,7 @@ class TenGbe(Memory):
         if refresh or (self.core_details is None):
             self.get_10gbe_core_details(arp, cpu)
         print '------------------------'
-        print '%s configuration:' % self.name
+        print '%s configuration:' % self.fullname
         print 'MAC: ',
         for mac in self.core_details['mac']:
             print '%02X' % mac,
