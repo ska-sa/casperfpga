@@ -250,9 +250,9 @@ class CasperFpga(object):
         try:
             data = struct.pack('>i' if integer < 0 else '>I', integer)
         except Exception as ve:
-            LOGGER.error('Writing integer %i failed with error %s' % (
+            LOGGER.error('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
-            raise ValueError('Writing integer %i failed with error %s' % (
+            raise ValueError('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
         if blindwrite:
             self.blindwrite(device_name, data, word_offset*4)

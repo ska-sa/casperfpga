@@ -74,7 +74,6 @@ class Register(Memory):
         :param kwargs:
         :return:
         """
-
         rawdata = self.parent.read(device_name=self.name, size=4, offset=0*4)
         return rawdata, time.time()
 
@@ -139,6 +138,23 @@ class Register(Memory):
             _intval = fp2fixed_int(new_values[_f.name], _f.width_bits,
                                    _f.binary_pt, _f.numtype == 1)
             fixed_int |= (_intval << _f.offset)
+
+        # double-check the integer value is not too large
+        if fixed_int > (2**32)-1:
+            LOGGER.error('%s: problem writing to register %s:' %
+                         (self.parent.host, self.name))
+            for _f in self._fields.values():
+                _intval = fp2fixed_int(new_values[_f.name], _f.width_bits,
+                                       _f.binary_pt, _f.numtype == 1)
+                LOGGER.error('%s:%s:%s:%i(%sfix%i.%i) = %.8e -> %i' % (
+                    self.parent.host, self.name, _f.name, _f.offset,
+                    'u' if _f.numtype != 1 else '',
+                    _f.width_bits, _f.binary_pt,
+                    new_values[_f.name], _intval
+                ))
+            LOGGER.error('%s:%s - gave int value of %i' %
+                         (self.parent.host, self.name, fixed_int))
+
         return fixed_int, pulse
 
     def blindwrite(self, **kwargs):
