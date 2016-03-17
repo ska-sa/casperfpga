@@ -8,13 +8,20 @@ import skarab_definitions as sd
 
 from casperfpga import CasperFpga
 
-LOGGER = logging.getLOGGER(__name__)
+#LOGGER = logging.getLogger(__name__)
+# logger
+
+LOGGER = logging.getLogger(__name__)
+log_level = logging.DEBUG
+logging.basicConfig(level=log_level, format='%(asctime)s %(name)s %(levelname)s: %(message)s',
+                    datefmt='%d/%m/%Y %I:%M:%S %p'
+                    )
 
 
 class SkarabFpga(CasperFpga):
 
     # create dictionary of skarabdefs module
-    skarabdefs_dict = vars(sd)
+    sd_dict = vars(sd)
 
     def __init__(self, host, port=0x7778, timeout=2.0):
         """
@@ -42,9 +49,9 @@ class SkarabFpga(CasperFpga):
 
         # check if connected to host
         if self.is_connected():
-            LOGGER.info('%s: port(%s) created%s.' % (self.host, port,' & connected'))
+            LOGGER.info('%s: port(%s) created%s.' % (self.skarab_ip_address, port, ' & connected'))
         else:
-            LOGGER.info('Error connecting to %s: port%s' %(self.host, port))
+            LOGGER.info('Error connecting to %s: port%s' %(self.skarab_ip_address, port))
             
     def is_connected(self):
         """
@@ -52,7 +59,7 @@ class SkarabFpga(CasperFpga):
         Tries to read a register
         :return: True or False
         """
-        major, minor = self.get_firmware_version
+        major, minor = self.get_firmware_version()
         return '{}.{}'.format(major, minor)
 
     def read(self, device_name, size, offset=0):
@@ -758,7 +765,7 @@ class SkarabFpga(CasperFpga):
 
             image_chunk = f.read(8192)
             ack = self.sdram_program(first_packet_in_image, last_packet_in_image, image_chunk)
-            if ack == 'ok':
+            if ack:
                 sent_pkt_counter += 1
             else:
                 LOGGER.error("Uploading to SDRAM Failed")
