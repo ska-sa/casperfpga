@@ -438,7 +438,7 @@ class SkarabFpga(CasperFpga):
     def read_wishbone(self, wb_address):
         """
         Used to perform low level wishbone read from a Wishbone slave.
-        :param wb: address of the wishbone slave to read from
+        :param wb_address: address of the wishbone slave to read from
         :return: Read Data or None
         """
 
