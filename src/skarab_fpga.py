@@ -8,7 +8,7 @@ import skarab_definitions as sd
 
 from casperfpga import CasperFpga
 
-#LOGGER = logging.getLogger(__name__)
+# LOGGER = logging.getLogger(__name__)
 # logger
 
 LOGGER = logging.getLogger(__name__)
@@ -379,6 +379,47 @@ class SkarabFpga(CasperFpga):
             return self.data_unpack_and_merge(read_reg_resp.RegDataHigh, read_reg_resp.RegDataLow)
         else:
             return None
+
+    def write_dsp_reg(self, reg_address, data, expect_response=True):
+        """
+        Write to a dsp register
+        :param reg_address: address of register to write to
+        :param data: data to write
+        :param expect_response: does this write command require a response? (only false for reset and shutdown commands)
+        :return: response object - object created from the response payload (attributes = payload components)
+        """
+        # create identifier for response type expected
+        response_type = 'sWriteRegResp'
+
+        # create payload packet structure with data
+        write_reg_req = sd.sWriteRegReq(sd.WRITE_REG, self.sequenceNumber, sd.DSP_REG, reg_address, *self.data_split_and_pack(data))
+
+        # create payload
+        payload = write_reg_req.createPayload()
+
+        # send payload via UDP pkt and return response object (if no response expected should return ok)
+        return self.send_packet(self.skarabControlSocket, self.skarabEthernetControlPort, payload, response_type, expect_response, sd.WRITE_REG, self.sequenceNumber, 11, 5)
+
+    def read_dsp_reg(self, reg_address):
+        """
+        Read from a specified dsp register
+        :param reg_address: address of register to read
+        :return: data read from register
+        """
+        # create identifier for response type expected
+        response_type = 'sReadRegResp'
+        expect_response = True
+
+        read_reg_req = sd.sReadRegReq(sd.READ_REG, self.sequenceNumber, sd.DSP_REG, reg_address)
+
+        payload = read_reg_req.createPayload()
+
+        read_reg_resp = self.send_packet(self.skarabControlSocket, self.skarabEthernetControlPort, payload, response_type, expect_response, sd.READ_REG, self.sequenceNumber, 11, 5)
+
+        if read_reg_resp is not None:
+            return self.data_unpack_and_merge(read_reg_resp.RegDataHigh, read_reg_resp.RegDataLow)
+        else:
+            return 0
 
     def get_embedded_software_ver(self):
         # TODO: debug response received from SKARAB: found that response is 22 bytes instead of 24 as per FUM
@@ -864,6 +905,7 @@ class SkarabFpga(CasperFpga):
         f_in.close()
         f_out.close()
         return out_file_name
+
     @staticmethod
     def convert_bit_to_bin(self, bit_file):
         #TODO: depending on fpg file, might use this to go from bit to bin
@@ -874,7 +916,7 @@ class SkarabFpga(CasperFpga):
 
         out_file_name = os.path.splitext(bit_file)[0] + '_from_bit.bin'
 
-        # header identifer
+        # header identifier
         header_end = '\xff' * 32  # header identifer
 
         f_in = open(bit_file, 'rb')  # read from
@@ -892,10 +934,12 @@ class SkarabFpga(CasperFpga):
         # .bit file already contains packed data: ABCD is a 2-byte hex value (size of this value is 2-bytes)
         # .bin file requires this packing of data, but has a different bit ordering within each nibble
         # i.e. given 1122 in .bit, require 8844 in .bin
-        # this equates to reversing the bits in each nibble of each byte in the file
+        # i.e. given 09DC in .bit, require B039 in .bin
+        # this equates to reversing the bits in each byte in the file
+
         temp = ''
         for i in range(len(data)):
-            temp += packer(int('{:08b}'.format(unpacker(data[i])[0])[::-1], 2))  # reverse bits of nibbles in each byte
+            temp += packer(int('{:08b}'.format(unpacker(data[i])[0])[::-1], 2))  # reverse bits each byte
 
         f_out.write(temp)
 
