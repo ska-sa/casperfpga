@@ -88,7 +88,7 @@ class SkarabFpga(CasperFpga):
 
         # can only read 32-bits (4 bytes) at a time
         # work out how many reads we require
-        num_reads = int(math.ceil(size/4))
+        num_reads = int(math.ceil(size/4.0))
 
         # string to store binary data read
         data = ''
