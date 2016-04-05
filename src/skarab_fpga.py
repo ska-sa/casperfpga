@@ -9,6 +9,9 @@ import skarab_definitions as sd
 
 from casperfpga import CasperFpga
 
+__author__ = 'tyronevb'
+__date__ = 'April 2016'
+
 # LOGGER = logging.getLogger(__name__)
 # logger
 
@@ -25,7 +28,7 @@ class SkarabFpga(CasperFpga):
     # create dictionary of skarab_definitions module
     sd_dict = vars(sd)
 
-    def __init__(self, host, port=0x7778, timeout=2.0):
+    def __init__(self, host):
         """
         Initialized SKARAB FPGA object
         :param host: IP Address of the targeted SKARAB Board
@@ -59,11 +62,14 @@ class SkarabFpga(CasperFpga):
 
         # check if connected to host
         if self.is_connected():
-            LOGGER.info('%s: port(%s) created%s.' % (self.skarab_ip_address,
-                                                     port, ' & connected'))
+            LOGGER.info('%s: port(%s) created%s.' %
+                        (self.skarab_ip_address,
+                         sd.ETHERNET_CONTROL_PORT_ADDRESS,
+                         ' & connected'))
         else:
             LOGGER.info('Error connecting to %s: port%s' %
-                        (self.skarab_ip_address, port))
+                        (self.skarab_ip_address,
+                         sd.ETHERNET_CONTROL_PORT_ADDRESS))
             
     def is_connected(self):
         """
@@ -163,13 +169,13 @@ class SkarabFpga(CasperFpga):
 
         # send write request
         _ = self.send_packet(skarab_socket=self.skarabControlSocket,
-                               port=self.skarabEthernetControlPort,
-                               payload=payload,
-                               response_type='sWriteWishboneResp',
-                               expect_response=True,
-                               command_id=sd.WRITE_WISHBONE,
-                               seq_num=self.sequenceNumber, number_of_words=11,
-                               pad_bytes=5)
+                             port=self.skarabEthernetControlPort,
+                             payload=payload,
+                             response_type='sWriteWishboneResp',
+                             expect_response=True,
+                             command_id=sd.WRITE_WISHBONE,
+                             seq_num=self.sequenceNumber, number_of_words=11,
+                             pad_bytes=5)
 
     def deprogram(self):
         """
@@ -221,9 +227,9 @@ class SkarabFpga(CasperFpga):
             - dataHigh: most significant 2 bytes of data
             - dataLow: least significant 2 bytes of data
 
-        While splitting the data, packs the data into a binary string for network transmission
+        Also packs the data into a binary string for network transmission
         :param data: 32 bit data to be split
-        :return: dataHigh, dataLow (packed into binary string for network transmission
+        :return: dataHigh, dataLow (packed into binary data string)
         """
         packer = struct.Struct("!I")
         packed_data = packer.pack(data)
@@ -247,9 +253,11 @@ class SkarabFpga(CasperFpga):
         data_high = packer.pack(data_high)
         data_low = packer.pack(data_low)
 
-        data = data_high + data_low  # merge the data (as a packed string of bytes)
-    
-        unpacker = struct.Struct("!I")  # unpacker for the 32-bit string of bytes
+        # merge the data (as a packed string of bytes)
+        data = data_high + data_low
+
+        # unpacker for the 32-bit string of bytes
+        unpacker = struct.Struct("!I")
         data = unpacker.unpack(data)
 
         return data[0]  # return the unpacked data (native Python type)
@@ -685,7 +693,11 @@ class SkarabFpga(CasperFpga):
         else:
             return False
 
-    def sdram_reconfigure(self, output_mode, clear_sdram, finished_writing, about_to_boot, do_reboot, reset_sdram_read_addr, clear_eth_stats, enable_debug, do_sdram_async_read, do_continuity_test, continuity_test_out_low, continuity_test_out_high):
+    def sdram_reconfigure(self, output_mode, clear_sdram, finished_writing,
+                          about_to_boot, do_reboot, reset_sdram_read_addr,
+                          clear_eth_stats, enable_debug, do_sdram_async_read,
+                          do_continuity_test, continuity_test_out_low,
+                          continuity_test_out_high):
         #TODO: docstring
         """
         Used to perform various tasks realting to programming of the boot SDRAM and config
@@ -736,7 +748,8 @@ class SkarabFpga(CasperFpga):
 
         return firmware_major_version, firmware_minor_version
 
-    def front_panel_status_leds(self, led_0_on, led_1_on, led_2_on, led_3_on, led_4_on, led_5_on, led_6_on, led_7_on):
+    def front_panel_status_leds(self, led_0_on, led_1_on, led_2_on, led_3_on,
+                                led_4_on, led_5_on, led_6_on, led_7_on):
         """
         Control front panel status LEDs
         :param led_0_on: True: Turn LED 0 on, False: off
