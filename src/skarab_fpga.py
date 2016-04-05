@@ -1,4 +1,5 @@
 import socket
+import math
 import select
 import logging
 import struct
@@ -13,14 +14,15 @@ from casperfpga import CasperFpga
 
 LOGGER = logging.getLogger(__name__)
 log_level = logging.DEBUG
-logging.basicConfig(level=log_level, format='%(asctime)s %(name)s %(levelname)s: %(message)s',
+logging.basicConfig(level=log_level,
+                    format='%(asctime)s %(name)s %(levelname)s: %(message)s',
                     datefmt='%d/%m/%Y %I:%M:%S %p'
                     )
 
 
 class SkarabFpga(CasperFpga):
 
-    # create dictionary of skarabdefs module
+    # create dictionary of skarab_definitions module
     sd_dict = vars(sd)
 
     def __init__(self, host, port=0x7778, timeout=2.0):
@@ -29,29 +31,39 @@ class SkarabFpga(CasperFpga):
         :param host: IP Address of the targeted SKARAB Board
         :return: none
         """
+
+        CasperFpga.__init__(self, host)
+
         self.skarab_ip_address = host
+
         # sequence number for control packets
-        self.sequenceNumber = 1
+        self.sequenceNumber = 0
 
         # initialize UDP socket for ethernet control packets
-        self.skarabControlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.skarabControlSocket = socket.socket(socket.AF_INET,
+                                                 socket.SOCK_DGRAM)
         self.skarabControlSocket.setblocking(0)  # prevent socket from blocking
 
         # create tuple for ethernet control packet address
-        self.skarabEthernetControlPort = (self.skarab_ip_address, sd.ETHERNET_CONTROL_PORT_ADDRESS)
+        self.skarabEthernetControlPort = (self.skarab_ip_address,
+                                          sd.ETHERNET_CONTROL_PORT_ADDRESS)
 
         # initialize UDP socket for fabric packets
-        self.skarabFabricSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.skarabFabricSocket = socket.socket(socket.AF_INET,
+                                                socket.SOCK_DGRAM)
         self.skarabControlSocket.setblocking(0)
 
         # create tuple for fabric packet address
-        self.skarabFabricPort = (self.skarab_ip_address, sd.ETHERNET_FABRIC_PORT_ADDRESS)
+        self.skarabFabricPort = (self.skarab_ip_address,
+                                 sd.ETHERNET_FABRIC_PORT_ADDRESS)
 
         # check if connected to host
         if self.is_connected():
-            LOGGER.info('%s: port(%s) created%s.' % (self.skarab_ip_address, port, ' & connected'))
+            LOGGER.info('%s: port(%s) created%s.' % (self.skarab_ip_address,
+                                                     port, ' & connected'))
         else:
-            LOGGER.info('Error connecting to %s: port%s' %(self.skarab_ip_address, port))
+            LOGGER.info('Error connecting to %s: port%s' %
+                        (self.skarab_ip_address, port))
             
     def is_connected(self):
         """
@@ -60,7 +72,10 @@ class SkarabFpga(CasperFpga):
         :return: True or False
         """
         major, minor = self.get_firmware_version()
-        return '{}.{}'.format(major, minor)
+        if not major and not minor:
+            return False
+        else:
+            return '{}.{}'.format(major, minor)
 
     def read(self, device_name, size, offset=0):
         """
@@ -70,7 +85,51 @@ class SkarabFpga(CasperFpga):
         :param offset: start at this offset
         :return: binary data string
         """
-        raise NotImplementedError
+
+        # can only read 32-bits (4 bytes) at a time
+        # work out how many reads we require
+        num_reads = int(math.ceil(size/4))
+
+        # string to store binary data read
+        data = ''
+
+        for i in range(num_reads):
+
+            # get correct address and pack into binary format
+            # TODO: sort out memory mapping of device_name
+            addr = device_name + offset
+            addr_high, addr_low = self.data_split_and_pack(addr)
+
+            # create payload packet structure for read request
+            request = sd.sReadWishboneReq(sd.READ_WISHBONE,
+                                          self.sequenceNumber,
+                                          addr_high, addr_low)
+
+            # create payload
+            payload = request.createPayload()
+
+            # send read request
+            resp = self.send_packet(skarab_socket=self.skarabControlSocket,
+                                    port=self.skarabEthernetControlPort,
+                                    payload=payload,
+                                    response_type='sReadWishboneResp',
+                                    expect_response=True,
+                                    command_id=sd.READ_WISHBONE,
+                                    seq_num=self.sequenceNumber,
+                                    number_of_words=11, pad_bytes=5)
+
+            # merge high and low binary data for the current read
+            new_read = struct.pack('!H', resp.ReadDataHigh) + \
+                struct.pack('!H', resp.ReadDataLow)
+
+            # append current read to read data
+            data += new_read
+
+            # increment offset by 4 to read the next 4 bytes (next 32-bit reg)
+            offset += 4
+
+        # return the number of bytes requested
+        return data[:size]
 
     def blindwrite(self, device_name, data, offset=0):
         """
@@ -80,7 +139,37 @@ class SkarabFpga(CasperFpga):
         :param offset: the offset, in bytes, at which to write
         :return: <nothing>
         """
-        raise NotImplementedError
+
+        assert(type(data) == str), 'Must supply binary packed string data'
+        assert(len(data) % 4 == 0), 'Must write 32-bit-bounded words'
+        assert(offset % 4 == 0), 'Must write 32-bit-bounded words'
+
+        # split the data into two 16-bit words
+        data_high = data[:2]
+        data_low = data[2:]
+
+        # get correct address and pack into binary format
+        # TODO: sort out memory mapping of device_name
+        addr = device_name + offset
+        addr_high, addr_low = self.data_split_and_pack(addr)
+
+        # create payload packet structure for write request
+        request = sd.sWriteWishboneReq(sd.WRITE_WISHBONE,
+                                       self.sequenceNumber, addr_high,
+                                       addr_low, data_high, data_low)
+
+        # create payload
+        payload = request.createPayload()
+
+        # send write request
+        _ = self.send_packet(skarab_socket=self.skarabControlSocket,
+                               port=self.skarabEthernetControlPort,
+                               payload=payload,
+                               response_type='sWriteWishboneResp',
+                               expect_response=True,
+                               command_id=sd.WRITE_WISHBONE,
+                               seq_num=self.sequenceNumber, number_of_words=11,
+                               pad_bytes=5)
 
     def deprogram(self):
         """
@@ -249,7 +338,7 @@ class SkarabFpga(CasperFpga):
                     # send packet
                     skarab_socket.sendto(payload, port)
                     if seq_num == 0xFFFF:
-                        self.sequenceNumber = 1
+                        self.sequenceNumber = 0
                     else:
                         self.sequenceNumber += 1
                     return 'ok'
@@ -422,7 +511,6 @@ class SkarabFpga(CasperFpga):
             return 0
 
     def get_embedded_software_ver(self):
-        # TODO: debug response received from SKARAB: found that response is 22 bytes instead of 24 as per FUM
         """
         Read the version of the microcontroller embedded software
         :return: embedded software version
