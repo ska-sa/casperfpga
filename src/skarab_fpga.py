@@ -6,21 +6,13 @@ import struct
 import time
 import os
 import skarab_definitions as sd
-
 from casperfpga import CasperFpga
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
 
-# LOGGER = logging.getLogger(__name__)
-# logger
-
 LOGGER = logging.getLogger(__name__)
-log_level = logging.DEBUG
-logging.basicConfig(level=log_level,
-                    format='%(asctime)s %(name)s %(levelname)s: %(message)s',
-                    datefmt='%d/%m/%Y %I:%M:%S %p'
-                    )
+LOGGER.setLevel(logging.DEBUG)
 
 
 class SkarabFpga(CasperFpga):
@@ -99,11 +91,12 @@ class SkarabFpga(CasperFpga):
         # string to store binary data read
         data = ''
 
+        # address to read is starting address plus offset
+        addr = device_name + offset
         for i in range(num_reads):
 
             # get correct address and pack into binary format
             # TODO: sort out memory mapping of device_name
-            addr = device_name + offset
             addr_high, addr_low = self.data_split_and_pack(addr)
 
             # create payload packet structure for read request
@@ -131,11 +124,69 @@ class SkarabFpga(CasperFpga):
             # append current read to read data
             data += new_read
 
-            # increment offset by 4 to read the next 4 bytes (next 32-bit reg)
-            offset += 4
+            # increment addr by 4 to read the next 4 bytes (next 32-bit reg)
+            addr += 4
 
         # return the number of bytes requested
         return data[:size]
+
+    def read_byte_level(self, device_name, size, offset=0):
+        """
+        Byte_level read. Sorts out reads overlapping registers, and
+        reading specific bytes.
+        Return size_bytes of binary data with carriage-return escape-sequenced.
+        :param device_name: name of memory device from which to read
+        :param size: how many bytes to read
+        :param offset: start at this offset
+        :return: binary data string
+        """
+
+        # can only read 32-bits (4 bytes) at a time
+        # work out how many reads we require, each read req reads a 32-bit reg
+        # need to determine how many registers need to be read
+        num_reads = int(math.ceil((offset+size)/4.0))
+
+        # string to store binary data read
+        data = ''
+
+        # address to read is starting address plus offset
+        addr = device_name + offset
+        for i in range(num_reads):
+
+            # get correct address and pack into binary format
+            # TODO: sort out memory mapping of device_name
+            addr_high, addr_low = self.data_split_and_pack(addr)
+
+            # create payload packet structure for read request
+            request = sd.sReadWishboneReq(sd.READ_WISHBONE,
+                                          self.sequenceNumber,
+                                          addr_high, addr_low)
+
+            # create payload
+            payload = request.createPayload()
+
+            # send read request
+            resp = self.send_packet(skarab_socket=self.skarabControlSocket,
+                                    port=self.skarabEthernetControlPort,
+                                    payload=payload,
+                                    response_type='sReadWishboneResp',
+                                    expect_response=True,
+                                    command_id=sd.READ_WISHBONE,
+                                    seq_num=self.sequenceNumber,
+                                    number_of_words=11, pad_bytes=5)
+
+            # merge high and low binary data for the current read
+            new_read = struct.pack('!H', resp.ReadDataHigh) + \
+                struct.pack('!H', resp.ReadDataLow)
+
+            # append current read to read data
+            data += new_read
+
+            # increment addr by 4 to read the next 4 bytes (next 32-bit reg)
+            addr += 4
+
+        # return the number of bytes requested
+        return data[offset:offset+size]
 
     def blindwrite(self, device_name, data, offset=0):
         """
