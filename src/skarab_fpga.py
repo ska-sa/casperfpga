@@ -231,9 +231,9 @@ class SkarabFpga(CasperFpga):
     def deprogram(self):
         """
         Deprogram the FPGA.
-        :return:
+        :return: nothing
         """
-        raise NotImplementedError
+        _ = self.reset_fpga()
 
     def is_running(self):
         """
@@ -270,6 +270,149 @@ class SkarabFpga(CasperFpga):
         :return:
         """
         raise NotImplementedError
+
+    def boot_from_sdram(self):
+        """
+        Triggers a reboot of the Virtex7 FPGA and boot from SDRAM.
+        :return: nothing
+        """
+        # trigger reboot
+        if self.complete_sdram_configuration():
+            LOGGER.info("Booting from SDRAM . . .")
+
+            # wait for DHCP
+            time.sleep(1)  # TODO: feasible wait time?
+
+        else:
+            LOGGER.error("Error triggering reboot")
+
+    def upload_to_sdram(self, filename):
+        # TODO: add option to verify programmed image
+        # TODO: add error checking and error handling with file
+        # TODO: modify to support .fpg files
+        """
+        Opens a bitfile from which to program FPGA. Reads bitfile
+        in chunks of 4096 16-bit words.
+
+        Pads last packet to a 4096 word boundary.
+        Sends chunks of bitfile to fpga via sdram_program method
+        :param filename: file to upload
+        :return: True if no errors
+        """
+
+        # flag to enable/disable padding of data send over udp pkt
+        padding = True
+
+        file_extension = os.path.splitext(filename)[1]
+
+        # check file extension: if bin, use it; if hex/bit, convert to bin
+        if file_extension == '.hex':
+            image_to_program = self.convert_hex_to_bin(filename)
+        elif file_extension == '.bit':
+            image_to_program = self.convert_bit_to_bin(filename)
+        elif file_extension == '.bin':
+            image_to_program = filename
+        else:
+            raise TypeError("Invalid file type. \ "
+                            "Only use .bit, .hex or .bin files")
+
+        # prepare SDRAM for programming
+        if not self.prepare_sdram_ram_for_programming():
+            LOGGER.error("SDRAM PREPARATION FAILED. Aborting programming. . .")
+            return False
+
+        size = os.path.getsize(image_to_program)
+        f = open(image_to_program, 'rb')
+
+        # counter for num packets sent
+        sent_pkt_counter = 0
+
+        # check if the bin file requires padding
+        if size % 8192 == 0:
+            # no padding required
+            padding = False
+
+        # loop over chunks of 4096 words
+        for i in range(size/8192):
+
+            if i == 0:
+                # flag first packet
+                first_packet_in_image = 1
+                last_packet_in_image = 0
+            elif i == (size/8192 - 1) and not padding:
+                # flag last packet
+                last_packet_in_image = 1
+                first_packet_in_image = 0
+            else:
+                # clear first/last packet flags for other packets
+                first_packet_in_image = 0
+                last_packet_in_image = 0
+
+            # read 4096 words from bin file
+            image_chunk = f.read(8192).rstrip()
+            # upload chunk of bin file to sdram
+            ack = self.sdram_program(first_packet_in_image,
+                                     last_packet_in_image, image_chunk)
+            if ack:
+                sent_pkt_counter += 1
+            else:
+                LOGGER.error("Uploading to SDRAM Failed")
+                return False
+
+        # if the bin file provided requires padding to 4096 word boundary
+        if padding:
+            # get last packet
+            image_chunk = f.read().rstrip()
+            first_packet_in_image = 0
+            last_packet_in_image = 1  # flag last packet in stream
+
+            # pad last packet to 4096 word boundary with 0xFFFF
+            image_chunk += '\xff' * (8192-len(image_chunk))
+
+            ack = self.sdram_program(first_packet_in_image,
+                                     last_packet_in_image, image_chunk)
+            if ack:
+                sent_pkt_counter += 1
+            else:
+                LOGGER.error("Uploading to SDRAM Failed")
+                return False
+
+        # complete writing and trigger reset
+        # check if all bytes in bin file uploaded successfully before trigger
+        if sent_pkt_counter == (size/8192) \
+                or sent_pkt_counter == (size/8192 + 1):
+
+            # set finished writing to SDRAM
+            finished_writing = self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE,
+                                                      False, True, False,
+                                                      False, False, False,
+                                                      False, False, False,
+                                                      0x0, 0x0)
+
+            if finished_writing:
+                return True
+            else:
+                LOGGER.error("Error completing write transaction.")
+                return False
+        else:
+            LOGGER.error("Error uploading FPGA image to SDRAM")
+            return False
+
+    def upload_to_sdram_and_program(self, filename):
+        """
+        Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
+        from the new image.
+        :param filename: fpga image to upload (currently supports bin, bit
+        and hex files)
+        :return: True, if success
+        """
+        # upload to sdram
+        if self.upload_to_sdram(filename):
+            # boot from the newly programmed image
+            if self.boot_from_sdram():
+                return True
+
+        return False
     
     @staticmethod
     def data_split_and_pack(data):
@@ -464,9 +607,13 @@ class SkarabFpga(CasperFpga):
         :return: 'ok'
         """
         output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR, sd.ROACH3_FPGA_RESET, False)
+
         # reset seq num
-        self.sequenceNumber = 1
-        time.sleep(1)  # 1 second pause after reset command issues
+        self.sequenceNumber = 0
+
+        # sleep to allow DHCP configuration
+        time.sleep(1)
+
         return output
 
     def shutdown_skarab(self):
@@ -749,7 +896,7 @@ class SkarabFpga(CasperFpga):
                           clear_eth_stats, enable_debug, do_sdram_async_read,
                           do_continuity_test, continuity_test_out_low,
                           continuity_test_out_high):
-        #TODO: docstring
+
         """
         Used to perform various tasks realting to programming of the boot SDRAM and config
         of Virtex7 FPGA from boot SDRAM
@@ -887,135 +1034,9 @@ class SkarabFpga(CasperFpga):
             LOGGER.error("Error enabling boot from SDRAM.")
             return False
 
-    def boot_from_sdram(self):
-        """
-        Triggers a reboot of the Virtex7 FPGA and boot from SDRAM.
-        :return: True or False
-        """
-        # trigger reboot
-        if self.complete_sdram_configuration():
-            LOGGER.info("Boot from SDRAM complete!")
-            return True
-        else:
-            LOGGER.error("Error triggering reboot")
-            return False
-
-    def upload_to_sdram(self, filename):
-        #TODO: add option to verify programmed image
-        #TODO: add error checking and error handling with file
-        #TODO: modify to support .fpg files
-        """
-        Opens a bitfile from which to program FPGA. Reads bitfile in chunks of 4096 16-bit words.
-        Pads last packet to a 4096 word boundary.
-        Sends chunks of bitfile to fpga via sdram_program method
-        :param filename: file to upload
-        :return: True if no errors
-        """
-
-        padding = True  # flag to enable/disable padding of data send over udp pkt (depends on bin file)
-
-        file_extension = os.path.splitext(filename)[1]
-
-        # check file extension: if bin, use it; if hex, convert to bin
-        if file_extension == '.hex':
-            image_to_program = self.convert_hex_to_bin(filename)
-        elif file_extension == '.bit':
-            image_to_program = self.convert_bit_to_bin(filename)
-        elif file_extension == '.bin':
-            image_to_program = filename
-        else:
-            raise TypeError("Invalid file type. Only use .bit, .hex or .bin files")
-
-        # prepare SDRAM for programming
-        if not self.prepare_sdram_ram_for_programming():
-            LOGGER.error("SDRAM PREPARATION FAILED. Aborting programming. . .")
-            return 0
-
-        size = os.path.getsize(image_to_program)
-        f = open(image_to_program, 'rb')
-
-        sent_pkt_counter = 0
-
-        if size % 8192 == 0:
-            # no padding required
-            padding = False
-
-        # loop over chunks of 4096 words
-        for i in range(size/8192):
-
-            if i == 0:
-                # flag first packet
-                first_packet_in_image = 1
-                last_packet_in_image = 0
-            elif i == (size/8192 - 1) and not padding:
-                # flag last packet
-                last_packet_in_image = 1
-                first_packet_in_image = 0
-            else:
-                # clear first/last packet flags
-                first_packet_in_image = 0
-                last_packet_in_image = 0
-
-            image_chunk = f.read(8192)
-            ack = self.sdram_program(first_packet_in_image, last_packet_in_image, image_chunk)
-            if ack:
-                sent_pkt_counter += 1
-            else:
-                LOGGER.error("Uploading to SDRAM Failed")
-                return 0
-
-        # if the bin file provided requires padding to 4096 word boundary
-        if padding:
-            # get last packet
-            image_chunk = f.read()
-            first_packet_in_image = 0
-            last_packet_in_image = 1  # flag last packet in stream
-
-            # don't need this - converted bin file already padded
-            # pad last packet to 4096 word boundary with 0xFFFF
-            pad = 8192 - len(image_chunk)
-            image_chunk += '\xff' * (8192-len(image_chunk))
-
-            ack = self.sdram_program(first_packet_in_image, last_packet_in_image, image_chunk)
-            if ack:
-                sent_pkt_counter += 1
-            else:
-                LOGGER.error("Uploading to SDRAM Failed")
-                return False
-
-        # complete writing and trigger reset
-        # check if all bytes in bin file uploaded successfully before trigger
-        if sent_pkt_counter == (size/8192) or sent_pkt_counter == (size/8192 + 1):
-            # set finished writing to SDRAM
-            finished_writing = self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, True, False, False, False, False,
-                                          False, False, False, 0x0, 0x0)
-
-            if finished_writing:
-                return True
-            else:
-                LOGGER.error("Error completing write transaction.")
-                return False
-        else:
-            LOGGER.error("Error uploading FPGA image to SDRAM")
-            return False
-
-    def upload_to_sdram_and_program(self, filename):
-        """
-        Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
-        from the new image.
-        :param filename: fpga image to upload (currently supports bin, bit and hex files)
-        :return: True or False
-        """
-        # upload to sdram
-        if self.upload_to_sdram(filename):
-            if self.boot_from_sdram():
-                return True
-
-        return False
-
     # support functions
     @staticmethod
-    def convert_hex_to_bin(self, hex_file):
+    def convert_hex_to_bin(hex_file):
         #TODO: error checking/handling
         """
         Converts a hex file to a bin file with little endianness for programming to sdram, also pads
@@ -1059,7 +1080,7 @@ class SkarabFpga(CasperFpga):
         return out_file_name
 
     @staticmethod
-    def convert_bit_to_bin(self, bit_file):
+    def convert_bit_to_bin(bit_file):
         #TODO: depending on fpg file, might use this to go from bit to bin
         # apparently .fpg file uses the .bit file generated from implementation
         # this function will convert the .bit file portion extracted from the .fpg file and convert it
