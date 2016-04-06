@@ -12,7 +12,7 @@ __author__ = 'tyronevb'
 __date__ = 'April 2016'
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
+logging.basicConfig()
 
 
 class SkarabFpga(CasperFpga):
