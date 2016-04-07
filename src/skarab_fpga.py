@@ -290,6 +290,9 @@ class SkarabFpga(CasperFpga):
             if self.complete_sdram_configuration():
                 LOGGER.info("Booting from SDRAM . . .")
 
+                # clear sdram programmed flag
+                self.sdram_programmed = False
+
                 # wait for DHCP
                 time.sleep(1)  # TODO: feasible wait time?
 
@@ -361,7 +364,7 @@ class SkarabFpga(CasperFpga):
                 last_packet_in_image = 0
 
             # read 4096 words from bin file
-            image_chunk = f.read(8192).rstrip()
+            image_chunk = f.read(8192)
             # upload chunk of bin file to sdram
             ack = self.sdram_program(first_packet_in_image,
                                      last_packet_in_image, image_chunk)
@@ -374,7 +377,7 @@ class SkarabFpga(CasperFpga):
         # if the bin file provided requires padding to 4096 word boundary
         if padding:
             # get last packet
-            image_chunk = f.read().rstrip()
+            image_chunk = f.read()
             first_packet_in_image = 0
             last_packet_in_image = 1  # flag last packet in stream
 
