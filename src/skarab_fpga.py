@@ -52,6 +52,9 @@ class SkarabFpga(CasperFpga):
         self.skarabFabricPort = (self.skarab_ip_address,
                                  sd.ETHERNET_FABRIC_PORT_ADDRESS)
 
+        # flag for keeping track of SDRAM state
+        self.sdram_programmed = False
+
         # check if connected to host
         if self.is_connected():
             LOGGER.info('%s: port(%s) created%s.' %
@@ -115,7 +118,7 @@ class SkarabFpga(CasperFpga):
                                     expect_response=True,
                                     command_id=sd.READ_WISHBONE,
                                     seq_num=self.sequenceNumber,
-                                    number_of_words=11, pad_bytes=5)
+                                    number_of_words=11, pad_words=5)
 
             # merge high and low binary data for the current read
             new_read = struct.pack('!H', resp.ReadDataHigh) + \
@@ -128,7 +131,7 @@ class SkarabFpga(CasperFpga):
             addr += 4
 
         # return the number of bytes requested
-        return data[:size]
+        return data[offset: offset + size]
 
     def read_byte_level(self, device_name, size, offset=0):
         """
@@ -173,7 +176,7 @@ class SkarabFpga(CasperFpga):
                                     expect_response=True,
                                     command_id=sd.READ_WISHBONE,
                                     seq_num=self.sequenceNumber,
-                                    number_of_words=11, pad_bytes=5)
+                                    number_of_words=11, pad_words=5)
 
             # merge high and low binary data for the current read
             new_read = struct.pack('!H', resp.ReadDataHigh) + \
@@ -226,7 +229,7 @@ class SkarabFpga(CasperFpga):
                              expect_response=True,
                              command_id=sd.WRITE_WISHBONE,
                              seq_num=self.sequenceNumber, number_of_words=11,
-                             pad_bytes=5)
+                             pad_words=5)
 
     def deprogram(self):
         """
@@ -234,6 +237,11 @@ class SkarabFpga(CasperFpga):
         :return: nothing
         """
         _ = self.reset_fpga()
+        super(SkarabFpga, self).deprogram()  # call the parent method
+        LOGGER.info('%s: deprogrammed okay' % self.host)
+
+        # reset the sdram programmed flag
+        self.sdram_programmed = False
 
     def is_running(self):
         """
@@ -276,15 +284,19 @@ class SkarabFpga(CasperFpga):
         Triggers a reboot of the Virtex7 FPGA and boot from SDRAM.
         :return: nothing
         """
-        # trigger reboot
-        if self.complete_sdram_configuration():
-            LOGGER.info("Booting from SDRAM . . .")
+        # check if sdram was programmed prior
+        if self.sdram_programmed:
+            # trigger reboot
+            if self.complete_sdram_configuration():
+                LOGGER.info("Booting from SDRAM . . .")
 
-            # wait for DHCP
-            time.sleep(1)  # TODO: feasible wait time?
+                # wait for DHCP
+                time.sleep(1)  # TODO: feasible wait time?
 
+            else:
+                LOGGER.error("Error triggering reboot")
         else:
-            LOGGER.error("Error triggering reboot")
+            LOGGER.error("First program SDRAM!")
 
     def upload_to_sdram(self, filename):
         # TODO: add option to verify programmed image
@@ -297,7 +309,7 @@ class SkarabFpga(CasperFpga):
         Pads last packet to a 4096 word boundary.
         Sends chunks of bitfile to fpga via sdram_program method
         :param filename: file to upload
-        :return: True if no errors
+        :return: True if successful, else Nothing
         """
 
         # flag to enable/disable padding of data send over udp pkt
@@ -319,7 +331,7 @@ class SkarabFpga(CasperFpga):
         # prepare SDRAM for programming
         if not self.prepare_sdram_ram_for_programming():
             LOGGER.error("SDRAM PREPARATION FAILED. Aborting programming. . .")
-            return False
+            return
 
         size = os.path.getsize(image_to_program)
         f = open(image_to_program, 'rb')
@@ -357,7 +369,7 @@ class SkarabFpga(CasperFpga):
                 sent_pkt_counter += 1
             else:
                 LOGGER.error("Uploading to SDRAM Failed")
-                return False
+                return
 
         # if the bin file provided requires padding to 4096 word boundary
         if padding:
@@ -375,7 +387,7 @@ class SkarabFpga(CasperFpga):
                 sent_pkt_counter += 1
             else:
                 LOGGER.error("Uploading to SDRAM Failed")
-                return False
+                return
 
         # complete writing and trigger reset
         # check if all bytes in bin file uploaded successfully before trigger
@@ -390,13 +402,15 @@ class SkarabFpga(CasperFpga):
                                                       0x0, 0x0)
 
             if finished_writing:
+                # set sdram programmed flag
+                self.sdram_programmed = True
                 return True
             else:
                 LOGGER.error("Error completing write transaction.")
-                return False
+                return
         else:
             LOGGER.error("Error uploading FPGA image to SDRAM")
-            return False
+            return
 
     def upload_to_sdram_and_program(self, filename):
         """
@@ -412,7 +426,19 @@ class SkarabFpga(CasperFpga):
             if self.boot_from_sdram():
                 return True
 
-        return False
+        return
+
+    def clear_sdram(self):
+        """
+        Clears the last uploaded image from the SDRAM.
+        Clears sdram programmed flag.
+        :return: Nothing
+        """
+
+        # logic to clear sdram here
+
+        # clear sdram programmed flag
+        self.sdram_programmed = False
     
     @staticmethod
     def data_split_and_pack(data):
@@ -457,41 +483,15 @@ class SkarabFpga(CasperFpga):
         return data[0]  # return the unpacked data (native Python type)
 
     @staticmethod
-    def packet_header_packer(order, size, data_type, data):
-        """
-        Universal packer for packing control packet header data into a binary string for network transmission.
-        :param order: specify the Endianness of the data ('!' for network byte order)
-        :param size: number of dataType entities to pack
-        :param data_type: type of data to be packed ('H' for 16 bit words, 'I' for 32 bit words)
-        :param data: data to be packed
-        :return: packed data (binary string)
-        """
-        packer_opt = order + size + data_type
-        packer = struct.Struct(packer_opt)
-
-        return packer.pack(data)
-
-    @staticmethod
-    def packet_2byte_packer(data):
-        """
-        Packes 2 byte data as a binary string
-        :param data: data to be packed (2 byte data)
-        :return: packed data (binary string)
-        """
-        packer = struct.Struct("!H")
-        
-        return packer.pack(data)
-
-    @staticmethod
-    def unpack_payload(response_payload, response_type, number_of_words, pad_bytes):
-        #TODO: pad_bytes should be words?
+    def unpack_payload(response_payload, response_type, number_of_words,
+                       pad_words):
         """
         Unpacks the data received from the SKARAB in the response packet.
 
         :param response_payload: payload in received response packed
-        :param response_type: type of response - must match a response class in sd
+        :param response_type: type of response (from skarab_definitions)
         :param number_of_words: number of 16-bit words in the response payload
-        :param pad_bytes: number of padding bytes expected in response payload
+        :param pad_words: number of padding bytes expected in response payload
         :return: response object with populated data fields
         """
         
@@ -500,29 +500,33 @@ class SkarabFpga(CasperFpga):
         unpacker = struct.Struct(formatter)
         unpacked_data = unpacker.unpack(response_payload)
 
-        if pad_bytes:
-            padding = unpacked_data[-pad_bytes:]  # isolate padding bytes as a tuple
+        if pad_words:
+            # isolate padding bytes as a tuple
+            padding = unpacked_data[-pad_words:]
         
-            unpacked_data = list(unpacked_data[:-pad_bytes])
+            unpacked_data = list(unpacked_data[:-pad_words])
             unpacked_data.append(padding)
-            
-        return SkarabFpga.sd_dict[response_type](*unpacked_data)  # return response from skarab
+
+        # return response from skarab
+        return SkarabFpga.sd_dict[response_type](*unpacked_data)
         
-    def send_packet(self, skarab_socket, port, payload, response_type, expect_response, command_id, seq_num, number_of_words, pad_bytes):
+    def send_packet(self, skarab_socket, port, payload, response_type,
+                    expect_response, command_id, seq_num, number_of_words,
+                    pad_words):
         """
         Send payload via UDP packet to SKARAB
-        Sends request packets then waits for response packet (if a response pkt is expected)
+        Sends request packets then waits for response packet if expected
         Retransmits request packet (up to 3 times) if response not received
 
         :param skarab_socket: socket object to be used
         :param payload: the data to send to SKARAB
-        :param response_type: type of response expected [matches request packet sent]
-        :param expect_response: is a response expected [False for RESET and shutdown commands among others]
-        :param command_id: command_id of the request packet, used for error checking response packet
-        :param seq_num: sequence number of the request packet, used for error checking response packet
+        :param response_type: type of response expected
+        :param expect_response: is a response expected?
+        :param command_id: command_id of the request packet
+        :param seq_num: sequence number of the request packet
         :param number_of_words: number of 16-bit words expected in response
-        :param pad_bytes: number of padding bytes (as 16 bit words) expected in response
-        :return: if response expected: returns response object or 'None' if no response received. else returns 'ok'
+        :param pad_words: number of padding words (16-bit) expected in response
+        :return: response expected: returns response object or 'None' if no response received. else returns 'ok'
         """
 
         waiting_response = True
@@ -550,9 +554,11 @@ class SkarabFpga(CasperFpga):
 
                 LOGGER.info("Waiting for response . . .")
 
-                # wait for response (timeout if response takes too long to arrive)
-                data_ready = select.select([skarab_socket], [], [], sd.CONTROL_RESPONSE_TIMEOUT)
+                # wait for response until timeout
+                data_ready = select.select([skarab_socket], [], [],
+                                           sd.CONTROL_RESPONSE_TIMEOUT)
 
+                # if we got a response, process it
                 if data_ready[0]:
 
                     data = skarab_socket.recvfrom(4096)
@@ -562,7 +568,10 @@ class SkarabFpga(CasperFpga):
                     LOGGER.debug("Response = %s" % repr(response_payload))
                     LOGGER.debug("Response length = %d" % len(response_payload))
 
-                    response_payload = self.unpack_payload(response_payload, response_type, number_of_words, pad_bytes)
+                    response_payload = self.unpack_payload(response_payload,
+                                                           response_type,
+                                                           number_of_words,
+                                                           pad_words)
 
                     if response_payload.Header.CommandType != (command_id + 1):
                         LOGGER.error("Incorrect command ID in response")
@@ -585,8 +594,9 @@ class SkarabFpga(CasperFpga):
                     self.sequenceNumber = 1 
                 else:
                     self.sequenceNumber += 1
-                
-                return response_payload  # returns the response packet object (response object for the given request command)
+
+                # returns the response packet object
+                return response_payload
             
             except KeyboardInterrupt:
 
