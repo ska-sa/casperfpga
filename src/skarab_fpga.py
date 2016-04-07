@@ -989,7 +989,7 @@ class SkarabFpga(CasperFpga):
         if led_7_on:
             led_mask = led_mask | sd.FRONT_PANEL_STATUS_LED7
 
-        resp = self.write_board_reg(sd.C_WR_FRONT_PANEL_STAT_LED_ADDR, led_mask)
+        _ = self.write_board_reg(sd.C_WR_FRONT_PANEL_STAT_LED_ADDR, led_mask)
 
     def prepare_sdram_ram_for_programming(self):
         """
