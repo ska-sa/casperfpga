@@ -234,10 +234,13 @@ class SkarabFpga(CasperFpga):
     def deprogram(self):
         """
         Deprogram the FPGA.
+        This actually reboots & programs the Golden Image to the SKARAB
         :return: nothing
         """
         _ = self.reset_fpga()
-        super(SkarabFpga, self).deprogram()  # call the parent method
+
+        # call the parent method to reset device info
+        super(SkarabFpga, self).deprogram()
         LOGGER.info('%s: deprogrammed okay' % self.host)
 
         # reset the sdram programmed flag
