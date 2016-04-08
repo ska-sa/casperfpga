@@ -82,7 +82,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         if connect:
             self.connect()
         LOGGER.info('%s: port(%s) created%s.' %
-                    (self.host, port,' & connected' if connect else ''))
+                    (self.host, port, ' & connected' if connect else ''))
 
     def connect(self, timeout=None):
         """
@@ -118,6 +118,12 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         if not got_ping:
             raise RuntimeError('Could not connect to KATCP '
                                'server %s' % self.host)
+
+        # set a higher write buffer size than standard
+        if self._stream.max_write_buffer_size <= 262144:
+            self._stream.max_buffer_size *= 2
+            self._stream.max_write_buffer_size *= 2
+
         LOGGER.info('%s: connection established' % self.host)
 
     def disconnect(self):
