@@ -53,7 +53,7 @@ class SkarabFpga(CasperFpga):
                                  sd.ETHERNET_FABRIC_PORT_ADDRESS)
 
         # flag for keeping track of SDRAM state
-        self.sdram_programmed = False
+        self.__sdram_programmed = False
 
         # check if connected to host
         if self.is_connected():
@@ -285,13 +285,13 @@ class SkarabFpga(CasperFpga):
         :return: nothing
         """
         # check if sdram was programmed prior
-        if self.sdram_programmed:
+        if self.__sdram_programmed:
             # trigger reboot
             if self.complete_sdram_configuration():
                 LOGGER.info("Booting from SDRAM . . .")
 
                 # clear sdram programmed flag
-                self.sdram_programmed = False
+                self.__sdram_programmed = False
 
                 # wait for DHCP
                 time.sleep(1)  # TODO: feasible wait time?
@@ -299,7 +299,7 @@ class SkarabFpga(CasperFpga):
             else:
                 LOGGER.error("Error triggering reboot")
         else:
-            LOGGER.error("First program SDRAM!")
+            LOGGER.error("SDRAM Not Programmed!")
 
     def upload_to_sdram(self, filename):
         # TODO: add option to verify programmed image
@@ -406,7 +406,7 @@ class SkarabFpga(CasperFpga):
 
             if finished_writing:
                 # set sdram programmed flag
-                self.sdram_programmed = True
+                self.__sdram_programmed = True
                 return True
             else:
                 LOGGER.error("Error completing write transaction.")
@@ -444,7 +444,7 @@ class SkarabFpga(CasperFpga):
                                    False, False, False, 0x0, 0x0)
 
         # clear sdram programmed flag
-        self.sdram_programmed = False
+        self.__sdram_programmed = False
     
     @staticmethod
     def data_split_and_pack(data):
