@@ -438,7 +438,10 @@ class SkarabFpga(CasperFpga):
         :return: Nothing
         """
 
-        # logic to clear sdram here
+        # clear sdram
+        _ = self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, True, False,
+                                   False, False, False, True,
+                                   False, False, False, 0x0, 0x0)
 
         # clear sdram programmed flag
         self.sdram_programmed = False
