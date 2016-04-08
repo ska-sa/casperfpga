@@ -72,11 +72,11 @@ class SkarabFpga(CasperFpga):
         Tries to read a register
         :return: True or False
         """
-        major, minor = self.get_firmware_version()
-        if not major and not minor:
-            return False
+        data = self.read_board_reg(sd.C_RD_VERSION_ADDR)
+        if data:
+            return True
         else:
-            return '{}.{}'.format(major, minor)
+            return False
 
     def read(self, device_name, size, offset=0):
         """
@@ -241,7 +241,7 @@ class SkarabFpga(CasperFpga):
         LOGGER.info('%s: deprogrammed okay' % self.host)
 
         # reset the sdram programmed flag
-        self.sdram_programmed = False
+        self.__sdram_programmed = False
 
     def is_running(self):
         """
@@ -957,10 +957,14 @@ class SkarabFpga(CasperFpga):
 
         reg_data = self.read_board_reg(sd.C_RD_VERSION_ADDR)
 
-        firmware_major_version = (reg_data >> 16) & 0xFFFF
-        firmware_minor_version = reg_data & 0xFFFF
+        if reg_data:
+            firmware_major_version = (reg_data >> 16) & 0xFFFF
+            firmware_minor_version = reg_data & 0xFFFF
+            return '{}.{}'.format(firmware_major_version,
+                                  firmware_minor_version)
 
-        return firmware_major_version, firmware_minor_version
+        else:
+            return None
 
     def front_panel_status_leds(self, led_0_on, led_1_on, led_2_on, led_3_on,
                                 led_4_on, led_5_on, led_6_on, led_7_on):
