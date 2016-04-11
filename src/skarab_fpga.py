@@ -31,7 +31,7 @@ class SkarabFpga(CasperFpga):
         :return: none
         """
 
-        super(SkarabFpga, self).__init__(self, host)
+        super(SkarabFpga, self).__init__(host)
 
         self.skarab_ip_address = host
 
