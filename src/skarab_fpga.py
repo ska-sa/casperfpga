@@ -3,10 +3,14 @@ import math
 import select
 import logging
 import struct
+import threading
 import time
 import os
+import zlib
 import skarab_definitions as sd
+
 from casperfpga import CasperFpga
+from utils import parse_fpg
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
@@ -54,6 +58,10 @@ class SkarabFpga(CasperFpga):
 
         # flag for keeping track of SDRAM state
         self.__sdram_programmed = False
+
+        # dict for system info
+        self.system_info = {'last_uploaded': '',
+                            'last_programmed': ''}
 
         # check if connected to host
         if self.is_connected():
@@ -296,18 +304,24 @@ class SkarabFpga(CasperFpga):
                 # clear sdram programmed flag
                 self.__sdram_programmed = False
 
+                # get design information
+                super(SkarabFpga, self).get_system_information(
+                    filename=self.system_info['last_uploaded'])
+
+                # update system info
+                self.system_info['last_programmed'] = \
+                    self.system_info['last_programmed']
+                self.system_info['last_uploaded'] = ''
+
                 # wait for DHCP
                 time.sleep(1)  # TODO: feasible wait time?
-
             else:
                 LOGGER.error("Error triggering reboot")
         else:
             LOGGER.error("SDRAM Not Programmed!")
 
-    def upload_to_sdram(self, filename):
+    def upload_to_sdram(self, filename, verify=False):
         # TODO: add option to verify programmed image
-        # TODO: add error checking and error handling with file
-        # TODO: modify to support .fpg files
         """
         Opens a bitfile from which to program FPGA. Reads bitfile
         in chunks of 4096 16-bit words.
@@ -324,7 +338,10 @@ class SkarabFpga(CasperFpga):
         file_extension = os.path.splitext(filename)[1]
 
         # check file extension: if bin, use it; if hex/bit, convert to bin
-        if file_extension == '.hex':
+        if file_extension == '.fpg':
+            # get bin file from fpg file
+            image_to_program = self.extract_bitstream(filename)
+        elif file_extension == '.hex':
             image_to_program = self.convert_hex_to_bin(filename)
         elif file_extension == '.bit':
             image_to_program = self.convert_bit_to_bin(filename)
@@ -332,7 +349,7 @@ class SkarabFpga(CasperFpga):
             image_to_program = filename
         else:
             raise TypeError("Invalid file type. \ "
-                            "Only use .bit, .hex or .bin files")
+                            "Only use .fpg, .bit, .hex or .bin files")
 
         # prepare SDRAM for programming
         if not self.prepare_sdram_ram_for_programming():
@@ -410,6 +427,9 @@ class SkarabFpga(CasperFpga):
             if finished_writing:
                 # set sdram programmed flag
                 self.__sdram_programmed = True
+
+                # set last uploaded parameter of system info
+                self.system_info['last_uploaded'] = filename
                 return True
             else:
                 LOGGER.error("Error completing write transaction.")
@@ -1142,3 +1162,41 @@ class SkarabFpga(CasperFpga):
         f_in.close()
         f_out.close()
         return out_file_name
+
+    @staticmethod
+    def extract_bitstream(filename):
+        """
+        Loads fpg file extracts bin file. Also checks if
+        the bin file is compressed and decompresses it.
+        :param filename: fpg file to load
+        :return: bin file name
+        """
+
+        # get design name
+        name = os.path.splitext(filename)[0]
+
+        fpg_file = open(filename, 'r')
+        fpg_contents = fpg_file.read()
+        fpg_file.close()
+
+        # scan for the end of the fpg header
+        end_of_header = fpg_contents.find('?quit')
+
+        assert(end_of_header != -1), 'Not a valid fpg file!'
+
+        bitstream_start = fpg_contents.find('?quit') + len('?quit') + 1
+
+        # exract the bitstream portion of the file
+        bitstream = fpg_contents[bitstream_start:]
+
+        # check if bitstream is compressed using magic number for gzip
+        if bitstream.startswith('\x1f\x8b\x08'):
+            # decompress
+            bitstream = zlib.decompress(bitstream, 16+zlib.MAX_WBITS)
+
+        # write to bin file
+        bin_file = open(name + '.bin', 'wb')
+        bin_file.write(bitstream)
+        bin_file.close()
+
+        return name + '.bin'
