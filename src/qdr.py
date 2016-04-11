@@ -390,7 +390,8 @@ class Qdr(Memory):
             except AssertionError:
                 in_delays = [0] * QDR_WORD_WIDTH
             except Exception as e:
-                raise RuntimeError('Unknown exception in qdr_cal - %s' % e.msg)
+                raise RuntimeError('Unknown exception in qdr_cal '
+                                   '- %s' % e.message)
             self.apply_cals(in_delays, out_delays=[out_step] * QDR_WORD_WIDTH,
                             clk_delay=out_step)
             cal = self.qdr_cal_check()
