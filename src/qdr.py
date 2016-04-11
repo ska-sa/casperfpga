@@ -12,8 +12,20 @@ import register
 from memory import Memory
 
 LOGGER = logging.getLogger(__name__)
+LOGGER.propagate = True
+
+USE_JACK_CAL = True
+
+LEVEL0 = logging.INFO
+LEVEL1 = LEVEL0 - 1
+LEVEL2 = LEVEL1 - 1
+LEVEL3 = LEVEL2 - 1
 
 QDR_WORD_WIDTH = 36
+QDR_WW_LIMITED = 32
+NUM_DELAY_TAPS = 32
+
+MINIMUM_WINDOW_LENGTH = 4
 
 CAL_DATA = [
     [0xAAAAAAAA, 0x55555555, 0xAAAAAAAA, 0x55555555,
@@ -32,9 +44,25 @@ CAL_DATA = [
 ]
 
 
+def logl0(msg):
+    logging.log(LEVEL0, msg)
+
+
+def logl1(msg):
+    logging.log(LEVEL1, msg)
+
+
+def logl2(msg):
+    logging.log(LEVEL2, msg)
+
+
+def logl3(msg):
+    logging.log(LEVEL3, msg)
+
+
 def find_cal_area(a):
     """
-
+    Given a vector of pass (1) and fail (-1), find contiguous chunks of 'pass'.
     :param a:
     :return:
     """
@@ -88,9 +116,10 @@ class Qdr(Memory):
         self.p_bwrite = self.parent.blindwrite
         self.p_read = self.parent.read
 
-        # set the 'verbosity' flag for the QDR
-        self.verbosity = 0
-        
+        # print 'QDR %s logger name(%s) id(%i) level(%i)' % (
+        #     self.name, LOGGER.name, id(LOGGER), LOGGER.level)
+        # print 'qdr logger handlers:', LOGGER.handlers
+
         LOGGER.debug('New Qdr %s' % self)
         # TODO - Link QDR ctrl register to self.registers properly
 
@@ -99,7 +128,7 @@ class Qdr(Memory):
         """
         Process device info and the memory map to get all necessary info and
         return a Qdr instance.
-        :param parent: 
+        :param parent:
         :param device_name: the unique device name
         :param device_info: information about this device
         :param memorymap_dict: a dictionary containing the device memory map
@@ -144,12 +173,35 @@ class Qdr(Memory):
     def _control_mem_write(self, value, offset):
         """
         Write to this QDR's control memory on the parent's mem bus
-        :param value: 
-        :param offset: 
-        :return: 
+        :param value:
+        :param offset:
+        :return:
         """
         self.p_write_int(self.control_mem, value,
                          blindwrite=True, word_offset=offset)
+
+    def _disable_fabric(self):
+        """
+        Disable the fabric write to the QDR.
+        :return:
+        """
+        self._control_mem_write(1, 2)
+
+    def _enable_fabric(self):
+        """
+        Enable the fabric write to the QDR.
+        :return:
+        """
+        self._control_mem_write(0, 2)
+
+    def _add_extra_latency(self, extra_lat):
+        """
+        If input argument is True, add an extra cycle of latency to QDR
+        input data. Useful for clock rates <~200.
+        If false, remove any extra latency already applied.
+        :param extra_lat:
+        """
+        self._control_mem_write(1 if extra_lat else 0, 9)
 
     def qdr_reset(self):
         """
@@ -157,23 +209,12 @@ class Qdr(Memory):
         """
         self._control_mem_write(1, 0)
         self._control_mem_write(0, 0)
+        # these two should just do nothing if support is not compiled into
+        # the running fpg
+        self._add_extra_latency(False)
+        self._enable_fabric()
 
-    def qdr_delay_out_step(self, bitmask, step):
-        """
-        Steps all bits in bitmask by 'step' number of taps.
-        :param bitmask:
-        :param step:
-        """
-        if step == 0:
-            return
-        self._control_mem_write(0 if step < 0 else 0xffffffff, 7)
-        for _ctr in range(abs(step)):
-            self._control_mem_write(0, 6)
-            self._control_mem_write(0, 5)
-            self._control_mem_write(0xffffffff & bitmask, 6)
-            self._control_mem_write((0xf & (bitmask >> 32)) << 4, 5)
-
-    def qdr_delay_clk_step(self, step):
+    def _qdr_delay_clk_step(self, step):
         """
         Steps the output clock by 'step' amount.
         :param step:
@@ -181,27 +222,52 @@ class Qdr(Memory):
         if step == 0:
             return
         self._control_mem_write(0 if step < 0 else 0xffffffff, 7)
+        logl1('Applying clock delay: {}'.format(step))
         for _ctr in range(abs(step)):
             self._control_mem_write(0, 5)
             self._control_mem_write(1 << 8, 5)
 
-    def qdr_delay_in_step(self, bitmask, step):
+    def _qdr_delay_inout_step(self, inout, bitmask, step):
+        """
+        Steps all bits in bitmask by 'step' number of taps.
+        :param bitmask:
+        :param step:
+        """
+        if step == 0:
+            return
+        self._control_mem_write(0 if step < 0 else 0xffffffff, 7)
+        if inout == 'in':
+            offset = 4
+            maskval = 0xf & (bitmask >> 32)
+        elif inout == 'out':
+            offset = 6
+            maskval = (0xf & (bitmask >> 32)) << 4
+        else:
+            raise ValueError('Unknown delay type: {}'.format(inout))
+        for _ctr in range(abs(step)):
+            self._control_mem_write(0, offset)
+            self._control_mem_write(0, 5)
+            self._control_mem_write(0xffffffff & bitmask, offset)
+            self._control_mem_write(maskval, 5)
+
+    def _qdr_delay_out_step(self, bitmask, step):
+        """
+        Steps all bits in bitmask by 'step' number of taps.
+        :param bitmask:
+        :param step:
+        """
+        self._qdr_delay_inout_step('out', bitmask, step)
+
+    def _qdr_delay_in_step(self, bitmask, step):
         """
         Steps all bits in bitmask by 'step' number of taps.
         :param bitmask:
         :param step:
         :return:
         """
-        if step == 0:
-            return
-        self._control_mem_write(0 if step < 0 else 0xffffffff, 7)
-        for _ctr in range(abs(step)):
-            self._control_mem_write(0, 4)
-            self._control_mem_write(0, 5)
-            self._control_mem_write(0xffffffff & bitmask, 4)
-            self._control_mem_write(0xf & (bitmask >> 32), 5)
+        self._qdr_delay_inout_step('in', bitmask, step)
 
-    def qdr_delay_clk_get(self):
+    def _qdr_delay_clk_get(self):
         """
         Gets the current value for the clk delay.
         :return:
@@ -212,9 +278,12 @@ class Qdr(Memory):
                                'Got back %i.' % raw)
         return raw & 0x1f
 
-    def qdr_cal_check(self):
+    def qdr_cal_check(self, step=-1, quickcheck=True):
         """
         Checks calibration on a qdr. Raises an exception if it failed.
+        :param step: the current step
+        :param quickcheck: if True, return after the first error, else process
+        all test vectors before returning
         :return:
         """
         patfail = 0
@@ -225,148 +294,134 @@ class Qdr(Memory):
             curr_val = self.p_read(self.memory, len(pattern)*4)
             curr_val = struct.unpack(data_format, curr_val)
             for word_n, word in enumerate(pattern):
-                patfail = patfail | (word ^ curr_val[word_n])
-                if self.verbosity > 2:
-                    print '{0:032b}'.format(word),
-                    print '{0:032b}'.format(curr_val[word_n]),
-                    print '{0:032b}'.format(patfail)
-        if patfail > 0:
-            # raise RuntimeError('Calibration of QDR%i failed: 0b%s.' % (
-            #     qdr, '{0:032b}'.format(patfail)))
-            return False
-        else:
-            return True
+                faildiff = word ^ curr_val[word_n]
+                # logl2('step({}) written({:032b}) read({:032b}) '
+                #       'faildiff({:032b})'.format(step, word,
+                #                                  curr_val[word_n], patfail))
+                if faildiff and quickcheck:
+                    return False, faildiff
+                patfail |= faildiff
+        return patfail == 0, patfail
 
-    def find_in_delays(self):
+    def _find_in_delays(self):
         """
-        :return: 
+        :return:
         """
-        n_steps = 32
-        n_bits = 32
-        fail = []
-        bit_cal = []
-        valid_steps = []
-        for ctr in range(n_bits):
-            bit_cal.append([])
-            valid_steps.append([])
-        for step in range(n_steps):
-            patfail = 0
-            for pattern in CAL_DATA:
-                data_format = '>%iL' % len(pattern)
-                self.p_bwrite(
-                    self.memory, struct.pack(data_format, *pattern))
-                curr_val = self.p_read(self.memory, len(pattern)*4)
-                curr_val = struct.unpack(data_format, curr_val)
-                for word_n, word in enumerate(pattern):
-                    patfail |= word ^ curr_val[word_n]
-                    if self.verbosity > 2:
-                        print '\t %4i %4i' % (step, word_n),
-                        print '{0:032b}'.format(word),
-                        print '{0:032b}'.format(curr_val[word_n]),
-                        print '{0:032b}'.format(patfail)
-            fail.append(patfail)
-            for bit in range(n_bits):
-                bitval = 1 - 2 * ((fail[step] & (1 << bit)) >> bit)
-                bit_cal[bit].append(bitval)
-                # if bit_cal[bit][step]==True:
-                #     valid_steps[bit].append(step)
-            if self.verbosity > 2:
-                print 'STEP input delays to %i!' % (step+1)
-            self.qdr_delay_in_step(0xfffffffff, 1)
+        per_step_fail = []
+        per_bit_cal = [[] for _ in range(QDR_WW_LIMITED)]
+        logl2('QDR({}) checking cal over {} steps'.format(
+            self.name, NUM_DELAY_TAPS))
+        for step in range(NUM_DELAY_TAPS):
+            # check this step
+            res, fail_pattern = self.qdr_cal_check(step, False)
+            per_step_fail.append(fail_pattern)
+            # check each bit of the failure pattern
+            for bit in range(QDR_WW_LIMITED):
+                masked_bit = (fail_pattern >> bit) & 0x01
+                bit_value = -1 if masked_bit else 1
+                per_bit_cal[bit].append(bit_value)
+            logl3('\tstep input delays to {}'.format(step+1))
+            self._qdr_delay_in_step(0xfffffffff, 1)
 
-        if self.verbosity > 0:
-            print 'Eye for QDR %s (0 is pass, 1 is fail):' % self.name
-            for step in range(n_steps):
-                print '\tTap step %2i: ' % step,
-                print '{0:032b}'.format(fail[step])
+        # print the failure patterns
+        logl2('Eye for QDR {:s} (0 is pass, 1 is fail):'.format(self.name))
+        for step, fail_pattern in enumerate(per_step_fail):
+            logl2('\tdelay_step {:2d}: {:032b}'.format(step, fail_pattern))
+        # print the per-bit eye diagrams
+        logl3('Per-bit cal:')
+        for bit, bit_eye in enumerate(per_bit_cal):
+            logl3('\tbit_{:d}: {}'.format(bit, bit_eye))
 
-        if self.verbosity > 3:
-            for bit in range(n_bits):
-                print 'Bit %2i: ' % bit,
-                print bit_cal[bit]
+        # # find indices where calibration passed and failed:
+        # for bit in range(n_bits):
+        #     try:
+        #         bit_cal[bit].index(1)
+        #     except ValueError:
+        #         raise RuntimeError('Calibration failed for bit %i.' % bit)
+        # logl0('valid_steps for bit {} {}'.format(bit, valid_steps[bit]))
 
-        # find indices where calibration passed and failed:
-        for bit in range(n_bits):
-            try:
-                bit_cal[bit].index(1)
-            except ValueError:
-                raise RuntimeError('Calibration failed for bit %i.' % bit)
-
-        # if (self.verbosity > 0):
-        #     print 'valid_steps for bit %i' % (bit), valid_steps[bit]
-
-        # find the largest contiguous cal area
-        cal_steps = numpy.zeros(n_bits + 4)
-        for bit in range(n_bits):
-            cal_area = find_cal_area(bit_cal[bit])
-            if cal_area[0] < 4:
+        cal = {
+            'steps': numpy.array([0] * (QDR_WW_LIMITED + 4)),
+            'area': numpy.array([0] * QDR_WW_LIMITED),
+            'start': numpy.array([0] * QDR_WW_LIMITED),
+            'stop': numpy.array([0] * QDR_WW_LIMITED)
+        }
+        # for each bit, calculate the area that is best calibrated
+        for bit, bit_eye in enumerate(per_bit_cal):
+            area, start, stop = find_cal_area(bit_eye)
+            if area < MINIMUM_WINDOW_LENGTH:
                 raise RuntimeError('Could not find a robust calibration '
                                    'setting for QDR %s' % self.name)
             # original was 1/2
             # running on /4 for some months, but seems to be giving errors
             # with hot roaches
-            cal_steps[bit] = sum(cal_area[1:3])/2
-            # cal_steps[bit] = sum(cal_area[1:3])/3
-            # cal_steps[bit] = sum(cal_area[1:3])/4
-            if self.verbosity > 1:
-                print 'Selected tap for bit %i: %i' % (bit, cal_steps[bit])
+            cal['start'][bit] = start
+            cal['stop'][bit] = stop
+            cal['steps'][bit] = (start + stop) // 2
+            # cal['steps'][bit] = (start + stop) // 3
+            # cal['steps'][bit] = (start + stop) // 4
 
         # since we don't have access to bits 32-36, we guess the number of
-        # taps required based on the other bits:
+        # taps required based on the lower 32 bits:
         # MEDIAN
-        median_taps = numpy.median(cal_steps)
-        if self.verbosity > 1:
-            print 'Median taps: %i' % median_taps
-        for bit in range(32, QDR_WORD_WIDTH):
-            cal_steps[bit] = median_taps
-            if self.verbosity > 1:
-                print 'Selected tap for bit %i: %i' % (bit, cal_steps[bit])
+        median_taps = numpy.median(cal['steps'])
+        logl1('Median taps: {}'.format(median_taps))
+        for bit in range(QDR_WW_LIMITED, QDR_WORD_WIDTH):
+            cal['steps'][bit] = median_taps
+
+        logl1('Selected per-bit delays: {}'.format(cal['steps']))
 
         # # MEAN
         # mean_taps = numpy.mean(cal_steps)
-        # if self.verbosity > 1:
-        #     print 'Mean taps: %i' % mean_taps
+        # logl1('Mean taps: {}'.format(mean_taps))
         # for bit in range(32, QDR_WORD_WIDTH):
         #     cal_steps[bit] = mean_taps
-        #     if self.verbosity > 1:
-        #         print 'Selected tap for bit %i: %i' % (bit, cal_steps[bit])
+        #     logl1('Selected tap for bit {}: {}'.format(
+        #         bit, cal_steps[bit]))
 
-        return cal_steps
+        return cal['steps'], cal['area'], cal['start'], cal['stop']
 
-    def apply_cals(self, in_delays, out_delays, clk_delay):
+    def _apply_calibration(self, in_delays, out_delays, clk_delay, extra_clk=0):
         """
 
         :param in_delays:
         :param out_delays:
         :param clk_delay:
+        :param extra_clk:
         :return:
         """
-        # reset all the taps to default (0)
-        self.qdr_reset()
         assert len(in_delays) == QDR_WORD_WIDTH
         assert len(out_delays) == QDR_WORD_WIDTH
 
-        self.qdr_delay_clk_step(clk_delay)
+        # reset all the taps to zero
+        self.qdr_reset()
 
-        for step in range(int(max(in_delays))):
-            mask = 0
-            for bit in range(len(in_delays)):
-                mask += (1 << bit if (step < in_delays[bit]) else 0)
-            if self.verbosity > 1:
-                print 'Step %i' % step,
-                print '{0:036b}'.format(mask)
-            self.qdr_delay_in_step(mask, 1)
+        if USE_JACK_CAL:
+            self._add_extra_latency(extra_clk)
 
-        for step in range(int(max(out_delays))):
-            mask = 0
-            for bit in range(len(out_delays)):
-                mask += (1 << bit if (step < out_delays[bit]) else 0)
-            if self.verbosity > 1:
-                print 'Step out %i' % step,
-                print '{0:036b}'.format(mask)
-            self.qdr_delay_out_step(mask, 1)
+        self._qdr_delay_clk_step(clk_delay)
+
+        for delays, delaypref in [(in_delays, 'in'), (out_delays, 'out')]:
+            _maxdelay = int(max(delays))
+            if _maxdelay == 0:
+                logl2('No {}put delays to apply'.format(delaypref))
+            else:
+                logl1('Applying {}put delays up to {}:'.format(
+                    delaypref, _maxdelay))
+            for step in range(_maxdelay):
+                mask = 0
+                for bit in range(len(delays)):
+                    mask += (1 << bit if (step < delays[bit]) else 0)
+                logl1('\tstep {} {} {:036b}'.format(delaypref, step, mask))
+                self._qdr_delay_inout_step(delaypref, mask, 1)
 
     def qdr_cal(self, fail_hard=True):
+        if not USE_JACK_CAL:
+            return self._qdr_cal_ours(fail_hard)
+        else:
+            return self._qdr_cal_jacks(fail_hard)
+
+    def _qdr_cal_ours(self, fail_hard=True):
         """
         Calibrates a QDR controller, stepping input delays and (if that fails)
         output delays. Returns True if calibrated, raises a runtime
@@ -375,32 +430,143 @@ class Qdr(Memory):
         :return:
         """
         cal = False
+        failure_pattern = 0xffffffff
         out_step = 0
-        while (not cal) and (out_step < 32):
+        while (not cal) and (out_step < NUM_DELAY_TAPS - 1):
             # reset all the in delays to zero, and the out delays to
             # this iteration.
             in_delays = [0] * QDR_WORD_WIDTH
-            self.apply_cals(in_delays, out_delays=[out_step] * QDR_WORD_WIDTH,
-                            clk_delay=out_step)
-            if self.verbosity > 0:
-                print '--- === Trying with OUT DELAYS to %i === ---' % out_step,
-                print 'was: %i' % self.qdr_delay_clk_get()
+            _out_delays = [out_step] * QDR_WORD_WIDTH
+            _current_step = self._qdr_delay_clk_get()
+            logl1('Output delay: current({}) set_to({})'.format(
+                _current_step, out_step))
+            self._apply_calibration(in_delays=in_delays,
+                                    out_delays=_out_delays,
+                                    clk_delay=out_step)
             try:
-                in_delays = self.find_in_delays()
+                in_delays, area, start, stop = self._find_in_delays()
             except AssertionError:
                 in_delays = [0] * QDR_WORD_WIDTH
             except Exception as e:
-                raise RuntimeError('Unknown exception in qdr_cal - %s' % e.msg)
-            self.apply_cals(in_delays, out_delays=[out_step] * QDR_WORD_WIDTH,
-                            clk_delay=out_step)
-            cal = self.qdr_cal_check()
+                raise RuntimeError('Unknown exception in qdr_cal - '
+                                   '{!s}'.format(e.message))
+
+            # update the out delays with the current input delays
+            _out_delays = [out_step] * QDR_WORD_WIDTH
+            self._apply_calibration(in_delays=in_delays,
+                                    out_delays=_out_delays,
+                                    clk_delay=out_step)
+            cal, failure_pattern = self.qdr_cal_check()
             out_step += 1
-        if self.qdr_cal_check():
-            return True
-        else:
-            if fail_hard:
-                raise RuntimeError('QDR %s calibration failed.' % self.name)
+
+        if (not cal) and fail_hard:
+            raise RuntimeError('QDR %s calibration failed.' % self.name)
+        return cal, failure_pattern
+
+    def qdr_check_cal_any_good(self, current_step, checkoffset=2**22):
+        """
+        Checks calibration on a qdr.
+        :param current_step: what is the current output delay step
+        :param checkoffset: where to write the test data
+        :return: True if *any* of the bits were good
+        """
+        patfail = 0
+        for pn, pattern in enumerate(CAL_DATA):
+            logl2('pattern[0]: {:x}'.format(pattern[0]))
+            _patternstr = '>%iL' % len(pattern)
+            _wrdata = struct.pack(_patternstr, *pattern)
+            self.p_bwrite(self.memory, _wrdata, offset=checkoffset)
+            _rdata = self.p_read(self.memory, len(pattern) * 4,
+                                 offset=checkoffset)
+            retdat = struct.unpack(_patternstr, _rdata)
+            for word_n, word in enumerate(pattern):
+                patfail |= word ^ retdat[word_n]
+                # logl2('\tcurstep({}) written({:032b}) read({:032b}) '
+                #       'faildiff({:032b})'.format(current_step, word,
+                #                                  retdat[word_n], patfail))
+                if patfail == 0xffffffff:
+                    # none of the bits were correct, so bail
+                    logl2('No good bits found, bailing.')
+                    return False
+        return True
+
+    def _scan_out_to_edge(self):
+        """
+        Step through the possible output delays. When any of the bits are OK,
+        use this as the start point for the input delay scan. This makes life
+        a little simpler than letting the input and output delays of all bits
+        be completely independent.
+        If no good bits are found, that's fine, we'll just leave the output
+        delay set to the maximum allowed
+        """
+        out_step = 0
+        for out_step in range(NUM_DELAY_TAPS):
+            if self.qdr_check_cal_any_good(out_step):
+                break
+            if out_step < NUM_DELAY_TAPS - 1:
+                self._qdr_delay_out_step(2**QDR_WORD_WIDTH - 1, 1)
+                self._qdr_delay_clk_step(1)
+        return out_step
+
+    def _qdr_cal_jacks(self, fail_hard=True, min_eye_width=8):
+        """
+        Calibrates a QDR controller
+        Step output delays until some of the bits reach their eye.
+        Then step input delays
+        Returns True if calibrated, raises a runtime exception if it doesn't.
+        :param fail_hard: throw an exception on cal fail if True, else
+        return False
+        :param min_eye_width: What is the minimum eye width we'll accept?
+        :return:
+        """
+        def _find_out_delay(add_extra_latency=False):
+            # reset all delays and set extra latency to zero.
+            self.qdr_reset()
+            self._disable_fabric()
+            if add_extra_latency:
+                self._add_extra_latency(1)
+            # find the first output delay that may work with no input delay
+            out_step = self._scan_out_to_edge()
+            logl1('Output delays set to {}'.format(out_step))
+            # find input delays for this output delay
+            in_dels, areas, starts, stops = self._find_in_delays()
+            return out_step, in_dels, areas, starts, stops
+
+        # find an initial solution
+        out_step0, in_delays0, good_area0, good_starts0, \
+            good_stops0 = _find_out_delay()
+
+        # if any of the calibration eyes are less than some minimum width,
+        # and there is a chance that adding an extra cycle of latency will
+        # help, give that a go!
+        # Default values to replace if we rescan
+        in_delays = in_delays0
+        out_delay = out_step0
+        extra_clk = False
+        max_input_delay_required = numpy.any(good_stops0 == NUM_DELAY_TAPS-1)
+        eyes_too_small = numpy.any(good_area0 < min_eye_width)
+        if max_input_delay_required and eyes_too_small:
+            logl1('Adding extra latency and checking for better solutions')
+            out_step1, in_delays1, good_area1, good_starts1, \
+                good_stops1 = _find_out_delay()
+            if numpy.all(good_area1 > good_area0):
+                logl1('New solutions with extra latency are better')
+                in_delays = in_delays1
+                out_delay = out_step1
+                extra_clk = True
             else:
-                return False
+                logl1('Original solution without extra latency was better')
+
+        logl1('Using in delays: {}'.format(in_delays))
+        self._apply_calibration(in_delays=in_delays,
+                                out_delays=[out_delay] * QDR_WORD_WIDTH,
+                                clk_delay=out_delay,
+                                extra_clk=extra_clk)
+
+        cal, failure_pattern = self.qdr_cal_check()
+        self._enable_fabric()
+        if (not cal) and fail_hard:
+            raise RuntimeError('QDR %s calibration failed.' % self.name)
+        return cal, failure_pattern
 
 # end
