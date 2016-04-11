@@ -13,5 +13,6 @@ from register import Register
 from sbram import Sbram
 from snap import Snap
 from tengbe import TenGbe
+from skarab_fpga import SkarabFpga
 
 # end
