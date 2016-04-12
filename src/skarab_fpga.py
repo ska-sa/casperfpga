@@ -1020,8 +1020,8 @@ class SkarabFpga(CasperFpga):
         if do_sdram_async_read:
             # process data read here
             sdram_reconfigure_resp = self.send_packet(self.skarabControlSocket, self.skarabEthernetControlPort, payload, response_type, expect_response, sd.SDRAM_RECONFIGURE, self.sequenceNumber, 19, 0)
-            sdram_data = struct.pack('!H', sdram_reconfigure_resp.SdramAsyncReadDataHigh) + \
-                              struct.pack('!H', sdram_reconfigure_resp.SdramAsyncReadDataLow)
+            sdram_data = struct.pack('!H', sdram_reconfigure_resp.SdramAsyncReadDataLow) + \
+                              struct.pack('!H', sdram_reconfigure_resp.SdramAsyncReadDataHigh)
 
             return sdram_data
 
