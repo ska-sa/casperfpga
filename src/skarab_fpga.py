@@ -310,7 +310,7 @@ class SkarabFpga(CasperFpga):
 
                 # update programming info
                 self.prog_info['last_programmed'] = \
-                    self.prog_info['last_programmed']
+                    self.prog_info['last_uploaded']
                 self.prog_info['last_uploaded'] = ''
 
                 # wait for DHCP
