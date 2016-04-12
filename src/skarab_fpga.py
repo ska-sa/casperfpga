@@ -468,6 +468,9 @@ class SkarabFpga(CasperFpga):
 
         # clear sdram programmed flag
         self.__sdram_programmed = False
+
+        # clear system_info for last uploaded
+        self.system_info["last_uploaded"] = ''
     
     @staticmethod
     def data_split_and_pack(data):
