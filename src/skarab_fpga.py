@@ -59,8 +59,8 @@ class SkarabFpga(CasperFpga):
         # flag for keeping track of SDRAM state
         self.__sdram_programmed = False
 
-        # dict for system info
-        self.system_info = {'last_uploaded': '',
+        # dict for programming/uploading info
+        self.prog_info = {'last_uploaded': '',
                             'last_programmed': ''}
 
         # check if connected to host
@@ -306,12 +306,12 @@ class SkarabFpga(CasperFpga):
 
                 # get design information
                 super(SkarabFpga, self).get_system_information(
-                    filename=self.system_info['last_uploaded'])
+                    filename=self.prog_info['last_uploaded'])
 
-                # update system info
-                self.system_info['last_programmed'] = \
-                    self.system_info['last_programmed']
-                self.system_info['last_uploaded'] = ''
+                # update programming info
+                self.prog_info['last_programmed'] = \
+                    self.prog_info['last_programmed']
+                self.prog_info['last_uploaded'] = ''
 
                 # wait for DHCP
                 time.sleep(1)  # TODO: feasible wait time?
@@ -428,8 +428,8 @@ class SkarabFpga(CasperFpga):
                 # set sdram programmed flag
                 self.__sdram_programmed = True
 
-                # set last uploaded parameter of system info
-                self.system_info['last_uploaded'] = filename
+                # set last uploaded parameter of programming info
+                self.prog_info['last_uploaded'] = filename
                 return True
             else:
                 LOGGER.error("Error completing write transaction.")
@@ -469,8 +469,8 @@ class SkarabFpga(CasperFpga):
         # clear sdram programmed flag
         self.__sdram_programmed = False
 
-        # clear system_info for last uploaded
-        self.system_info["last_uploaded"] = ''
+        # clear prog_info for last uploaded
+        self.prog_info["last_uploaded"] = ''
     
     @staticmethod
     def data_split_and_pack(data):
