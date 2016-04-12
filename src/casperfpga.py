@@ -86,6 +86,19 @@ class CasperFpga(object):
         """
         self.__reset_device_info()
 
+    def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
+                                  wait_complete=True):
+        """
+        Upload an FPG file to RAM and then program the FPGA.
+        :param filename: the file to upload
+        :param port: the port to use on the rx end, -1 means a random port
+        :param timeout: how long to wait, seconds
+        :param wait_complete: wait for the transaction to complete, return
+        after upload if False
+        :return:
+        """
+        raise NotImplementedError
+
     def __reset_device_info(self):
         """
         Reset information of devices this FPGA knows about.
@@ -250,9 +263,9 @@ class CasperFpga(object):
         try:
             data = struct.pack('>i' if integer < 0 else '>I', integer)
         except Exception as ve:
-            LOGGER.error('Writing integer %i failed with error %s' % (
+            LOGGER.error('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
-            raise ValueError('Writing integer %i failed with error %s' % (
+            raise ValueError('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
         if blindwrite:
             self.blindwrite(device_name, data, word_offset*4)
