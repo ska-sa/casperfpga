@@ -485,6 +485,9 @@ class SkarabFpga(CasperFpga):
         """
         Verifies the data programmed to the SDRAM by reading this back
         and comparing it to the bitstream used to program the SDRAM.
+
+        Verification of the bitstream programmed to SDRAM can take
+        extremely long and should only be used for debugging.
         :param filename: bitstream used to program SDRAM (binfile)
         :return: True if successful
         """
@@ -494,6 +497,7 @@ class SkarabFpga(CasperFpga):
 
         # read contents of file
         file_contents = f.read()
+        f.close()
 
         # prep SDRAM for reading
         _ = self.sdram_reconfigure(sd.SDRAM_READ_MODE, False, False,
@@ -511,15 +515,18 @@ class SkarabFpga(CasperFpga):
             file_contents = file_contents[4:]
 
             # read from sdram
-            sdram_data = self.sdram_reconfigure(sd.SDRAM_READ_MODE, False, False,
-                                                False, False, False, False, True,
-                                                True, False, 0x0, 0x0)
+            sdram_data = self.sdram_reconfigure(sd.SDRAM_READ_MODE, False,
+                                                False, False, False, False,
+                                                False, True, True, False,
+                                                0x0, 0x0)
 
+            # if mismatch, stop check and return False
             if words_from_file != sdram_data:
                 return False
             else:
                 continue
 
+        # entire binfile verified
         return True
 
     @staticmethod
