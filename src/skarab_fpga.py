@@ -424,6 +424,15 @@ class SkarabFpga(CasperFpga):
                                                       False, False, False,
                                                       0x0, 0x0)
 
+            # if verification is enabled
+            if verify:
+                sdram_verified = self.verify_sdram_contents(image_to_program)
+
+                if not sdram_verified:
+                    LOGGER.error("SDRAM verification failed! Clearing SDRAM")
+                    self.clear_sdram()
+                    return
+
             if finished_writing:
                 # set sdram programmed flag
                 self.__sdram_programmed = True
@@ -471,7 +480,48 @@ class SkarabFpga(CasperFpga):
 
         # clear prog_info for last uploaded
         self.prog_info["last_uploaded"] = ''
-    
+
+    def verify_sdram_contents(self, filename):
+        """
+        Verifies the data programmed to the SDRAM by reading this back
+        and comparing it to the bitstream used to program the SDRAM.
+        :param filename: bitstream used to program SDRAM (binfile)
+        :return: True if successful
+        """
+
+        # open binfile
+        f = open(filename, 'rb')
+
+        # read contents of file
+        file_contents = f.read()
+
+        # prep SDRAM for reading
+        _ = self.sdram_reconfigure(sd.SDRAM_READ_MODE, False, False,
+                                   False, False, True, False, True,
+                                   False, False, 0x0, 0x0)
+
+        # sdram read returns 32-bits (4 bytes)
+        # so we compare 4 bytes each time
+
+        for i in range(len(file_contents)/4):
+            # get 4 bytes
+            words_from_file = file_contents[:4]
+
+            # remove the 4 bytes already read
+            file_contents = file_contents[4:]
+
+            # read from sdram
+            sdram_data = self.sdram_reconfigure(sd.SDRAM_READ_MODE, False, False,
+                                                False, False, False, False, True,
+                                                True, False, 0x0, 0x0)
+
+            if words_from_file != sdram_data:
+                return False
+            else:
+                continue
+
+        return True
+
     @staticmethod
     def data_split_and_pack(data):
         """
@@ -967,7 +1017,14 @@ class SkarabFpga(CasperFpga):
         payload = sdram_reconfigure_req.createPayload()
 
         # send payload
-        if self.send_packet(self.skarabControlSocket, self.skarabEthernetControlPort, payload, response_type, expect_response, sd.SDRAM_RECONFIGURE, self.sequenceNumber, 19, 0):
+        if do_sdram_async_read:
+            # process data read here
+            sdram_reconfigure_resp = self.send_packet(self.skarabControlSocket, self.skarabEthernetControlPort, payload, response_type, expect_response, sd.SDRAM_RECONFIGURE, self.sequenceNumber, 19, 0)
+            sdram_data = sdram_reconfigure_resp.SdramAsyncReadDataHigh + sdram_reconfigure_resp.SdramAsyncReadDataLow
+
+            return sdram_data
+
+        elif self.send_packet(self.skarabControlSocket, self.skarabEthernetControlPort, payload, response_type, expect_response, sd.SDRAM_RECONFIGURE, self.sequenceNumber, 19, 0):
             return True
         else:
             LOGGER.error("Problem configuring SDRAM")
