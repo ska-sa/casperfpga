@@ -270,24 +270,23 @@ class SkarabFpga(CasperFpga):
     def upload_to_flash(self, filename):
         """
         Upload an FPG file to flash memory.
+        This is used to perform in-field upgrades of the SKARAB
         :param filename: the file to upload
         :return:
         """
-
-        # strip off text
-
-        # send bin
-
-        # reset
 
         raise NotImplementedError
 
     def program_from_flash(self):
         """
         Program the FPGA from flash memory.
+        This is achieved with a reboot of the board.
+        The SKARAB boots from flash on start up.
         :return:
         """
-        raise NotImplementedError
+
+        # trigger a reboot to boot from flash
+        self.reboot_fpga()
 
     def boot_from_sdram(self):
         """
@@ -525,11 +524,16 @@ class SkarabFpga(CasperFpga):
             else:
                 continue
 
-        # entire binfile verified
+        # reset the sdram read address
+        _ = self.sdram_reconfigure(sd.SDRAM_READ_MODE, False, False,
+                                   False, False, True, False, True,
+                                   False, False, 0x0, 0x0)
+
         # exit read mode and put sdram back into program mode
         _ = self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, False, False,
                                    False, False, False, False, False,
                                    False, 0x0, 0x0)
+        # entire binfile verified
         return True
 
     @staticmethod
