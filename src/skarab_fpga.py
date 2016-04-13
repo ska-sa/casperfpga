@@ -527,6 +527,10 @@ class SkarabFpga(CasperFpga):
                 continue
 
         # entire binfile verified
+        # exit read mode and put sdram back into program mode
+        _ = self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, False, False,
+                                   False, False, False, False, False,
+                                   False, 0x0, 0x0)
         return True
 
     @staticmethod
