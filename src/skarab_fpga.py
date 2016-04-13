@@ -242,17 +242,16 @@ class SkarabFpga(CasperFpga):
     def deprogram(self):
         """
         Deprogram the FPGA.
-        This actually reboots & programs the Golden Image to the SKARAB
+        This actually reboots & boots from the Golden Image
         :return: nothing
         """
-        _ = self.reset_fpga()
+
+        # trigger reboot of FPGA
+        self.reboot_fpga()
 
         # call the parent method to reset device info
         super(SkarabFpga, self).deprogram()
         LOGGER.info('%s: deprogrammed okay' % self.host)
-
-        # reset the sdram programmed flag
-        self.__sdram_programmed = False
 
     def is_running(self):
         """
@@ -704,15 +703,37 @@ class SkarabFpga(CasperFpga):
 
     # low level access functions
 
+    def reboot_fpga(self):
+        """
+        Reboots the FPGA, booting from the NOR FLASH.
+        :return: Nothing
+        """
+
+        # trigger a reboot of the FPGA
+        _ = self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, False, False,
+                                   True, False, False, False, False, False,
+                                   0x0, 0x0)
+
+        # reset sequence numbers
+        self.sequenceNumber = 0
+
+        # reset the sdram programmed flag
+        self.__sdram_programmed = False
+
+        # clear prog_info
+        self.prog_info['last_programmed'] = ''
+        self.prog_info['last_uploaded'] = ''
+
     def reset_fpga(self):
         """
-        Reset the FPGA fabric
+        Reset the FPGA firmware. Resets the clks, registers, etc of the design
         :return: 'ok'
         """
-        output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR, sd.ROACH3_FPGA_RESET, False)
+        output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
+                                      sd.ROACH3_FPGA_RESET, False)
 
-        # reset seq num
-        self.sequenceNumber = 0
+        # reset seq num?
+        # self.sequenceNumber = 0
 
         # sleep to allow DHCP configuration
         time.sleep(1)
@@ -729,10 +750,13 @@ class SkarabFpga(CasperFpga):
 
         LOGGER.info("Shutting board down. . .")
 
-        self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR, sd.ROACH3_SHUTDOWN, False)
-        output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_1_ADDR, sd.ROACH3_SHUTDOWN, False)
+        _ = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
+                                 sd.ROACH3_SHUTDOWN, False)
+
+        output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_1_ADDR,
+                                      sd.ROACH3_SHUTDOWN, False)
         
-        self.sequenceNumber = 1  # reset sequence number
+        self.sequenceNumber = 0  # reset sequence number
 
         return output
 
