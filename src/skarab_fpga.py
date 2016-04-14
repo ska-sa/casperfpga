@@ -310,7 +310,7 @@ class SkarabFpga(CasperFpga):
 
                 else:
                     # if not fpg file, then
-                    super(SkarabFpga, self).__reset_device_info()
+                    self.__reset_device_info()
 
                 # update programming info
                 self.prog_info['last_programmed'] = \
