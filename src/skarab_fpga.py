@@ -302,9 +302,11 @@ class SkarabFpga(CasperFpga):
                 # clear sdram programmed flag
                 self.__sdram_programmed = False
 
-                # get design information
-                super(SkarabFpga, self).get_system_information(
-                    filename=self.prog_info['last_uploaded'])
+                # if fpg file used, get design information
+                if self.prog_info['last_uploaded'].split('.')[1] == 'fpg':
+
+                    super(SkarabFpga, self).get_system_information(
+                        filename=self.prog_info['last_uploaded'])
 
                 # update programming info
                 self.prog_info['last_programmed'] = \
