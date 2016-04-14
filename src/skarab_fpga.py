@@ -308,6 +308,10 @@ class SkarabFpga(CasperFpga):
                     super(SkarabFpga, self).get_system_information(
                         filename=self.prog_info['last_uploaded'])
 
+                else:
+                    # if not fpg file, then
+                    super(SkarabFpga, self).__reset_device_info()
+
                 # update programming info
                 self.prog_info['last_programmed'] = \
                     self.prog_info['last_uploaded']
