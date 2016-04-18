@@ -3,14 +3,12 @@ import math
 import select
 import logging
 import struct
-import threading
 import time
 import os
 import zlib
 import skarab_definitions as sd
 
 from casperfpga import CasperFpga
-from utils import parse_fpg
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
@@ -310,7 +308,7 @@ class SkarabFpga(CasperFpga):
 
                 else:
                     # if not fpg file, then
-                    self.__reset_device_info()
+                    self._CasperFpga__reset_device_info()
 
                 # update programming info
                 self.prog_info['last_programmed'] = \
