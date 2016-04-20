@@ -443,7 +443,7 @@ class sReadI2CResp(Command):
     def __init__(self, CommandID, seqNum, I2C_interface_id, SlaveAddress,
                  NumBytes, ReadBytes, ReadSuccess, Padding):
         self.__dict__['_odict'] = odict()
-        self.Header = sCommandHeader(CommandID, seqNum)
+        self.Header = sCommandHeader(CommandID, seqNum, False)
         self.Id = I2C_interface_id
         self.SlaveAddress = SlaveAddress
         self.NumBytes = NumBytes
