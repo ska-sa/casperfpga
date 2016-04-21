@@ -1010,6 +1010,10 @@ class SkarabFpga(CasperFpga):
         for byte in bytes_to_write:
             packed_bytes += pack(byte)
 
+        # pad the number of bytes to write to 32 bytes
+        if num_bytes < 32:
+            packed_bytes += (32-num_bytes)*'\x00\x00'
+
         # create payload packet structure
         write_i2c_req = sd.sWriteI2CReq(sd.WRITE_I2C, self.sequenceNumber,
                                         interface, slave_address, num_bytes,
@@ -1024,7 +1028,7 @@ class SkarabFpga(CasperFpga):
                                           payload, response_type,
                                           expect_response, sd.WRITE_I2C,
                                           self.sequenceNumber,
-                                          (7 + num_bytes), 1)
+                                          39, 1)
 
         # check if the write was successful
         if write_i2c_resp.WriteSuccess:
