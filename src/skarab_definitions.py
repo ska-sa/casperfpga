@@ -825,7 +825,7 @@ class sPMBusReadI2CBytesReq(Command):
 
 class sPMBusReadI2CBytesResp(Command):
     def __init__(self, commandID, seqNum, I2C_interface_id, SlaveAddress,
-                 CommandCode, ReadBytes, NumBytes, ReadSuccess, Padding):
+                 CommandCode, ReadBytes, NumBytes, ReadSuccess):
         self.__dict__['_odict'] = odict()
         self.Header = sCommandHeader(commandID, seqNum, False)
         self.Id = I2C_interface_id
@@ -834,8 +834,6 @@ class sPMBusReadI2CBytesResp(Command):
         self.ReadBytes = ReadBytes
         self.NumBytes = NumBytes
         self.ReadSuccess = ReadSuccess
-        self.Padding = Padding
-
 
 # SDRAM_PROGRAM
 class sSdramProgramReq(Command):
