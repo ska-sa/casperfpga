@@ -615,6 +615,10 @@ class SkarabFpga(CasperFpga):
             read_bytes = unpacked_data[5:37]
             unpacked_data[5:37] = [read_bytes]
 
+        if response_type == 'sWriteI2CResp':
+            write_bytes = unpacked_data[5:37]
+            unpacked_data[5:37] = [write_bytes]
+
         # return response from skarab
         return SkarabFpga.sd_dict[response_type](*unpacked_data)
 
