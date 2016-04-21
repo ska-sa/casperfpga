@@ -1106,7 +1106,7 @@ class SkarabFpga(CasperFpga):
                                                sd.PMBUS_READ_I2C,
                                                self.sequenceNumber, 39, 0)
 
-        return
+        return pmbus_read_i2c_resp
 
     def sdram_program(self, first_packet, last_packet, write_words):
         """
