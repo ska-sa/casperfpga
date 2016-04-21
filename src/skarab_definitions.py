@@ -408,6 +408,7 @@ class sReadWishboneResp(Command):
 class sWriteI2CReq(Command):
     def __init__(self, CommandID, seqNum, I2C_interface_id, SlaveAddress,
                  NumBytes, WriteBytes):
+        self.__dict__['_odict'] = odict()
         self.Header = sCommandHeader(CommandID, seqNum)
         self.Id = self.packet2BytePacker(I2C_interface_id)
         self.SlaveAddress = self.packet2BytePacker(SlaveAddress)

@@ -1018,11 +1018,20 @@ class SkarabFpga(CasperFpga):
         # create payload
         payload = write_i2c_req.createPayload()
 
-        # send payload and return response object
-        return self.send_packet(self.skarabControlSocket,
-                                self.skarabEthernetControlPort, payload,
-                                response_type, expect_response, sd.WRITE_I2C,
-                                self.sequenceNumber, (7 + num_bytes), 1)
+        # send payload and receive response object
+        write_i2c_resp = self.send_packet(self.skarabControlSocket,
+                                          self.skarabEthernetControlPort,
+                                          payload, response_type,
+                                          expect_response, sd.WRITE_I2C,
+                                          self.sequenceNumber,
+                                          (7 + num_bytes), 1)
+
+        # check if the write was successful
+        if write_i2c_resp.WriteSuccess:
+            # if successful
+            return True
+        else:
+            return False
 
     def read_i2c(self, interface, slave_address, num_bytes):
         # TODO: complete; needs debugging and handling response data
@@ -1451,3 +1460,15 @@ class SkarabFpga(CasperFpga):
         bin_file.close()
 
         return name + '.bin'
+
+    # sensor functions
+    def configure_i2c_switch(self, switch_select):
+        """
+        Configures the PCA9546AD I2C switch.
+        :param switch_select: the desired switch configuration
+        :return: nothing
+        """
+
+        if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                              1):
+            LOGGER.error("Failed to configure I2C switch.")
