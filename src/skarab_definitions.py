@@ -814,6 +814,7 @@ class sGetEmbeddedSoftwareVersionResp(Command):
 class sPMBusReadI2CBytesReq(Command):
     def __init__(self, commandID, seqNum, I2C_interface_id, SlaveAddress,
                  CommandCode, ReadBytes, NumBytes):
+        self.__dict__['_odict'] = odict()
         self.Header = sCommandHeader(commandID, seqNum)
         self.Id = self.packet2BytePacker(I2C_interface_id)
         self.SlaveAddress = self.packet2BytePacker(SlaveAddress)
@@ -825,6 +826,7 @@ class sPMBusReadI2CBytesReq(Command):
 class sPMBusReadI2CBytesResp(Command):
     def __init__(self, commandID, seqNum, I2C_interface_id, SlaveAddress,
                  CommandCode, ReadBytes, NumBytes, ReadSuccess, Padding):
+        self.__dict__['_odict'] = odict()
         self.Header = sCommandHeader(commandID, seqNum, False)
         self.Id = I2C_interface_id
         self.SlaveAddress = SlaveAddress
