@@ -1504,14 +1504,15 @@ class SkarabFpga(CasperFpga):
 
         # house keeping
         if type(bytes_to_write) != list:
-            bytes_to_write = list(bytes_to_write)
+            write_data = list()
+            write_data.append(bytes_to_write)
 
         total_num_bytes = 1 + num_bytes
 
         combined_write_bytes = list()
 
         combined_write_bytes.append(command_code)
-        combined_write_bytes.extend(bytes_to_write)
+        combined_write_bytes.extend(write_data)
 
         # do an i2c write
         if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
