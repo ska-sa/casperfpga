@@ -1034,12 +1034,15 @@ class SkarabFpga(CasperFpga):
                                           self.sequenceNumber,
                                           39, 1)
 
+        # TODO: modify to return data if read success or false if not
         # check if the write was successful
-        if write_i2c_resp.WriteSuccess:
-            # if successful
-            return True
-        else:
-            return False
+        if write_i2c_req is not None:
+            if write_i2c_resp.WriteSuccess:
+                # if successful
+                return True
+
+        # otherwise write failed
+        return False
 
     def read_i2c(self, interface, slave_address, num_bytes):
         # TODO: complete; needs debugging and handling response data
@@ -1092,8 +1095,9 @@ class SkarabFpga(CasperFpga):
         :param slave_address: address of the slave PMBus device to read
         :param command_code: PMBus command for the I2C read
         :param num_bytes: Number of bytes to read
-        :return: data read
+        :return: data read if successful
         """
+
         response_type = 'sPMBusReadI2CBytesResp'
         expect_response = True
 
@@ -1123,7 +1127,12 @@ class SkarabFpga(CasperFpga):
                                                sd.PMBUS_READ_I2C,
                                                self.sequenceNumber, 39, 0)
 
-        return pmbus_read_i2c_resp
+        # TODO: modify to return data if read success or false if not
+        if pmbus_read_i2c_resp is not None:
+            if pmbus_read_i2c_resp.ReadSuccess:
+                return pmbus_read_i2c_resp.ReadBytes[:num_bytes]
+
+        return None
 
     def sdram_program(self, first_packet, last_packet, write_words):
         """
@@ -1478,5 +1487,96 @@ class SkarabFpga(CasperFpga):
         """
 
         if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
-                              1):
+                              switch_select):
             LOGGER.error("Failed to configure I2C switch.")
+        else:
+            LOGGER.debug("I2C Switch successfully configured")
+
+    # fan controller functions
+    def write_fan_controller(self, command_code, num_bytes, bytes_to_write):
+        """
+        Perform a PMBus write to the MAX31785 Fan Controller
+        :param command_code: desired command code
+        :param num_bytes: number of bytes in command
+        :param bytes_to_write:  bytes to write
+        :return: Nothing
+        """
+
+        # house keeping
+        if type(bytes_to_write) != list:
+            bytes_to_write = list(bytes_to_write)
+
+        total_num_bytes = 1 + num_bytes
+
+        combined_write_bytes = list()
+
+        combined_write_bytes.append(command_code)
+        combined_write_bytes.extend(bytes_to_write)
+
+        # do an i2c write
+        if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                              total_num_bytes, combined_write_bytes):
+            LOGGER.error("Failed to write to the Fan Contoller")
+        else:
+            LOGGER.debug("Write to fan controller successful")
+
+    def read_fan_controller(self, command_code, num_bytes):
+        """
+        Performs PMBus read from the MAX31785 Fan Controller
+        :param command_code: desired command code
+        :param num_bytes: number of bytes in command
+        :return: Read bytes if successful
+        """
+
+        # do a PMBus i2c read
+        data = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                   sd.MAX31785_I2C_DEVICE_ADDRESS, command_code
+                                   , num_bytes)
+
+        # check the received data
+        if data is None:
+            # read was unsucessful
+            LOGGER.error("Failed to read from the fan controller")
+            return None
+        else:
+            # success
+            LOGGER.debug("Read from fan controller successful")
+            return data
+
+    def read_fan_speed_rpm(self, fan, open_switch=True):
+        """
+        Read the current fan speed of a selected fan in RPM
+        :param fan: selected fan
+        :param open_switch: True if the i2c switch must be opened
+        :return: read fan speed in RPM
+        """
+
+        # find the address of the desired fan
+        if fan == 'LeftFrontFan':
+            fan_selected = sd.LEFT_FRONT_FAN_PAGE
+        elif fan == 'LeftMiddleFan':
+            fan_selected = sd.LEFT_MIDDLE_FAN_PAGE
+        elif fan == 'LeftBackFan':
+            fan_selected = sd.LEFT_BACK_FAN_PAGE
+        elif fan == 'RightBackFan':
+            fan_selected = sd.RIGHT_BACK_FAN_PAGE
+        elif fan == 'FPGAFan':
+            fan_selected = sd.FPGA_FAN
+        else:
+            LOGGER.error("Unknown fan selected")
+            return None
+
+        # open switch
+        if open_switch:
+            self.configure_i2c_switch(sd.FAN_CONT_SWITCH_SELECT)
+
+        # write to fan controller
+        self.write_fan_controller(sd.PAGE_CMD, 1, fan_selected)
+
+        # read from fan controller
+
+        read_data = self.read_fan_controller(sd.READ_FAN_SPEED_1_CMD, 2)
+
+        fan_speed_rpm = read_data[0] + (read_data[1] << 8)
+
+        return fan_speed_rpm
