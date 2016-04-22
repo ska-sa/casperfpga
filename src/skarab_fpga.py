@@ -597,7 +597,6 @@ class SkarabFpga(CasperFpga):
         unpacker = struct.Struct(formatter)
         unpacked_data = list(unpacker.unpack(response_payload))
 
-
         if pad_words:
             # isolate padding bytes as a tuple
             padding = unpacked_data[-pad_words:]
@@ -839,8 +838,8 @@ class SkarabFpga(CasperFpga):
         Write to a dsp register
         :param reg_address: address of register to write to
         :param data: data to write
-        :param expect_response: does this write command require a response? (only false for reset and shutdown commands)
-        :return: response object - object created from the response payload (attributes = payload components)
+        :param expect_response: does this write command require a response?
+        :return: response object - object created from the response payload
         """
         # create identifier for response type expected
         response_type = 'sWriteRegResp'
@@ -1016,7 +1015,7 @@ class SkarabFpga(CasperFpga):
 
         # pad the number of bytes to write to 32 bytes
         if num_bytes < 32:
-            packed_bytes += (32-num_bytes)*'\x00\x00'
+            packed_bytes += (32 - num_bytes) * '\x00\x00'
 
         # create payload packet structure
         write_i2c_req = sd.sWriteI2CReq(sd.WRITE_I2C, self.sequenceNumber,
@@ -1104,7 +1103,7 @@ class SkarabFpga(CasperFpga):
         if num_bytes > 32:
             LOGGER.error("Maximum of 32 bytes can be read in a "
                          "single transaction")
-            return False
+            return
 
         # dummy read data
         read_bytes = struct.pack('!32H', *(32 * [0]))
@@ -1132,7 +1131,7 @@ class SkarabFpga(CasperFpga):
             if pmbus_read_i2c_resp.ReadSuccess:
                 return pmbus_read_i2c_resp.ReadBytes[:num_bytes]
 
-        return None
+        return
 
     def sdram_program(self, first_packet, last_packet, write_words):
         """
@@ -1503,7 +1502,7 @@ class SkarabFpga(CasperFpga):
         """
 
         # house keeping
-        #if type(bytes_to_write) != list:
+        # if type(bytes_to_write) != list:
         #    write_data = list()
         #    write_data.append(bytes_to_write)
 
@@ -1565,7 +1564,7 @@ class SkarabFpga(CasperFpga):
             fan_selected = sd.FPGA_FAN
         else:
             LOGGER.error("Unknown fan selected")
-            return None
+            return
 
         # open switch
         if open_switch:
@@ -1578,6 +1577,9 @@ class SkarabFpga(CasperFpga):
 
         read_data = self.read_fan_controller(sd.READ_FAN_SPEED_1_CMD, 2)
 
-        fan_speed_rpm = read_data[0] + (read_data[1] << 8)
+        if read_data is not None:
+            fan_speed_rpm = read_data[0] + (read_data[1] << 8)
 
-        return fan_speed_rpm
+            return fan_speed_rpm
+        else:
+            return
