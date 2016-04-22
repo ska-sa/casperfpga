@@ -1493,7 +1493,7 @@ class SkarabFpga(CasperFpga):
             LOGGER.debug("I2C Switch successfully configured")
 
     # fan controller functions
-    def write_fan_controller(self, command_code, num_bytes, bytes_to_write):
+    def write_fan_controller(self, command_code, num_bytes, *bytes_to_write):
         """
         Perform a PMBus write to the MAX31785 Fan Controller
         :param command_code: desired command code
@@ -1503,20 +1503,20 @@ class SkarabFpga(CasperFpga):
         """
 
         # house keeping
-        if type(bytes_to_write) != list:
-            write_data = list()
-            write_data.append(bytes_to_write)
+        #if type(bytes_to_write) != list:
+        #    write_data = list()
+        #    write_data.append(bytes_to_write)
 
         total_num_bytes = 1 + num_bytes
 
         combined_write_bytes = list()
 
         combined_write_bytes.append(command_code)
-        combined_write_bytes.extend(write_data)
+        combined_write_bytes.extend(bytes_to_write)
 
         # do an i2c write
         if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
-                              total_num_bytes, combined_write_bytes):
+                              total_num_bytes, *combined_write_bytes):
             LOGGER.error("Failed to write to the Fan Contoller")
         else:
             LOGGER.debug("Write to fan controller successful")
