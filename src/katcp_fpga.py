@@ -120,9 +120,12 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                                'server %s' % self.host)
 
         # set a higher write buffer size than standard
-        if self._stream.max_write_buffer_size <= 262144:
-            self._stream.max_buffer_size *= 2
-            self._stream.max_write_buffer_size *= 2
+        try:
+            if self._stream.max_write_buffer_size <= 262144:
+                self._stream.max_buffer_size *= 2
+                self._stream.max_write_buffer_size *= 2
+        except AttributeError:
+            LOGGER.warn('%s: no ._stream instance found.' % self.host)
 
         LOGGER.info('%s: connection established' % self.host)
 
