@@ -68,6 +68,10 @@ class Mac(object):
         """
         Make a MAC address object from a ROACH hostname
         """
+        # HACK
+        if hostname.startswith('cbf_oach'):
+            hostname = hostname.replace('cbf_oach', 'roach')
+        # /HACK
         if not hostname.startswith('roach'):
             raise RuntimeError('Only hostnames beginning with'
                                'roach supported: %s' % hostname)
