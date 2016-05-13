@@ -37,7 +37,7 @@ class Mac(object):
         """
         mac = 0
         if mac_str.count(':') != 5:
-            raise RuntimeError('A MAC address must be of the form xx:xx:xx:xx:xx:xx')
+            raise RuntimeError('A MAC address must be of the form xx:xx:xx:xx:xx:xx, got %s' % mac_str)
         offset = 40
         for byte_str in mac_str.split(':'):
             value = int(byte_str, base=16)
@@ -54,6 +54,10 @@ class Mac(object):
             mac_str = mac
         elif isinstance(mac, int):
             mac_int = mac
+        if mac_str is not None:
+            if mac_str.find(':') == -1:
+                mac_int = int(mac_str)
+                mac_str = None
         if (mac_str is None) and (mac_int is None):
             raise ValueError('Cannot make a MAC with no value.')
         elif mac_str is not None:
@@ -68,6 +72,10 @@ class Mac(object):
         """
         Make a MAC address object from a ROACH hostname
         """
+        # HACK
+        if hostname.startswith('cbf_oach'):
+            hostname = hostname.replace('cbf_oach', 'roach')
+        # /HACK
         if not hostname.startswith('roach'):
             raise RuntimeError('Only hostnames beginning with'
                                'roach supported: %s' % hostname)
@@ -130,6 +138,10 @@ class IpAddress(object):
             ip_str = ip
         elif isinstance(ip, int):
             ip_int = ip
+        if ip_str is not None:
+            if ip_str.find('.') == -1:
+                ip_int = int(ip_str)
+                ip_str = None
         if (ip_str is None) and (ip_int is None):
             raise ValueError('Cannot make an IP with no value.')
         elif ip_str is not None:
