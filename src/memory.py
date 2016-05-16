@@ -35,78 +35,58 @@ def bin2fp(raw_word, bitwidth, bin_pt, signed):
         return quotient + (float(rem) / (2**bin_pt))
     raise RuntimeError
 
-
-def fp2fixed_int(num, bitwidth, bin_pt, signed):
+def fp2fixed(num, bitwidth, bin_pt, signed):
     """
-    Convert a given float to an integer representation of the fixed-point number
-    described by the params.
-    Provides the same output as a Xilinx block in Simulink would if you cast
-    it to an unsigned int.
+    Convert a floating point number to its fixed point equivalent.
+    :param num:
+    :param bitwidth:
+    :param bin_pt:
+    :param signed:
+    :return:
     """
     _format = '%s%i.%i' % ('fix' if signed else 'ufix', bitwidth, bin_pt)
-    LOGGER.debug('Converting %f to %s' % (num, _format))
     if bin_pt >= bitwidth:
         raise ValueError('Cannot have bin_pt >= bitwidth')
     if bin_pt < 0:
         raise ValueError('bin_pt < 0 makes no sense')
     if (not signed) and (num < 0):
-        raise ValueError('Cannot represent %f in %s' % (num, _format))
+        raise ValueError('Cannot represent negative number (%f) in %s' % (
+            num, _format))
     if num == 0:
         return 0
-    left_bits = bitwidth - bin_pt
+    scaled = num * (2**bin_pt)
+    scaled = round(scaled)
     if signed:
-        left_limits = -1 * 2**(left_bits-1), 2**(left_bits-1) - 1
+        _nbits = bitwidth - 1
+        limits = [-1 * (2**_nbits), (2**_nbits) - 1]
     else:
-        left_limits = 0, 2**left_bits - 1
-    negnum = num < 0
-    _original_num = num
-    num = abs(num)
-    right, left = np.modf(num)
-    left = int(left)
-    right = int(right*(2**bin_pt))
-    # left = int(num)
-    if left > left_limits[1]:
-        raise ValueError('Cannot represent %f in %s' % (_original_num, _format))
-    # right = int(round((abs(num) % 1) * (2**bin_pt)))
-    assert left >= 0 and right >= 0
-    _lsbin = bin(left)[2:]
-    _lsbin = '0'*(left_bits-len(_lsbin)) + _lsbin
-    if bin_pt == 0:
-        _rsbin = ''
-    else:
-        _rsbin = bin(right)[2:]
-        _rsbin = '0'*(bin_pt-len(_rsbin)) + _rsbin
-    rv = int(_lsbin + _rsbin, 2)
-    if negnum:
-        rv = 2**bitwidth - rv
-    LOGGER.debug('    returning %i' % rv)
-    return rv
+        limits = [0, (2**bitwidth) - 1]
+    scaled = min(limits[1], max(limits[0], scaled))
+    unscaled = scaled / ((2**bin_pt) * 1.0)
+    return unscaled
 
-
-def bin2fp_old(bits, mantissa=8, exponent=7, signed=False):
+def cast_fixed(fpnum, bitwidth, bin_pt):
     """
-    Convert a raw fixed-point number to a float based on a given
-    mantissa and exponent.
+    Represent a fixed point number as an unsigned number, like the Xilinx
+    reinterpret block.
+    :param fpnum:
+    :param bitwidth:
+    :param bin_pt:
+    :return:
     """
-    if bits == 0:
+    if fpnum == 0:
         return 0
-    if exponent >= mantissa:
-        raise TypeError('Unsupported fixed format: %i.%i' % (mantissa, exponent))
-    if not signed:
-        if exponent == 0:
-            if mantissa <= 63:
-                return int(bits)
-            else:
-                # print bits, mantissa, exponent
-                return long(bits)
-        else:
-            return float(bits) / (2**exponent)
-    if bits >= 2**(mantissa-1):
-        rnum = float(bits - (1 << mantissa)) / (2**exponent)
-    else:
-        rnum = float(bits) / (2**exponent)
-    return rnum
+    val = int(fpnum * (2**bin_pt))
+    if fpnum < 0:
+        val += 2**bitwidth
+    return val
 
+def fp2fixed_int(num, bitwidth, bin_pt, signed):
+    """
+    Compatability function, rather use the other functions explicitly.
+    """
+    val = fp2fixed(num, bitwidth, bin_pt, signed)
+    return cast_fixed(val, bitwidth, bin_pt)
 
 class Memory(bitfield.Bitfield):
     """
