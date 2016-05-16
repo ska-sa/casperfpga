@@ -77,7 +77,7 @@ class Mac(object):
             hostname = hostname.replace('cbf_oach', 'roach')
         # /HACK
         if not hostname.startswith('roach'):
-            raise RuntimeError('Only hostnames beginning with'
+            raise RuntimeError('Only hostnames beginning with '
                                'roach supported: %s' % hostname)
         digits = hostname.replace('roach', '')
         serial = [int(digits[ctr:ctr+2], 16) for ctr in range(0, 6, 2)]
@@ -325,7 +325,7 @@ class TenGbe(Memory):
             result0 = self.read_tx_counters()
             # does the required tx counter exist?
             if self.name+'_txctr' not in result0.keys():
-                LOGGER.error('%s: missing registers in gbe block' % 
+                LOGGER.error('%s: missing registers in gbe block' %
                              self.fullname)
                 return False
             time.sleep(wait_time)
