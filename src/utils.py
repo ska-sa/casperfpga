@@ -164,16 +164,20 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=1
         thread_list.append(thread)
     for thread_ in thread_list:
         thread_.join(timeout)
-    fpgas = []
+    fpgas = [None] * num_hosts
     while True:
         try:
             result = result_queue.get_nowait()
-            fpgas.append(result)
+            host_pos = host_list.index(result.host)
+            fpgas[host_pos] = result
         except Queue.Empty:
             break
-    if len(fpgas) != num_hosts:
-        print fpgas
-        raise RuntimeError('Given %d hosts, only made %d %ss' % (num_hosts, len(fpgas), fpga_class))
+    for f in fpgas:
+        if f is None:
+            print fpgas
+            raise RuntimeError(
+                'Given %d hosts, only made %d %ss' % (
+                    num_hosts, len(fpgas), fpga_class))
     return fpgas
 
 
