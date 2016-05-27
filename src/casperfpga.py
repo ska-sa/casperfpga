@@ -319,16 +319,19 @@ class CasperFpga(object):
     def __create_memory_devices(self, device_dict, memorymap_dict):
         """
         Create memory devices from dictionaries of design information.
-        :param device_dict: raw dictionary of information from tagged blocks in Simulink design, keyed on device name
-        :param memorymap_dict: dictionary of information that would have been in coreinfo.tab - memory bus information
+        :param device_dict: raw dictionary of information from tagged
+        blocks in Simulink design, keyed on device name
+        :param memorymap_dict: dictionary of information that would have been
+        in coreinfo.tab - memory bus information
         :return:
         """
         # create and add memory devices to the memory device dictionary
         for device_name, device_info in device_dict.items():
             if device_name == '':
-                raise NameError('There\'s a problem somewhere, got a blank device name?')
+                raise NameError('There\'s a problem somewhere, got a blank '
+                                'device name?')
             if device_name in self.memory_devices.keys():
-                raise NameError('Memory device %s already exists.' % device_name)
+                raise NameError('Memory device %s already exists' % device_name)
             # get the class from the known devices, if it exists there
             tag = device_info['tag']
             try:
@@ -338,16 +341,20 @@ class CasperFpga(object):
                 pass
             else:
                 if not callable(known_device_class):
-                    raise TypeError('%s is not a callable Memory class - that\'s a problem.' % known_device_class)
-                new_device = known_device_class.from_device_info(self, device_name, device_info, memorymap_dict)
+                    raise TypeError('%s is not a callable Memory class - '
+                                    'that\'s a problem.' % known_device_class)
+                new_device = known_device_class.from_device_info(
+                    self, device_name, device_info, memorymap_dict)
                 if new_device.name in self.memory_devices.keys():
-                    raise NameError('Device called %s of type %s already exists in devices list.' %
-                                    (new_device.name, type(new_device)))
+                    raise NameError(
+                        'Device called %s of type %s already exists in '
+                        'devices list.' % (new_device.name, type(new_device)))
                 self.devices[device_name] = new_device
                 self.memory_devices[device_name] = new_device
                 container = getattr(self, known_device_container)
                 setattr(container, device_name, new_device)
-                assert id(getattr(container, device_name)) == id(new_device) == id(self.memory_devices[device_name])
+                assert id(getattr(container, device_name)) == id(new_device)
+                assert id(new_device) == id(self.memory_devices[device_name])
         # allow created devices to update themselves with full device info
         # link control registers, etc
         for name, device in self.memory_devices.items():
@@ -359,12 +366,14 @@ class CasperFpga(object):
     def __create_other_devices(self, device_dict):
         """
         Store non-memory device information in a dictionary
-        :param device_dict: raw dictionary of information from tagged blocks in Simulink design, keyed on device name
+        :param device_dict: raw dictionary of information from tagged
+        blocks in Simulink design, keyed on device name
         :return:
         """
         for device_name, device_info in device_dict.items():
             if device_name == '':
-                raise NameError('There\'s a problem somewhere, got a blank device name?')
+                raise NameError('There\'s a problem somewhere, got a '
+                                'blank device name?')
             if device_name in self.other_devices.keys():
                 raise NameError('Other device %s already exists.' % device_name)
             if device_info['tag'] in CASPER_OTHER_DEVICES.keys():
@@ -372,25 +381,30 @@ class CasperFpga(object):
                 self.other_devices[device_name] = device_info
 
     def device_names_by_container(self, container_name):
-        """Return a list of devices in a certain container.
         """
-        return [devname for devname, container in self.memory_devices.iteritems() if container == container_name]
+        Return a list of devices in a certain container.
+        """
+        return [devname for devname, container
+                in self.memory_devices.iteritems()
+                if container == container_name]
 
     def devices_by_container(self, container):
-        """Get devices using container type.
+        """
+        Get devices using container type.
         """
         return getattr(self, container)
 
     def get_system_information(self, filename=None, fpg_info=None):
         """
         Get information about the design running on the FPGA.
-        If filename is given, get it from there, otherwise query the host via KATCP.
+        If filename is given, get it from file, otherwise query the host via KATCP.
         :param filename: fpg filename
         :param fpg_info: a tuple containing device_info and coreinfo dictionaries
         :return: <nothing> the information is populated in the class
         """
         if (filename is None) and (fpg_info is None):
-            raise RuntimeError('Either filename or parsed fpg data must be given.')
+            raise RuntimeError('Either filename or parsed fpg data '
+                               'must be given.')
         if filename is not None:
             device_dict, memorymap_dict = parse_fpg(filename)
         else:
@@ -398,7 +412,7 @@ class CasperFpga(object):
             memorymap_dict = fpg_info[1]
         # add system registers
         device_dict.update(self.__add_sys_registers())
-        # reset current devices and create new ones from the new design information
+        # reset current devices, create new ones from the new design information
         self.__reset_device_info()
         self.__create_memory_devices(device_dict, memorymap_dict)
         self.__create_other_devices(device_dict)
@@ -426,9 +440,10 @@ class CasperFpga(object):
 
     @staticmethod
     def __add_sys_registers():
-        standard_reg = {'tag': 'xps:sw_reg', 'mode': 'one value', 'io_dir': 'To Processor',
-                        'io_delay': '1', 'sample_period': '1', 'sim_port': 'off', 'show_format': 'off',
-                        'names': 'reg', 'bitwidths': '32', 'arith_types': '0', 'bin_pts': '0'}
+        standard_reg = {'tag': 'xps:sw_reg', 'io_dir': 'To Processor',
+                        'io_delay': '1', 'sample_period': '1', 'names': 'reg',
+                        'bitwidths': '32', 'bin_pts': '0', 'arith_types': '0',
+                        'sim_port': 'off', 'show_format': 'off', }
         sys_registers = {'sys_board_id': standard_reg.copy(),
                          'sys_rev': standard_reg.copy(),
                          'sys_rev_rcs': standard_reg.copy(),
