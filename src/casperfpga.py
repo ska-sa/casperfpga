@@ -62,6 +62,20 @@ class CasperFpga(object):
         :return:
         """
         self.host = host
+
+        # this is just for code introspection
+        self.devices = None
+        self.memory_devices = None
+        self.other_devices = None
+        self.sbrams = None
+        self.qdrs = None
+        self.registers = None
+        self.tengbes = None
+        self.snapshots = None
+        self.system_info = None
+        self.rcs_info = None
+        # /just for introspection
+
         self.__reset_device_info()
         LOGGER.debug('%s: now a CasperFpga' % self.host)
 
