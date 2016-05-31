@@ -452,6 +452,32 @@ class CasperFpga(object):
             secondpass += (2**32)
         return (secondpass - firstpass) / 2000000.0
 
+    def check_tx_raw(self, wait_time=0.2, checks=10):
+        """
+        Check to see whether this host is transmitting packets without
+        error on all its GBE interfaces.
+        :param wait_time: seconds to wait between checks
+        :param checks: times to run check
+        :return:
+        """
+        for gbecore in self.tengbes:
+            if not gbecore.tx_okay(wait_time=wait_time, checks=checks):
+                return False
+        return True
+
+    def check_rx_raw(self, wait_time=0.2, checks=10):
+        """
+        Check to see whether this host is receiving packets without
+        error on all its GBE interfaces.
+        :param wait_time: seconds to wait between checks
+        :param checks: times to run check
+        :return:
+        """
+        for gbecore in self.tengbes:
+            if not gbecore.rx_okay(wait_time=wait_time, checks=checks):
+                return False
+        return True
+
     @staticmethod
     def __add_sys_registers():
         standard_reg = {'tag': 'xps:sw_reg', 'io_dir': 'To Processor',
