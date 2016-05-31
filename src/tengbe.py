@@ -6,7 +6,8 @@ Created on Feb 28, 2013
 
 import logging
 import struct
-import time
+
+from utils import check_changing_status
 
 from memory import Memory
 
@@ -293,7 +294,7 @@ class TenGbe(Memory):
         """
         results = {}
         for reg in self.registers['rx']:
-            results[reg] = self.parent.memory_devices[reg].read()
+            results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
         return results
 
     def read_tx_counters(self):
@@ -301,7 +302,7 @@ class TenGbe(Memory):
         """
         results = {}
         for reg in self.registers['tx']:
-            results[reg] = self.parent.memory_devices[reg].read()
+            results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
         return results
 
     def read_counters(self):
@@ -310,62 +311,58 @@ class TenGbe(Memory):
         results = {}
         for direction in ['tx', 'rx']:
             for reg in self.registers[direction]:
-                results[reg] = self.parent.memory_devices[reg].read()
+                results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
         return results
 
-    def tx_okay(self, wait_time=1):
+    def rx_okay(self, wait_time=0.2, checks=10):
         """
-        Is this gbe block okay?
-        i.e. _txctr incrementing and _txerrctr not incrementing
+        Is this gbe core receiving okay?
+        i.e. _rxctr incrementing and _rxerrctr not incrementing
+        :param wait_time: seconds to wait between checks
+        :param checks: times to run check
         :return: True/False
         """
-        TOTAL_TRIES = 2
+        if checks < 2:
+            raise RuntimeError('Cannot check less often than twice?')
+        fields = {
+            # name, required, True=same|False=different
+            self.name + '_rxctr': (True, False),
+            self.name + '_rxfullctr': (False, True),
+            self.name + '_rxofctr': (False, True),
+            self.name + '_rxerrctr': (True, True),
+            self.name + '_rxvldctr': (False, False),
+        }
+        result, message = check_changing_status(fields, self.read_rx_counters,
+                                                wait_time, checks)
+        if not result:
+            LOGGER.error('%s: %s' % (self.fullname, message))
+            return False
+        return True
 
-        def _runtest():
-            result0 = self.read_tx_counters()
-            # does the required tx counter exist?
-            if self.name+'_txctr' not in result0.keys():
-                LOGGER.error('%s: missing registers in gbe block' % 
-                             self.fullname)
-                return False
-            time.sleep(wait_time)
-            result1 = self.read_tx_counters()
-            # check that the tx counter is ticking over
-            key = self.name+'_txctr'
-            if (result0[key]['data']['reg'] == result1[key]['data']['reg']):
-                LOGGER.error('%s: %s ok - FALSE' % (self.fullname, key))
-                return False
-            else:
-                LOGGER.debug('%s: %s ok - TRUE' % (self.fullname, key))
-            optional = [self.name+'_txfullctr', self.name+'_txofctr',
-                        self.name+'_txvldctr', self.name+'_txerrctr']
-            for key in optional:
-                if key not in result0.keys():
-                    LOGGER.debug('%s: %s not implemented' % (self.fullname, key))
-                    continue
-                res0 = result0[key]['data']['reg']
-                res1 = result1[key]['data']['reg']
-                key_suffix = key.replace(self.name, '')
-                if key_suffix in ['_txerrctr', '_txfullctr', '_txofctr']:
-                    if res0 == res1:
-                        LOGGER.debug('%s: %s ok - TRUE' % (self.fullname, key))
-                    else:
-                        LOGGER.error('%s: %s ok - FALSE' % (self.fullname, key))
-                        return False
-                elif key_suffix == '_txvldctr':
-                    if res0 != res1:
-                        LOGGER.debug('%s: %s ok - TRUE' % (self.fullname, key))
-                    else:
-                        LOGGER.error('%s: %s ok - FALSE' % (self.fullname, key))
-                        return False
-            LOGGER.info('%s: tx_okay() - TRUE.' % self.fullname)
-            return True
-        for tries in range(TOTAL_TRIES):
-            if _runtest():
-                return True
-        LOGGER.error('%s: tx_okay() - FALSE.' % self.fullname)
-        return False
-
+    def tx_okay(self, wait_time=0.2, checks=10):
+        """
+        Is this gbe core transmitting okay?
+        i.e. _txctr incrementing and _txerrctr not incrementing
+        :param wait_time: seconds to wait between checks
+        :param checks: times to run check
+        :return: True/False
+        """
+        if checks < 2:
+            raise RuntimeError('Cannot check less often than twice?')
+        fields = {
+            # name, required, True=same|False=different
+            self.name + '_txctr': (True, False),
+            self.name + '_txfullctr': (False, True),
+            self.name + '_txofctr': (False, True),
+            self.name + '_txerrctr': (False, True),
+            self.name + '_txvldctr': (False, False),
+        }
+        result, message = check_changing_status(fields, self.read_tx_counters,
+                                                wait_time, checks)
+        if not result:
+            LOGGER.error('%s: %s' % (self.fullname, message))
+            return False
+        return True
 
     #def read_raw(self,  **kwargs):
     #    # size is in bytes
