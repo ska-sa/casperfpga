@@ -98,7 +98,12 @@ def get_gbe_data(fpga):
     """
     returndata = {}
     for gbecore in fpga.tengbes:
-        returndata[gbecore.name] = gbecore.read_counters()
+        ctr_data = gbecore.read_counters()
+        for regname in ctr_data:
+            regdata = ctr_data[regname]
+            if ('timestamp' in regdata.keys()) and ('data' in regdata.keys()):
+                ctr_data[regname] = regdata['data']['reg']
+        returndata[gbecore.name] = ctr_data
     return returndata
 
 
@@ -112,9 +117,14 @@ def get_tap_data(fpga):
     return data
 
 # get gbe and tap data
-tap_data = utils.threaded_fpga_operation(fpgas, 10, get_tap_data)
-gbe_data = utils.threaded_fpga_operation(fpgas, 10, get_gbe_data)
-# print gbe_data['roach020956']['gbe0'].keys()
+tap_data = utils.threaded_fpga_operation(fpgas, 15, get_tap_data)
+gbe_data = utils.threaded_fpga_operation(fpgas, 15, get_gbe_data)
+# for fpga in gbe_data:
+#     fpga_data = gbe_data[fpga]
+#     print fpga, ':'
+#     for gbe in fpga_data:
+#         print gbe, ':'
+#         print fpga_data[gbe]
 # utils.threaded_fpga_function(fpgas, 10, 'disconnect')
 # sys.exit()
 
@@ -185,26 +195,19 @@ try:
                 fpga_data = gbe_data[fpga.host]
                 scroller.add_line(fpga.host)
                 for core, core_data in fpga_data.items():
-                    fpga_data[core]['tap_running'] = {
-                        'data': {
-                            'reg': not(tap_data[fpga.host][core]['name'] == '')
-                        }
-                    }
-                    fpga_data[core]['ip'] = {
-                        'data': {
-                            'reg': tap_data[fpga.host][core]['ip']
-                        }
-                    }
+                    tap_running = tap_data[fpga.host][core]['name'] == ''
+                    fpga_data[core]['tap_running'] = not tap_running
+                    fpga_data[core]['ip'] = tap_data[fpga.host][core]['ip']
                     start_pos = 20
                     scroller.add_line(core, 5)
                     for header_register in fpga_headers[0]:
                         core_regname = header_register.replace('gbe', core)
                         if start_pos < 200:
                             if core_regname in core_data.keys():
-                                if not isinstance(core_data[core_regname]['data']['reg'], str):
-                                    regval = '%d' % core_data[core_regname]['data']['reg']
+                                if not isinstance(core_data[core_regname], str):
+                                    regval = '%d' % core_data[core_regname]
                                 else:
-                                    regval = core_data[core_regname]['data']['reg']
+                                    regval = core_data[core_regname]
                             else:
                                 regval = 'n/a'
                             # all on the same line

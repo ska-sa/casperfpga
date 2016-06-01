@@ -284,10 +284,12 @@ class TenGbe(Memory):
         self.parent.read(self.name, 1)
 
     def read_txsnap(self):
-        return self.parent.memory_devices[self.name + '_txs_ss'].read(timeout=10)['data']
+        tmp = self.parent.memory_devices[self.name + '_txs_ss'].read(timeout=10)
+        return tmp['data']
 
     def read_rxsnap(self):
-        return self.parent.memory_devices[self.name + '_rxs_ss'].read(timeout=10)['data']
+        tmp = self.parent.memory_devices[self.name + '_rxs_ss'].read(timeout=10)
+        return tmp['data']
 
     def read_rx_counters(self):
         """Read all rx counters in gbe block
@@ -311,7 +313,8 @@ class TenGbe(Memory):
         results = {}
         for direction in ['tx', 'rx']:
             for reg in self.registers[direction]:
-                results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
+                tmp = self.parent.memory_devices[reg].read()
+                results[reg] = tmp['data']['reg']
         return results
 
     def rx_okay(self, wait_time=0.2, checks=10):
