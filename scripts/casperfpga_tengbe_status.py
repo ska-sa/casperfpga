@@ -101,8 +101,11 @@ def get_gbe_data(fpga):
         ctr_data = gbecore.read_counters()
         for regname in ctr_data:
             regdata = ctr_data[regname]
-            if ('timestamp' in regdata.keys()) and ('data' in regdata.keys()):
-                ctr_data[regname] = regdata['data']['reg']
+            try:
+                if ('timestamp' in regdata.keys()) and ('data' in regdata.keys()):
+                    ctr_data[regname] = regdata['data']['reg']
+            except AttributeError:
+                pass
         returndata[gbecore.name] = ctr_data
     return returndata
 
