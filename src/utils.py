@@ -20,8 +20,9 @@ def create_meta_dictionary(metalist):
             meta_items[name] = {}
         try:
             if meta_items[name]['tag'] != tag:
-                raise ValueError('Different tags - %s, %s - for the same item %s' %
-                                 (meta_items[name]['tag'], tag, name))
+                raise ValueError(
+                    'Different tags - %s, %s - for the same item %s' % (
+                        meta_items[name]['tag'], tag, name))
         except KeyError:
             meta_items[name]['tag'] = tag
         meta_items[name][param] = value
@@ -60,12 +61,15 @@ def parse_fpg(filename):
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
-            lineSplit = line.split('\t')
-            name = lineSplit[0]
-            tag = lineSplit[1]
-            param = lineSplit[2]
-            value = lineSplit[3:][0] if len(lineSplit[3:]) == 1 else ' '.join(lineSplit[3:])
-            #name, tag, param, value = line.split('\t')
+            line_split = line.split('\t')
+            name = line_split[0]
+            tag = line_split[1]
+            param = line_split[2]
+            if len(line_split[3:]) == 1:
+                value = line_split[3:][0]
+            else:
+                value = ' '.join(line_split[3:])
+            # name, tag, param, value = line.split('\t')
             name = name.replace('/', '_')
             metalist.append((name, tag, param, value))
         elif line.startswith('?register'):
