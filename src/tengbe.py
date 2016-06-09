@@ -158,6 +158,13 @@ class IpAddress(object):
             ip.extend([int(byte, base=10)])
         return struct.pack('>4B', *ip)
 
+    def is_multicast(self):
+        """
+        Does the data source's IP address begin with 239?
+        :return:
+        """
+        return (self.ip_int >> 24) == 239
+
     def __int__(self):
         return self.ip_int
 
