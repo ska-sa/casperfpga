@@ -78,7 +78,7 @@ class Mac(object):
             hostname = hostname.replace('cbf_oach', 'roach')
         # /HACK
         if not hostname.startswith('roach'):
-            raise RuntimeError('Only hostnames beginning with'
+            raise RuntimeError('Only hostnames beginning with '
                                'roach supported: %s' % hostname)
         digits = hostname.replace('roach', '')
         serial = [int(digits[ctr:ctr+2], 16) for ctr in range(0, 6, 2)]
