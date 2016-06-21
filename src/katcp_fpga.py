@@ -598,8 +598,15 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         metalist = []
         for inform in informs:
             if len(inform.arguments) < 4:
-                raise ValueError('Incorrect number of meta inform '
+                if len(inform.arguments) == 3:
+                    LOGGER.warn('Incorrect number of meta inform '
+                                'arguments, missing value '
+                                'field: %s' % str(inform.arguments))
+                    inform.arguments.append('-1')
+                else:
+                    LOGGER.error('FEWER than THREE meta inform '
                                  'arguments: %s' % str(inform.arguments))
+                    continue
             for arg in inform.arguments:
                 arg = arg.replace('\_', ' ')
             name = inform.arguments[0]

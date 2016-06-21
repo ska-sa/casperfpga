@@ -20,8 +20,9 @@ def create_meta_dictionary(metalist):
             meta_items[name] = {}
         try:
             if meta_items[name]['tag'] != tag:
-                raise ValueError('Different tags - %s, %s - for the same item %s' %
-                                 (meta_items[name]['tag'], tag, name))
+                raise ValueError(
+                    'Different tags - %s, %s - for the same item %s' % (
+                        meta_items[name]['tag'], tag, name))
         except KeyError:
             meta_items[name]['tag'] = tag
         meta_items[name][param] = value
@@ -60,12 +61,15 @@ def parse_fpg(filename):
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
-            lineSplit = line.split('\t')
-            name = lineSplit[0]
-            tag = lineSplit[1]
-            param = lineSplit[2]
-            value = lineSplit[3:][0] if len(lineSplit[3:]) == 1 else ' '.join(lineSplit[3:])
-            #name, tag, param, value = line.split('\t')
+            line_split = line.split('\t')
+            name = line_split[0]
+            tag = line_split[1]
+            param = line_split[2]
+            if len(line_split[3:]) == 1:
+                value = line_split[3:][0]
+            else:
+                value = ' '.join(line_split[3:])
+            # name, tag, param, value = line.split('\t')
             name = name.replace('/', '_')
             metalist.append((name, tag, param, value))
         elif line.startswith('?register'):
@@ -118,6 +122,71 @@ def pull_info_from_fpg(fpg_file, parameter):
     return match
 
 
+def check_changing_status(field_dict, data_function,
+                          wait_time, num_checks):
+    """
+    Check a changing set of status fields.
+    :param field_dict: field descriptions {name: (required, constant)}
+    :param data_function: a function that will return a single value for the
+    fields from field_dict
+    :param wait_time: seconds to wait between calls to data_function
+    :param num_checks: times to run data_function
+    :return:
+    """
+    # fields = {
+    #     # name, required, True=same|False=different
+    #     'test_required_diff': (True, False),
+    #     'test_required_same': (True, True),
+    #     'test_diff': (True, False),
+    #     'test_same': (True, True),
+    # }
+    #
+    # def get_data():
+    #     res = {}
+    #     res['test_required_diff'] = time.time()
+    #     res['test_required_same'] = 123456
+    #     res['test_diff'] = time.time()
+    #     res['test_same'] = 654321
+    #     return res
+
+    # check that required data fields are returned by the data function
+    change_required = {}
+    d = data_function()
+    checked_fields = field_dict.copy()
+    for f in checked_fields.keys():
+        req = checked_fields[f][0]
+        if f not in d.keys():
+            if req:
+                return False, 'required field %s not found' % f
+            else:
+                checked_fields.pop(f)
+        else:
+            if not checked_fields[f][1]:
+                change_required[f] = False
+    # collect data, checking fields while we're at it
+    prev_data = [d]
+    time.sleep(wait_time)
+    for loop in range(num_checks-1):
+        d = data_function()
+        for f in checked_fields.keys():
+            same_reqd = checked_fields[f][1]
+            for pd in prev_data:
+                value_the_same = pd[f] == d[f]
+                if not value_the_same:
+                    if same_reqd:
+                        return False, '%s changing: %.3f > %.3f' % (
+                            f, pd[f], d[f])
+                    else:
+                        change_required[f] = True
+        prev_data.append(d)
+        time.sleep(wait_time)
+    # did the necessary fields change
+    for f in change_required:
+        if not change_required[f]:
+            return False, '%s is not changing: %.3f' % (f, prev_data[0][f])
+    return True, ''
+
+
 def program_fpgas(fpga_list, progfile, timeout=10):
     """
     Program more than one FPGA at the same time.
@@ -164,16 +233,20 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=1
         thread_list.append(thread)
     for thread_ in thread_list:
         thread_.join(timeout)
-    fpgas = []
+    fpgas = [None] * num_hosts
     while True:
         try:
             result = result_queue.get_nowait()
-            fpgas.append(result)
+            host_pos = host_list.index(result.host)
+            fpgas[host_pos] = result
         except Queue.Empty:
             break
-    if len(fpgas) != num_hosts:
-        print fpgas
-        raise RuntimeError('Given %d hosts, only made %d %ss' % (num_hosts, len(fpgas), fpga_class))
+    for f in fpgas:
+        if f is None:
+            print fpgas
+            raise RuntimeError(
+                'Given %d hosts, only made %d %ss' % (
+                    num_hosts, len(fpgas), fpga_class))
     return fpgas
 
 
