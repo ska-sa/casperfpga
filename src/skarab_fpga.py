@@ -1359,7 +1359,7 @@ class SkarabFpga(CasperFpga):
     def get_sensor_data(self):
         """
         Get sensor data.
-        :return: all sensor data rolled up into an array
+        :return: all sensor data rolled up into a dictionary
         """
         # create identifier for response type expected
         response_type = 'sGetSensorDataResp'
@@ -1388,7 +1388,17 @@ class SkarabFpga(CasperFpga):
                                 'left_middle_fan': sensor_data_values[1],
                                 'left_back_fan': sensor_data_values[2],
                                 'right_back_fan': sensor_data_values[3],
-                                'fpga_fan': sensor_data_values[4]}
+                                'fpga_fan': sensor_data_values[4],
+                                'left_front_fan_pwm': float(
+                                    sensor_data_values[5]) / 100.0,
+                                'left_middle_fan_pwm': float(
+                                    sensor_data_values[6]) / 100.0,
+                                'left_back_fan_pwm': float(
+                                    sensor_data_values[7]) / 100.0,
+                                'right_back_fan_pwm': float(
+                                    sensor_data_values[8]) / 100.0,
+                                'fpga_fan_pwm': float(
+                                    sensor_data_values[9]) / 100.0}
 
             return self.sensor_data
         else:
