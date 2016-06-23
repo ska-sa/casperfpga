@@ -119,6 +119,7 @@ SDRAM_PROGRAM = 0x0029
 CONFIGURE_MULTICAST = 0x002B
 DEBUG_LOOPBACK_TEST = 0x002D
 QSFP_RESET_AND_PROG = 0x002F
+GET_SENSOR_DATA = 0x0031
 
 # I2C BUS DEFINES
 MB_I2C_BUS_ID = 0x0
@@ -508,6 +509,18 @@ class sSdramReconfigureResp(Command):
         self.ContinuityTestOutputLow = ContinuityTestOutputLow
         self.ContinuityTestOutputHigh = ContinuityTestOutputHigh
 
+# GET_SENSOR_DATA
+class sGetSensorDataReq(Command):
+    def __init__(self, commandID, seqNum):
+        self.__dict__['_odict'] = odict()
+        self.Header = sCommandHeader(commandID, seqNum)
+
+class sGetSensorDataResp(Command):
+    def __init__(self, commandID, seqNum, SensorData, Padding):
+        self.__dict__['_odict'] = odict()
+        self.Header = sCommandHeader(commandID, seqNum, False)
+        self.SensorData = SensorData
+        self.Padding = Padding
 
 # READ_FLASH_WORDS
 class sReadFlashWordsReq(object):

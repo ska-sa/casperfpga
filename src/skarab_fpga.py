@@ -60,6 +60,9 @@ class SkarabFpga(CasperFpga):
         self.prog_info = {'last_uploaded': '',
                           'last_programmed': ''}
 
+        # dict for sensor data, empty at initialization
+        self.sensor_data = {}
+
         # check if connected to host
         if self.is_connected():
             LOGGER.info('%s: port(%s) created%s.' %
@@ -617,6 +620,10 @@ class SkarabFpga(CasperFpga):
         if response_type == 'sWriteI2CResp':
             write_bytes = unpacked_data[5:37]
             unpacked_data[5:37] = [write_bytes]
+
+        if response_type == 'sGetSensorDataResp':
+            read_bytes = unpacked_data[2:32]
+            unpacked_data[2:32] = [read_bytes]
 
         # return response from skarab
         return SkarabFpga.sd_dict[response_type](*unpacked_data)
@@ -1347,6 +1354,44 @@ class SkarabFpga(CasperFpga):
 
         else:
             LOGGER.error("Error enabling boot from SDRAM.")
+            return False
+
+    def get_sensor_data(self):
+        """
+        Get sensor data.
+        :return: all sensor data rolled up into an array
+        """
+        # create identifier for response type expected
+        response_type = 'sGetSensorDataResp'
+        expect_response = True
+
+        get_sensor_data_req = sd.sGetSensorDataReq(sd.GET_SENSOR_DATA,
+                                                   self.sequenceNumber)
+
+        payload = get_sensor_data_req.createPayload()
+
+        # TODO: complete this and below
+        get_sensor_data_resp = self.send_packet(self.skarabControlSocket,
+                                                self.skarabEthernetControlPort,
+                                                payload, response_type,
+                                                expect_response,
+                                                sd.GET_SENSOR_DATA,
+                                                self.sequenceNumber, 35, 3)
+
+        if get_sensor_data_resp is not None:
+
+            sensor_data_values = get_sensor_data_resp.SensorData
+
+            # map sensor values to a readable dict
+            # the order of the sensors received is fixed
+            self.sensor_data = {'left_front_fan': sensor_data_values[0],
+                                'left_middle_fan': sensor_data_values[1],
+                                'left_back_fan': sensor_data_values[2],
+                                'right_back_fan': sensor_data_values[3],
+                                'fpga_fan': sensor_data_values[4]}
+
+            return self.sensor_data
+        else:
             return False
 
     # support functions
