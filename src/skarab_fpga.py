@@ -1361,6 +1361,18 @@ class SkarabFpga(CasperFpga):
         Get sensor data.
         :return: all sensor data rolled up into a dictionary
         """
+
+        def temperature_value_check(val):
+            if val == 0x7FFF:
+                return "Error"
+            if val & 0x8000 != 0:
+                val |= 0xFFFF0000
+
+            val = int(val)
+            val = float(val)
+
+            return val/100.0
+
         # create identifier for response type expected
         response_type = 'sGetSensorDataResp'
         expect_response = True
@@ -1398,7 +1410,16 @@ class SkarabFpga(CasperFpga):
                                 'right_back_fan_pwm': float(
                                     sensor_data_values[8]) / 100.0,
                                 'fpga_fan_pwm': float(
-                                    sensor_data_values[9]) / 100.0}
+                                    sensor_data_values[9]) / 100.0,
+                                'inlet_temperature': temperature_value_check(
+                                    sensor_data_values[10]),
+                                'outlet_temperature': temperature_value_check(
+                                    sensor_data_values[11]),
+                                'fpga_temperature': temperature_value_check(
+                                    sensor_data_values[12]),
+                                'fan_controller_temperature':
+                                    temperature_value_check(
+                                        sensor_data_values[13])}
 
             return self.sensor_data
         else:
