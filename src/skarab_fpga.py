@@ -1359,19 +1359,67 @@ class SkarabFpga(CasperFpga):
     def get_sensor_data(self):
         """
         Get sensor data.
+        Units:
+        Fan Speed - RPM
+        Fan Speed PWM - PWM %
+        Temperature Sensors - degrees Celsius
+        Voltage - Volts (V)
+        Currents - Amps (A)
         :return: all sensor data rolled up into a dictionary
         """
 
-        def temperature_value_check(val):
-            if val == 0x7FFF:
+        def sign_extend(value, bits):
+            """
+            Performs 2's compliment sign extension
+            :param value: value to sign extend
+            :param bits: number of bits making up the value
+            :return: sign extended value
+            """
+
+            sign_bit = 1 << (bits - 1)
+            return (value & (sign_bit - 1)) - (value & sign_bit)
+
+        def temperature_value_check(value):
+            """
+            Checks the value returned from the temperature sensor and handles
+            it accordingly.
+            :param value: value returned from temperature sensor
+            :return: correct temperature value
+            """
+            if value == 0x7FFF:
                 return "Error"
-            if val & 0x8000 != 0:
-                val |= 0xFFFF0000
+            if value & 0x8000 != 0:
+                value = sign_extend(value, 16)  # 16 bits represent the temperature
 
-            val = int(val)
-            val = float(val)
+            value = int(value)
+            value = float(value)
 
-            return val/100.0
+            return value / 100.0
+
+        def voltage_current_monitor_temperature_check(value):
+            """
+            Checks the value returned for the voltage monitor temperature
+            and handles it appropriately to extract the actual temperature
+            value from the received data
+            :param value: value returned by voltage monitor temperature sensor
+            :return: correct temperature value
+            """
+
+            mantissa = value & 0x07FF  # get lower 11 bits
+
+            if (mantissa & 0x400) != 0:
+                mantissa = sign_extend(mantissa, 11)  # lower 11 bits are for mantissa
+
+            mantissa = int(mantissa)
+
+            exponent = (value >> 11) & 0x1F  # get upper 5 bits
+
+            if (exponent & 0x10) != 0:
+                exponent = sign_extend(exponent, 5)  # upper 5 bits are for exponent
+
+            exponent = int(exponent)
+
+            return float(mantissa) * pow(2.0, float(exponent))
 
         # create identifier for response type expected
         response_type = 'sGetSensorDataResp'
@@ -1393,14 +1441,14 @@ class SkarabFpga(CasperFpga):
         if get_sensor_data_resp is not None:
 
             sensor_data_values = get_sensor_data_resp.SensorData
-
+            print sensor_data_values
             # map sensor values to a readable dict
             # the order of the sensors received is fixed
-            self.sensor_data = {'left_front_fan': sensor_data_values[0],
-                                'left_middle_fan': sensor_data_values[1],
-                                'left_back_fan': sensor_data_values[2],
-                                'right_back_fan': sensor_data_values[3],
-                                'fpga_fan': sensor_data_values[4],
+            self.sensor_data = {'left_front_fan_rpm': sensor_data_values[0],
+                                'left_middle_fan_rpm': sensor_data_values[1],
+                                'left_back_fan_rpm': sensor_data_values[2],
+                                'right_back_fan_rpm': sensor_data_values[3],
+                                'fpga_fan_rpm': sensor_data_values[4],
                                 'left_front_fan_pwm': float(
                                     sensor_data_values[5]) / 100.0,
                                 'left_middle_fan_pwm': float(
@@ -1411,15 +1459,25 @@ class SkarabFpga(CasperFpga):
                                     sensor_data_values[8]) / 100.0,
                                 'fpga_fan_pwm': float(
                                     sensor_data_values[9]) / 100.0,
-                                'inlet_temperature': temperature_value_check(
-                                    sensor_data_values[10]),
-                                'outlet_temperature': temperature_value_check(
-                                    sensor_data_values[11]),
-                                'fpga_temperature': temperature_value_check(
-                                    sensor_data_values[12]),
-                                'fan_controller_temperature':
+                                'inlet_temperature_degC':
                                     temperature_value_check(
-                                        sensor_data_values[13])}
+                                    sensor_data_values[10]),
+                                'outlet_temperature_degC':
+                                    temperature_value_check(
+                                    sensor_data_values[11]),
+                                'fpga_temperature_degC':
+                                    temperature_value_check(
+                                    sensor_data_values[12]),
+                                'fan_controller_temperature_degC':
+                                    temperature_value_check(
+                                        sensor_data_values[13]),
+                                'voltage_monitor_temperature_degC':
+                                    voltage_current_monitor_temperature_check(
+                                        sensor_data_values[14]),
+                                'current_monitor_temperature_degC':
+                                    voltage_current_monitor_temperature_check(
+                                        sensor_data_values[15]
+                                    )}
 
             return self.sensor_data
         else:
