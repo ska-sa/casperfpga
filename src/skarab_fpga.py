@@ -622,8 +622,8 @@ class SkarabFpga(CasperFpga):
             unpacked_data[5:37] = [write_bytes]
 
         if response_type == 'sGetSensorDataResp':
-            read_bytes = unpacked_data[2:32]
-            unpacked_data[2:32] = [read_bytes]
+            read_bytes = unpacked_data[2:93]
+            unpacked_data[2:93] = [read_bytes]
 
         # return response from skarab
         return SkarabFpga.sd_dict[response_type](*unpacked_data)
@@ -642,7 +642,7 @@ class SkarabFpga(CasperFpga):
         :param expect_response: is a response expected?
         :param command_id: command_id of the request packet
         :param seq_num: sequence number of the request packet
-        :param number_of_words: number of 16-bit words expected in response
+        :param number_of_words: total number of 16-bit words expected in response
         :param pad_words: number of padding words (16-bit) expected in response
         :return: response expected: returns response object or 'None' if no response received. else returns 'ok'
         """
@@ -1421,6 +1421,50 @@ class SkarabFpga(CasperFpga):
 
             return float(mantissa) * pow(2.0, float(exponent))
 
+        def voltage_handler(index):
+            """
+            Handles the data returned by the voltage monitor for the various
+            board voltages. Returns actual voltages extracted from this data.
+            :param index: index at which next voltage sensor data begins
+            :return: extracted voltage
+            """
+
+            voltage = sensor_data_values[index]
+            voltage_scale_factor = sensor_data_values[index + 1]
+
+            if (voltage_scale_factor & 0x10) != 0:
+                voltage_scale_factor = sign_extend(voltage_scale_factor, 5)
+
+            voltage_scale_factor = int(voltage_scale_factor)
+
+            val = float(voltage) * float(pow(2.0, float(voltage_scale_factor)))
+
+            return round(
+                val * next(v for k, v in sd.voltage_scaling.iteritems() if
+                           str(sensor_data_values[index + 2]) in k), 2)
+
+        def current_handler(index):
+            """
+            Handles the data returned by the current monitor for the various
+            board currents. Returns actual current extracted from this data.
+            :param index: index at which next current sensor data begins
+            :return: extracted current
+            """
+
+            current = sensor_data_values[index]
+            scale_factor = sensor_data_values[index + 1]
+
+            if (scale_factor & 0x10) != 0:
+                scale_factor = sign_extend(scale_factor, 5)
+
+                scale_factor = int(scale_factor)
+
+            val = float(current) * float(pow(2.0, float(scale_factor)))
+
+            return round(
+                val * next(v for k, v in sd.voltage_scaling.iteritems() if
+                           str(sensor_data_values[index + 2]) in k), 2)
+
         # create identifier for response type expected
         response_type = 'sGetSensorDataResp'
         expect_response = True
@@ -1436,7 +1480,7 @@ class SkarabFpga(CasperFpga):
                                                 payload, response_type,
                                                 expect_response,
                                                 sd.GET_SENSOR_DATA,
-                                                self.sequenceNumber, 35, 3)
+                                                self.sequenceNumber, 95, 2)
 
         if get_sensor_data_resp is not None:
 
@@ -1476,8 +1520,58 @@ class SkarabFpga(CasperFpga):
                                         sensor_data_values[14]),
                                 'current_monitor_temperature_degC':
                                     voltage_current_monitor_temperature_check(
-                                        sensor_data_values[15]
-                                    )}
+                                        sensor_data_values[15]),
+                                '+12V2_voltage':
+                                    voltage_handler(16),
+                                '+12V_voltage':
+                                    voltage_handler(19),
+                                '+5V_voltage':
+                                    voltage_handler(22),
+                                '+3V3_voltage':
+                                    voltage_handler(25),
+                                '+2V5_voltage':
+                                    voltage_handler(28),
+                                '+1V8_voltage':
+                                    voltage_handler(31),
+                                '+1V2_voltage':
+                                    voltage_handler(34),
+                                '+1V0_voltage':
+                                    voltage_handler(37),
+                                '+1V8_MGTVCCAUX_voltage':
+                                    voltage_handler(40),
+                                '+1V0_MGTAVCC_voltage':
+                                    voltage_handler(43),
+                                '+1V2_MGTAVTT_voltage':
+                                    voltage_handler(46),
+                                '+3V3_config_voltage':
+                                    voltage_handler(49),
+                                '+5V_aux_voltage':
+                                    voltage_handler(52),
+                                '+12V2_current':
+                                    voltage_handler(55),
+                                '+12V_current':
+                                    voltage_handler(58),
+                                '+5V_current':
+                                    voltage_handler(61),
+                                '+3V3_current':
+                                    voltage_handler(64),
+                                '+2V5_current':
+                                    voltage_handler(67),
+                                '+1V8_current':
+                                    voltage_handler(70),
+                                '+1V2_current':
+                                    voltage_handler(73),
+                                '+1V0_current':
+                                    voltage_handler(76),
+                                '+1V8_MGTVCCAUX_current':
+                                    voltage_handler(79),
+                                '+1V0_MGTAVCC_current':
+                                    voltage_handler(82),
+                                '+1V2_MGTAVTT_current':
+                                    voltage_handler(85),
+                                '+3V3_config_current':
+                                    voltage_handler(88)
+                                }
 
             return self.sensor_data
         else:

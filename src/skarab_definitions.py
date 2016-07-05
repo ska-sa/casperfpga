@@ -232,6 +232,7 @@ P1V8_MGTVCCAUX_VOLTAGE_MON_PAGE = 8
 P1V0_MGTAVCC_VOLTAGE_MON_PAGE = 9
 P1V2_MGTAVTT_VOLTAGE_MON_PAGE = 10
 P3V3_CONFIG_VOLTAGE_MON_PAGE = 11
+P5VAUX_VOLTAGE_MON_PAGE = 11
 
 # UCD90120A CURRENT MONITOR PAGES
 P12V2_CURRENT_MON_PAGE = 0
@@ -246,6 +247,35 @@ P1V8_MGTVCCAUX_CURRENT_MON_PAGE = 8
 P1V0_MGTAVCC_CURRENT_MON_PAGE = 9
 P1V2_MGTAVTT_CURRENT_MON_PAGE = 10
 P1V8_CURRENT_MON_PAGE = 11
+
+voltage_scaling = {(str(P12V2_VOLTAGE_MON_PAGE),
+                    str(P12V_VOLTAGE_MON_PAGE)): 6100.0 / 1000.0,
+                   (str(P5V_VOLTAGE_MON_PAGE),
+                    str(P3V3_VOLTAGE_MON_PAGE),
+                    str(P3V3_CONFIG_VOLTAGE_MON_PAGE),
+                    str(P5VAUX_VOLTAGE_MON_PAGE)): 2500.0 / 1000.0,
+                   str(P2V5_VOLTAGE_MON_PAGE): 4900.0 / 3900.0,
+                   (str(P1V8_VOLTAGE_MON_PAGE),
+                    str(P1V2_VOLTAGE_MON_PAGE),
+                    str(P1V0_VOLTAGE_MON_PAGE),
+                    str(P1V8_MGTVCCAUX_VOLTAGE_MON_PAGE),
+                    str(P1V0_MGTAVCC_VOLTAGE_MON_PAGE),
+                    str(P1V2_MGTAVTT_VOLTAGE_MON_PAGE)): 1
+                   }
+
+current_scaling = {(str(P12V2_CURRENT_MON_PAGE),
+                    str(P12V_CURRENT_MON_PAGE)): 1.0 / (100.0 * 0.001),
+                   str(P5V_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.002),
+                   str(P3V3_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.005),
+                   str(P3V3_CONFIG_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
+                   str(P2V5_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
+                   str(P1V8_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.005),
+                   str(P1V2_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
+                   str(P1V0_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.0000250),
+                   str(P1V8_MGTVCCAUX_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
+                   str(P1V0_MGTAVCC_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
+                   str(P1V2_MGTAVTT_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.002)
+                   }
 
 # 88E1111 GBE DEFINES
 GBE_88E1111_I2C_DEVICE_ADDRESS = 0x58  # Without read/write bit
