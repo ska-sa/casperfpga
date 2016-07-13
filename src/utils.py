@@ -15,17 +15,22 @@ def create_meta_dictionary(metalist):
     :return: a dictionary of device info, keyed by unique device name
     """
     meta_items = {}
-    for name, tag, param, value in metalist:
-        if name not in meta_items.keys():
-            meta_items[name] = {}
-        try:
-            if meta_items[name]['tag'] != tag:
-                raise ValueError(
-                    'Different tags - %s, %s - for the same item %s' % (
-                        meta_items[name]['tag'], tag, name))
-        except KeyError:
-            meta_items[name]['tag'] = tag
-        meta_items[name][param] = value
+    try:
+        for name, tag, param, value in metalist:
+            if name not in meta_items:
+                meta_items[name] = {}
+            try:
+                if meta_items[name]['tag'] != tag:
+                    raise ValueError(
+                        'Different tags - %s, %s - for the same item %s' % (
+                            meta_items[name]['tag'], tag, name))
+            except KeyError:
+                meta_items[name]['tag'] = tag
+            meta_items[name][param] = value
+    except ValueError as e:
+        for ctr, contents in enumerate(metalist):
+            print ctr, contents
+        raise e
     return meta_items
 
 

@@ -219,6 +219,7 @@ class TenGbe(Memory):
         self.core_details = None
         self.snaps = {'tx': None, 'rx': None}
         self.registers = {'tx': [], 'rx': []}
+        self.multicast_subscriptions = []
         # TODO
         # if self.parent.is_connected():
         #     self._check()
@@ -321,7 +322,8 @@ class TenGbe(Memory):
         for direction in ['tx', 'rx']:
             for reg in self.registers[direction]:
                 tmp = self.parent.memory_devices[reg].read()
-                results[reg] = tmp['data']['reg']
+                keyname = self.name + '_' + direction + 'ctr'
+                results[keyname] = tmp['data']['reg']
         return results
 
     def rx_okay(self, wait_time=0.2, checks=10):
@@ -518,6 +520,8 @@ class TenGbe(Memory):
                                             request_args=(self.name, 'recv',
                                                           mcast_group_string, ))
         if reply.arguments[0] == 'ok':
+            if mcast_group_string not in self.multicast_subscriptions:
+                self.multicast_subscriptions.append(mcast_group_string)
             return
         else:
             raise RuntimeError("%s: failed adding multicast receive %s to "
@@ -534,10 +538,16 @@ class TenGbe(Memory):
                                                 request_args=(self.name,
                                                               IpAddress.str2ip(ip_str), ))
         except:
-            raise RuntimeError("%s: tap-multicast-remove does not seem to "
-                               "be supported on %s" % (self.fullname,
+            raise RuntimeError('%s: tap-multicast-remove does not seem to '
+                               'be supported on %s' % (self.fullname,
                                                        self.parent.host))
         if reply.arguments[0] == 'ok':
+            if ip_str not in self.multicast_subscriptions:
+                LOGGER.warning(
+                    '%s: That is odd, %s removed from mcast subscriptions, but '
+                    'it was not in its list of sbscribed addresses.' % (
+                        self.fullname, ip_str))
+                self.multicast_subscriptions.remove(ip_str)
             return
         else:
             raise RuntimeError('%s: failed removing multicast address %s '
