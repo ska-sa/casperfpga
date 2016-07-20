@@ -1389,12 +1389,13 @@ class SkarabFpga(CasperFpga):
             if value == 0x7FFF:
                 return "Error"
             if value & 0x8000 != 0:
-                value = sign_extend(value, 16)  # 16 bits represent the temperature
+                value = sign_extend(value,
+                                    16)  # 16 bits represent the temperature
 
             value = int(value)
             value = float(value)
 
-            return value / 100.0
+            return round(value / 100.0, 2)
 
         def voltage_current_monitor_temperature_check(value):
             """
@@ -1408,20 +1409,22 @@ class SkarabFpga(CasperFpga):
             mantissa = value & 0x07FF  # get lower 11 bits
 
             if (mantissa & 0x400) != 0:
-                mantissa = sign_extend(mantissa, 11)  # lower 11 bits are for mantissa
+                mantissa = sign_extend(mantissa,
+                                       11)  # lower 11 bits are for mantissa
 
             mantissa = int(mantissa)
 
             exponent = (value >> 11) & 0x1F  # get upper 5 bits
 
             if (exponent & 0x10) != 0:
-                exponent = sign_extend(exponent, 5)  # upper 5 bits are for exponent
+                exponent = sign_extend(exponent,
+                                       5)  # upper 5 bits are for exponent
 
             exponent = int(exponent)
 
-            return float(mantissa) * pow(2.0, float(exponent))
+            return round(float(mantissa) * pow(2.0, float(exponent)), 2)
 
-        def voltage_handler(index):
+        def voltage_handler(raw_sensor_data, index):
             """
             Handles the data returned by the voltage monitor for the various
             board voltages. Returns actual voltages extracted from this data.
@@ -1429,8 +1432,9 @@ class SkarabFpga(CasperFpga):
             :return: extracted voltage
             """
 
-            voltage = sensor_data_values[index]
-            voltage_scale_factor = sensor_data_values[index + 1]
+            voltage = raw_sensor_data[index]
+
+            voltage_scale_factor = raw_sensor_data[index + 1]
 
             if (voltage_scale_factor & 0x10) != 0:
                 voltage_scale_factor = sign_extend(voltage_scale_factor, 5)
@@ -1440,10 +1444,10 @@ class SkarabFpga(CasperFpga):
             val = float(voltage) * float(pow(2.0, float(voltage_scale_factor)))
 
             return round(
-                val * next(v for k, v in sd.voltage_scaling.iteritems() if
-                           str(sensor_data_values[index + 2]) in k), 2)
+                val * sd.voltage_scaling[str(raw_sensor_data[index + 2])],
+                2)
 
-        def current_handler(index):
+        def current_handler(raw_sensor_data, index):
             """
             Handles the data returned by the current monitor for the various
             board currents. Returns actual current extracted from this data.
@@ -1451,8 +1455,8 @@ class SkarabFpga(CasperFpga):
             :return: extracted current
             """
 
-            current = sensor_data_values[index]
-            scale_factor = sensor_data_values[index + 1]
+            current = raw_sensor_data[index]
+            scale_factor = raw_sensor_data[index + 1]
 
             if (scale_factor & 0x10) != 0:
                 scale_factor = sign_extend(scale_factor, 5)
@@ -1462,8 +1466,118 @@ class SkarabFpga(CasperFpga):
             val = float(current) * float(pow(2.0, float(scale_factor)))
 
             return round(
-                val * next(v for k, v in sd.voltage_scaling.iteritems() if
-                           str(sensor_data_values[index + 2]) in k), 2)
+                val * sd.current_scaling[str(raw_sensor_data[index + 2])],
+                2)
+
+        # TODO:
+        def check_fan_speed(fan_name):
+            """
+            Checks if a given fan is running within accpetable limits
+            :param fan_name: fan to be checked
+            :return: OK, WARNING or ERROR
+            """
+            return 'unknown'
+
+        def check_temperature(sensor_name, value, inlet_ref):
+            """
+            Checks if a given temperature is within acceptable range
+            :param sensor_name: temperature to check
+            :param inlet_ref: inlet temperature; used as reference for other temperature thresholds
+            :return: OK, WARNING or ERROR
+            """
+            if sensor_name == 'inlet_temperature_degC':
+                if value > sd.temperature_ranges[sensor_name][0] or value < \
+                        sd.temperature_ranges[sensor_name][1]:
+                    return 'ERROR'
+                else:
+                    return 'OK'
+            else:
+                if value > inlet_ref + sd.temperature_ranges[sensor_name][
+                    0] or value < inlet_ref + \
+                        sd.temperature_ranges[sensor_name][1]:
+                    return 'ERROR'
+                else:
+                    return 'OK'
+
+        def check_current(current_name, value):
+            """
+            Checks if a given PSU current reading is within acceptable range
+            :param current_name: current to check
+            :param value: value of the sensor
+            :return: OK, WARNING or ERROR
+            """
+
+            if value > sd.current_ranges[current_name][0] or value < \
+                    sd.current_ranges[current_name][1]:
+                # return "\033[0;31m{}\033[00m".format('ERROR')
+                return 'ERROR'
+
+            else:
+                # return "\033[0;31m{}\033[00m".format('OK')
+                return 'OK'
+
+        def check_voltage(voltage_name, value):
+            """
+            Checks if a given PSU voltage reading is within acceptable range
+            :param voltage_name: voltage to check
+            :param value: value of the sensor
+            :return: OK, WARNING or ERROR
+            """
+
+            if value > sd.voltage_ranges[voltage_name][0] or value < \
+                    sd.voltage_ranges[voltage_name][1]:
+                # return "\033[0;31m{}\033[00m".format('ERROR')
+                return 'ERROR'
+            else:
+                # return "\033[0;31m{}\033[00m".format('OK')
+                return 'OK'
+
+        def parse_fan_speeds_rpm(raw_sensor_data):
+            for key, value in sd.sensor_list.items():
+                if 'fan_rpm' in key:
+                    self.sensor_data[key] = (
+                        raw_sensor_data[value], 'rpm', check_fan_speed(key))
+
+        def parse_fan_speeds_pwm(raw_sensor_data):
+            for key, value in sd.sensor_list.items():
+                if 'fan_pwm' in key:
+                    self.sensor_data[key] = round(
+                        raw_sensor_data[value] / 100.0, 2)
+
+        def parse_temperatures(raw_sensor_data):
+            # inlet temp (reference)
+            inlet_ref = temperature_value_check(
+                raw_sensor_data[sd.sensor_list['inlet_temperature_degC']])
+            for key, value in sd.sensor_list.items():
+                if 'temperature' in key:
+                    if 'voltage' in key or 'current' in key:
+                        temperature = voltage_current_monitor_temperature_check(
+                            raw_sensor_data[value])
+                        self.sensor_data[
+                            key] = (temperature, 'degC',
+                                    check_temperature(key, temperature,
+                                                      inlet_ref))
+                    else:
+                        temperature = temperature_value_check(
+                            raw_sensor_data[value])
+                        self.sensor_data[key] = (temperature, 'degC',
+                                                 check_temperature(key,
+                                                                   temperature,
+                                                                   inlet_ref))
+
+        def parse_voltages(raw_sensor_data):
+            for key, value in sd.sensor_list.items():
+                if '_voltage' in key:
+                    voltage = voltage_handler(raw_sensor_data, value)
+                    self.sensor_data[key] = (voltage, 'volts',
+                                             check_voltage(key, voltage))
+
+        def parse_currents(raw_sensor_data):
+            for key, value in sd.sensor_list.items():
+                if '_current' in key:
+                    current = current_handler(raw_sensor_data, value)
+                    self.sensor_data[key] = (current, 'amperes',
+                                             check_current(key, current))
 
         # create identifier for response type expected
         response_type = 'sGetSensorDataResp'
@@ -1484,94 +1598,15 @@ class SkarabFpga(CasperFpga):
 
         if get_sensor_data_resp is not None:
 
-            sensor_data_values = get_sensor_data_resp.SensorData
-            print sensor_data_values
-            # map sensor values to a readable dict
-            # the order of the sensors received is fixed
-            self.sensor_data = {'left_front_fan_rpm': sensor_data_values[0],
-                                'left_middle_fan_rpm': sensor_data_values[1],
-                                'left_back_fan_rpm': sensor_data_values[2],
-                                'right_back_fan_rpm': sensor_data_values[3],
-                                'fpga_fan_rpm': sensor_data_values[4],
-                                'left_front_fan_pwm': float(
-                                    sensor_data_values[5]) / 100.0,
-                                'left_middle_fan_pwm': float(
-                                    sensor_data_values[6]) / 100.0,
-                                'left_back_fan_pwm': float(
-                                    sensor_data_values[7]) / 100.0,
-                                'right_back_fan_pwm': float(
-                                    sensor_data_values[8]) / 100.0,
-                                'fpga_fan_pwm': float(
-                                    sensor_data_values[9]) / 100.0,
-                                'inlet_temperature_degC':
-                                    temperature_value_check(
-                                    sensor_data_values[10]),
-                                'outlet_temperature_degC':
-                                    temperature_value_check(
-                                    sensor_data_values[11]),
-                                'fpga_temperature_degC':
-                                    temperature_value_check(
-                                    sensor_data_values[12]),
-                                'fan_controller_temperature_degC':
-                                    temperature_value_check(
-                                        sensor_data_values[13]),
-                                'voltage_monitor_temperature_degC':
-                                    voltage_current_monitor_temperature_check(
-                                        sensor_data_values[14]),
-                                'current_monitor_temperature_degC':
-                                    voltage_current_monitor_temperature_check(
-                                        sensor_data_values[15]),
-                                '+12V2_voltage':
-                                    voltage_handler(16),
-                                '+12V_voltage':
-                                    voltage_handler(19),
-                                '+5V_voltage':
-                                    voltage_handler(22),
-                                '+3V3_voltage':
-                                    voltage_handler(25),
-                                '+2V5_voltage':
-                                    voltage_handler(28),
-                                '+1V8_voltage':
-                                    voltage_handler(31),
-                                '+1V2_voltage':
-                                    voltage_handler(34),
-                                '+1V0_voltage':
-                                    voltage_handler(37),
-                                '+1V8_MGTVCCAUX_voltage':
-                                    voltage_handler(40),
-                                '+1V0_MGTAVCC_voltage':
-                                    voltage_handler(43),
-                                '+1V2_MGTAVTT_voltage':
-                                    voltage_handler(46),
-                                '+3V3_config_voltage':
-                                    voltage_handler(49),
-                                '+5V_aux_voltage':
-                                    voltage_handler(52),
-                                '+12V2_current':
-                                    voltage_handler(55),
-                                '+12V_current':
-                                    voltage_handler(58),
-                                '+5V_current':
-                                    voltage_handler(61),
-                                '+3V3_current':
-                                    voltage_handler(64),
-                                '+2V5_current':
-                                    voltage_handler(67),
-                                '+1V8_current':
-                                    voltage_handler(70),
-                                '+1V2_current':
-                                    voltage_handler(73),
-                                '+1V0_current':
-                                    voltage_handler(76),
-                                '+1V8_MGTVCCAUX_current':
-                                    voltage_handler(79),
-                                '+1V0_MGTAVCC_current':
-                                    voltage_handler(82),
-                                '+1V2_MGTAVTT_current':
-                                    voltage_handler(85),
-                                '+3V3_config_current':
-                                    voltage_handler(88)
-                                }
+            # raw sensor data received from SKARAB
+            recvd_sensor_data_values = get_sensor_data_resp.SensorData
+
+            # parse the raw data to extract actual sensor info
+            parse_fan_speeds_rpm(recvd_sensor_data_values)
+            parse_fan_speeds_pwm(recvd_sensor_data_values)
+            parse_currents(recvd_sensor_data_values)
+            parse_voltages(recvd_sensor_data_values)
+            parse_temperatures(recvd_sensor_data_values)
 
             return self.sensor_data
         else:
