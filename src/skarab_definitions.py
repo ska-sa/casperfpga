@@ -120,6 +120,7 @@ CONFIGURE_MULTICAST = 0x002B
 DEBUG_LOOPBACK_TEST = 0x002D
 QSFP_RESET_AND_PROG = 0x002F
 GET_SENSOR_DATA = 0x0031
+SET_FAN_SPEED = 0x0033
 
 # I2C BUS DEFINES
 MB_I2C_BUS_ID = 0x0
@@ -367,7 +368,7 @@ fan_speed_ranges = {'left_front_fan_rpm': (23000, 2000, -4000),
                     'left_middle_fan_rpm': (23000, 2000, -4000),
                     'left_back_fan_rpm': (23000, 2000, -4000),
                     'right_back_fan_rpm': (23000, 2000, -4000),
-                    'fpga_fan_rpm': (4000, 2000, -2000),
+                    'fpga_fan_rpm': (6000, 2000, -2000),
                     'left_front_fan_pwm': (100, 0),
                     'left_middle_fan_pwm': (100, 0),
                     'left_back_fan_pwm': (100, 0),
@@ -649,6 +650,23 @@ class sGetSensorDataResp(Command):
         self.SensorData = SensorData
         self.Padding = Padding
 
+
+# SET_FAN_SPEED
+class sSetFanSpeedReq(Command):
+    def __init__(self, commandID, seqNum, fanPage, pwmSetting):
+        self.__dict__['_odict'] = odict()
+        self.Header = sCommandHeader(commandID, seqNum)
+        self.fanPage = self.packet2BytePacker(fanPage)
+        self.pwmSetting = self.packet2BytePacker(pwmSetting*100)
+
+
+class sSetFanSpeedResp(Command):
+    def __init__(self, commandID, seqNum, fanSpeedPWM, fanSpeedRPM, Padding):
+        self.__dict__['_odict'] = odict()
+        self.Header = sCommandHeader(commandID, seqNum, False)
+        self.fanSpeedPWM = fanSpeedPWM
+        self.fanSpeedRPM = fanSpeedRPM
+        self.Padding = Padding
 # READ_FLASH_WORDS
 class sReadFlashWordsReq(object):
     def __init__(self, commandID, seqNum, AddressHigh, AddressLow, NumWords):
@@ -656,7 +674,6 @@ class sReadFlashWordsReq(object):
         self.AddressHigh = AddressHigh
         self.AddressLow = AddressLow
         self.NumWords = NumWords
-
 
 class sReadFlashWordsResp(object):
     def __init__(self, commandID, seqNum, AddressHigh, AddressLow, NumWords,

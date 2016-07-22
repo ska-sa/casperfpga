@@ -1428,6 +1428,7 @@ class SkarabFpga(CasperFpga):
             """
             Handles the data returned by the voltage monitor for the various
             board voltages. Returns actual voltages extracted from this data.
+            :param raw_sensor_data: array containing raw sensor data
             :param index: index at which next voltage sensor data begins
             :return: extracted voltage
             """
@@ -1451,6 +1452,7 @@ class SkarabFpga(CasperFpga):
             """
             Handles the data returned by the current monitor for the various
             board currents. Returns actual current extracted from this data.
+            :param raw_sensor_data: array containing raw sensor data
             :param index: index at which next current sensor data begins
             :return: extracted current
             """
@@ -1470,18 +1472,31 @@ class SkarabFpga(CasperFpga):
                 2)
 
         # TODO:
-        def check_fan_speed(fan_name):
+        def check_fan_speed(fan_name, value):
             """
-            Checks if a given fan is running within accpetable limits
+            Checks if a given fan is running within acceptable limits
             :param fan_name: fan to be checked
+            :param value: fan speed value
             :return: OK, WARNING or ERROR
             """
-            return 'unknown'
+
+            if value > ((self.sensor_data[fan_name.replace('_rpm',
+                                                           '_pwm')] + 10.0) / 100.0) * \
+                    sd.fan_speed_ranges[fan_name][0] or value < ((
+                                                                             self.sensor_data[
+                                                                                 fan_name.replace(
+                                                                                     '_rpm',
+                                                                                     '_pwm')] - 10.0) / 100.0) * \
+                    sd.fan_speed_ranges[fan_name][0]:
+                return 'ERROR'
+            else:
+                return 'OK'
 
         def check_temperature(sensor_name, value, inlet_ref):
             """
             Checks if a given temperature is within acceptable range
             :param sensor_name: temperature to check
+            :param value: temperature value
             :param inlet_ref: inlet temperature; used as reference for other temperature thresholds
             :return: OK, WARNING or ERROR
             """
@@ -1535,8 +1550,9 @@ class SkarabFpga(CasperFpga):
         def parse_fan_speeds_rpm(raw_sensor_data):
             for key, value in sd.sensor_list.items():
                 if 'fan_rpm' in key:
+                    fan_speed = raw_sensor_data[value]
                     self.sensor_data[key] = (
-                        raw_sensor_data[value], 'rpm', check_fan_speed(key))
+                            fan_speed, 'rpm', check_fan_speed(key, fan_speed))
 
         def parse_fan_speeds_pwm(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -1602,8 +1618,8 @@ class SkarabFpga(CasperFpga):
             recvd_sensor_data_values = get_sensor_data_resp.SensorData
 
             # parse the raw data to extract actual sensor info
-            parse_fan_speeds_rpm(recvd_sensor_data_values)
             parse_fan_speeds_pwm(recvd_sensor_data_values)
+            parse_fan_speeds_rpm(recvd_sensor_data_values)
             parse_currents(recvd_sensor_data_values)
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
@@ -1611,6 +1627,42 @@ class SkarabFpga(CasperFpga):
             return self.sensor_data
         else:
             return False
+
+    def set_fan_speed(self, fan_page, pwm_setting):
+        """
+        Sets the speed of a selected fan on the SKARAB motherboard. Desired
+        speed is given as a PWM setting: range: 0.0 - 100.0
+        :param fan_page: desired fan
+        :param pwm_setting: desired PWM speed (as a value from 0.0 to 100.0
+        :return: (new_fan_speed_pwm, new_fan_speed_rpm)
+        """
+        # create identifier for response type expected
+        response_type = 'sSetFanSpeedResp'
+        expect_response = True
+
+        # check desired fan speed
+        if pwm_setting > 100.0 or pwm_setting < 0.0:
+            LOGGER.error("Given speed out of expected range.")
+            return
+
+        set_fan_speed_req = sd.sSetFanSpeedReq(sd.SET_FAN_SPEED,
+                                               self.sequenceNumber, fan_page,
+                                               pwm_setting)
+
+        payload = set_fan_speed_req.createPayload()
+        LOGGER.debug("Payload = %s", repr(payload))
+
+        set_fan_speed_resp = self.send_packet(self.skarabControlSocket,
+                                              self.skarabEthernetControlPort,
+                                              payload, response_type,
+                                              expect_response,
+                                              sd.SET_FAN_SPEED,
+                                              self.sequenceNumber, 11, 7)
+
+        if set_fan_speed_resp is not None:
+            return (
+                set_fan_speed_resp.fanSpeedPWM / 100.0,
+                set_fan_speed_resp.fanSpeedRPM)
 
     # support functions
     @staticmethod
