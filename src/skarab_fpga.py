@@ -323,7 +323,6 @@ class SkarabFpga(CasperFpga):
             LOGGER.error("SDRAM Not Programmed!")
 
     def upload_to_sdram(self, filename, verify=False):
-        # TODO: add option to verify programmed image
         """
         Opens a bitfile from which to program FPGA. Reads bitfile
         in chunks of 4096 16-bit words.
@@ -331,27 +330,71 @@ class SkarabFpga(CasperFpga):
         Pads last packet to a 4096 word boundary.
         Sends chunks of bitfile to fpga via sdram_program method
         :param filename: file to upload
+        :param verify: flag to enable verification of uploaded bitstream (slow)
         :return: True if successful, else Nothing
         """
 
         # flag to enable/disable padding of data send over udp pkt
         padding = True
 
+        # get file extension
         file_extension = os.path.splitext(filename)[1]
 
-        # check file extension: if bin, use it; if hex/bit, convert to bin
+        # flag bad bitstreams
+        do_not_program = False
+
+        # check file extension to see what we're dealing with
         if file_extension == '.fpg':
             # get bin file from fpg file
+            LOGGER.info('Extracting bitstream from fpg file . . .')
             image_to_program = self.extract_bitstream(filename)
+            if not self.check_bitstream(image_to_program):
+                LOGGER.error("Incompatible fpg file. Cannot program SKARAB")
+                do_not_program = True
+            else:
+                LOGGER.info("Valid bitstream detected")
         elif file_extension == '.hex':
+            LOGGER.warning(
+                'Hex file detected. Attempting to convert to '
+                'required bin file . . .')
             image_to_program = self.convert_hex_to_bin(filename)
+            if not self.check_bitstream(image_to_program):
+                LOGGER.error('Incompatible hex file. Cannot program SKARAB')
+                do_not_program = True
+            else:
+                LOGGER.info("Valid bitstream detected")
         elif file_extension == '.bit':
+            LOGGER.warning(
+                'Bit file detected. Attempting to convert to required '
+                'bin file . . .')
             image_to_program = self.convert_bit_to_bin(filename)
+            if not self.check_bitstream(image_to_program):
+                LOGGER.error('Incompatible bit file. Cannot program SKARAB')
+                do_not_program = True
+            else:
+                LOGGER.info('Valid bitstream detected')
         elif file_extension == '.bin':
             image_to_program = filename
+            if not self.check_bitstream(image_to_program):
+                LOGGER.warning(
+                    'Incompatible bin file. Attemping to convert. . .')
+                image_to_program = self.reorder_bytes_in_bin_file(
+                    image_to_program)
+                if not self.check_bitstream(image_to_program):
+                    LOGGER.error(
+                        'Incompatible bin file. Cannot program SKARAB')
+                    do_not_program = True
+                else:
+                    LOGGER.info('Valid bitstream detected')
+            else:
+                LOGGER.info('Valid bitstream detected ')
         else:
-            raise TypeError("Invalid file type. \ "
+            raise TypeError("Invalid file type. "
                             "Only use .fpg, .bit, .hex or .bin files")
+
+        # quit on invalid file
+        if do_not_program:
+            return
 
         # prepare SDRAM for programming
         if not self.prepare_sdram_ram_for_programming():
@@ -434,6 +477,8 @@ class SkarabFpga(CasperFpga):
                     LOGGER.error("SDRAM verification failed! Clearing SDRAM")
                     self.clear_sdram()
                     return
+                else:
+                    LOGGER.info("SDRAM verification passed!")
 
             if finished_writing:
                 # set sdram programmed flag
@@ -1791,6 +1836,59 @@ class SkarabFpga(CasperFpga):
         bin_file.close()
 
         return name + '.bin'
+
+    @staticmethod
+    def check_bitstream(filename):
+        """
+        Checks the bitstream to see if it is valid.
+        i.e. if it contains a known, correct substring in it's header
+        :param filename: bitstream to check
+        :return: True or False
+        """
+
+        bitstream = open(filename, 'r')
+        contents = bitstream.read()
+        bitstream.close()
+
+        valid_string = '\xff\xff\x00\x00\x00\xdd\x88\x44\x00\x22\xff\xff'
+
+        # check if the valid header substring exists
+        if contents.find(valid_string) == 30:
+            return True
+        else:
+            read_header = contents[30:41]
+            LOGGER.error(
+                "Incompatible bitstream detected.\nExpected header: {}"
+                "\nRead header: {}".format(repr(valid_string), repr(read_header)))
+            return False
+
+    @staticmethod
+    def reorder_bytes_in_bin_file(filename):
+        """
+        Reorders the bytes in a given bin file to make it compatible for
+        programming the SKARAB. This function only handles the case where
+        the two bytes making up a word need to be swapped.
+        :param filename: bin file to reorder
+        :return: fixed bin file name
+        """
+        # get filename name, less extension
+        name = os.path.splitext(filename)[0]
+        new_file_name = name + '_fix.bin'
+
+        bitstream = open(filename, 'rb')
+        contents = bitstream.read().rstrip()
+        bitstream.close()
+
+        num_words = len(contents) / 2
+
+        data_format_pack = '<' + str(num_words) + 'H'
+        data_format_unpack = '>' + str(num_words) + 'H'
+
+        reordered_bitstream = open(new_file_name, 'wb')
+        reordered_bitstream.write(struct.pack(data_format_pack, *struct.unpack(
+            data_format_unpack, contents)))
+
+        return new_file_name
 
     # sensor functions
     def configure_i2c_switch(self, switch_select):
