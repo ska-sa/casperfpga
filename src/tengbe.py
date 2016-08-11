@@ -400,28 +400,32 @@ class TenGbe(Memory):
         if self.mac is None:
             # TODO get MAC from EEPROM serial number and assign here
             self.mac = '0'
-        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=5,
-                                            require_ok=True,
-                                            request_args=(self.name, self.name, '0.0.0.0',
-                                                          str(self.port), str(self.mac), ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-start', request_timeout=5,
+            require_ok=True,
+            request_args=(self.name, self.name, '0.0.0.0',
+                          str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting tap driver.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
-                                            require_ok=True,
-                                            request_args=(self.name, "mode", "0"))
+        reply, _ = self.parent.katcprequest(
+            name='tap-arp-config', request_timeout=1,
+            require_ok=True,
+            request_args=(self.name, 'mode', '0'))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure disabling ARP.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-dhcp", request_timeout=30,
-                                            require_ok=True,
-                                            request_args=(self.name, ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-dhcp', request_timeout=30,
+            require_ok=True,
+            request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting DHCP client.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
-                                            require_ok=True,
-                                            request_args=(self.name, "mode", "-1"))
+        reply, _ = self.parent.katcprequest(
+            name='tap-arp-config', request_timeout=1,
+            require_ok=True,
+            request_args=(self.name, 'mode', '-1'))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure re-enabling ARP.' % self.name)
 
@@ -441,9 +445,10 @@ class TenGbe(Memory):
             LOGGER.info('%s: tap already running.' % self.fullname)
             return
         LOGGER.info('%s: starting tap driver.' % self.fullname)
-        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=-1, require_ok=True,
-                                            request_args=(self.name, self.name, str(self.ip_address),
-                                                          str(self.port), str(self.mac), ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-start', request_timeout=-1, require_ok=True,
+            request_args=(self.name, self.name, str(self.ip_address),
+                          str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting tap driver.' %
                                self.fullname)

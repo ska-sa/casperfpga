@@ -290,9 +290,15 @@ def threaded_fpga_function(fpga_list, timeout, target_function):
     target_function = _check_target_func(target_function)
 
     def dofunc(fpga, *args, **kwargs):
-        rv = eval('fpga.%s' % target_function[0])(*args, **kwargs)
-        return rv
-    return threaded_fpga_operation(fpga_list, timeout, (dofunc, target_function[1], target_function[2]))
+        try:
+            rv = getattr(fpga, target_function[0])(*args, **kwargs)
+            return rv
+        except AttributeError:
+            LOGGER.error('FPGA %s has no such function: %s' % (
+                fpga.host, target_function[0]))
+            raise
+    return threaded_fpga_operation(
+        fpga_list, timeout, (dofunc, target_function[1], target_function[2]))
 
 
 def threaded_fpga_operation(fpga_list, timeout, target_function):
