@@ -60,9 +60,11 @@ def parse_fpg(filename):
             # some versions of mlib_devel may mistakenly have put spaces
             # as delimiters where tabs should have been used. Rectify that
             # here.
+            if line.startswith('?meta '):
+                LOGGER.warn('An old version of mlib_devel generated %s. Please '
+                            'update. Meta fields are seperated by spaces, '
+                            'should be tabs.' % filename)
             line = line.replace(' ', '\t')
-            LOGGER.warn('An old version of mlib_devel generated %s. Please '
-                        'update.' % filename)
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
@@ -324,7 +326,7 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
     thread_list = []
     for fpga_ in fpga_list:
         thread = threading.Thread(target=jobfunc, args=(result_queue, fpga_))
-        thread.daemon = True
+        thread.setDaemon(True)
         thread.start()
         thread_list.append(thread)
     for thread_ in thread_list:
