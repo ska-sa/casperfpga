@@ -55,8 +55,6 @@ def parse_fpg(filename):
             # as delimiters where tabs should have been used. Rectify that
             # here.
             line = line.replace(' ', '\t')
-            LOGGER.warn('An old version of mlib_devel generated %s. Please '
-                        'update.' % filename)
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
