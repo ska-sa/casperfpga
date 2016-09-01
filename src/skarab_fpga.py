@@ -322,7 +322,7 @@ class SkarabFpga(CasperFpga):
         else:
             LOGGER.error("SDRAM Not Programmed!")
 
-    def upload_to_sdram(self, filename, verify=False):
+    def upload_to_ram(self, filename, verify=False):
         """
         Opens a bitfile from which to program FPGA. Reads bitfile
         in chunks of 4096 16-bit words.
@@ -494,7 +494,7 @@ class SkarabFpga(CasperFpga):
             LOGGER.error("Error uploading FPGA image to SDRAM")
             return
 
-    def upload_to_sdram_and_program(self, filename):
+    def upload_to_ram_and_program(self, filename):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -503,7 +503,7 @@ class SkarabFpga(CasperFpga):
         :return: True, if success
         """
         # upload to sdram
-        if self.upload_to_sdram(filename):
+        if self.upload_to_ram(filename):
             # boot from the newly programmed image
             if self.boot_from_sdram():
                 return True
