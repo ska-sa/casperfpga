@@ -9,6 +9,7 @@ import zlib
 import skarab_definitions as sd
 
 from casperfpga import CasperFpga
+from utils import parse_fpg
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
@@ -63,6 +64,9 @@ class SkarabFpga(CasperFpga):
         # dict for sensor data, empty at initialization
         self.sensor_data = {}
 
+        # dict for memory_addresses
+        self.memory_devices = {}
+
         # check if connected to host
         if self.is_connected():
             LOGGER.info('%s: port(%s) created%s.' %
@@ -91,9 +95,17 @@ class SkarabFpga(CasperFpga):
         Return size_bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
-        :param offset: start at this offset
+        :param offset: start at this offset, offset in bytes
         :return: binary data string
         """
+        # get correct address and pack into binary format
+        # TODO: sort out memory mapping of device_name
+        # if can't find, bail
+        if device_name in self.memory_devices.keys():
+            addr = self.memory_devices[device_name].address
+        else:
+            LOGGER.error("Unknown device name")
+            raise KeyError
 
         # can only read 32-bits (4 bytes) at a time
         # work out how many reads we require
@@ -103,10 +115,9 @@ class SkarabFpga(CasperFpga):
         data = ''
 
         # address to read is starting address plus offset
-        addr = device_name + offset
+        addr = addr + offset
         for i in range(num_reads):
-            # get correct address and pack into binary format
-            # TODO: sort out memory mapping of device_name
+
             addr_high, addr_low = self.data_split_and_pack(addr)
 
             # create payload packet structure for read request
@@ -205,6 +216,13 @@ class SkarabFpga(CasperFpga):
         :param offset: the offset, in bytes, at which to write
         :return: <nothing>
         """
+        # get correct address and pack into binary format
+        # TODO: sort out memory mapping of device_name
+        if device_name in self.memory_devices.keys():
+            addr = self.memory_devices[device_name].address
+        else:
+            LOGGER.error("Unknown device name")
+            raise KeyError
 
         assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
@@ -214,9 +232,8 @@ class SkarabFpga(CasperFpga):
         data_high = data[:2]
         data_low = data[2:]
 
-        # get correct address and pack into binary format
-        # TODO: sort out memory mapping of device_name
-        addr = device_name + offset
+
+        addr = addr + offset
         addr_high, addr_low = self.data_split_and_pack(addr)
 
         # create payload packet structure for write request
@@ -305,6 +322,7 @@ class SkarabFpga(CasperFpga):
 
                     super(SkarabFpga, self).get_system_information(
                         filename=self.prog_info['last_uploaded'])
+                    self.__create_memory_map()
 
                 else:
                     # if not fpg file, then
@@ -1889,6 +1907,50 @@ class SkarabFpga(CasperFpga):
             data_format_unpack, contents)))
 
         return new_file_name
+
+    def get_system_information(self, filename=None, fpg_info=None):
+        """
+        Get information about the design running on the FPGA.
+        If filename is given, get it from there, otherwise query the host via KATCP.
+        :param filename: fpg filename
+        :param fpg_info: a tuple containing device_info and coreinfo dictionaries
+        :return: <nothing> the information is populated in the class
+        """
+        if (filename is None) and (fpg_info is None):
+            raise RuntimeError(
+                'Either filename or parsed fpg data must be given.')
+        if filename is not None:
+            device_dict, memorymap_dict = parse_fpg(filename)
+        else:
+            device_dict = fpg_info[0]
+            memorymap_dict = fpg_info[1]
+        # add system registers
+        device_dict.update(self._CasperFpga__add_sys_registers())
+        # reset current devices and create new ones from the new design information
+        self._CasperFpga__reset_device_info()
+        self._CasperFpga__create_memory_devices(device_dict, memorymap_dict)
+        self._CasperFpga__create_other_devices(device_dict)
+        self.__create_memory_map()
+        # populate some system information
+        try:
+            self.system_info.update(device_dict['77777'])
+        except KeyError:
+            LOGGER.warn('%s: no sys info key in design info!' % self.host)
+        # and RCS information if included
+        if '77777_git' in device_dict:
+            self.rcs_info['git'] = device_dict['77777_git']
+        if '77777_svn' in device_dict:
+            self.rcs_info['svn'] = device_dict['77777_svn']
+
+    def __create_memory_map(self):
+        """
+        Fixes the memory mapping for SKARAB registers by masking the most
+        significant bit of the register address parsed from the fpg file.
+        :return: nothing
+        """
+
+        for key in self.memory_devices.keys():
+            self.memory_devices[key].address &= 0x7fffffff
 
     # sensor functions
     def configure_i2c_switch(self, switch_select):
