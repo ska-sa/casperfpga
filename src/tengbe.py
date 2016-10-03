@@ -78,7 +78,7 @@ class Mac(object):
             hostname = hostname.replace('cbf_oach', 'roach')
         # /HACK
         if not hostname.startswith('roach'):
-            raise RuntimeError('Only hostnames beginning with'
+            raise RuntimeError('Only hostnames beginning with '
                                'roach supported: %s' % hostname)
         digits = hostname.replace('roach', '')
         serial = [int(digits[ctr:ctr+2], 16) for ctr in range(0, 6, 2)]
@@ -219,6 +219,7 @@ class TenGbe(Memory):
         self.core_details = None
         self.snaps = {'tx': None, 'rx': None}
         self.registers = {'tx': [], 'rx': []}
+        self.multicast_subscriptions = []
         # TODO
         # if self.parent.is_connected():
         #     self._check()
@@ -321,7 +322,8 @@ class TenGbe(Memory):
         for direction in ['tx', 'rx']:
             for reg in self.registers[direction]:
                 tmp = self.parent.memory_devices[reg].read()
-                results[reg] = tmp['data']['reg']
+                keyname = self.name + '_' + direction + 'ctr'
+                results[keyname] = tmp['data']['reg']
         return results
 
     def rx_okay(self, wait_time=0.2, checks=10):
@@ -398,28 +400,32 @@ class TenGbe(Memory):
         if self.mac is None:
             # TODO get MAC from EEPROM serial number and assign here
             self.mac = '0'
-        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=5,
-                                            require_ok=True,
-                                            request_args=(self.name, self.name, '0.0.0.0',
-                                                          str(self.port), str(self.mac), ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-start', request_timeout=5,
+            require_ok=True,
+            request_args=(self.name, self.name, '0.0.0.0',
+                          str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting tap driver.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
-                                            require_ok=True,
-                                            request_args=(self.name, "mode", "0"))
+        reply, _ = self.parent.katcprequest(
+            name='tap-arp-config', request_timeout=1,
+            require_ok=True,
+            request_args=(self.name, 'mode', '0'))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure disabling ARP.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-dhcp", request_timeout=30,
-                                            require_ok=True,
-                                            request_args=(self.name, ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-dhcp', request_timeout=30,
+            require_ok=True,
+            request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting DHCP client.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
-                                            require_ok=True,
-                                            request_args=(self.name, "mode", "-1"))
+        reply, _ = self.parent.katcprequest(
+            name='tap-arp-config', request_timeout=1,
+            require_ok=True,
+            request_args=(self.name, 'mode', '-1'))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure re-enabling ARP.' % self.name)
 
@@ -439,9 +445,10 @@ class TenGbe(Memory):
             LOGGER.info('%s: tap already running.' % self.fullname)
             return
         LOGGER.info('%s: starting tap driver.' % self.fullname)
-        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=-1, require_ok=True,
-                                            request_args=(self.name, self.name, str(self.ip_address),
-                                                          str(self.port), str(self.mac), ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-start', request_timeout=-1, require_ok=True,
+            request_args=(self.name, self.name, str(self.ip_address),
+                          str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting tap driver.' %
                                self.fullname)
@@ -518,6 +525,8 @@ class TenGbe(Memory):
                                             request_args=(self.name, 'recv',
                                                           mcast_group_string, ))
         if reply.arguments[0] == 'ok':
+            if mcast_group_string not in self.multicast_subscriptions:
+                self.multicast_subscriptions.append(mcast_group_string)
             return
         else:
             raise RuntimeError("%s: failed adding multicast receive %s to "
@@ -534,10 +543,16 @@ class TenGbe(Memory):
                                                 request_args=(self.name,
                                                               IpAddress.str2ip(ip_str), ))
         except:
-            raise RuntimeError("%s: tap-multicast-remove does not seem to "
-                               "be supported on %s" % (self.fullname,
+            raise RuntimeError('%s: tap-multicast-remove does not seem to '
+                               'be supported on %s' % (self.fullname,
                                                        self.parent.host))
         if reply.arguments[0] == 'ok':
+            if ip_str not in self.multicast_subscriptions:
+                LOGGER.warning(
+                    '%s: That is odd, %s removed from mcast subscriptions, but '
+                    'it was not in its list of sbscribed addresses.' % (
+                        self.fullname, ip_str))
+                self.multicast_subscriptions.remove(ip_str)
             return
         else:
             raise RuntimeError('%s: failed removing multicast address %s '

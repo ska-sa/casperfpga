@@ -15,17 +15,22 @@ def create_meta_dictionary(metalist):
     :return: a dictionary of device info, keyed by unique device name
     """
     meta_items = {}
-    for name, tag, param, value in metalist:
-        if name not in meta_items.keys():
-            meta_items[name] = {}
-        try:
-            if meta_items[name]['tag'] != tag:
-                raise ValueError(
-                    'Different tags - %s, %s - for the same item %s' % (
-                        meta_items[name]['tag'], tag, name))
-        except KeyError:
-            meta_items[name]['tag'] = tag
-        meta_items[name][param] = value
+    try:
+        for name, tag, param, value in metalist:
+            if name not in meta_items:
+                meta_items[name] = {}
+            try:
+                if meta_items[name]['tag'] != tag:
+                    raise ValueError(
+                        'Different tags - %s, %s - for the same item %s' % (
+                            meta_items[name]['tag'], tag, name))
+            except KeyError:
+                meta_items[name]['tag'] = tag
+            meta_items[name][param] = value
+    except ValueError as e:
+        for ctr, contents in enumerate(metalist):
+            print ctr, contents
+        raise e
     return meta_items
 
 
@@ -55,9 +60,11 @@ def parse_fpg(filename):
             # some versions of mlib_devel may mistakenly have put spaces
             # as delimiters where tabs should have been used. Rectify that
             # here.
+            if line.startswith('?meta '):
+                LOGGER.warn('An old version of mlib_devel generated %s. Please '
+                            'update. Meta fields are seperated by spaces, '
+                            'should be tabs.' % filename)
             line = line.replace(' ', '\t')
-            LOGGER.warn('An old version of mlib_devel generated %s. Please '
-                        'update.' % filename)
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
@@ -285,9 +292,15 @@ def threaded_fpga_function(fpga_list, timeout, target_function):
     target_function = _check_target_func(target_function)
 
     def dofunc(fpga, *args, **kwargs):
-        rv = eval('fpga.%s' % target_function[0])(*args, **kwargs)
-        return rv
-    return threaded_fpga_operation(fpga_list, timeout, (dofunc, target_function[1], target_function[2]))
+        try:
+            rv = getattr(fpga, target_function[0])(*args, **kwargs)
+            return rv
+        except AttributeError:
+            LOGGER.error('FPGA %s has no such function: %s' % (
+                fpga.host, target_function[0]))
+            raise
+    return threaded_fpga_operation(
+        fpga_list, timeout, (dofunc, target_function[1], target_function[2]))
 
 
 def threaded_fpga_operation(fpga_list, timeout, target_function):
@@ -313,7 +326,7 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
     thread_list = []
     for fpga_ in fpga_list:
         thread = threading.Thread(target=jobfunc, args=(result_queue, fpga_))
-        thread.daemon = True
+        thread.setDaemon(True)
         thread.start()
         thread_list.append(thread)
     for thread_ in thread_list:

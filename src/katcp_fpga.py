@@ -576,6 +576,27 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                (self.host, self._bindaddr[1],
                 'connected' if self.is_connected() else 'disconnected')
 
+    @staticmethod
+    def _process_git_info(metalist):
+        """
+        Git information in the FPG must be processed.
+        :param metalist:
+        :return:
+        """
+        got_git = {}
+        time_pref = str(int(time.time())).replace('.', '_') + '_'
+        for ctr, parms in enumerate(metalist):
+            name, tag, param, value = parms
+            if name == '77777_git':
+                assert tag == 'rcs'
+                newname = name + '_' + time_pref + param
+                if newname not in got_git:
+                    got_git[newname] = (newname, tag, 'file-name', param)
+                param = value[0]
+                value = value[1:]
+                metalist[ctr] = (newname, tag, param, value)
+        metalist.extend(got_git.values())
+
     def _read_design_info_from_host(self, device=None):
         """
         Katcp request for extra system information embedded in the boffile.
@@ -617,11 +638,13 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                 value = value[0]
             name = name.replace('/', '_')
             metalist.append((name, tag, param, value))
+        self._process_git_info(metalist)
         return create_meta_dictionary(metalist)
 
     def _read_coreinfo_from_host(self):
         """
-        Get the equivalent of coreinfo.tab from the host using KATCP listdev commands.
+        Get the equivalent of coreinfo.tab from the host using
+        KATCP listdev commands.
         :return:
         """
         LOGGER.debug('%s: reading coreinfo' % self.host)
@@ -629,35 +652,42 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         listdev_size = self.listdev(getsize=True)
         listdev_address = self.listdev(getaddress=True)
         if len(listdev_address) != len(listdev_size):
-            raise RuntimeError('Different length listdev(size) and listdev(detail)')
+            raise RuntimeError('Different length listdev(size) and '
+                               'listdev(detail)')
         for byte_dev, byte_size in listdev_size:
             matched = False
             for addrdev, address in listdev_address:
                 if addrdev == byte_dev:
                     byte_size = int(byte_size.split(':')[0])
                     address = int(address.split(':')[0], 16)
-                    memorymap_dict[byte_dev] = {'address': address, 'bytes': byte_size}
+                    memorymap_dict[byte_dev] = {'address': address,
+                                                'bytes': byte_size}
                     matched = True
                     continue
             if not matched:
-                raise RuntimeError('No matching listdev address for device %s' % byte_dev)
+                raise RuntimeError('No matching listdev address for '
+                                   'device %s' % byte_dev)
         return memorymap_dict
 
     def get_system_information(self, filename=None, fpg_info=None):
         """
         Get information about the design running on the FPGA.
-        If filename is given, get it from there, otherwise query the host via KATCP.
+        If filename is given, get it from there, otherwise query the
+        host via KATCP.
         :param filename: fpg filename
+        :param fpg_info: a tuple with two dictionaries of FPG information
         :return: <nothing> the information is populated in the class
         """
         if (not self.is_running()) and (filename is None):
-            raise RuntimeError('This can only be run on a running device when no file is given.')
+            raise RuntimeError('This can only be run on a running device '
+                               'when no file is given.')
         if filename is not None:
             device_dict, memorymap_dict = parse_fpg(filename)
         else:
             device_dict = self._read_design_info_from_host()
             memorymap_dict = self._read_coreinfo_from_host()
-        super(KatcpFpga, self).get_system_information(fpg_info=(device_dict, memorymap_dict))
+        super(KatcpFpga, self).get_system_information(
+            fpg_info=(device_dict, memorymap_dict))
 
     def unhandled_inform(self, msg):
         """

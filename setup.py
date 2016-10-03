@@ -18,7 +18,9 @@ setup(
     provides=['casperfpga'],
     packages=['casperfpga'],  # , 'casperfpga.test'],
     package_dir={'casperfpga': 'src'},
-    scripts=glob.glob('scripts/*')
+    scripts=glob.glob('scripts/*'),
+    setup_requires=['katversion'],
+    use_katversion=True
 )
 
 # end
