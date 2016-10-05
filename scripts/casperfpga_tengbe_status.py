@@ -124,30 +124,32 @@ def get_tap_data(fpga):
 
 # get gbe and tap data
 tap_data = utils.threaded_fpga_operation(fpgas, 15, get_tap_data)
-gbe_data = utils.threaded_fpga_operation(fpgas, 15, get_gbe_data)
+# gbe_data = utils.threaded_fpga_operation(fpgas, 15, get_gbe_data)
 # for fpga in gbe_data:
 #     fpga_data = gbe_data[fpga]
 #     print fpga, ':'
 #     for gbe in fpga_data:
 #         print gbe, ':'
 #         print fpga_data[gbe]
+
+# work out tables for each fpga
+# fpga_headers = ['tap_running', 'ip']
+# for fpga in fpgas:
+#     gbedata = gbe_data[fpga.host]
+#     for core in gbedata:
+#         core_regs = [key.replace(core, 'gbe') for key in gbedata[core].keys()]
+#         for reg in core_regs:
+#             if reg not in fpga_headers:
+#                 fpga_headers.append(reg)
+# fpga_headers = [fpga_headers]
+
+# print fpga_headers
 # utils.threaded_fpga_function(fpgas, 10, 'disconnect')
 # sys.exit()
 
-# work out tables for each fpga
-fpga_headers = ['tap_running', 'ip']
-for fpga in fpgas:
-    gbedata = gbe_data[fpga.host]
-    for core in gbedata:
-        core_regs = [key.replace(core, 'gbe') for key in gbedata[core].keys()]
-        for reg in core_regs:
-            if reg not in fpga_headers:
-                fpga_headers.append(reg)
-fpga_headers = [fpga_headers]
-
-fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr',
-                 'gbe_rxerrctr', 'gbe_rxbadctr', 'gbe_txerrctr',
-                 'gbe_txfullctr', 'gbe_txofctr', 'gbe_txctr', 'gbe_txvldctr']]
+fpga_headers = ['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr',
+                'gbe_rxerrctr', 'gbe_rxbadctr', 'gbe_txerrctr',
+                'gbe_txfullctr', 'gbe_txofctr', 'gbe_txctr', 'gbe_txvldctr']
 
 
 def exit_gracefully(sig, frame):
@@ -165,8 +167,9 @@ for fpga in fpgas:
     for gbe_name in fpga.tengbes.names():
         max_1st_col_offset = max(max_1st_col_offset, len(gbe_name))
 max_fldname = -1
-for hdr in fpga_headers[0]:
+for hdr in fpga_headers:
     max_fldname = max(max_fldname, len(hdr))
+
 max_1st_col_offset += 5
 
 # set up the curses scroll screen
@@ -205,7 +208,7 @@ try:
                 start_pos = max_1st_col_offset
                 fpga_data = gbe_data[fpga.host]
                 line = scroller.add_string(fpga.host)
-                for reg in fpga_headers[0]:
+                for reg in fpga_headers:
                     fld = '{val:>{width}}'.format(val=reg, width=max_fldname)
                     line = scroller.add_string(fld, start_pos)
                     start_pos += pos_increment
@@ -216,7 +219,7 @@ try:
                     fpga_data[core]['ip'] = tap_data[fpga.host][core]['ip']
                     start_pos = max_1st_col_offset
                     line = scroller.add_string(core)
-                    for header_register in fpga_headers[0]:
+                    for header_register in fpga_headers:
                         core_regname = header_register.replace('gbe', core)
                         if core_regname in core_data.keys():
                             fld = '{val:>{width}}'.format(
