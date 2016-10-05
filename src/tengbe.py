@@ -322,8 +322,8 @@ class TenGbe(Memory):
         for direction in ['tx', 'rx']:
             for reg in self.registers[direction]:
                 tmp = self.parent.memory_devices[reg].read()
-                keyname = self.name + '_' + direction + 'ctr'
-                results[keyname] = tmp['data']['reg']
+                # keyname = self.name + '_' + direction + 'ctr'
+                results[reg] = tmp['data']['reg']
         return results
 
     def rx_okay(self, wait_time=0.2, checks=10):
