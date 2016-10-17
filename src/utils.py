@@ -96,7 +96,8 @@ def parse_fpg(filename):
 def pull_info_from_fpg(fpg_file, parameter):
     """
     Pull available parameters about x-engine or f-engine from .fpg file.
-    Available options for x-engine: 'x_fpga_clock', 'xeng_outbits', 'xeng_accumulation_len'
+    Available options for x-engine: 'x_fpga_clock', 'xeng_outbits',
+    'xeng_accumulation_len'
     Available options for f-engine: 'n_chans', 'quant_format', 'spead_flavour'
     :param fpg_file: bit file path
     :param parameter: parameter string
@@ -121,11 +122,15 @@ def pull_info_from_fpg(fpg_file, parameter):
         s = '.'
         match = s.join([match1[1], match2[1]])
     if parameter == 'n_chans':
-        match1 = int(fpg_dict[0]['pfb_fft_wideband_real_fft_biplex_real_4x']['fftsize'])
-        match2 = int(fpg_dict[0]['pfb_fft_wideband_real_fft_biplex_real_4x']['n_inputs'])
+        pfb_dict = fpg_dict[0]['pfb_fft_wideband_real_fft_biplex_real_4x']
+        match1 = int(pfb_dict['fftsize'])
+        match2 = int(pfb_dict['n_inputs'])
         match = match2*2**match1
     if match is []:
-        raise RuntimeError('Parameter %s does not match any field in fpg file.' % parameter)
+        errstr = 'Parameter %s does not match any field in fpg ' \
+                 'file.' % parameter
+        LOGGER.error(errstr)
+        raise RuntimeError(errstr)
     return match
 
 
@@ -220,7 +225,8 @@ def program_fpgas(fpga_list, progfile, timeout=10):
     LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (len(fpga_list), time.time() - stime))
 
 
-def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=10):
+def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147,
+                                     timeout=10):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
     :param fpga_class: the class to instantiate - KatcpFpga or DcpFpga
@@ -232,28 +238,34 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147, timeout=1
     num_hosts = len(host_list)
     result_queue = Queue.Queue(maxsize=num_hosts)
     thread_list = []
+
+    def makehost(hostname):
+        result_queue.put_nowait(fpga_class(hostname, port))
+
     for host_ in host_list:
-        thread = threading.Thread(target=lambda hostname: result_queue.put_nowait(fpga_class(hostname, port)),
-                                  args=(host_,))
+        thread = threading.Thread(target=makehost, args=(host_,))
         thread.daemon = True
         thread.start()
         thread_list.append(thread)
     for thread_ in thread_list:
         thread_.join(timeout)
     fpgas = [None] * num_hosts
+    hosts_missing = host_list[:]
     while True:
         try:
             result = result_queue.get_nowait()
             host_pos = host_list.index(result.host)
             fpgas[host_pos] = result
+            hosts_missing.pop(hosts_missing.index(result.host))
         except Queue.Empty:
             break
-    for f in fpgas:
-        if f is None:
-            print fpgas
-            raise RuntimeError(
-                'Given %d hosts, only made %d %ss' % (
-                    num_hosts, len(fpgas), fpga_class))
+    if hosts_missing:
+        for host in hosts_missing:
+            LOGGER.error('Could not create host %s.' % host)
+        errstr = 'Given %d hosts, only made %d %s objects.' % (
+            num_hosts, len(fpgas), fpga_class.__name__)
+        LOGGER.error(errstr)
+        raise RuntimeError(errstr)
     return fpgas
 
 
@@ -279,7 +291,7 @@ def threaded_fpga_function(fpga_list, timeout, target_function):
     """
     Thread the running of any KatcpClientFpga function on a list of KatcpClientFpga objects.
     Much faster.
-    :param fpgas: list of KatcpClientFpga objects
+    :param fpga_list: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
     :param target_function: a tuple with three parts:
                             1. string, the KatcpClientFpga function to
@@ -306,7 +318,7 @@ def threaded_fpga_function(fpga_list, timeout, target_function):
 def threaded_fpga_operation(fpga_list, timeout, target_function):
     """
     Thread any operation against many FPGA objects
-    :param fpgas: list of KatcpClientFpga objects
+    :param fpga_list: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
     :param target_function: a tuple with three parts:
                             1. reference, the function object that must be
@@ -334,16 +346,19 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
         if thread_.isAlive():
             break
     returnval = {}
+    hosts_missing = [fpga.host for fpga in fpga_list]
     while True:
         try:
             result = result_queue.get_nowait()
             returnval[result[0]] = result[1]
+            hosts_missing.pop(hosts_missing.index(result[0]))
         except Queue.Empty:
             break
-    if len(returnval) != num_fpgas:
-        print returnval
-        raise RuntimeError('Given %d FPGAs, only got %d results, must '
-                           'have timed out.' % (num_fpgas, len(returnval)))
+    if hosts_missing:
+        errmsg = 'Ran \'%s\' on hosts. Did not get a response ' \
+                 'from %s.' % (target_function[0].__name__, hosts_missing)
+        LOGGER.error(errmsg)
+        raise RuntimeError(errmsg)
     return returnval
 
 
