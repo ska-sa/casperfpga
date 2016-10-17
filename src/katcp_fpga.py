@@ -98,16 +98,19 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
             # Implement backward / forwards compatibility for change in
             # daemonization APIs in upstream katcp package.
             try:
-                # New style
+                # new style
                 self.setDaemon(True)
                 self.start()
             except AttributeError:
-                # Old style
+                # old style
                 self.start(daemon=True)
             connected = self.wait_connected(timeout)
             if not connected:
-                raise RuntimeError('Connection to {} not established within {}s'
-                                   .format(self.bind_address_string, timeout))
+                err_msg = 'Connection to {} not established within {}s'.format(
+                    self.bind_address_string, timeout)
+                LOGGER.error(err_msg)
+                raise RuntimeError(err_msg)
+
         # check that an actual katcp command gets through
         got_ping = False
         _stime = time.time()
@@ -116,8 +119,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                 got_ping = True
                 break
         if not got_ping:
-            raise RuntimeError('Could not connect to KATCP '
-                               'server %s' % self.host)
+            err_msg = 'Could not connect to KATCP server %s' % self.host
+            LOGGER.error(err_msg)
+            raise RuntimeError(err_msg)
 
         # set a higher write buffer size than standard
         try:
