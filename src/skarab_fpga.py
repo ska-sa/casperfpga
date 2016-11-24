@@ -98,9 +98,8 @@ class SkarabFpga(CasperFpga):
         :param offset: start at this offset, offset in bytes
         :return: binary data string
         """
-        # get correct address and pack into binary format
-        # TODO: sort out memory mapping of device_name
-        # if can't find, bail
+
+        # map device name to address, if can't find, bail
         if device_name in self.memory_devices.keys():
             addr = self.memory_devices[device_name].address
         else:
@@ -216,8 +215,7 @@ class SkarabFpga(CasperFpga):
         :param offset: the offset, in bytes, at which to write
         :return: <nothing>
         """
-        # get correct address and pack into binary format
-        # TODO: sort out memory mapping of device_name
+        # map device name to address, if can't find, bail
         if device_name in self.memory_devices.keys():
             addr = self.memory_devices[device_name].address
         else:
@@ -1051,16 +1049,15 @@ class SkarabFpga(CasperFpga):
             return None
 
     def write_i2c(self, interface, slave_address, *bytes_to_write):
-        # TODO: complete; needs debugging and handling response data
         """
         Perform i2c write on a selected i2c interface.
         Up to 32 bytes can be written in a single i2c transaction
         :param interface: identifier for i2c interface:
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
-                          2 - Mezzanine 0 i2c
-                          3 - Mezzanine 0 i2c
-                          4 - Mezzanine 0 i2c
+                          2 - Mezzanine 1 i2c
+                          3 - Mezzanine 2 i2c
+                          4 - Mezzanine 3 i2c
         :param slave_address: i2c address of slave to write to
         :param bytes_to_write: 32 bytes of data to write (to be packed as 16-bit word each), list of bytes
         :return: response object
@@ -1103,30 +1100,31 @@ class SkarabFpga(CasperFpga):
                                           self.sequenceNumber,
                                           39, 1)
 
-        # TODO: modify to return data if read success or false if not
         # check if the write was successful
         if write_i2c_req is not None:
             if write_i2c_resp.WriteSuccess:
                 # if successful
                 return True
-
-        # otherwise write failed
-        return False
+            else:
+                LOGGER.error('I2C write failed!')
+                return False
+        else:
+            LOGGER.error('Bad response received')
+            return False
 
     def read_i2c(self, interface, slave_address, num_bytes):
-        # TODO: complete; needs debugging and handling response data
         """
         Perform i2c read on a selected i2c interface.
         Up to 32 bytes can be read in a single i2c transaction.
         :param interface: identifier for i2c interface:
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
-                          2 - Mezzanine 0 i2c
-                          3 - Mezzanine 0 i2c
-                          4 - Mezzanine 0 i2c
+                          2 - Mezzanine 1 i2c
+                          3 - Mezzanine 2 i2c
+                          4 - Mezzanine 3 i2c
         :param slave_address: i2c address of slave to read from
         :param num_bytes: number of bytes to read
-        :return:
+        :return: an array of the read bytes if successful, else none
         """
 
         response_type = 'sReadI2CResp'
@@ -1146,10 +1144,21 @@ class SkarabFpga(CasperFpga):
         payload = read_i2c_req.createPayload()
 
         # send payload and return response object
-        return self.send_packet(self.skarabControlSocket,
-                                self.skarabEthernetControlPort, payload,
-                                response_type, expect_response, sd.READ_I2C,
-                                self.sequenceNumber, 39, 1)
+        read_i2c_resp = self.send_packet(self.skarabControlSocket,
+                                         self.skarabEthernetControlPort,
+                                         payload,
+                                         response_type, expect_response,
+                                         sd.READ_I2C,
+                                         self.sequenceNumber, 39, 1)
+        if read_i2c_resp is not None:
+            if read_i2c_resp.ReadSuccess:
+                return read_i2c_resp.ReadBytes[:num_bytes]
+            else:
+                LOGGER.error('I2C read failed!')
+                return 0
+        else:
+            LOGGER.error('Bad response received.')
+            return
 
     def pmbus_read_i2c(self, bus, slave_address, command_code,
                        num_bytes):
@@ -1164,7 +1173,7 @@ class SkarabFpga(CasperFpga):
         :param slave_address: address of the slave PMBus device to read
         :param command_code: PMBus command for the I2C read
         :param num_bytes: Number of bytes to read
-        :return: data read if successful
+        :return: array of read bytes if successful, else none
         """
 
         response_type = 'sPMBusReadI2CBytesResp'
@@ -1196,12 +1205,17 @@ class SkarabFpga(CasperFpga):
                                                sd.PMBUS_READ_I2C,
                                                self.sequenceNumber, 39, 0)
 
-        # TODO: modify to return data if read success or false if not
+
         if pmbus_read_i2c_resp is not None:
             if pmbus_read_i2c_resp.ReadSuccess:
                 return pmbus_read_i2c_resp.ReadBytes[:num_bytes]
 
-        return
+            else:
+                LOGGER.error('PMBus I2C read failed!')
+                return 0
+        else:
+            LOGGER.error('Bad response received.')
+            return
 
     def sdram_program(self, first_packet, last_packet, write_words):
         """
@@ -1534,7 +1548,6 @@ class SkarabFpga(CasperFpga):
                 val * sd.current_scaling[str(raw_sensor_data[index + 2])],
                 2)
 
-        # TODO:
         def check_fan_speed(fan_name, value):
             """
             Checks if a given fan is running within acceptable limits
@@ -1667,7 +1680,6 @@ class SkarabFpga(CasperFpga):
 
         payload = get_sensor_data_req.createPayload()
 
-        # TODO: complete this and below
         get_sensor_data_resp = self.send_packet(self.skarabControlSocket,
                                                 self.skarabEthernetControlPort,
                                                 payload, response_type,
@@ -1956,23 +1968,30 @@ class SkarabFpga(CasperFpga):
     def configure_i2c_switch(self, switch_select):
         """
         Configures the PCA9546AD I2C switch.
-        :param switch_select: the desired switch configuration
-        :return: nothing
+        :param switch_select: the desired switch configuration:
+               Fan Controller = 1
+               Voltage/Current Monitor = 2
+               1GbE = 4
+
+        :return: True or False
         """
 
         if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
                               switch_select):
             LOGGER.error("Failed to configure I2C switch.")
+            return False
         else:
             LOGGER.debug("I2C Switch successfully configured")
+            return True
 
     # fan controller functions
-    def write_fan_controller(self, command_code, num_bytes, *bytes_to_write):
+    # TODO: deprecate
+    def write_fan_controller(self, command_code, num_bytes, byte_to_write):
         """
         Perform a PMBus write to the MAX31785 Fan Controller
         :param command_code: desired command code
         :param num_bytes: number of bytes in command
-        :param bytes_to_write:  bytes to write
+        :param byte_to_write:  bytes to write
         :return: Nothing
         """
 
@@ -1986,15 +2005,16 @@ class SkarabFpga(CasperFpga):
         combined_write_bytes = list()
 
         combined_write_bytes.append(command_code)
-        combined_write_bytes.extend(bytes_to_write)
+        combined_write_bytes.append(byte_to_write)
 
         # do an i2c write
         if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
                               total_num_bytes, *combined_write_bytes):
-            LOGGER.error("Failed to write to the Fan Contoller")
+            LOGGER.error("Failed to write to the Fan Controller")
         else:
             LOGGER.debug("Write to fan controller successful")
 
+    # TODO: deprecate
     def read_fan_controller(self, command_code, num_bytes):
         """
         Performs PMBus read from the MAX31785 Fan Controller
@@ -2018,6 +2038,7 @@ class SkarabFpga(CasperFpga):
             LOGGER.debug("Read from fan controller successful")
             return data
 
+    # TODO: deprecate
     def read_fan_speed_rpm(self, fan, open_switch=True):
         """
         Read the current fan speed of a selected fan in RPM
