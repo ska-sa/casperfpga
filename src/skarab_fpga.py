@@ -330,13 +330,14 @@ class SkarabFpga(CasperFpga):
                 self.prog_info['last_programmed'] = \
                     self.prog_info['last_uploaded']
                 self.prog_info['last_uploaded'] = ''
+                return True
 
-                # wait for DHCP
-                time.sleep(1)  # TODO: feasible wait time?
             else:
                 LOGGER.error("Error triggering reboot")
+                return False
         else:
             LOGGER.error("SDRAM Not Programmed!")
+            return False
 
     def upload_to_ram(self, filename, verify=False):
         """
@@ -510,7 +511,7 @@ class SkarabFpga(CasperFpga):
             LOGGER.error("Error uploading FPGA image to SDRAM")
             return
 
-    def upload_to_ram_and_program(self, filename):
+    def upload_to_ram_and_program(self, filename, timeout=60):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -518,13 +519,58 @@ class SkarabFpga(CasperFpga):
         and hex files)
         :return: True, if success
         """
+
+        # put the interface into programming mode
+        self.config_prog_mux(user_data=0)
         # upload to sdram
         if self.upload_to_ram(filename):
             # boot from the newly programmed image
-            if self.boot_from_sdram():
-                return True
+            if self.boot_from_sdram() == False:
+                return False
 
-        return
+        # wait for board to come back up
+        # this can be reduced when the 40gbe switch issue is resolved
+        timeout = timeout + time.time()
+        while timeout > time.time():
+            if self.is_connected():
+                # configure the mux back to user_date mode
+                self.config_prog_mux(user_data=1)
+                firmware_version = float(self.get_firmware_version())
+                if firmware_version >= 2.2:
+                    LOGGER.info('SKARAB back up, in %s seconds with firmware version %s' % (str(60-(timeout-time.time())), str(firmware_version)))
+                    return True
+                elif firmware_version == 2.0:
+                    LOGGER.error('SKARAB back up, but fell back to golden image with firmware version %s' %str(firmware_version))
+                    return False
+                elif firmware_version == 2.1:
+                    LOGGER.error('SKARAB back up, but fell back to multiboot image with firmware version %s' %str(firmware_version))
+                    return False
+                else:
+                    LOGGER.error('SKARAB back up, but unknown version number %s' %str(firmware_version))
+                    return False
+        LOGGER.error('SKARAB has not come back')
+        return False
+
+
+    def config_prog_mux(self, user_data=1):
+       """ 
+       Sets the bits in the register that controls which interface is used
+       to program the SDRAM. It also sets the mux for the data and programming
+       interface.
+       register
+       :param user_data: bool, 0 = config_mode, 1 = simulink data
+       """
+       # the bit that tells us if the 40gbe link is up
+       reg = format(int(self.read_wishbone(0xc)), '#032b')
+       forty_gbe_link = int(reg[30])
+       one_gbe_link = int(reg[31])
+       if forty_gbe_link == 1:                         # 40gbe link up
+           LOGGER.info('The 40GbE link is up so using 40GbE to program the SKARAB')
+           self.write_wishbone(0x18, user_data*2**1)
+       else:                                           # 40gbe link down so fall back to 1gbe
+           LOGGER.info('The 40GbE link is down so using 1GbE to program the SKARAB')
+           self.write_wishbone(0x18, 4 + user_data*2**1)
+
 
     def clear_sdram(self):
         """
@@ -691,7 +737,7 @@ class SkarabFpga(CasperFpga):
 
     def send_packet(self, skarab_socket, port, payload, response_type,
                     expect_response, command_id, seq_num, number_of_words,
-                    pad_words):
+                    pad_words, timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=3):
         """
         Send payload via UDP packet to SKARAB
         Sends request packets then waits for response packet if expected
@@ -711,7 +757,7 @@ class SkarabFpga(CasperFpga):
         waiting_response = True
         retransmit_count = 0
 
-        while retransmit_count < 3 and waiting_response:
+        while retransmit_count < retries and waiting_response:
             LOGGER.info("Retransmit Attempts: {}".format(retransmit_count))
             try:
                 # wait for response?
