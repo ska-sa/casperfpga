@@ -8,7 +8,6 @@ import random
 import socket
 
 
-import async_requester
 from casperfpga import CasperFpga
 from utils import parse_fpg, create_meta_dictionary
 
@@ -40,6 +39,7 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     :param targethost: the host to which it must be sent
     :param port: the port the host should open
     :param result_queue: the result of the upload, nothing '' indicates success
+    :param timeout:
     :return:
     """
     upload_socket = socket.socket()
@@ -64,13 +64,17 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
                     (targethost, time.time()))
 
 
-class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
-                katcp.CallbackClient):
+class KatcpFpga(CasperFpga, katcp.CallbackClient):
 
     def __init__(self, host, port=7147, timeout=20.0, connect=True):
-        async_requester.AsyncRequester.__init__(self, host,
-                                                self.callback_request,
-                                                max_requests=100)
+        """
+
+        :param host:
+        :param port:
+        :param timeout:
+        :param connect:
+        :return:
+        """
         katcp.CallbackClient.__init__(self, host, port,
                                       tb_limit=20, timeout=timeout,
                                       logger=LOGGER, auto_reconnect=True)

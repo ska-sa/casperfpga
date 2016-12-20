@@ -203,7 +203,8 @@ def program_fpgas(fpga_list, progfile, timeout=10):
     """
     Program more than one FPGA at the same time.
     :param fpga_list: a list of objects for the FPGAs to be programmed
-    :param progfile: string, the filename of the file to use to program the FPGAs
+    :param progfile: string, the file used to program the FPGAs
+    :param timeout: how long to wait for a response, in seconds
     :return: <nothing>
     """
     stime = time.time()
@@ -221,8 +222,10 @@ def program_fpgas(fpga_list, progfile, timeout=10):
 
     def _prog_fpga(_fpga):
         _fpga.upload_to_ram_and_program(new_dict[_fpga.host])
-    threaded_fpga_operation(fpga_list=new_list, timeout=timeout, target_function=(_prog_fpga,))
-    LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (len(fpga_list), time.time() - stime))
+    threaded_fpga_operation(fpga_list=new_list, timeout=timeout,
+                            target_function=(_prog_fpga,))
+    LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (
+        len(fpga_list), time.time() - stime))
 
 
 def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147,
@@ -270,6 +273,11 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147,
 
 
 def _check_target_func(target_function):
+    """
+
+    :param target_function:
+    :return:
+    """
     if isinstance(target_function, basestring):
         return target_function, (), {}
     try:
@@ -289,8 +297,8 @@ def _check_target_func(target_function):
 
 def threaded_fpga_function(fpga_list, timeout, target_function):
     """
-    Thread the running of any KatcpClientFpga function on a list of KatcpClientFpga objects.
-    Much faster.
+    Thread the running of any KatcpClientFpga function on a list of
+    KatcpClientFpga objects. Much faster.
     :param fpga_list: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
     :param target_function: a tuple with three parts:
@@ -333,6 +341,7 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
     def jobfunc(resultq, fpga):
         rv = target_function[0](fpga, *target_function[1], **target_function[2])
         resultq.put_nowait((fpga.host, rv))
+
     num_fpgas = len(fpga_list)
     result_queue = Queue.Queue(maxsize=num_fpgas)
     thread_list = []
@@ -364,13 +373,18 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
 
 def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
     """
-    Make a non-blocking KatCP request to a list of KatcpClientFpgas, using the Asynchronous client.
+    Make a non-blocking KatCP request to a list of KatcpClientFpgas, using
+    the Asynchronous client.
     :param fpga_list: list of KatcpClientFpga objects
     :param timeout: the request timeout
     :param request: the request string
     :param request_args: the arguments to the request, as a list
-    :return: a dictionary, keyed by hostname, of result dictionaries containing reply and informs
+    :return: a dictionary, keyed by hostname, of result dictionaries containing
+    reply and informs
     """
+
+    raise DeprecationWarning
+
     num_fpgas = len(fpga_list)
     reply_queue = Queue.Queue(maxsize=num_fpgas)
     requests = {}
@@ -389,7 +403,8 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         req = fpga_.nb_request(request, None, reply_cb, *request_args)
         requests[req['host']] = [req['request'], req['id']]
         lock.release()
-        LOGGER.debug('Request \'%s\' id(%s) to host(%s)' % (req['request'], req['id'], req['host']))
+        LOGGER.debug('Request \'%s\' id(%s) to host(%s)' % (
+            req['request'], req['id'], req['host']))
 
     # wait for replies from the requests
     timedout = False
@@ -415,8 +430,9 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
             request_id = replies[fpga_.host]
         except KeyError:
             LOGGER.error(replies)
-            raise KeyError('Didn\'t get a reply for FPGA \'%s\' so the '
-                           'request \'%s\' probably didn\'t complete.' % (fpga_.host, request))
+            raise KeyError(
+                'Didn\'t get a reply for FPGA \'%s\' so the request \'%s\' '
+                'probably didn\'t complete.' % (fpga_.host, request))
         reply, informs = fpga_.nb_get_request_result(request_id)
         frv = {'request': requests[fpga_.host][0],
                'reply': reply.arguments[0],
