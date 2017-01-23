@@ -78,13 +78,13 @@ class SkarabFpga(CasperFpga):
                         (self.skarab_ip_address,
                          sd.ETHERNET_CONTROL_PORT_ADDRESS))
 
-    def is_connected(self):
+    def is_connected(self, retries=3):
         """
         'ping' the board to see if it is connected and running.
         Tries to read a register
         :return: True or False
         """
-        data = self.read_board_reg(sd.C_RD_VERSION_ADDR)
+        data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=retries)
         if data:
             return True
         else:
@@ -532,22 +532,25 @@ class SkarabFpga(CasperFpga):
         # this can be reduced when the 40gbe switch issue is resolved
         timeout = timeout + time.time()
         while timeout > time.time():
-            if self.is_connected():
+            # setting the retries to 20 allows about 60s for the 40 switch to come back.
+            # it also prevents errors being logged when there is no responce.
+            if self.is_connected(retries=20):
                 # configure the mux back to user_date mode
                 self.config_prog_mux(user_data=1)
-                firmware_version = float(self.get_firmware_version())
-                if firmware_version >= 2.2:
+                [golden_image, multiboot, firmware_version] = self.get_firmware_version()
+                if golden_image == 0 and multiboot == 0:
                     LOGGER.info('SKARAB back up, in %s seconds with firmware version %s' % (str(60-(timeout-time.time())), str(firmware_version)))
                     return True
-                elif firmware_version == 2.0:
+                elif golden_image == 1 and multiboot == 0:
                     LOGGER.error('SKARAB back up, but fell back to golden image with firmware version %s' %str(firmware_version))
                     return False
-                elif firmware_version == 2.1:
+                elif golden_image == 0 and multiboot == 1:
                     LOGGER.error('SKARAB back up, but fell back to multiboot image with firmware version %s' %str(firmware_version))
                     return False
                 else:
-                    LOGGER.error('SKARAB back up, but unknown version number %s' %str(firmware_version))
+                    LOGGER.error('SKARAB back up, but unknown image with firmware version number %s' %str(firmware_version))
                     return False
+                print [golden_image, multiboot, firmware_version]
         LOGGER.error('SKARAB has not come back')
         return False
 
@@ -563,7 +566,9 @@ class SkarabFpga(CasperFpga):
        # the bit that tells us if the 40gbe link is up
        reg = format(int(self.read_wishbone(0xc)), '#032b')
        forty_gbe_link = int(reg[30])
-       one_gbe_link = int(reg[31])
+       # the bit that tells us if the 1gbe link is up
+       reg = format(int(self.read_wishbone(0x4)), '#032b')
+       one_gbe_link = int(reg[27])
        if forty_gbe_link == 1:                         # 40gbe link up
            LOGGER.info('The 40GbE link is up so using 40GbE to program the SKARAB')
            self.write_wishbone(0x18, user_data*2**1)
@@ -920,7 +925,7 @@ class SkarabFpga(CasperFpga):
                                 response_type, expect_response, sd.WRITE_REG,
                                 self.sequenceNumber, 11, 5)
 
-    def read_board_reg(self, reg_address):
+    def read_board_reg(self, reg_address, retries=3):
         """
         Read from a specified board register
         :param reg_address: address of register to read
@@ -939,7 +944,7 @@ class SkarabFpga(CasperFpga):
                                          self.skarabEthernetControlPort,
                                          payload, response_type,
                                          expect_response, sd.READ_REG,
-                                         self.sequenceNumber, 11, 5)
+                                         self.sequenceNumber, 11, 5, retries=retries)
 
         if read_reg_resp is not None:
             return self.data_unpack_and_merge(read_reg_resp.RegDataHigh,
@@ -1022,9 +1027,11 @@ class SkarabFpga(CasperFpga):
                                                  self.sequenceNumber, 11, 5)
 
         if get_embedded_ver_resp is not None:
-            major = get_embedded_ver_resp.VersionMajor
+            major = get_embedded_ver_resp.VersionMajor & 0x3F
             minor = get_embedded_ver_resp.VersionMinor
-            return '{}.{}'.format(major, minor)
+            golden_image = get_embedded_ver_resp.VersionMajor >> 15
+            multiboot = get_embedded_ver_resp.VersionMajor >> 14 & 0x1
+            return golden_image, multiboot, '{}.{}'.format(major, minor)
         else:
             return False
 
@@ -1372,19 +1379,38 @@ class SkarabFpga(CasperFpga):
     def get_firmware_version(self):
         """
         Read the version of the firmware
-        :return: firmware_major_version, firmware_minor_version
+        :return: golden_image, multiboot, firmware_major_version, firmware_minor_version
+
         """
 
         reg_data = self.read_board_reg(sd.C_RD_VERSION_ADDR)
 
         if reg_data:
-            firmware_major_version = (reg_data >> 16) & 0xFFFF
+            firmware_major_version = (reg_data >> 16) & 0x3FFF
             firmware_minor_version = reg_data & 0xFFFF
-            return '{}.{}'.format(firmware_major_version,
-                                  firmware_minor_version)
+            return reg_data >> 31, reg_data >> 30 & 0x1, '{}.{}'.format(firmware_major_version, firmware_minor_version)
 
         else:
             return None
+    
+    
+    def get_soc_version(self):
+        """
+        Read the version of the soc
+        :return: golden_image, multiboot, soc_major_version, soc_minor_version
+
+        """
+
+        reg_data = self.read_board_reg(sd.C_RD_SOC_VERSION_ADDR)
+
+        if reg_data:
+            soc_major_version = (reg_data >> 16) & 0x3FFF
+            soc_minor_version = reg_data & 0xFFFF
+            return reg_data >> 31, reg_data >> 30 & 0x1, '{}.{}'.format(soc_major_version, soc_minor_version)
+
+        else:
+            return None
+
 
     def front_panel_status_leds(self, led_0_on, led_1_on, led_2_on, led_3_on,
                                 led_4_on, led_5_on, led_6_on, led_7_on):
