@@ -142,7 +142,8 @@ class Memory(bitfield.Bitfield):
 
     def read(self, **kwargs):
         """
-        Read raw binary data and convert it using the bitfield description for this memory.
+        Read raw binary data and convert it using the bitfield
+        description for this memory.
         @return : (data dictionary, read time)
         """
         # read the data raw, passing necessary arguments through
@@ -158,11 +159,13 @@ class Memory(bitfield.Bitfield):
 
     def _process_data(self, rawdata):
         """
-        Process raw data according to this memory's bitfield setup. Does not use construct, just struct
-        and iterate through. Faster than construct. Who knew?
+        Process raw data according to this memory's bitfield setup.
+        Does not use construct, just struct and iterate through.
+        Faster than construct. Who knew?
         """
         if not(isinstance(rawdata, str) or isinstance(rawdata, buffer)):
-            raise TypeError('self.read_raw returning incorrect datatype. Must be str or buffer.')
+            raise TypeError('self.read_raw returning incorrect datatype. '
+                            'Must be str or buffer.')
         fbytes = struct.unpack('%iB' % self.length_bytes, rawdata)
         width_bytes = self.width_bits / 8
         memory_words = []
@@ -172,7 +175,8 @@ class Memory(bitfield.Bitfield):
             for bytectr in range(0, width_bytes):
                 byte = fbytes[startindex + width_bytes - (bytectr + 1)]
                 wordl |= byte << (bytectr * 8)
-                # print '\t%d: bytel: 0x%02X, wordl: 0x%X' % (bytectr, byte, wordl)
+                # print '\t%d: bytel: 0x%02X, wordl: 0x%X' % (
+                #     bytectr, byte, wordl)
             memory_words.append(wordl)
         # now we have all the words as longs, so carry on
         processed = {}
@@ -181,6 +185,7 @@ class Memory(bitfield.Bitfield):
         for ctr, word in enumerate(memory_words):
             for field in self._fields.itervalues():
                 word_shift = word >> field.offset
-                word_done = bin2fp(word_shift, field.width_bits, field.binary_pt, field.numtype == 1)
+                word_done = bin2fp(word_shift, field.width_bits,
+                                   field.binary_pt, field.numtype == 1)
                 processed[field.name].append(word_done)
         return processed

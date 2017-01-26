@@ -12,6 +12,14 @@ class Register(Memory):
     """
     def __init__(self, parent, name, address, device_info=None,
                  auto_update=False):
+        """
+
+        :param parent:
+        :param name:
+        :param address:
+        :param device_info:
+        :param auto_update:
+        """
         self.auto_update = auto_update
         self.parent = parent
         self.last_values = {}
@@ -25,6 +33,7 @@ class Register(Memory):
         """
         Process device info and the memory map to get all necessary info and
         return a Register instance.
+        :param parent: the parent device
         :param device_name: the unique device name
         :param device_info: information about this device
         :param memorymap_dict: a dictionary containing the device memory map
@@ -190,6 +199,11 @@ class Register(Memory):
         fwritedict = {self.field_names()[0]: value}
         self.write(**fwritedict)
 
+    # TODO
+    # class FieldsHolder(object):
+    #     def __init__(self, parentreg):
+    #         self._reglkjsdfoi = parentreg
+
     def process_info(self, info):
         """
         Set this Register's extra information.
@@ -215,6 +229,19 @@ class Register(Memory):
             LOGGER.error(self.block_info)
             self.field_add(bitfield.Field('reg', 0, 32, 0, 0))
             # raise RuntimeError('Unknown Register type.')
+
+        # TODO
+        # # add the fields as shortcut readable and writeable
+        # self.fields = Register.FieldsHolder(self)
+        # for fld in self._fields:
+        #     setattr(
+        #         self.fields, fld, property(
+        #             lambda fldhldr:
+        #                 fldhldr._reglkjsdfoi.read()['data'][fld],
+        #             lambda fldhldr, value:
+        #                 fldhldr._reglkjsdfoi.write(**{fld: value})
+        #         )
+        #     )
 
     def _process_info_current(self):
         # current one
