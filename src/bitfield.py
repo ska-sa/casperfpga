@@ -23,7 +23,7 @@ def clean_fields(parent_name, parent_type, field_str):
     _rv = []
     for _fname in _flist:
         if _fname.strip() == '':
-            LOGGER.DEBUG('Throwing away empty field in %s %s' % (
+            LOGGER.debug('Throwing away empty field in %s %s' % (
                 parent_type, parent_name))
         else:
             _rv.append(_fname)

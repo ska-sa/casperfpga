@@ -178,6 +178,18 @@ class Register(Memory):
         if len(pulse.keys()) > 0:
             self.write(**pulse)
 
+    def write_single(self, value):
+        """
+
+        :param value:
+        :return:
+        """
+        if len(self.field_names()) != 1:
+            raise ValueError('Register has more than one field, cannot '
+                             'use the assignment shortcut write method.')
+        fwritedict = {self.field_names()[0]: value}
+        self.write(**fwritedict)
+
     def process_info(self, info):
         """
         Set this Register's extra information.

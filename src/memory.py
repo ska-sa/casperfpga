@@ -35,6 +35,7 @@ def bin2fp(raw_word, bitwidth, bin_pt, signed):
         return quotient + (float(rem) / (2**bin_pt))
     raise RuntimeError
 
+
 def fp2fixed(num, bitwidth, bin_pt, signed):
     """
     Convert a floating point number to its fixed point equivalent.
@@ -65,6 +66,7 @@ def fp2fixed(num, bitwidth, bin_pt, signed):
     unscaled = scaled / ((2**bin_pt) * 1.0)
     return unscaled
 
+
 def cast_fixed(fpnum, bitwidth, bin_pt):
     """
     Represent a fixed point number as an unsigned number, like the Xilinx
@@ -81,12 +83,14 @@ def cast_fixed(fpnum, bitwidth, bin_pt):
         val += 2**bitwidth
     return val
 
+
 def fp2fixed_int(num, bitwidth, bin_pt, signed):
     """
     Compatability function, rather use the other functions explicitly.
     """
     val = fp2fixed(num, bitwidth, bin_pt, signed)
     return cast_fixed(val, bitwidth, bin_pt)
+
 
 class Memory(bitfield.Bitfield):
     """
