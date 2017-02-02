@@ -24,7 +24,8 @@ class Snap(Memory):
         self.control_registers = {
             'control': {'register': None, 'name': self.name + '_ctrl'},
             'status': {'register': None, 'name': self.name + '_status'},
-            'trig_offset': {'register': None, 'name': self.name + '_trig_offset'},
+            'trig_offset': {'register': None,
+                            'name': self.name + '_trig_offset'},
             'extra_value': {'register': None, 'name': self.name + '_val'},
             'tr_en_cnt': {'register': None, 'name': self.name + '_tr_en_cnt'}}
         LOGGER.debug('New Snap %s' % self)
@@ -34,6 +35,7 @@ class Snap(Memory):
         """
         Process device info and the memory map to get all necessary
         info and return a Snap instance.
+        :param parent: the Casperfpga on which this snap is found
         :param device_name: the unique device name
         :param device_info: information about this device
         :param memorymap_dict: a dictionary containing the device memory map
@@ -58,7 +60,7 @@ class Snap(Memory):
 
     def post_create_update(self, raw_system_info):
         """Update the device with information not available at creation.
-        @param raw_device_info: dictionary of device information
+        @param raw_system_info: dictionary of device information
         """
         # is this snap block inside a bitsnap block?
         for dev_name, dev_info in raw_system_info.items():
@@ -208,7 +210,7 @@ class Snap(Memory):
         """
         for kkey in kwargs.keys():
             if kkey not in ['circular_capture', 'man_trig', 'man_valid',
-                            'offset', 'timeout', 'arm']:
+                            'offset', 'timeout', 'arm', 'read_nowait']:
                 raise RuntimeError('Invalid option for snap read: %s' % kkey)
         rawdata, rawtime = self.read_raw(**kwargs)
         # processed = self._process_data_no_construct(rawdata['data'])
@@ -221,7 +223,8 @@ class Snap(Memory):
                 'extra_value': rawdata['extra_value']}
 
     def read_raw(self, **kwargs):
-        """Read snap data from the memory device.
+        """
+        Read snap data from the memory device.
         """
         def getkwarg(key, default):
             try:
@@ -232,38 +235,46 @@ class Snap(Memory):
         man_valid = getkwarg('man_valid', False)
         timeout = getkwarg('timeout', -1)
         offset = getkwarg('offset', -1)
+        read_nowait = getkwarg('read_nowait', False)
         circular_capture = getkwarg('circular_capture', False)
         arm = getkwarg('arm', True)
         if arm:
             self.arm(man_trig=man_trig, man_valid=man_valid, offset=offset,
                      circular_capture=circular_capture)
         # wait
-        done = False
+        done = read_nowait
         start_time = time.time()
-        # TODO - what would a sensible option be to check addr? the default
-        # of zero is probably not right
+        # TODO - what would a sensible option be to check addr? the default of zero is probably not right
         addr = 0
         while (not done) and \
                 ((time.time() - start_time) < timeout or (timeout < 0)):
             addr = self.control_registers['status']['register'].read_uint()
             done = not bool(addr & 0x80000000)
+        if read_nowait:
+            addr = self.length_bytes
         bram_dmp = {'extra_value': None, 'data': [],
                     'length': addr & 0x7fffffff, 'offset': 0}
         status_val = self.control_registers['status']['register'].read_uint()
         now_status = bool(status_val & 0x80000000)
         now_addr = status_val & 0x7fffffff
-        if (bram_dmp['length'] != now_addr) or (bram_dmp['length'] == 0) or \
-                now_status:
+        if (not read_nowait) and \
+                ((bram_dmp['length'] != now_addr) or
+                    (bram_dmp['length'] == 0) or now_status):
             # if address is still changing, then the snap block didn't
             # finish capturing. we return empty.
-            error_info = 'timeout %2.2f seconds. Addr at stop time: %i. Now: Still running :%s, addr: %i.'\
-                         % (timeout, bram_dmp['length'], 'yes' if now_status else 'no', now_addr)
+            error_info = 'timeout %2.2f seconds. Addr at stop time: %i. ' \
+                         'Now: Still running :%s, addr: %i.' % (
+                            timeout, bram_dmp['length'],
+                            'yes' if now_status else 'no', now_addr)
             if bram_dmp['length'] != now_addr:
-                raise RuntimeError("Snap %s error: Address still changing after %s" % (self.name, error_info))
+                raise RuntimeError('Snap %s error: Address still changing '
+                                   'after %s' % (self.name, error_info))
             elif bram_dmp['length'] == 0:
-                raise RuntimeError("Snap %s error: Returned 0 bytes after %s" % (self.name, error_info))
+                raise RuntimeError('Snap %s error: Returned 0 bytes after '
+                                   '%s' % (self.name, error_info))
             else:
-                raise RuntimeError("Snap %s error: %s" % (self.name, error_info))
+                raise RuntimeError('Snap %s error: %s' % (
+                    self.name, error_info))
         if circular_capture:
             val = self.control_registers['tr_en_cnt']['register'].read_uint()
             bram_dmp['offset'] = val - bram_dmp['length']
@@ -273,17 +284,20 @@ class Snap(Memory):
             bram_dmp['data'] = []
             datatime = -1
         else:
-            bram_dmp['data'] = self.parent.read(self.name + '_bram', bram_dmp['length'])
+            bram_dmp['data'] = self.parent.read(self.name + '_bram',
+                                                bram_dmp['length'])
             datatime = time.time()
         bram_dmp['offset'] += offset
         if bram_dmp['offset'] < 0:
             bram_dmp['offset'] = 0
         if bram_dmp['length'] != self.length_bytes:
             raise RuntimeError('%s.read_uint() - expected %i bytes, got %i' % (
-                self.name, self.length_bytes, bram_dmp['length'] / (self.width_bits / 8)))
+                self.name, self.length_bytes,
+                bram_dmp['length'] / (self.width_bits / 8)))
         # read the extra value
-        if self.control_registers['extra_value']['register'] is not None:
-            bram_dmp['extra_value'] = self.control_registers['extra_value']['register'].read()
+        ev_reg = self.control_registers['extra_value']['register']
+        if ev_reg is not None:
+            bram_dmp['extra_value'] = ev_reg.read()
         # done
         return bram_dmp, datatime
 
