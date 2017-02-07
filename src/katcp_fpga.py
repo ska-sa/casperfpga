@@ -160,7 +160,7 @@ class KatcpFpga(CasperFpga, katcp.CallbackClient):
         """
         # TODO raise sensible errors
         if request_timeout == -1:
-            request_timeout = self._timeout
+            request_timeout = 30.0
         request = katcp.Message.request(name, *request_args)
         reply, informs = self.blocking_request(request, timeout=request_timeout)
         if (reply.arguments[0] != katcp.Message.OK) and require_ok:
