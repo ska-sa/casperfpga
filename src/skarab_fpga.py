@@ -7,6 +7,7 @@ import time
 import os
 import zlib
 import skarab_definitions as sd
+import re
 
 from casperfpga import CasperFpga
 from utils import parse_fpg
@@ -409,6 +410,8 @@ class SkarabFpga(CasperFpga):
             raise TypeError("Invalid file type. "
                             "Only use .fpg, .bit, .hex or .bin files")
 
+        # at this point the bitstream is in memory
+
         # quit on invalid file
         if do_not_program:
             return
@@ -418,8 +421,10 @@ class SkarabFpga(CasperFpga):
             LOGGER.error("SDRAM PREPARATION FAILED. Aborting programming. . .")
             return
 
-        size = os.path.getsize(image_to_program)
-        f = open(image_to_program, 'rb')
+        size = len(image_to_program)
+
+        # split image into chunks of 4096 words
+        image_chunks = [image_to_program[i:i+8192] for i in range(0, size, 8192)]
 
         # counter for num packets sent
         sent_pkt_counter = 0
@@ -445,8 +450,8 @@ class SkarabFpga(CasperFpga):
                 first_packet_in_image = 0
                 last_packet_in_image = 0
 
-            # read 4096 words from bin file
-            image_chunk = f.read(8192)
+            # select a 4096 chunk of words from bin file
+            image_chunk = image_chunks[i]
             # upload chunk of bin file to sdram
             ack = self.sdram_program(first_packet_in_image,
                                      last_packet_in_image, image_chunk)
@@ -459,7 +464,8 @@ class SkarabFpga(CasperFpga):
         # if the bin file provided requires padding to 4096 word boundary
         if padding:
             # get last packet
-            image_chunk = f.read()
+
+            image_chunk = image_chunks[-1]
             first_packet_in_image = 0
             last_packet_in_image = 1  # flag last packet in stream
 
@@ -550,10 +556,8 @@ class SkarabFpga(CasperFpga):
                 else:
                     LOGGER.error('SKARAB back up, but unknown image with firmware version number %s' %str(firmware_version))
                     return False
-                print [golden_image, multiboot, firmware_version]
         LOGGER.error('SKARAB has not come back')
         return False
-
 
     def config_prog_mux(self, user_data=1):
        """ 
@@ -1813,19 +1817,18 @@ class SkarabFpga(CasperFpga):
 
     # support functions
     @staticmethod
-    def convert_hex_to_bin(hex_file):
+    def convert_hex_to_bin(hex_file, extract_to_disk=False):
         # TODO: error checking/handling
         """
         Converts a hex file to a bin file with little endianness for programming to sdram, also pads
         to 4096 word boundary
         :param hex_file: file name of hex file to be converted
-        :return: file name of converted bin file
+        :param extract_to_disk: flag whether or not bin file is extracted to harddisk
+        :return: bitsream
         """
 
-        out_file_name = os.path.splitext(hex_file)[0] + '.bin'
-
         f_in = open(hex_file, 'rb')  # read from
-        f_out = open(out_file_name, 'wb')  # write to
+        bitstream = ''  # blank string for bitstream
 
         packer = struct.Struct(
             "<H")  # for packing fpga image data into binary string use little endian
@@ -1840,8 +1843,7 @@ class SkarabFpga(CasperFpga):
             # create packets of 4096 words
             for j in range(4096):
                 word = f_in.read(4)
-                f_out.write(
-                    packer.pack(int(word, 16)))  # pack into binary string
+                bitstream += packer.pack(int(word, 16))  # pack into binary string
 
         # entire file not processed yet. Remaining data needs to be padded to a 4096 word boundary
         # in the hex file this equates to 4096*4 bytes
@@ -1850,29 +1852,43 @@ class SkarabFpga(CasperFpga):
         last_pkt = f_in.read().rstrip()  # strip eof '\r\n' before padding
         last_pkt += 'f' * (16384 - len(last_pkt))  # pad to 4096 word boundary
 
+        # close the file
+        f_in.close()
+
+        # handle last data chunk
         for i in range(0, 16384, 4):
             word = last_pkt[i:i + 4]  # grab 4 chars to form word
-            f_out.write(packer.pack(int(word, 16)))  # pack into binary string
+            bitstream += packer.pack(int(word, 16))  # pack into binary string
 
-        f_in.close()
-        f_out.close()
-        return out_file_name
+        if extract_to_disk:
+            out_file_name = os.path.splitext(hex_file)[0] + '.bin'
+            f_out = open(out_file_name, 'wb')  # write to
+            f_out.write(bitstream)
+            f_out.close()
+            LOGGER.info('Output binary filename: {}'.format(out_file_name))
+
+        return bitstream
+
 
     @staticmethod
-    def convert_bit_to_bin(bit_file):
-        # TODO: depending on fpg file, might use this to go from bit to bin
+    def convert_bit_to_bin(bit_file, extract_to_disk=False):
+        '''
+        Converts a .bit file to a .bin file for programming SKARAB. .bit files
+        typically contain the .bin file with an additional prepended header.
+        :param bit_file: bit file to be converted
+        :param extract_to_disk: flag whether or not bin file is extracted to harddisk
+        :return: bitstream
+        '''
         # apparently .fpg file uses the .bit file generated from implementation
         # this function will convert the .bit file portion extracted from the .fpg file and convert it
         # to .bin format with required endianness
         # also strips away .bit file header
 
-        out_file_name = os.path.splitext(bit_file)[0] + '_from_bit.bin'
-
-        # header identifier
+        # bin file header identifier
         header_end = '\xff' * 32  # header identifer
 
         f_in = open(bit_file, 'rb')  # read from
-        f_out = open(out_file_name, 'wb')  # write to
+
 
         data_format = struct.Struct(
             "!B")  # for unpacking data from bit file and repacking
@@ -1884,30 +1900,35 @@ class SkarabFpga(CasperFpga):
         header_end_index = data.find(header_end)
         data = data[header_end_index:]
 
+        f_in.close()  # close file
+
         # .bit file already contains packed data: ABCD is a 2-byte hex value (size of this value is 2-bytes)
         # .bin file requires this packing of data, but has a different bit ordering within each nibble
         # i.e. given 1122 in .bit, require 8844 in .bin
         # i.e. given 09DC in .bit, require B039 in .bin
         # this equates to reversing the bits in each byte in the file
 
-        temp = ''
+        bitstream = ''
         for i in range(len(data)):
-            temp += packer(int('{:08b}'.format(unpacker(data[i])[0])[::-1],
-                               2))  # reverse bits each byte
+            bitstream += packer(int('{:08b}'.format(unpacker(data[i])[0])[::-1]
+                                    , 2))  # reverse bits each byte
+        if extract_to_disk:
+            out_file_name = os.path.splitext(bit_file)[0] + '_from_bit.bin'
+            f_out = open(out_file_name, 'wb')  # write to
+            f_out.write(bitstream)  # write bitstream to file
+            f_out.close()
+            LOGGER.info('Output binary filename: {}'.format(out_file_name))
 
-        f_out.write(temp)
-
-        f_in.close()
-        f_out.close()
-        return out_file_name
+        return bitstream
 
     @staticmethod
-    def extract_bitstream(filename):
+    def extract_bitstream(filename, extract_to_disk=False):
         """
         Loads fpg file extracts bin file. Also checks if
         the bin file is compressed and decompresses it.
         :param filename: fpg file to load
-        :return: bin file name
+        :param extract_to_disk: flag whether or not bin file is extracted to harddisk
+        :return: bitstream
         """
 
         # get design name
@@ -1932,25 +1953,34 @@ class SkarabFpga(CasperFpga):
             # decompress
             bitstream = zlib.decompress(bitstream, 16 + zlib.MAX_WBITS)
 
-        # write to bin file
-        bin_file = open(name + '.bin', 'wb')
-        bin_file.write(bitstream)
-        bin_file.close()
+        # write binary file to disk?
+        if extract_to_disk:
 
-        return name + '.bin'
+            # write to bin file
+            bin_file = open(name + '.bin', 'wb')
+            bin_file.write(bitstream)
+            bin_file.close()
+            LOGGER.info('Output binary filename: {}'.format(name + '.bin'))
+
+        return bitstream
 
     @staticmethod
-    def check_bitstream(filename):
+    def check_bitstream(bitstream):
         """
         Checks the bitstream to see if it is valid.
         i.e. if it contains a known, correct substring in it's header
-        :param filename: bitstream to check
+        :param bitstream: bitstream to check
         :return: True or False
         """
 
-        bitstream = open(filename, 'r')
-        contents = bitstream.read()
-        bitstream.close()
+        # check if filename or bitstream:
+        #if '.bin' in bitstream:
+        #    # filename given
+        #    bitstream = open(bitstream, 'rb')
+        #    contents = bitstream.read()
+        #    bitstream.close()
+        #else:
+        contents = bitstream
 
         valid_string = '\xff\xff\x00\x00\x00\xdd\x88\x44\x00\x22\xff\xff'
 
@@ -1965,32 +1995,38 @@ class SkarabFpga(CasperFpga):
             return False
 
     @staticmethod
-    def reorder_bytes_in_bin_file(filename):
+    def reorder_bytes_in_bin_file(filename, extract_to_disk=False):
         """
         Reorders the bytes in a given bin file to make it compatible for
         programming the SKARAB. This function only handles the case where
         the two bytes making up a word need to be swapped.
         :param filename: bin file to reorder
-        :return: fixed bin file name
+        :param extract_to_disk: flag whether or not bin file is extracted to harddisk
+        :return: bitstream
         """
-        # get filename name, less extension
-        name = os.path.splitext(filename)[0]
-        new_file_name = name + '_fix.bin'
 
-        bitstream = open(filename, 'rb')
-        contents = bitstream.read().rstrip()
-        bitstream.close()
+        f_in = open(filename, 'rb')
+        contents = f_in.read().rstrip()
+        f_in.close()
 
         num_words = len(contents) / 2
 
         data_format_pack = '<' + str(num_words) + 'H'
         data_format_unpack = '>' + str(num_words) + 'H'
 
-        reordered_bitstream = open(new_file_name, 'wb')
-        reordered_bitstream.write(struct.pack(data_format_pack, *struct.unpack(
-            data_format_unpack, contents)))
+        bitstream = struct.pack(data_format_pack, *struct.unpack(
+            data_format_unpack, contents))
 
-        return new_file_name
+        if extract_to_disk:
+            # get filename name, less extension
+            name = os.path.splitext(filename)[0]
+            new_file_name = name + '_fix.bin'
+            f_out = open(new_file_name, 'wb')
+            f_out.write(bitstream)
+            f_out.close()
+            LOGGER.info('Output binary filename: {}'.format(new_file_name))
+
+        return bitstream
 
     def get_system_information(self, filename=None, fpg_info=None):
         """
