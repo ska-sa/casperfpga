@@ -52,6 +52,9 @@ if args.log_level != '':
         logging.basicConfig(level=eval('logging.%s' % log_level))
     except AttributeError:
         raise RuntimeError('No such log level: %s' % log_level)
+# import logging
+# logging.basicConfig(filename='/tmp/casperfpga_tengbe_status_curses.log', level=logging.DEBUG)
+# logging.info('****************************************************')
 
 if args.comms == 'katcp':
     HOSTCLASS = katcp_fpga.KatcpFpga
@@ -98,7 +101,15 @@ def get_gbe_data(fpga):
     """
     returndata = {}
     for gbecore in fpga.tengbes:
-        returndata[gbecore.name] = gbecore.read_counters()
+        ctr_data = gbecore.read_counters()
+        for regname in ctr_data:
+            regdata = ctr_data[regname]
+            try:
+                if ('timestamp' in regdata.keys()) and ('data' in regdata.keys()):
+                    ctr_data[regname] = regdata['data']['reg']
+            except AttributeError:
+                pass
+        returndata[gbecore.name] = ctr_data
     return returndata
 
 
@@ -112,26 +123,33 @@ def get_tap_data(fpga):
     return data
 
 # get gbe and tap data
-tap_data = utils.threaded_fpga_operation(fpgas, 10, get_tap_data)
-gbe_data = utils.threaded_fpga_operation(fpgas, 10, get_gbe_data)
-# print gbe_data['roach020956']['gbe0'].keys()
+tap_data = utils.threaded_fpga_operation(fpgas, 15, get_tap_data)
+# gbe_data = utils.threaded_fpga_operation(fpgas, 15, get_gbe_data)
+# for fpga in gbe_data:
+#     fpga_data = gbe_data[fpga]
+#     print fpga, ':'
+#     for gbe in fpga_data:
+#         print gbe, ':'
+#         print fpga_data[gbe]
+
+# work out tables for each fpga
+# fpga_headers = ['tap_running', 'ip']
+# for fpga in fpgas:
+#     gbedata = gbe_data[fpga.host]
+#     for core in gbedata:
+#         core_regs = [key.replace(core, 'gbe') for key in gbedata[core].keys()]
+#         for reg in core_regs:
+#             if reg not in fpga_headers:
+#                 fpga_headers.append(reg)
+# fpga_headers = [fpga_headers]
+
+# print fpga_headers
 # utils.threaded_fpga_function(fpgas, 10, 'disconnect')
 # sys.exit()
 
-# work out tables for each fpga
-fpga_headers = ['tap_running', 'ip']
-for fpga in fpgas:
-    gbedata = gbe_data[fpga.host]
-    for core in gbedata:
-        core_regs = [key.replace(core, 'gbe') for key in gbedata[core].keys()]
-        for reg in core_regs:
-            if reg not in fpga_headers:
-                fpga_headers.append(reg)
-fpga_headers = [fpga_headers]
-
-fpga_headers = [['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr',
-                 'gbe_rxerrctr', 'gbe_rxbadctr', 'gbe_txerrctr',
-                 'gbe_txfullctr', 'gbe_txofctr', 'gbe_txctr', 'gbe_txvldctr']]
+fpga_headers = ['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr',
+                'gbe_rxerrctr', 'gbe_rxbadctr', 'gbe_txerrctr',
+                'gbe_txfullctr', 'gbe_txofctr', 'gbe_txctr', 'gbe_txvldctr']
 
 
 def exit_gracefully(sig, frame):
@@ -141,6 +159,18 @@ def exit_gracefully(sig, frame):
     sys.exit(0)
 signal.signal(signal.SIGINT, exit_gracefully)
 signal.signal(signal.SIGHUP, exit_gracefully)
+
+# work out the maximum host/core name
+max_1st_col_offset = -1
+for fpga in fpgas:
+    max_1st_col_offset = max(max_1st_col_offset, len(fpga.host))
+    for gbe_name in fpga.tengbes.names():
+        max_1st_col_offset = max(max_1st_col_offset, len(gbe_name))
+max_fldname = -1
+for hdr in fpga_headers:
+    max_fldname = max(max_fldname, len(hdr))
+
+max_1st_col_offset += 5
 
 # set up the curses scroll screen
 scroller = scroll.Scroll(debug=False)
@@ -161,61 +191,50 @@ try:
             scroller.draw_screen()
         if time.time() > last_refresh + polltime:
             scroller.clear_buffer()
-            scroller.add_line(
+            line = scroller.add_string(
                 'Polling %i host%s every %s - %is elapsed.' % (
                     len(fpgas),
                     '' if len(fpgas) == 1 else 's',
                     'second' if polltime == 1 else ('%i seconds' % polltime),
-                    time.time() - STARTTIME), 0, 0, absolute=True)
-            start_pos = 20
-            pos_increment = 15
-            if len(fpga_headers) == 1:
-                scroller.add_line('Host', 0, 1, absolute=True)
-                for reg in fpga_headers[0]:
-                    scroller.add_line(
-                        reg.rjust(pos_increment), start_pos, 1, absolute=True)
-                    start_pos += pos_increment
-                scroller.set_ypos(newpos=2)
-                scroller.set_ylimits(ymin=2)
-            else:
-                scroller.set_ypos(1)
-                scroller.set_ylimits(ymin=1)
+                    time.time() - STARTTIME), 0, 0, fixed=True)
+            start_pos = max_1st_col_offset
+            pos_increment = max_fldname + 2
+
+            scroller.set_current_line(1)
+            scroller.set_ylimits(1)
+
             gbe_data = utils.threaded_fpga_operation(fpgas, 10, get_gbe_data)
             for ctr, fpga in enumerate(fpgas):
+                start_pos = max_1st_col_offset
                 fpga_data = gbe_data[fpga.host]
-                scroller.add_line(fpga.host)
+                line = scroller.add_string(fpga.host)
+                for reg in fpga_headers:
+                    fld = '{val:>{width}}'.format(val=reg, width=max_fldname)
+                    line = scroller.add_string(fld, start_pos)
+                    start_pos += pos_increment
+                scroller.add_string('', cr=True)
                 for core, core_data in fpga_data.items():
-                    fpga_data[core]['tap_running'] = {
-                        'data': {
-                            'reg': not(tap_data[fpga.host][core]['name'] == '')
-                        }
-                    }
-                    fpga_data[core]['ip'] = {
-                        'data': {
-                            'reg': tap_data[fpga.host][core]['ip']
-                        }
-                    }
-                    start_pos = 20
-                    scroller.add_line(core, 5)
-                    for header_register in fpga_headers[0]:
+                    tap_running = tap_data[fpga.host][core]['name'] == ''
+                    fpga_data[core]['tap_running'] = not tap_running
+                    fpga_data[core]['ip'] = tap_data[fpga.host][core]['ip']
+                    start_pos = max_1st_col_offset
+                    line = scroller.add_string(core)
+                    for header_register in fpga_headers:
                         core_regname = header_register.replace('gbe', core)
-                        if start_pos < 200:
-                            if core_regname in core_data.keys():
-                                if not isinstance(core_data[core_regname]['data']['reg'], str):
-                                    regval = '%d' % core_data[core_regname]['data']['reg']
-                                else:
-                                    regval = core_data[core_regname]['data']['reg']
-                            else:
-                                regval = 'n/a'
-                            # all on the same line
-                            scroller.add_line(regval.rjust(pos_increment),
-                                              start_pos,
-                                              scroller.get_current_line() - 1)
-                            start_pos += pos_increment
+                        if core_regname in core_data.keys():
+                            fld = '{val:>{width}}'.format(
+                                    val=core_data[core_regname],
+                                    width=max_fldname)
+                        else:
+                            fld = '{val:>{width}}'.format(
+                                val='n/a', width=max_fldname)
+                        scroller.add_string(fld, start_pos)
+                        start_pos += pos_increment
+                    scroller.add_string('', cr=True)
             scroller.draw_screen()
             last_refresh = time.time()
         else:
-            time.sleep(0.1)
+            time.sleep(0.05)
 except Exception, e:
     exit_gracefully(None, None)
     raise

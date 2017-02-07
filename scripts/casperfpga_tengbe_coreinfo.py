@@ -19,20 +19,28 @@ try:
 except ImportError:
     corr2 = None
 
-parser = argparse.ArgumentParser(description='Display TenGBE interface information about a MeerKAT fpga host.',
-                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--hosts', dest='hosts', type=str, action='store', default='',
-                    help='comma-delimited list of hosts, or a corr2 config file')
-parser.add_argument('-c', '--core', dest='core', action='store', default='all', type=str,
-                    help='which core to query')
-parser.add_argument('--arp', dest='arp', action='store_true', default=False,
-                    help='print the ARP table')
-parser.add_argument('--cpu', dest='cpu', action='store_true', default=False,
-                    help='print the CPU details')
-parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
-                    help='katcp (default) or dcp?')
-parser.add_argument('--loglevel', dest='log_level', action='store', default='',
-                    help='log level to use, default None, options INFO, DEBUG, ERROR')
+parser = argparse.ArgumentParser(
+    description='Display TenGBE interface information '
+                'about a MeerKAT fpga host.',
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument(
+    '--hosts', dest='hosts', type=str, action='store', default='',
+    help='comma-delimited list of hosts, or a corr2 config file')
+parser.add_argument(
+    '-c', '--core', dest='core', action='store', default='all', type=str,
+    help='which core to query')
+parser.add_argument(
+    '--arp', dest='arp', action='store_true', default=False,
+    help='print the ARP table')
+parser.add_argument(
+    '--cpu', dest='cpu', action='store_true', default=False,
+    help='print the CPU details')
+parser.add_argument(
+    '--comms', dest='comms', action='store', default='katcp', type=str,
+    help='katcp (default) or dcp?')
+parser.add_argument(
+    '--loglevel', dest='log_level', action='store', default='',
+    help='log level to use, default None, options INFO, DEBUG, ERROR')
 args = parser.parse_args()
 
 if args.log_level != '':
@@ -65,8 +73,9 @@ for fpga in fpgas:
     numgbes = len(fpga.tengbes)
     if numgbes < 1:
         raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
-    print '%s: found %i 10gbe core%s.' % (fpga.host, numgbes, '' if numgbes == 1 else 's')
-
+    print '%s: found %i 10gbe core%s.' % (fpga.host,
+                                          numgbes,
+                                          '' if numgbes == 1 else 's')
 
 for fpga in fpgas:
     if args.core == 'all':
@@ -77,7 +86,8 @@ for fpga in fpgas:
     print '%s:' % fpga.host
     print 50*'#'
     for core in cores:
-        fpga.tengbes[core].print_10gbe_core_details(arp=args.arp, cpu=args.cpu, refresh=True)
+        fpga.tengbes[core].print_10gbe_core_details(arp=args.arp, cpu=args.cpu,
+                                                    refresh=True)
 
 # handle exits cleanly
 utils.threaded_fpga_function(fpgas, 10, 'disconnect')

@@ -6,7 +6,8 @@ Created on Feb 28, 2013
 
 import logging
 import struct
-import time
+
+from utils import check_changing_status
 
 from memory import Memory
 
@@ -37,7 +38,7 @@ class Mac(object):
         """
         mac = 0
         if mac_str.count(':') != 5:
-            raise RuntimeError('A MAC address must be of the form xx:xx:xx:xx:xx:xx')
+            raise RuntimeError('A MAC address must be of the form xx:xx:xx:xx:xx:xx, got %s' % mac_str)
         offset = 40
         for byte_str in mac_str.split(':'):
             value = int(byte_str, base=16)
@@ -54,6 +55,10 @@ class Mac(object):
             mac_str = mac
         elif isinstance(mac, int):
             mac_int = mac
+        if mac_str is not None:
+            if mac_str.find(':') == -1:
+                mac_int = int(mac_str)
+                mac_str = None
         if (mac_str is None) and (mac_int is None):
             raise ValueError('Cannot make a MAC with no value.')
         elif mac_str is not None:
@@ -68,8 +73,12 @@ class Mac(object):
         """
         Make a MAC address object from a ROACH hostname
         """
+        # HACK
+        if hostname.startswith('cbf_oach'):
+            hostname = hostname.replace('cbf_oach', 'roach')
+        # /HACK
         if not hostname.startswith('roach'):
-            raise RuntimeError('Only hostnames beginning with'
+            raise RuntimeError('Only hostnames beginning with '
                                'roach supported: %s' % hostname)
         digits = hostname.replace('roach', '')
         serial = [int(digits[ctr:ctr+2], 16) for ctr in range(0, 6, 2)]
@@ -130,6 +139,10 @@ class IpAddress(object):
             ip_str = ip
         elif isinstance(ip, int):
             ip_int = ip
+        if ip_str is not None:
+            if ip_str.find('.') == -1:
+                ip_int = int(ip_str)
+                ip_str = None
         if (ip_str is None) and (ip_int is None):
             raise ValueError('Cannot make an IP with no value.')
         elif ip_str is not None:
@@ -144,6 +157,13 @@ class IpAddress(object):
         for byte in self.ip_str.split('.'):
             ip.extend([int(byte, base=10)])
         return struct.pack('>4B', *ip)
+
+    def is_multicast(self):
+        """
+        Does the data source's IP address begin with 239?
+        :return:
+        """
+        return (self.ip_int >> 24) == 239
 
     def __int__(self):
         return self.ip_int
@@ -199,6 +219,7 @@ class TenGbe(Memory):
         self.core_details = None
         self.snaps = {'tx': None, 'rx': None}
         self.registers = {'tx': [], 'rx': []}
+        self.multicast_subscriptions = []
         # TODO
         # if self.parent.is_connected():
         #     self._check()
@@ -271,17 +292,19 @@ class TenGbe(Memory):
         self.parent.read(self.name, 1)
 
     def read_txsnap(self):
-        return self.parent.memory_devices[self.name + '_txs_ss'].read(timeout=10)['data']
+        tmp = self.parent.memory_devices[self.name + '_txs_ss'].read(timeout=10)
+        return tmp['data']
 
     def read_rxsnap(self):
-        return self.parent.memory_devices[self.name + '_rxs_ss'].read(timeout=10)['data']
+        tmp = self.parent.memory_devices[self.name + '_rxs_ss'].read(timeout=10)
+        return tmp['data']
 
     def read_rx_counters(self):
         """Read all rx counters in gbe block
         """
         results = {}
         for reg in self.registers['rx']:
-            results[reg] = self.parent.memory_devices[reg].read()
+            results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
         return results
 
     def read_tx_counters(self):
@@ -289,7 +312,7 @@ class TenGbe(Memory):
         """
         results = {}
         for reg in self.registers['tx']:
-            results[reg] = self.parent.memory_devices[reg].read()
+            results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
         return results
 
     def read_counters(self):
@@ -298,62 +321,60 @@ class TenGbe(Memory):
         results = {}
         for direction in ['tx', 'rx']:
             for reg in self.registers[direction]:
-                results[reg] = self.parent.memory_devices[reg].read()
+                tmp = self.parent.memory_devices[reg].read()
+                # keyname = self.name + '_' + direction + 'ctr'
+                results[reg] = tmp['data']['reg']
         return results
 
-    def tx_okay(self, wait_time=1):
+    def rx_okay(self, wait_time=0.2, checks=10):
         """
-        Is this gbe block okay?
-        i.e. _txctr incrementing and _txerrctr not incrementing
+        Is this gbe core receiving okay?
+        i.e. _rxctr incrementing and _rxerrctr not incrementing
+        :param wait_time: seconds to wait between checks
+        :param checks: times to run check
         :return: True/False
         """
-        TOTAL_TRIES = 2
+        if checks < 2:
+            raise RuntimeError('Cannot check less often than twice?')
+        fields = {
+            # name, required, True=same|False=different
+            self.name + '_rxctr': (True, False),
+            self.name + '_rxfullctr': (False, True),
+            self.name + '_rxofctr': (False, True),
+            self.name + '_rxerrctr': (True, True),
+            self.name + '_rxvldctr': (False, False),
+        }
+        result, message = check_changing_status(fields, self.read_rx_counters,
+                                                wait_time, checks)
+        if not result:
+            LOGGER.error('%s: %s' % (self.fullname, message))
+            return False
+        return True
 
-        def _runtest():
-            result0 = self.read_tx_counters()
-            # does the required tx counter exist?
-            if self.name+'_txctr' not in result0.keys():
-                LOGGER.error('%s: missing registers in gbe block' % 
-                             self.fullname)
-                return False
-            time.sleep(wait_time)
-            result1 = self.read_tx_counters()
-            # check that the tx counter is ticking over
-            key = self.name+'_txctr'
-            if (result0[key]['data']['reg'] == result1[key]['data']['reg']):
-                LOGGER.error('%s: %s ok - FALSE' % (self.fullname, key))
-                return False
-            else:
-                LOGGER.debug('%s: %s ok - TRUE' % (self.fullname, key))
-            optional = [self.name+'_txfullctr', self.name+'_txofctr',
-                        self.name+'_txvldctr', self.name+'_txerrctr']
-            for key in optional:
-                if key not in result0.keys():
-                    LOGGER.debug('%s: %s not implemented' % (self.fullname, key))
-                    continue
-                res0 = result0[key]['data']['reg']
-                res1 = result1[key]['data']['reg']
-                key_suffix = key.replace(self.name, '')
-                if key_suffix in ['_txerrctr', '_txfullctr', '_txofctr']:
-                    if res0 == res1:
-                        LOGGER.debug('%s: %s ok - TRUE' % (self.fullname, key))
-                    else:
-                        LOGGER.error('%s: %s ok - FALSE' % (self.fullname, key))
-                        return False
-                elif key_suffix == '_txvldctr':
-                    if res0 != res1:
-                        LOGGER.debug('%s: %s ok - TRUE' % (self.fullname, key))
-                    else:
-                        LOGGER.error('%s: %s ok - FALSE' % (self.fullname, key))
-                        return False
-            LOGGER.info('%s: tx_okay() - TRUE.' % self.fullname)
-            return True
-        for tries in range(TOTAL_TRIES):
-            if _runtest():
-                return True
-        LOGGER.error('%s: tx_okay() - FALSE.' % self.fullname)
-        return False
-
+    def tx_okay(self, wait_time=0.2, checks=10):
+        """
+        Is this gbe core transmitting okay?
+        i.e. _txctr incrementing and _txerrctr not incrementing
+        :param wait_time: seconds to wait between checks
+        :param checks: times to run check
+        :return: True/False
+        """
+        if checks < 2:
+            raise RuntimeError('Cannot check less often than twice?')
+        fields = {
+            # name, required, True=same|False=different
+            self.name + '_txctr': (True, False),
+            self.name + '_txfullctr': (False, True),
+            self.name + '_txofctr': (False, True),
+            self.name + '_txerrctr': (False, True),
+            self.name + '_txvldctr': (False, False),
+        }
+        result, message = check_changing_status(fields, self.read_tx_counters,
+                                                wait_time, checks)
+        if not result:
+            LOGGER.error('%s: %s' % (self.fullname, message))
+            return False
+        return True
 
     #def read_raw(self,  **kwargs):
     #    # size is in bytes
@@ -379,28 +400,32 @@ class TenGbe(Memory):
         if self.mac is None:
             # TODO get MAC from EEPROM serial number and assign here
             self.mac = '0'
-        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=5,
-                                            require_ok=True,
-                                            request_args=(self.name, self.name, '0.0.0.0',
-                                                          str(self.port), str(self.mac), ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-start', request_timeout=5,
+            require_ok=True,
+            request_args=(self.name, self.name, '0.0.0.0',
+                          str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting tap driver.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
-                                            require_ok=True,
-                                            request_args=(self.name, "mode", "0"))
+        reply, _ = self.parent.katcprequest(
+            name='tap-arp-config', request_timeout=1,
+            require_ok=True,
+            request_args=(self.name, 'mode', '0'))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure disabling ARP.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-dhcp", request_timeout=30,
-                                            require_ok=True,
-                                            request_args=(self.name, ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-dhcp', request_timeout=30,
+            require_ok=True,
+            request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting DHCP client.' % self.name)
 
-        reply, _ = self.parent.katcprequest(name="tap-arp-config", request_timeout=1,
-                                            require_ok=True,
-                                            request_args=(self.name, "mode", "-1"))
+        reply, _ = self.parent.katcprequest(
+            name='tap-arp-config', request_timeout=1,
+            require_ok=True,
+            request_args=(self.name, 'mode', '-1'))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure re-enabling ARP.' % self.name)
 
@@ -420,9 +445,10 @@ class TenGbe(Memory):
             LOGGER.info('%s: tap already running.' % self.fullname)
             return
         LOGGER.info('%s: starting tap driver.' % self.fullname)
-        reply, _ = self.parent.katcprequest(name="tap-start", request_timeout=-1, require_ok=True,
-                                            request_args=(self.name, self.name, str(self.ip_address),
-                                                          str(self.port), str(self.mac), ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-start', request_timeout=-1, require_ok=True,
+            request_args=(self.name, self.name, str(self.ip_address),
+                          str(self.port), str(self.mac), ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting tap driver.' %
                                self.fullname)
@@ -499,6 +525,8 @@ class TenGbe(Memory):
                                             request_args=(self.name, 'recv',
                                                           mcast_group_string, ))
         if reply.arguments[0] == 'ok':
+            if mcast_group_string not in self.multicast_subscriptions:
+                self.multicast_subscriptions.append(mcast_group_string)
             return
         else:
             raise RuntimeError("%s: failed adding multicast receive %s to "
@@ -515,10 +543,16 @@ class TenGbe(Memory):
                                                 request_args=(self.name,
                                                               IpAddress.str2ip(ip_str), ))
         except:
-            raise RuntimeError("%s: tap-multicast-remove does not seem to "
-                               "be supported on %s" % (self.fullname,
+            raise RuntimeError('%s: tap-multicast-remove does not seem to '
+                               'be supported on %s' % (self.fullname,
                                                        self.parent.host))
         if reply.arguments[0] == 'ok':
+            if ip_str not in self.multicast_subscriptions:
+                LOGGER.warning(
+                    '%s: That is odd, %s removed from mcast subscriptions, but '
+                    'it was not in its list of sbscribed addresses.' % (
+                        self.fullname, ip_str))
+                self.multicast_subscriptions.remove(ip_str)
             return
         else:
             raise RuntimeError('%s: failed removing multicast address %s '
@@ -587,6 +621,9 @@ class TenGbe(Memory):
         0x29    :    RX_eq_pol
         0x2a    :    TX_preemph
         0x2b    :    TX_diff_ctrl
+        0x30 - 0x33: Multicast IP RX base address
+        0x34 - 0x37: Multicast IP mask
+        0x38 - 0x3b: Multicast subnet mask
         0x1000  :    CPU TX buffer
         0x2000  :    CPU RX buffer
         0x3000  :    ARP tables start
@@ -624,26 +661,55 @@ class TenGbe(Memory):
         #self.add_field(Bitfield.Field('arp_table', 0,       0x1000 * word_width,        0, 0x3000 * word_width))
         """
         returnval = {}
-        port_dump = list(struct.unpack('>16384B', self.parent.read(self.name, 16384)))
-        returnval['ip_prefix'] = '%i.%i.%i.' % (port_dump[0x10], port_dump[0x11], port_dump[0x12])
-        returnval['ip'] = IpAddress('%i.%i.%i.%i' % (port_dump[0x10], port_dump[0x11],
-                                                     port_dump[0x12], port_dump[0x13]))
-        returnval['mac'] = Mac('%i:%i:%i:%i:%i:%i' % (port_dump[0x02], port_dump[0x03],
-                                                      port_dump[0x04], port_dump[0x05],
-                                                      port_dump[0x06], port_dump[0x07]))
-        returnval['gateway_ip'] = IpAddress('%i.%i.%i.%i' % (port_dump[0x0c], port_dump[0x0d],
-                                                             port_dump[0x0e], port_dump[0x0f]))
+        port_dump = list(struct.unpack('>16384B',
+                                       self.parent.read(self.name, 16384)))
+        returnval['ip_prefix'] = '%i.%i.%i.' % (
+            port_dump[0x10], port_dump[0x11], port_dump[0x12])
+        returnval['ip'] = IpAddress('%i.%i.%i.%i' % (
+            port_dump[0x10], port_dump[0x11], port_dump[0x12], port_dump[0x13]))
+        returnval['mac'] = Mac('%i:%i:%i:%i:%i:%i' % (
+            port_dump[0x02], port_dump[0x03],
+            port_dump[0x04], port_dump[0x05],
+            port_dump[0x06], port_dump[0x07]))
+        returnval['gateway_ip'] = IpAddress('%i.%i.%i.%i' % (
+            port_dump[0x0c], port_dump[0x0d], port_dump[0x0e], port_dump[0x0f]))
         returnval['fabric_port'] = ((port_dump[0x22] << 8) + (port_dump[0x23]))
         returnval['fabric_en'] = bool(port_dump[0x21] & 1)
-        returnval['xaui_lane_sync'] = [bool(port_dump[0x27] & 4), bool(port_dump[0x27] & 8),
-                                       bool(port_dump[0x27] & 16), bool(port_dump[0x27] & 32)]
-        returnval['xaui_status'] = [port_dump[0x24], port_dump[0x25], port_dump[0x26], port_dump[0x27]]
+        returnval['xaui_lane_sync'] = [
+            bool(port_dump[0x27] & 4), bool(port_dump[0x27] & 8),
+            bool(port_dump[0x27] & 16), bool(port_dump[0x27] & 32)]
+        returnval['xaui_status'] = [
+            port_dump[0x24], port_dump[0x25], port_dump[0x26], port_dump[0x27]]
         returnval['xaui_chan_bond'] = bool(port_dump[0x27] & 64)
         returnval['xaui_phy'] = {}
         returnval['xaui_phy']['rx_eq_mix'] = port_dump[0x28]
         returnval['xaui_phy']['rx_eq_pol'] = port_dump[0x29]
         returnval['xaui_phy']['tx_preemph'] = port_dump[0x2a]
         returnval['xaui_phy']['tx_swing'] = port_dump[0x2b]
+        returnval['multicast'] = {}
+        returnval['multicast']['base_ip'] = IpAddress(
+            '%i.%i.%i.%i' % (port_dump[0x30], port_dump[0x31],
+                             port_dump[0x32], port_dump[0x33]))
+        returnval['multicast']['ip_mask'] = IpAddress(
+            '%i.%i.%i.%i' % (port_dump[0x34], port_dump[0x35],
+                             port_dump[0x36], port_dump[0x37]))
+        returnval['multicast']['subnet_mask'] = IpAddress(
+            '%i.%i.%i.%i' % (port_dump[0x38], port_dump[0x39],
+                             port_dump[0x3a], port_dump[0x3b]))
+        possible_addresses = [int(returnval['multicast']['base_ip'])]
+        mask_int = int(returnval['multicast']['ip_mask'])
+        for ctr in range(32):
+            mask_bit = (mask_int >> ctr) & 1
+            if not mask_bit:
+                new_ips = []
+                for ip in possible_addresses:
+                    new_ips.append(ip & (~(1 << ctr)))
+                    new_ips.append(new_ips[-1] | (1 << ctr))
+                possible_addresses.extend(new_ips)
+        returnval['multicast']['rx_ips'] = []
+        tmp = list(set(possible_addresses))
+        for ip in tmp:
+            returnval['multicast']['rx_ips'].append(IpAddress(ip))
         if read_arp:
             returnval['arp'] = self.get_arp_details(port_dump)
         if read_cpu:
@@ -696,27 +762,16 @@ class TenGbe(Memory):
         """
         if refresh or (self.core_details is None):
             self.get_10gbe_core_details(arp, cpu)
+        #print self.core_details
         print '------------------------'
         print '%s configuration:' % self.fullname
-        print 'MAC: ',
-        for mac in self.core_details['mac']:
-            print '%02X' % mac,
-        print ''
-        print 'Gateway: ',
-        for gw_ip in self.core_details['gateway_ip']:
-            print '%3d' % gw_ip,
-        print ''
-        print 'IP: ',
-        for ip_addr in self.core_details['ip']:
-            print '%3d' % ip_addr,
-        print ''
+        print 'MAC: ', Mac.mac2str(int(self.core_details['mac']))
+        print 'Gateway: ', self.core_details['gateway_ip']
+        print 'IP: ', self.core_details['ip']
         print 'Fabric port: ',
         print '%5d' % self.core_details['fabric_port']
         print 'Fabric interface is currently:', 'Enabled' if self.core_details['fabric_en'] else 'Disabled'
-        print 'XAUI Status: ',
-        for xaui_status in self.core_details['xaui_status']:
-            print '%02X' % xaui_status,
-        print ''
+        print 'XAUI Status: ', self.core_details['xaui_status']
         for i in range(0, 4):
             print '\tlane sync %i:  %i' % (i, self.core_details['xaui_lane_sync'][i])
         print '\tChannel bond: %i' % self.core_details['xaui_chan_bond']
@@ -725,6 +780,10 @@ class TenGbe(Memory):
         print '\tRX_eq_pol: %2X' % self.core_details['xaui_phy']['rx_eq_pol']
         print '\tTX_pre-emph: %2X' % self.core_details['xaui_phy']['tx_preemph']
         print '\tTX_diff_ctrl: %2X' % self.core_details['xaui_phy']['tx_swing']
+        print 'Multicast:'
+        for k in self.core_details['multicast']:
+            print '\t%s: %s' % (k, self.core_details['multicast'][k])
+
         if arp:
             self.print_arp_details(refresh=refresh, only_hits=True)
         if cpu:

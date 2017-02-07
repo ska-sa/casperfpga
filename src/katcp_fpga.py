@@ -8,7 +8,6 @@ import random
 import socket
 
 
-import async_requester
 from casperfpga import CasperFpga
 from utils import parse_fpg, create_meta_dictionary
 
@@ -40,6 +39,7 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     :param targethost: the host to which it must be sent
     :param port: the port the host should open
     :param result_queue: the result of the upload, nothing '' indicates success
+    :param timeout:
     :return:
     """
     upload_socket = socket.socket()
@@ -64,13 +64,17 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
                     (targethost, time.time()))
 
 
-class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
-                katcp.CallbackClient):
+class KatcpFpga(CasperFpga, katcp.CallbackClient):
 
     def __init__(self, host, port=7147, timeout=20.0, connect=True):
-        async_requester.AsyncRequester.__init__(self, host,
-                                                self.callback_request,
-                                                max_requests=100)
+        """
+
+        :param host:
+        :param port:
+        :param timeout:
+        :param connect:
+        :return:
+        """
         katcp.CallbackClient.__init__(self, host, port,
                                       tb_limit=20, timeout=timeout,
                                       logger=LOGGER, auto_reconnect=True)
@@ -98,16 +102,19 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
             # Implement backward / forwards compatibility for change in
             # daemonization APIs in upstream katcp package.
             try:
-                # New style
+                # new style
                 self.setDaemon(True)
                 self.start()
             except AttributeError:
-                # Old style
+                # old style
                 self.start(daemon=True)
             connected = self.wait_connected(timeout)
             if not connected:
-                raise RuntimeError('Connection to {} not established within {}s'
-                                   .format(self.bind_address_string, timeout))
+                err_msg = 'Connection to {} not established within {}s'.format(
+                    self.bind_address_string, timeout)
+                LOGGER.error(err_msg)
+                raise RuntimeError(err_msg)
+
         # check that an actual katcp command gets through
         got_ping = False
         _stime = time.time()
@@ -116,13 +123,17 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                 got_ping = True
                 break
         if not got_ping:
-            raise RuntimeError('Could not connect to KATCP '
-                               'server %s' % self.host)
+            err_msg = 'Could not connect to KATCP server %s' % self.host
+            LOGGER.error(err_msg)
+            raise RuntimeError(err_msg)
 
         # set a higher write buffer size than standard
-        if self._stream.max_write_buffer_size <= 262144:
-            self._stream.max_buffer_size *= 2
-            self._stream.max_write_buffer_size *= 2
+        try:
+            if self._stream.max_write_buffer_size <= 262144:
+                self._stream.max_buffer_size *= 2
+                self._stream.max_write_buffer_size *= 2
+        except AttributeError:
+            LOGGER.warn('%s: no ._stream instance found.' % self.host)
 
         LOGGER.info('%s: connection established' % self.host)
 
@@ -573,6 +584,27 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                (self.host, self._bindaddr[1],
                 'connected' if self.is_connected() else 'disconnected')
 
+    @staticmethod
+    def _process_git_info(metalist):
+        """
+        Git information in the FPG must be processed.
+        :param metalist:
+        :return:
+        """
+        got_git = {}
+        time_pref = str(int(time.time())).replace('.', '_') + '_'
+        for ctr, parms in enumerate(metalist):
+            name, tag, param, value = parms
+            if name == '77777_git':
+                assert tag == 'rcs'
+                newname = name + '_' + time_pref + param
+                if newname not in got_git:
+                    got_git[newname] = (newname, tag, 'file-name', param)
+                param = value[0]
+                value = value[1:]
+                metalist[ctr] = (newname, tag, param, value)
+        metalist.extend(got_git.values())
+
     def _read_design_info_from_host(self, device=None):
         """
         Katcp request for extra system information embedded in the boffile.
@@ -595,8 +627,15 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         metalist = []
         for inform in informs:
             if len(inform.arguments) < 4:
-                raise ValueError('Incorrect number of meta inform '
+                if len(inform.arguments) == 3:
+                    LOGGER.warn('Incorrect number of meta inform '
+                                'arguments, missing value '
+                                'field: %s' % str(inform.arguments))
+                    inform.arguments.append('-1')
+                else:
+                    LOGGER.error('FEWER than THREE meta inform '
                                  'arguments: %s' % str(inform.arguments))
+                    continue
             for arg in inform.arguments:
                 arg = arg.replace('\_', ' ')
             name = inform.arguments[0]
@@ -607,11 +646,13 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                 value = value[0]
             name = name.replace('/', '_')
             metalist.append((name, tag, param, value))
+        self._process_git_info(metalist)
         return create_meta_dictionary(metalist)
 
     def _read_coreinfo_from_host(self):
         """
-        Get the equivalent of coreinfo.tab from the host using KATCP listdev commands.
+        Get the equivalent of coreinfo.tab from the host using
+        KATCP listdev commands.
         :return:
         """
         LOGGER.debug('%s: reading coreinfo' % self.host)
@@ -619,35 +660,42 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         listdev_size = self.listdev(getsize=True)
         listdev_address = self.listdev(getaddress=True)
         if len(listdev_address) != len(listdev_size):
-            raise RuntimeError('Different length listdev(size) and listdev(detail)')
+            raise RuntimeError('Different length listdev(size) and '
+                               'listdev(detail)')
         for byte_dev, byte_size in listdev_size:
             matched = False
             for addrdev, address in listdev_address:
                 if addrdev == byte_dev:
                     byte_size = int(byte_size.split(':')[0])
                     address = int(address.split(':')[0], 16)
-                    memorymap_dict[byte_dev] = {'address': address, 'bytes': byte_size}
+                    memorymap_dict[byte_dev] = {'address': address,
+                                                'bytes': byte_size}
                     matched = True
                     continue
             if not matched:
-                raise RuntimeError('No matching listdev address for device %s' % byte_dev)
+                raise RuntimeError('No matching listdev address for '
+                                   'device %s' % byte_dev)
         return memorymap_dict
 
     def get_system_information(self, filename=None, fpg_info=None):
         """
         Get information about the design running on the FPGA.
-        If filename is given, get it from there, otherwise query the host via KATCP.
+        If filename is given, get it from there, otherwise query the
+        host via KATCP.
         :param filename: fpg filename
+        :param fpg_info: a tuple with two dictionaries of FPG information
         :return: <nothing> the information is populated in the class
         """
         if (not self.is_running()) and (filename is None):
-            raise RuntimeError('This can only be run on a running device when no file is given.')
+            raise RuntimeError('This can only be run on a running device '
+                               'when no file is given.')
         if filename is not None:
             device_dict, memorymap_dict = parse_fpg(filename)
         else:
             device_dict = self._read_design_info_from_host()
             memorymap_dict = self._read_coreinfo_from_host()
-        super(KatcpFpga, self).get_system_information(fpg_info=(device_dict, memorymap_dict))
+        super(KatcpFpga, self).get_system_information(
+            fpg_info=(device_dict, memorymap_dict))
 
     def unhandled_inform(self, msg):
         """
