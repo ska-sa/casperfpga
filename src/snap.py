@@ -7,6 +7,20 @@ from register import Register
 LOGGER = logging.getLogger(__name__)
 
 
+def getkwarg(key, default, **kwargs):
+    """
+    Use a default value if a key does not exist in a kwargs dictionary
+    :param key: key to fetch
+    :param default: the default to use if it's not found
+    :param kwargs: the kwargs
+    :return:
+    """
+    try:
+        return kwargs[key]
+    except KeyError:
+        return default
+
+
 class Snap(Memory):
     """
     Snap blocks are triggered/controlled blocks of RAM on FPGAs.
@@ -177,18 +191,20 @@ class Snap(Memory):
                            (man_valid << 2) +
                            (circular_capture << 3)))
 
-    def print_snap(self, limit_lines=-1, man_valid=False, man_trig=False,
-                   circular_capture=False):
+    def print_snap(self, limit_lines=-1, **kwargs):
         """
         Read and print a snap block.
         :param limit_lines: limit the number of lines to print
-        :param man_valid: read the snap block with a man valid
-        :param man_trig: read the snap block with a man trigger
-        :param circular_capture: enable circular capture on the read command
+        :param offset: trigger offset
+        :param man_valid: force valid to be true
+        :param man_trig: force a trigger now
+        :param circular_capture: enable circular capture
+        :param timeout: time out after this many seconds
+        :param read_nowait: do not wait for the snap to finish reading
         :return:
         """
-        snapdata = self.read(man_valid=man_valid, man_trig=man_trig,
-                             circular_capture=circular_capture)
+        snapdata = self.read(**kwargs)
+        circular_capture = getkwarg('circular_capture', False, **kwargs)
         for ctr in range(0, len(snapdata['data'][snapdata['data'].keys()[0]])):
             print '%5d' % ctr,
             for key in snapdata['data'].keys():
@@ -203,10 +219,11 @@ class Snap(Memory):
         """
         Override Memory.read to handle the extra value register.
         :param offset: trigger offset
-        :param man_valid
-        :param man_trig
-        :param circular_capture
-        :param timeout
+        :param man_valid: force valid to be true
+        :param man_trig: force a trigger now
+        :param circular_capture: enable circular capture
+        :param timeout: time out after this many seconds
+        :param read_nowait: do not wait for the snap to finish reading
         """
         for kkey in kwargs.keys():
             if kkey not in ['circular_capture', 'man_trig', 'man_valid',
@@ -226,18 +243,13 @@ class Snap(Memory):
         """
         Read snap data from the memory device.
         """
-        def getkwarg(key, default):
-            try:
-                return kwargs[key]
-            except KeyError:
-                return default
-        man_trig = getkwarg('man_trig', False)
-        man_valid = getkwarg('man_valid', False)
-        timeout = getkwarg('timeout', -1)
-        offset = getkwarg('offset', -1)
-        read_nowait = getkwarg('read_nowait', False)
-        circular_capture = getkwarg('circular_capture', False)
-        arm = getkwarg('arm', True)
+        man_trig = getkwarg('man_trig', False, **kwargs)
+        man_valid = getkwarg('man_valid', False, **kwargs)
+        timeout = getkwarg('timeout', -1, **kwargs)
+        offset = getkwarg('offset', -1, **kwargs)
+        read_nowait = getkwarg('read_nowait', False, **kwargs)
+        circular_capture = getkwarg('circular_capture', False, **kwargs)
+        arm = getkwarg('arm', True, **kwargs)
         if arm:
             self.arm(man_trig=man_trig, man_valid=man_valid, offset=offset,
                      circular_capture=circular_capture)
