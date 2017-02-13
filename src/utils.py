@@ -64,7 +64,10 @@ def parse_fpg(filename):
                 LOGGER.warn('An old version of mlib_devel generated %s. Please '
                             'update. Meta fields are seperated by spaces, '
                             'should be tabs.' % filename)
-            line = line.replace(' ', '\t')
+                line = line.replace(' ', '\t')
+            if line.find(' ') != -1:
+                raise ValueError('Error parsing line with unwanted '
+                                 'spaces: "%s"' % line)
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
@@ -80,9 +83,17 @@ def parse_fpg(filename):
             name = name.replace('/', '_')
             metalist.append((name, tag, param, value))
         elif line.startswith('?register'):
-            register = line.replace('\_', ' ').replace('?register ', '')
-            register = register.replace('\n', '').lstrip().rstrip()
-            name, address, size_bytes = register.split(' ')
+            if line.startswith('?register '):
+                register = line.replace('\_', ' ').replace('?register ', '')
+                register = register.replace('\n', '').lstrip().rstrip()
+                name, address, size_bytes = register.split(' ')
+            elif line.startswith('?register\t'):
+                register = line.replace('\_', ' ').replace('?register\t', '')
+                register = register.replace('\n', '').lstrip().rstrip()
+                name, address, size_bytes = register.split('\t')
+            else:
+                raise ValueError('Cannot find ?register entries in '
+                                 'correct format.')
             address = int(address, 16)
             size_bytes = int(size_bytes, 16)
             if name in memorydict.keys():
