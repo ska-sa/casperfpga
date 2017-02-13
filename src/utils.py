@@ -65,9 +65,6 @@ def parse_fpg(filename):
                             'update. Meta fields are seperated by spaces, '
                             'should be tabs.' % filename)
                 line = line.replace(' ', '\t')
-            if line.find(' ') != -1:
-                raise ValueError('Error parsing line with unwanted '
-                                 'spaces: "%s"' % line)
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
