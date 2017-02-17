@@ -116,8 +116,11 @@ SDRAM_PROGRAM = 0x0029
 MULTICAST_REQUEST = 0x002B
 DEBUG_LOOPBACK_TEST = 0x002D
 QSFP_RESET_AND_PROG = 0x002F
-GET_SENSOR_DATA = 0x0031
-SET_FAN_SPEED = 0x0033
+READ_HMC_I2C = 0x0031
+
+# SKA SA Defined Command ID's
+GET_SENSOR_DATA = 0x0043
+SET_FAN_SPEED = 0x0045
 
 # I2C BUS DEFINES
 MB_I2C_BUS_ID = 0x0
@@ -902,7 +905,8 @@ class DebugConfigureEthernetReq(Command):
                  fabric_ip_address_low, fabric_multicast_ip_address_high,
                  fabric_multicast_ip_address_low, 
                  fabric_multicast_ip_address_mask_high,
-                 fabric_multicast_ip_address_mask_low, enable_fabric_interface):
+                 fabric_multicast_ip_address_mask_low,
+                 enable_fabric_interface):
         super(DebugConfigureEthernetReq, self).__init__()
         self.header = CommandHeader(DEBUG_CONFIGURE_ETHERNET, seq_num)
         self.id = interface_id
@@ -913,7 +917,8 @@ class DebugConfigureEthernetReq(Command):
         self.gateway_arp_cache_address = gateway_arp_cache_address
         self.fabric_ip_address_high = fabric_ip_address_high
         self.fabric_ip_address_low = fabric_ip_address_low
-        self.fabric_multicast_ip_address_high = fabric_multicast_ip_address_high
+        self.fabric_multicast_ip_address_high =  \
+            fabric_multicast_ip_address_high
         self.fabric_multicast_ip_address_low = fabric_multicast_ip_address_low
         self.fabric_multicast_ip_address_mask_high = \
             fabric_multicast_ip_address_mask_high
@@ -941,7 +946,8 @@ class DebugConfigureEthernetResp(Command):
         self.gateway_arp_cache_address = gateway_arp_cache_address
         self.fabric_ip_address_high = fabric_ip_address_high
         self.fabric_ip_address_low = fabric_ip_address_low
-        self.fabric_multicast_ip_address_high = fabric_multicast_ip_address_high
+        self.fabric_multicast_ip_address_high =  \
+            fabric_multicast_ip_address_high
         self.fabric_multicast_ip_address_low = fabric_multicast_ip_address_low
         self.fabric_multicast_ip_address_mask_high = \
             fabric_multicast_ip_address_mask_high
@@ -1099,6 +1105,29 @@ class QSFPResetAndProgramResp(Command):
         self.header = CommandHeader(command_id, seq_num)
         self.reset = reset
         self.program = program
+        self.padding = padding
+
+
+class ReadHMCI2CReq(Command):
+    def __init__(self, seq_num, interface_id, slave_address,
+                 read_address):
+        super(ReadHMCI2CReq, self).__init__()
+        self.header = CommandHeader(READ_HMC_I2C, seq_num)
+        self.id = interface_id
+        self.slave_address = slave_address
+        self.read_address = read_address
+
+
+class ReadHMCI2CResp(Command):
+    def __init__(self, command_id, seq_num, interface_id, slave_address,
+                 read_address, read_bytes, read_success, padding):
+        super(ReadHMCI2CResp, self).__init__()
+        self.header = CommandHeader(command_id, seq_num, False)
+        self.id = interface_id
+        self.slave_address = slave_address
+        self.read_address = read_address
+        self.read_bytes = read_bytes
+        self.read_success = read_success
         self.padding = padding
 
 

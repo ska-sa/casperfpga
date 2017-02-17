@@ -434,7 +434,7 @@ class SkarabFpga(CasperFpga):
             else:
                 LOGGER.info('Valid bitstream detected')
         elif file_extension == '.bin':
-            image_to_program = filename
+            image_to_program = open(filename, 'rb').read()
             if not self.check_bitstream(image_to_program):
                 LOGGER.warning(
                     'Incompatible bin file. Attemping to convert...')
@@ -792,6 +792,12 @@ class SkarabFpga(CasperFpga):
         if response_type == 'GetSensorDataResp':
             read_bytes = unpacked_data[2:93]
             unpacked_data[2:93] = [read_bytes]
+
+        if response_type == 'ReadHMCI2CResp':
+            slave_address = unpacked_data[4:8]
+            read_bytes = unpacked_data[8:12]
+            unpacked_data[4:8] = [slave_address]
+            unpacked_data[5:9] = [read_bytes]  # note the indices change after the first replacement!
 
         # return response from skarab
         return SkarabFpga.sd_dict[response_type](*unpacked_data)
@@ -1548,6 +1554,65 @@ class SkarabFpga(CasperFpga):
         else:
             LOGGER.error('Error enabling boot from SDRAM.')
             return False
+
+    def read_hmc_i2c(self, interface, slave_address, read_address, format_print=False):
+        """
+        Read a register on the HMC device via the I2C interface
+        Prints the data in binary (32-bit) and hexadecimal formats
+        Also returns the data
+        :param interface: identifier for i2c interface:
+                          0 - SKARAB Motherboard i2c
+                          1 - Mezzanine 0 i2c
+                          2 - Mezzanine 1 i2c
+                          3 - Mezzanine 2 i2c
+                          4 - Mezzanine 3 i2c
+        :param slave_address: I2C slave address of device to read
+        :param read_address: register address on device to read
+        :return: read data / None if fails
+        """
+
+        response_type = 'sReadHMCI2CResp'
+        expect_response = True
+
+        # handle read address (pack it as 4 16-bit words)
+        # TODO: handle this in the createPayload method
+        read_address = ''.join([struct.pack('!H', x) for x in
+                                struct.unpack('!4B', struct.pack('!I',
+                                                                 read_address))])
+
+        # create payload packet structure
+        request = sd.ReadHMCI2CReq(self.seq_num, interface, slave_address,
+                                   read_address)
+
+        # send payload and return response object
+        response = self.send_packet(skarab_socket=self.skarab_ctrl_sock,
+                                    port=self.skarab_eth_ctrl_port,
+                                    payload=request.create_payload(),
+                                    response_type='ReadHMCI2CResp',
+                                    expect_response=True,
+                                    command_id=sd.READ_I2C,
+                                    seq_num=self.seq_num,
+                                    number_of_words=15, pad_words=2)
+
+        if response is not None:
+            if response.read_success:
+                hmc_read_bytes = response.read_bytes  # this is the 4 bytes
+                # read
+                # from the register
+                # want to create a 32 bit value
+
+                hmc_read_word = struct.unpack('!I', struct.pack('!4B', *hmc_read_bytes))[0]
+                if format_print:
+                    print 'Binary: \t {:#032b}'.format(hmc_read_word)
+                    print 'Hex:    \t ' + '0x' + '{:08x}'.format(hmc_read_word)
+                return hmc_read_word
+
+            else:
+                LOGGER.error('HMC I2C read failed!')
+                return 0
+        else:
+            LOGGER.error('Bad response received.')
+            return
 
     def get_sensor_data(self):
         """
