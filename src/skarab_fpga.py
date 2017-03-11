@@ -809,10 +809,11 @@ class SkarabFpga(CasperFpga):
 
                     if response_payload.Header.CommandType != (command_id + 1):
                         LOGGER.error("Incorrect command ID in response")
-                        # exit command with error?
+                        return None
+
                     if response_payload.Header.SequenceNumber != seq_num:
                         LOGGER.error("Incorrect sequence number in response")
-                        # exit command with error?
+                        return None
 
                     # valid response received
                     # waiting_response = False
@@ -834,14 +835,36 @@ class SkarabFpga(CasperFpga):
 
             except KeyboardInterrupt:
 
-                LOGGER.error("Keyboard Interrupt: Sockets Closed.")
-                self.skarabControlSocket.close()
-                self.skarabFabricSocket.close()
-                time.sleep(1)
-                break
+                LOGGER.warning("Keyboard Interrupt: Process halted.")
+                time.sleep(3)  # wait to receive incoming responses
+
+                # clear the receive buffer
+                if self.clear_recv_buffer(skarab_socket, seq_num):
+                    LOGGER.info('Cleared recv buffer.')
+                    return None
 
         LOGGER.error("Socket timeout. Response packet not received.")
         return None
+
+    def clear_recv_buffer(self, skarab_socket, seq_num):
+        """
+        Clears the recv buffer to discard unhandled responses from the SKARAB
+        :param skarab_socket: socket object to be used
+        :return: True when buffer empty
+        """
+
+        # check if there is data ready to be handled
+        while select.select([skarab_socket], [], [], 0)[0]:
+            # read away the data in the recv buffer
+            _ = skarab_socket.recvfrom(4096)
+
+            # increment sequence number to re-synchronize request/response msgs
+            if seq_num == 0xFFFF:
+                self.sequenceNumber = 1
+            else:
+                self.sequenceNumber += 1
+
+        return True
 
     # low level access functions
 
