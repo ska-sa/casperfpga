@@ -516,11 +516,9 @@ class SkarabFpga(CasperFpga):
                 or sent_pkt_counter == (size / 8192 + 1):
 
             # set finished writing to SDRAM
-            finished_writing = self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE,
-                                                      False, True, False,
-                                                      False, False, False,
-                                                      False, False, False,
-                                                      0x0, 0x0)
+            finished_writing = self.sdram_reconfigure(
+                sd.SDRAM_PROGRAM_MODE, False, True, False, False, False, False,
+                False, False, False, 0x0, 0x0)
 
             # if verification is enabled
             if verify:
@@ -547,15 +545,18 @@ class SkarabFpga(CasperFpga):
             LOGGER.error('Error uploading FPGA image to SDRAM')
             return
 
-    def upload_to_ram_and_program(self, filename, timeout=60):
+    def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
+                                  wait_complete=True):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
         :param filename: fpga image to upload (currently supports bin, bit
+        :param port
+        :param timeout
+        :param wait_complete
         and hex files)
         :return: True, if success
         """
-
         # put the interface into programming mode
         self.config_prog_mux(user_data=0)
         # upload to sdram
@@ -577,16 +578,25 @@ class SkarabFpga(CasperFpga):
                 [golden_image, multiboot, firmware_version] = \
                     self.get_firmware_version()
                 if golden_image == 0 and multiboot == 0:
-                    LOGGER.info('SKARAB back up, in %s seconds with firmware version %s' % (str(60-(timeout-time.time())), str(firmware_version)))
+                    LOGGER.info(
+                        'SKARAB back up, in %s seconds with firmware version '
+                        '%s' % (str(60-(timeout-time.time())),
+                                str(firmware_version)))
                     return True
                 elif golden_image == 1 and multiboot == 0:
-                    LOGGER.error('SKARAB back up, but fell back to golden image with firmware version %s' %str(firmware_version))
+                    LOGGER.error(
+                        'SKARAB back up, but fell back to golden image with '
+                        'firmware version %s' % str(firmware_version))
                     return False
                 elif golden_image == 0 and multiboot == 1:
-                    LOGGER.error('SKARAB back up, but fell back to multiboot image with firmware version %s' %str(firmware_version))
+                    LOGGER.error(
+                        'SKARAB back up, but fell back to multiboot image with '
+                        'firmware version %s' % str(firmware_version))
                     return False
                 else:
-                    LOGGER.error('SKARAB back up, but unknown image with firmware version number %s' %str(firmware_version))
+                    LOGGER.error(
+                        'SKARAB back up, but unknown image with firmware '
+                        'version number %s' % str(firmware_version))
                     return False
         LOGGER.error('SKARAB has not come back')
         return False
@@ -603,8 +613,8 @@ class SkarabFpga(CasperFpga):
         reg = format(int(self.read_wishbone(0xc)), '#032b')
         forty_gbe_link = int(reg[30])
         # the bit that tells us if the 1gbe link is up
-        reg = format(int(self.read_wishbone(0x4)), '#032b')
-        one_gbe_link = int(reg[27])
+        # reg = format(int(self.read_wishbone(0x4)), '#032b')
+        # one_gbe_link = int(reg[27])
         # 40gbe link up
         if forty_gbe_link == 1:
             LOGGER.info(
@@ -1947,7 +1957,6 @@ class SkarabFpga(CasperFpga):
 
         # write binary file to disk?
         if extract_to_disk:
-
             # write to bin file
             bin_file = open(name + '.bin', 'wb')
             bin_file.write(bitstream)

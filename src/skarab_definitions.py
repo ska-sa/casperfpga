@@ -247,130 +247,143 @@ P1V0_MGTAVCC_CURRENT_MON_PAGE = 9
 P1V2_MGTAVTT_CURRENT_MON_PAGE = 10
 P1V8_CURRENT_MON_PAGE = 11
 
-voltage_scaling = {str(P12V2_VOLTAGE_MON_PAGE): 6100.0 / 1000.0,
-                   str(P12V_VOLTAGE_MON_PAGE): 6100.0 / 1000.0,
-                   str(P5V_VOLTAGE_MON_PAGE): 2500.0 / 1000.0,
-                   str(P5VAUX_VOLTAGE_MON_PAGE): 2500.0 / 1000.0,
-                   str(P3V3_VOLTAGE_MON_PAGE): 2500.0/1500.0,
-                   str(PLUS3V3CONFIG02_ADC_PAGE): 1.0/1000.0,
-                   str(P2V5_VOLTAGE_MON_PAGE): 4900.0 / 3900.0,
-                   str(P1V8_VOLTAGE_MON_PAGE): 1,
-                   str(P1V2_VOLTAGE_MON_PAGE): 1,
-                   str(P1V0_VOLTAGE_MON_PAGE): 1,
-                   str(P1V8_MGTVCCAUX_VOLTAGE_MON_PAGE): 1,
-                   str(P1V0_MGTAVCC_VOLTAGE_MON_PAGE): 1,
-                   str(P1V2_MGTAVTT_VOLTAGE_MON_PAGE): 1
-                   }
+voltage_scaling = {
+    str(P12V2_VOLTAGE_MON_PAGE): 6100.0 / 1000.0,
+    str(P12V_VOLTAGE_MON_PAGE): 6100.0 / 1000.0,
+    str(P5V_VOLTAGE_MON_PAGE): 2500.0 / 1000.0,
+    str(P5VAUX_VOLTAGE_MON_PAGE): 2500.0 / 1000.0,
+    str(P3V3_VOLTAGE_MON_PAGE): 2500.0/1500.0,
+    str(PLUS3V3CONFIG02_ADC_PAGE): 1.0/1000.0,
+    str(P2V5_VOLTAGE_MON_PAGE): 4900.0 / 3900.0,
+    str(P1V8_VOLTAGE_MON_PAGE): 1,
+    str(P1V2_VOLTAGE_MON_PAGE): 1,
+    str(P1V0_VOLTAGE_MON_PAGE): 1,
+    str(P1V8_MGTVCCAUX_VOLTAGE_MON_PAGE): 1,
+    str(P1V0_MGTAVCC_VOLTAGE_MON_PAGE): 1,
+    str(P1V2_MGTAVTT_VOLTAGE_MON_PAGE): 1
+}
 
-current_scaling = {str(P12V2_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
-                   str(P12V_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
-                   str(P5V_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.002),
-                   str(P3V3_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
-                   str(P3V3_CONFIG_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
-                   str(P2V5_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
-                   str(P1V8_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.005),
-                   str(P1V2_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
-                   str(P1V0_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.000250),
-                   str(P1V8_MGTVCCAUX_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
-                   str(P1V0_MGTAVCC_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
-                   str(P1V2_MGTAVTT_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.002)
-                   }
+current_scaling = {
+    str(P12V2_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
+    str(P12V_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
+    str(P5V_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.002),
+    str(P3V3_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
+    str(P3V3_CONFIG_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
+    str(P2V5_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
+    str(P1V8_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.005),
+    str(P1V2_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
+    str(P1V0_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.000250),
+    str(P1V8_MGTVCCAUX_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.020),
+    str(P1V0_MGTAVCC_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.001),
+    str(P1V2_MGTAVTT_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.002)
+}
+
 # dictionary holding all sensor infomation
 # comprised of sensor name and key; key = index of sensor data in rolled
 # up sensor response from SKARAB
-sensor_list = {'left_front_fan_rpm': 0,
-               'left_middle_fan_rpm': 1,
-               'left_back_fan_rpm': 2,
-               'right_back_fan_rpm': 3,
-               'fpga_fan_rpm': 4,
-               'left_front_fan_pwm': 5,
-               'left_middle_fan_pwm': 6,
-               'left_back_fan_pwm': 7,
-               'right_back_fan_pwm': 8,
-               'fpga_fan_pwm': 9,
-               'inlet_temperature_degC': 10,
-               'outlet_temperature_degC': 11,
-               'fpga_temperature_degC': 12,
-               'fan_controller_temperature_degC': 13,
-               'voltage_monitor_temperature_degC': 14,
-               'current_monitor_temperature_degC': 15,
-               '+12V2_voltage': 16,
-               '+12V_voltage': 19,
-               '+5V_voltage': 22,
-               '+3V3_voltage': 25,
-               '+2V5_voltage': 28,
-               '+1V8_voltage': 31,
-               '+1V2_voltage': 34,
-               '+1V0_voltage': 37,
-               '+1V8_MGTVCCAUX_voltage': 40,
-               '+1V0_MGTAVCC_voltage': 43,
-               '+1V2_MGTAVTT_voltage': 46,
-               '+5V_aux_voltage': 49,
-               '+3V3_config_voltage': 52,
-               '+12V2_current': 55,
-               '+12V_current': 58,
-               '+5V_current': 61,
-               '+3V3_current': 64,
-               '+2V5_current': 67,
-               '+1V8_current': 70,
-               '+1V2_current': 73,
-               '+1V0_current': 76,
-               '+1V8_MGTVCCAUX_current': 79,
-               '+1V0_MGTAVCC_current': 82,
-               '+1V2_MGTAVTT_current': 85,
-               '+3V3_config_current': 88}
+sensor_list = {
+    'left_front_fan_rpm': 0,
+    'left_middle_fan_rpm': 1,
+    'left_back_fan_rpm': 2,
+    'right_back_fan_rpm': 3,
+    'fpga_fan_rpm': 4,
+    'left_front_fan_pwm': 5,
+    'left_middle_fan_pwm': 6,
+    'left_back_fan_pwm': 7,
+    'right_back_fan_pwm': 8,
+    'fpga_fan_pwm': 9,
+    'inlet_temperature_degC': 10,
+    'outlet_temperature_degC': 11,
+    'fpga_temperature_degC': 12,
+    'fan_controller_temperature_degC': 13,
+    'voltage_monitor_temperature_degC': 14,
+    'current_monitor_temperature_degC': 15,
+    '+12V2_voltage': 16,
+    '+12V_voltage': 19,
+    '+5V_voltage': 22,
+    '+3V3_voltage': 25,
+    '+2V5_voltage': 28,
+    '+1V8_voltage': 31,
+    '+1V2_voltage': 34,
+    '+1V0_voltage': 37,
+    '+1V8_MGTVCCAUX_voltage': 40,
+    '+1V0_MGTAVCC_voltage': 43,
+    '+1V2_MGTAVTT_voltage': 46,
+    '+5V_aux_voltage': 49,
+    '+3V3_config_voltage': 52,
+    '+12V2_current': 55,
+    '+12V_current': 58,
+    '+5V_current': 61,
+    '+3V3_current': 64,
+    '+2V5_current': 67,
+    '+1V8_current': 70,
+    '+1V2_current': 73,
+    '+1V0_current': 76,
+    '+1V8_MGTVCCAUX_current': 79,
+    '+1V0_MGTAVCC_current': 82,
+    '+1V2_MGTAVTT_current': 85,
+    '+3V3_config_current': 88
+}
 
 # sensor thresholds
 # voltage_sensor: (max, min)
-voltage_ranges = {'+12V2_voltage': (13.2, 10.8),
-                  '+12V_voltage': (13.2, 10.8),
-                  '+5V_voltage': (5.5, 4.5),
-                  '+3V3_voltage': (3.63, 2.97),
-                  '+2V5_voltage': (2.625, 2.375),
-                  '+1V8_voltage': (1.89, 1.71),
-                  '+1V2_voltage': (1.26, 1.14),
-                  '+1V0_voltage': (1.05, 0.95),
-                  '+1V8_MGTVCCAUX_voltage': (1.89, 1.71),
-                  '+1V0_MGTAVCC_voltage': (1.05, 0.95),
-                  '+1V2_MGTAVTT_voltage': (1.26, 1.14),
-                  '+3V3_config_voltage': (3.465, 3.135),
-                  '+5V_aux_voltage': (5.5, 4.5)}
+voltage_ranges = {
+    '+12V2_voltage': (13.2, 10.8),
+    '+12V_voltage': (13.2, 10.8),
+    '+5V_voltage': (5.5, 4.5),
+    '+3V3_voltage': (3.63, 2.97),
+    '+2V5_voltage': (2.625, 2.375),
+    '+1V8_voltage': (1.89, 1.71),
+    '+1V2_voltage': (1.26, 1.14),
+    '+1V0_voltage': (1.05, 0.95),
+    '+1V8_MGTVCCAUX_voltage': (1.89, 1.71),
+    '+1V0_MGTAVCC_voltage': (1.05, 0.95),
+    '+1V2_MGTAVTT_voltage': (1.26, 1.14),
+    '+3V3_config_voltage': (3.465, 3.135),
+    '+5V_aux_voltage': (5.5, 4.5)
+}
 
 # current_sensor: (max, min)
-current_ranges = {'+12V2_current': (8.8, 0.001),
-                  '+12V_current': (8.69, 0.001),
-                  '+5V_current': (7.26, 0.001),
-                  '+3V3_current': (2.42, 0.001),
-                  '+2V5_current': (0.55, 0.001),
-                  '+1V8_current': (0.88, 0.001),
-                  '+1V2_current': (0.22, 0.001),
-                  '+1V0_current': (24.2, 0.001),
-                  '+1V8_MGTVCCAUX_current': (0.33, 0.001),
-                  '+1V0_MGTAVCC_current': (15.84, 0.001),
-                  '+1V2_MGTAVTT_current': (5.83, 0.001),
-                  '+3V3_config_current': (0.11, 0.001)}
+current_ranges = {
+    '+12V2_current': (8.8, 0.001),
+    '+12V_current': (8.69, 0.001),
+    '+5V_current': (7.26, 0.001),
+    '+3V3_current': (2.42, 0.001),
+    '+2V5_current': (0.55, 0.001),
+    '+1V8_current': (0.88, 0.001),
+    '+1V2_current': (0.22, 0.001),
+    '+1V0_current': (24.2, 0.001),
+    '+1V8_MGTVCCAUX_current': (0.33, 0.001),
+    '+1V0_MGTAVCC_current': (15.84, 0.001),
+    '+1V2_MGTAVTT_current': (5.83, 0.001),
+    '+3V3_config_current': (0.11, 0.001)
+}
 
 # temperature_sensor: (max, min)
 # other temperatures are relative to inlet temp
-temperature_ranges = {'inlet_temperature_degC': (50.0, -10.0),
-                      'outlet_temperature_degC': (10, -10),
-                      'fpga_temperature_degC': (30, -10),
-                      'fan_controller_temperature_degC': (10, -10),
-                      'voltage_monitor_temperature_degC': (10, -10),
-                      'current_monitor_temperature_degC': (10, -10)}
+temperature_ranges = {
+    'inlet_temperature_degC': (50.0, -10.0),
+    'outlet_temperature_degC': (10, -10),
+    'fpga_temperature_degC': (30, -10),
+    'fan_controller_temperature_degC': (10, -10),
+    'voltage_monitor_temperature_degC': (10, -10),
+    'current_monitor_temperature_degC': (10, -10)
+}
 
 # fan_rpm: (rating, max, min)
 # fan_pwm: (max, min)
-fan_speed_ranges = {'left_front_fan_rpm': (23000, 2000, -4000),
-                    'left_middle_fan_rpm': (23000, 2000, -4000),
-                    'left_back_fan_rpm': (23000, 2000, -4000),
-                    'right_back_fan_rpm': (23000, 2000, -4000),
-                    'fpga_fan_rpm': (6000, 2000, -2000),
-                    'left_front_fan_pwm': (100, 0),
-                    'left_middle_fan_pwm': (100, 0),
-                    'left_back_fan_pwm': (100, 0),
-                    'right_back_fan_pwm': (100, 0),
-                    'fpga_fan_pwm': (100, 0)}
+fan_speed_ranges = {
+    'left_front_fan_rpm': (23000, 2000, -4000),
+    'left_middle_fan_rpm': (23000, 2000, -4000),
+    'left_back_fan_rpm': (23000, 2000, -4000),
+    'right_back_fan_rpm': (23000, 2000, -4000),
+    'fpga_fan_rpm': (6000, 2000, -2000),
+    'left_front_fan_pwm': (100, 0),
+    'left_middle_fan_pwm': (100, 0),
+    'left_back_fan_pwm': (100, 0),
+    'right_back_fan_pwm': (100, 0),
+    'fpga_fan_pwm': (100, 0)
+}
 
 # 88E1111 GBE DEFINES
 GBE_88E1111_I2C_DEVICE_ADDRESS = 0x58  # Without read/write bit
@@ -402,10 +415,10 @@ class Command(object):
             if isinstance(value, CommandHeader):
                 for sub_attribute in value._odict.items():
                     sub_attr, sub_value = sub_attribute
-                    print 'CommandHeader:', sub_attr, repr(sub_value)
+                    # print 'CommandHeader:', sub_attr, repr(sub_value)
                     payload += sub_value
             else:
-                print attr, repr(value)
+                # print attr, repr(value)
                 payload += str(value)
         return payload
 
@@ -600,7 +613,7 @@ class SdramReconfigureReq(Command):
             reset_sdram_read_address)
         self.clear_ethernet_stats = self.packet_to_bytes_packer(
             clear_ethernet_stats)
-        self.EnableDebugSdramReadMode = self.packet_to_bytes_packer(
+        self.enable_debug_sdram_read_mode = self.packet_to_bytes_packer(
             enable_debug_sdram_read_mode)
         self.do_sdram_async_read = self.packet_to_bytes_packer(
             do_sdram_async_read)
@@ -630,7 +643,7 @@ class SdramReconfigureResp(Command):
         self.do_reboot = do_reboot
         self.reset_sdram_read_address = reset_sdram_read_address
         self.clear_ethernet_stats = clear_ethernet_stats
-        self.EnableDebugSdramReadMode = enable_debug_sdram_read_mode
+        self.enable_debug_sdram_read_mode = enable_debug_sdram_read_mode
         self.num_ethernet_frames = num_ethernet_frames
         self.num_ethernet_bad_frames = num_ethernet_bad_frames
         self.num_ethernet_overload_frames = num_ethernet_overload_frames
@@ -837,8 +850,8 @@ class OneWireDS2433WriteMemReq(Command):
         self.skip_rom_address = skip_rom_address
         self.write_bytes = write_bytes
         self.num_bytes = num_bytes
-        self.TA1 = target_address_1
-        self.TA2 = target_address_2
+        self.ta1 = target_address_1
+        self.ta2 = target_address_2
         self.one_wire_port = one_wire_port
 
 
@@ -851,8 +864,8 @@ class OneWireDS2433WriteMemResp(object):
         self.skip_rom_address = skip_rom_address
         self.write_bytes = write_bytes
         self.num_bytes = num_bytes
-        self.TA1 = target_address_1
-        self.TA2 = target_address_2
+        self.ta1 = target_address_1
+        self.ta2 = target_address_2
         self.one_wire_port = one_wire_port
         self.write_success = write_success
         self.padding = padding
@@ -865,8 +878,8 @@ class OneWireDS2433ReadMemReq(object):
         self.device_rom = device_rom
         self.skip_rom_address = skip_rom_address
         self.num_bytes = num_bytes
-        self.TA1 = target_address_1
-        self.TA2 = target_address_2
+        self.ta1 = target_address_1
+        self.ta2 = target_address_2
         self.one_wire_port = one_wire_port
 
 
@@ -879,8 +892,8 @@ class OneWireDS2433ReadMemResp(object):
         self.skip_rom_address = skip_rom_address
         self.read_bytes = read_bytes
         self.num_bytes = num_bytes
-        self.TA1 = target_address_1
-        self.TA2 = target_address_2
+        self.ta1 = target_address_1
+        self.ta2 = target_address_2
         self.one_wire_port = one_wire_port
         self.read_success = read_success
         self.padding = padding
