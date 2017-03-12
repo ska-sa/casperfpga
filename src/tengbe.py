@@ -454,19 +454,23 @@ class TenGbe(Memory):
                                self.fullname)
 
     def tap_stop(self):
-        """Stop a TAP driver.
+        """
+        Stop a TAP driver.
         @param self  This object.
         """
         if not self.tap_running():
             return
         LOGGER.info('%s: stopping tap driver.' % self.fullname)
-        reply, _ = self.parent.katcprequest(name="tap-stop", request_timeout=-1, require_ok=True,
-                                            request_args=(self.name, ))
+        reply, _ = self.parent.katcprequest(
+            name='tap-stop', request_timeout=-1,
+            require_ok=True, request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError('%s: failure stopping tap device.' % self.fullname)
+            raise RuntimeError('%s: failure stopping tap '
+                               'device.' % self.fullname)
 
     def tap_info(self):
-        """Get info on the tap instance running on this interface.
+        """
+        Get info on the tap instance running on this interface.
         @param self  This object.
         """
         uninforms = []
@@ -475,12 +479,14 @@ class TenGbe(Memory):
             uninforms.append(msg)
 
         self.parent.unhandled_inform_handler = handle_inform
-        _, informs = self.parent.katcprequest(name='tap-info', request_timeout=-1, require_ok=False,
-                                              request_args=(self.name, ))
+        _, informs = self.parent.katcprequest(
+            name='tap-info', request_timeout=-1,
+            require_ok=False, request_args=(self.name, ))
         self.parent.unhandled_inform_handler = None
         # process the tap-info
         if len(informs) == 1:
-            return {'name': informs[0].arguments[0], 'ip': informs[0].arguments[1]}
+            return {'name': informs[0].arguments[0],
+                    'ip': informs[0].arguments[1]}
         elif len(informs) == 0:
             return {'name': '', 'ip': ''}
         else:
@@ -491,7 +497,9 @@ class TenGbe(Memory):
         #     log_runtime_error(LOGGER, "Failure getting tap info for device %s." % str(self))
 
     def tap_running(self):
-        """Determine if an instance if tap is already running on for this Ten GBE interface.
+        """
+        Determine if an instance if tap is already running on for this
+        ten GBE interface.
         @param self  This object.
         """
         tapinfo = self.tap_info()
@@ -504,16 +512,22 @@ class TenGbe(Memory):
         Have the tap driver reload its ARP table right now.
         :return:
         """
-        reply, _ = self.parent.katcprequest(name="tap-arp-reload", request_timeout=-1,
-                                            require_ok=True, request_args=(self.name, ))
+        reply, _ = self.parent.katcprequest(
+            name="tap-arp-reload", request_timeout=-1,
+            require_ok=True, request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
-            raise RuntimeError("Failure requesting ARP reload for tap device %s." % str(self))
+            raise RuntimeError('Failure requesting ARP reload for tap '
+                               'device %s.' % str(self))
 
     def multicast_receive(self, ip_str, group_size):
-        """Send a request to KATCP to have this tap instance send a multicast group join request.
+        """
+        Send a request to KATCP to have this tap instance send a multicast
+        group join request.
         @param self  This object.
-        @param ip_str  A dotted decimal string representation of the base mcast IP address.
-        @param group_size  An integer for how many mcast addresses from base to respond to.
+        @param ip_str  A dotted decimal string representation of the base
+        mcast IP address.
+        @param group_size  An integer for how many mcast addresses from
+        base to respond to.
         """
         #mask = 255*(2 ** 24) + 255*(2 ** 16) + 255*(2 ** 8) + (255-group_size)
         #self.parent.write_int(self.name, str2ip(ip_str), offset=12)
@@ -521,7 +535,7 @@ class TenGbe(Memory):
 
         # mcast_group_string = ip_str + '+' + str(group_size)
         mcast_group_string = ip_str
-        reply, _ = self.parent.katcprequest("tap-multicast-add", -1, True,
+        reply, _ = self.parent.katcprequest('tap-multicast-add', -1, True,
                                             request_args=(self.name, 'recv',
                                                           mcast_group_string, ))
         if reply.arguments[0] == 'ok':
@@ -529,19 +543,21 @@ class TenGbe(Memory):
                 self.multicast_subscriptions.append(mcast_group_string)
             return
         else:
-            raise RuntimeError("%s: failed adding multicast receive %s to "
-                               "tap device." % (self.fullname,
+            raise RuntimeError('%s: failed adding multicast receive %s to '
+                               'tap device.' % (self.fullname,
                                                 mcast_group_string))
 
     def multicast_remove(self, ip_str):
-        """Send a request to be removed from a multicast group.
+        """
+        Send a request to be removed from a multicast group.
         @param self  This object.
-        @param ip_str  A dotted decimal string representation of the base mcast IP address.
+        @param ip_str  A dotted decimal string representation of the base
+        mcast IP address.
         """
         try:
-            reply, _ = self.parent.katcprequest("tap-multicast-remove", -1, True,
-                                                request_args=(self.name,
-                                                              IpAddress.str2ip(ip_str), ))
+            reply, _ = self.parent.katcprequest(
+                'tap-multicast-remove', -1, True,
+                request_args=(self.name, IpAddress.str2ip(ip_str), ))
         except:
             raise RuntimeError('%s: tap-multicast-remove does not seem to '
                                'be supported on %s' % (self.fullname,
@@ -561,7 +577,8 @@ class TenGbe(Memory):
 
     def _fabric_enable_disable(self, target_val):
         # 0x20 or (0x20 / 4)? What was the /4 for?
-        word_bytes = list(struct.unpack('>4B', self.parent.read(self.name, 4, 0x20)))
+        word_bytes = list(struct.unpack('>4B',
+                                        self.parent.read(self.name, 4, 0x20)))
         if word_bytes[1] == target_val:
             return
         word_bytes[1] = target_val
