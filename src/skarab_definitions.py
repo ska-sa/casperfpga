@@ -418,17 +418,19 @@ class Command(object):
                     # print 'CommandHeader:', sub_attr, repr(sub_value)
                     payload += sub_value
             else:
-                # print attr, repr(value)
-                payload += str(value)
+                if type(value) == str:
+                    payload += str(value)
+                else:
+                    payload += str(self.pack_two_bytes(value))
         return payload
 
     @staticmethod
-    def packet_to_bytes_packer(data):
+    def pack_two_bytes(data):
         packer = struct.Struct("!H")
         return packer.pack(data)
 
     @staticmethod
-    def packet_to_bytes_unpacker(data):
+    def unpack_two_bytes(data):
         unpacker = struct.Struct("!H")
         return unpacker.unpack(data)
 
@@ -443,8 +445,8 @@ class CommandHeader(Command):
     def __init__(self, command_id, seq_num, pack=True):
         super(CommandHeader, self).__init__()
         if pack:
-            self.command_type = self.packet_to_bytes_packer(command_id)
-            self.seq_num = self.packet_to_bytes_packer(seq_num)
+            self.command_type = self.pack_two_bytes(command_id)
+            self.seq_num = self.pack_two_bytes(seq_num)
         else:
             self.command_type = command_id
             self.seq_num = seq_num
@@ -455,8 +457,8 @@ class WriteRegReq(Command):
                  reg_data_low):
         super(WriteRegReq, self).__init__()
         self.header = CommandHeader(WRITE_REG, seq_num)
-        self.board_reg = self.packet_to_bytes_packer(board_reg)
-        self.reg_address = self.packet_to_bytes_packer(reg_addr)
+        self.board_reg = board_reg
+        self.reg_address = reg_addr
         self.reg_data_high = reg_data_high
         self.reg_data_low = reg_data_low
 
@@ -477,8 +479,8 @@ class ReadRegReq(Command):
     def __init__(self, seq_num, board_reg, reg_addr):
         super(ReadRegReq, self).__init__()
         self.header = CommandHeader(READ_REG, seq_num)
-        self.board_reg = self.packet_to_bytes_packer(board_reg)
-        self.reg_address = self.packet_to_bytes_packer(reg_addr)
+        self.board_reg = board_reg
+        self.reg_address = reg_addr
 
 
 class ReadRegResp(Command):
@@ -552,9 +554,9 @@ class WriteI2CReq(Command):
                  num_bytes, write_bytes):
         super(WriteI2CReq, self).__init__()
         self.header = CommandHeader(WRITE_I2C, seq_num)
-        self.id = self.packet_to_bytes_packer(i2c_interface_id)
-        self.slave_address = self.packet_to_bytes_packer(slave_address)
-        self.num_bytes = self.packet_to_bytes_packer(num_bytes)
+        self.id = i2c_interface_id
+        self.slave_address = slave_address
+        self.num_bytes = num_bytes
         self.write_bytes = write_bytes
 
 
@@ -576,9 +578,9 @@ class ReadI2CReq(Command):
                  num_bytes):
         super(ReadI2CReq, self).__init__()
         self.header = CommandHeader(READ_I2C, seq_num)
-        self.id = self.packet_to_bytes_packer(i2c_interface_id)
-        self.slave_address = self.packet_to_bytes_packer(slave_address)
-        self.num_bytes = self.packet_to_bytes_packer(num_bytes)
+        self.id = i2c_interface_id
+        self.slave_address = slave_address
+        self.num_bytes = num_bytes
 
 
 class ReadI2CResp(Command):
@@ -604,24 +606,18 @@ class SdramReconfigureReq(Command):
                  continuity_test_output_high):
         super(SdramReconfigureReq, self).__init__()
         self.header = CommandHeader(SDRAM_RECONFIGURE, seq_num)
-        self.output_mode = self.packet_to_bytes_packer(output_mode)
-        self.clear_sdram = self.packet_to_bytes_packer(clear_sdram)
-        self.finished_writing = self.packet_to_bytes_packer(finished_writing)
-        self.about_to_boot = self.packet_to_bytes_packer(about_to_boot)
-        self.do_reboot = self.packet_to_bytes_packer(do_reboot)
-        self.reset_sdram_read_address = self.packet_to_bytes_packer(
-            reset_sdram_read_address)
-        self.clear_ethernet_stats = self.packet_to_bytes_packer(
-            clear_ethernet_stats)
-        self.enable_debug_sdram_read_mode = self.packet_to_bytes_packer(
-            enable_debug_sdram_read_mode)
-        self.do_sdram_async_read = self.packet_to_bytes_packer(
-            do_sdram_async_read)
-        self.do_continuity_test = self.packet_to_bytes_packer(do_continuity_test)
-        self.continuity_test_output_low = self.packet_to_bytes_packer(
-            continuity_test_output_low)
-        self.continuity_test_output_high = self.packet_to_bytes_packer(
-            continuity_test_output_high)
+        self.output_mode = output_mode
+        self.clear_sdram = clear_sdram
+        self.finished_writing = finished_writing
+        self.about_to_boot = about_to_boot
+        self.do_reboot = do_reboot
+        self.reset_sdram_read_address = reset_sdram_read_address
+        self.clear_ethernet_stats = clear_ethernet_stats
+        self.enable_debug_sdram_read_mode = enable_debug_sdram_read_mode
+        self.do_sdram_async_read = do_sdram_async_read
+        self.do_continuity_test = do_continuity_test
+        self.continuity_test_output_low = continuity_test_output_low
+        self.continuity_test_output_high = continuity_test_output_high
 
 
 class SdramReconfigureResp(Command):
@@ -673,8 +669,8 @@ class SetFanSpeedReq(Command):
     def __init__(self, seq_num, fan_page, pwm_setting):
         super(SetFanSpeedReq, self).__init__()
         self.header = CommandHeader(SET_FAN_SPEED, seq_num)
-        self.fan_page = self.packet_to_bytes_packer(fan_page)
-        self.pwm_setting = self.packet_to_bytes_packer(pwm_setting*100)
+        self.fan_page = fan_page
+        self.pwm_setting = pwm_setting * 100
 
 
 class SetFanSpeedResp(Command):
@@ -1002,11 +998,11 @@ class PMBusReadI2CBytesReq(Command):
                  command_code, read_bytes, num_bytes):
         super(PMBusReadI2CBytesReq, self).__init__()
         self.header = CommandHeader(PMBUS_READ_I2C, seq_num)
-        self.id = self.packet_to_bytes_packer(i2c_interface_id)
-        self.slave_address = self.packet_to_bytes_packer(slave_address)
-        self.command_code = self.packet_to_bytes_packer(command_code)
+        self.id = i2c_interface_id
+        self.slave_address = slave_address
+        self.command_code = command_code
         self.read_bytes = read_bytes
-        self.num_bytes = self.packet_to_bytes_packer(num_bytes)
+        self.num_bytes = num_bytes
 
 
 class PMBusReadI2CBytesResp(Command):
@@ -1026,8 +1022,8 @@ class SdramProgramReq(Command):
     def __init__(self, seq_num, first_packet, last_packet, write_words):
         super(SdramProgramReq, self).__init__()
         self.header = CommandHeader(SDRAM_PROGRAM, seq_num)
-        self.first_packet = self.packet_to_bytes_packer(first_packet)
-        self.last_packet = self.packet_to_bytes_packer(last_packet)
+        self.first_packet = first_packet
+        self.last_packet = last_packet
         self.write_words = write_words
 
 
@@ -1040,8 +1036,10 @@ class ConfigureMulticastReq(Command):
         super(ConfigureMulticastReq, self).__init__()
         self.header = CommandHeader(MULTICAST_REQUEST, seq_num)
         self.id = interface_id
-        self.fabric_multicast_ip_address_high = fabric_multicast_ip_address_high
-        self.fabric_multicast_ip_address_low = fabric_multicast_ip_address_low
+        self.fabric_multicast_ip_address_high =  \
+            fabric_multicast_ip_address_high
+        self.fabric_multicast_ip_address_low = \
+            fabric_multicast_ip_address_low
         self.fabric_multicast_ip_address_mask_high = \
             fabric_multicast_ip_address_mask_high
         self.fabric_multicast_ip_address_mask_low = \
@@ -1055,10 +1053,12 @@ class ConfigureMulticastResp(Command):
                  fabric_multicast_ip_address_mask_high,
                  fabric_multicast_ip_address_mask_low, padding):
         super(ConfigureMulticastResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num)
+        self.header = CommandHeader(command_id, seq_num, False)
         self.id = interface_id
-        self.fabric_multicast_ip_address_high = fabric_multicast_ip_address_high
-        self.fabric_multicast_ip_address_low = fabric_multicast_ip_address_low
+        self.fabric_multicast_ip_address_high = \
+            fabric_multicast_ip_address_high
+        self.fabric_multicast_ip_address_low = \
+            fabric_multicast_ip_address_low
         self.fabric_multicast_ip_address_mask_high = \
             fabric_multicast_ip_address_mask_high
         self.fabric_multicast_ip_address_mask_low = \
