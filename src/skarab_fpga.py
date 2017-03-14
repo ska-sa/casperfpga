@@ -134,7 +134,19 @@ class SkarabFpga(CasperFpga):
                                 expect_response=True,
                                 command_id=sd.MULTICAST_REQUEST,
                                 seq_num=self.seq_num,
-                                number_of_words=7, pad_words=1)
+                                number_of_words=11, pad_words=4)
+
+        resp_ip = tengbe.IpAddress(
+            resp.fabric_multicast_ip_address_high << 16 |
+            resp.fabric_multicast_ip_address_low)
+
+        resp_mask = tengbe.IpAddress(
+            resp.fabric_multicast_ip_address_mask_high << 16 |
+            resp.fabric_multicast_ip_address_mask_low)
+
+        LOGGER.debug('Multicast Configured')
+        LOGGER.debug('Multicast address: {}'.format(resp_ip.ip_str))
+        LOGGER.debug('Multicast mask: {}'.format(resp_mask.ip_str))
 
         raise NotImplementedError
 
