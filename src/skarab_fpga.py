@@ -1093,8 +1093,7 @@ class SkarabFpga(CasperFpga):
         (attributes = payload components)
         """
         # create payload packet structure with data
-        request = sd.WriteRegReq(sd.WRITE_REG, self.seq_num,
-                                 sd.BOARD_REG, reg_address,
+        request = sd.WriteRegReq(self.seq_num, sd.BOARD_REG, reg_address,
                                  *self.data_split_and_pack(data))
         # send payload via UDP pkt and return response object (if no response
         # expected should return ok)
@@ -1114,13 +1113,13 @@ class SkarabFpga(CasperFpga):
         :return: data read from register
         """
         request = sd.ReadRegReq(self.seq_num, sd.BOARD_REG, reg_address)
-        read_reg_resp = self.send_packet(
+        response = self.send_packet(
             self.skarab_ctrl_sock, self.skarab_eth_ctrl_port,
             request.create_payload(), 'ReadRegResp', True, sd.READ_REG,
             self.seq_num, 11, 5, retries=retries)
-        if read_reg_resp:
+        if response:
             return self.data_unpack_and_merge(
-                read_reg_resp.reg_data_high, read_reg_resp.reg_data_low)
+                response.reg_data_high, response.reg_data_low)
         return None
 
     def write_dsp_reg(self, reg_address, data, expect_response=True):
@@ -1132,8 +1131,7 @@ class SkarabFpga(CasperFpga):
         :return: response object - object created from the response payload
         """
         # create payload packet structure with data
-        request = sd.WriteRegReq(sd.WRITE_REG, self.seq_num,
-                                 sd.DSP_REG, reg_address,
+        request = sd.WriteRegReq(self.seq_num, sd.DSP_REG, reg_address,
                                  *self.data_split_and_pack(data))
         # send payload via UDP pkt and return response object
         # (if no response expected should return ok)
