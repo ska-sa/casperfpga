@@ -24,6 +24,9 @@ class SkarabSendPacketError(ValueError):
 class InvalidSkarabBitstream(ValueError):
     pass
 
+class SkarabSdramError(RuntimeError):
+    pass
+
 
 class SkarabFpga(CasperFpga):
     # create dictionary of skarab_definitions module
@@ -54,6 +57,7 @@ class SkarabFpga(CasperFpga):
 
         # initialize UDP socket for fabric packets
         self.skarab_fpga_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # self.skarab_fpga_sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1)
         self.skarab_ctrl_sock.setblocking(0)
 
         # create tuple for fabric packet address
@@ -105,6 +109,69 @@ class SkarabFpga(CasperFpga):
             timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=1)
         raise RuntimeError('Not yet tested')
 
+    def fortygbedeets(self):
+        from tengbe import IpAddress, Mac
+        gbebase = 0x50000
+        gbedata = []
+        for ctr in range(0, 0x40, 4):
+            gbedata.append(self.read_wishbone(gbebase + ctr))
+        gbebytes = []
+        for d in gbedata:
+            gbebytes.append((d >> 24) & 0xff)
+            gbebytes.append((d >> 16) & 0xff)
+            gbebytes.append((d >> 8) & 0xff)
+            gbebytes.append((d >> 0) & 0xff)
+        port_dump = gbebytes
+        returnval = {'ip_prefix': '%i.%i.%i.' % (
+            port_dump[0x10], port_dump[0x11], port_dump[0x12])
+        }
+        returnval['ip'] = IpAddress('%i.%i.%i.%i' % (
+            port_dump[0x10], port_dump[0x11], port_dump[0x12], port_dump[0x13]))
+        returnval['mac'] = Mac('%i:%i:%i:%i:%i:%i' % (
+            port_dump[0x02], port_dump[0x03],
+            port_dump[0x04], port_dump[0x05],
+            port_dump[0x06], port_dump[0x07]))
+        returnval['gateway_ip'] = IpAddress('%i.%i.%i.%i' % (
+            port_dump[0x0c], port_dump[0x0d], port_dump[0x0e], port_dump[0x0f]))
+        returnval['fabric_port'] = ((port_dump[0x22] << 8) + (port_dump[0x23]))
+        returnval['fabric_en'] = bool(port_dump[0x21] & 1)
+        returnval['xaui_lane_sync'] = [
+            bool(port_dump[0x27] & 4), bool(port_dump[0x27] & 8),
+            bool(port_dump[0x27] & 16), bool(port_dump[0x27] & 32)]
+        returnval['xaui_status'] = [
+            port_dump[0x24], port_dump[0x25], port_dump[0x26], port_dump[0x27]]
+        returnval['xaui_chan_bond'] = bool(port_dump[0x27] & 64)
+        returnval['xaui_phy'] = {}
+        returnval['xaui_phy']['rx_eq_mix'] = port_dump[0x28]
+        returnval['xaui_phy']['rx_eq_pol'] = port_dump[0x29]
+        returnval['xaui_phy']['tx_preemph'] = port_dump[0x2a]
+        returnval['xaui_phy']['tx_swing'] = port_dump[0x2b]
+        returnval['multicast'] = {}
+        returnval['multicast']['base_ip'] = IpAddress(
+            '%i.%i.%i.%i' % (port_dump[0x30], port_dump[0x31],
+                             port_dump[0x32], port_dump[0x33]))
+        returnval['multicast']['ip_mask'] = IpAddress(
+            '%i.%i.%i.%i' % (port_dump[0x34], port_dump[0x35],
+                             port_dump[0x36], port_dump[0x37]))
+        returnval['multicast']['subnet_mask'] = IpAddress(
+            '%i.%i.%i.%i' % (port_dump[0x38], port_dump[0x39],
+                             port_dump[0x3a], port_dump[0x3b]))
+        possible_addresses = [int(returnval['multicast']['base_ip'])]
+        mask_int = int(returnval['multicast']['ip_mask'])
+        for ctr in range(32):
+            mask_bit = (mask_int >> ctr) & 1
+            if not mask_bit:
+                new_ips = []
+                for ip in possible_addresses:
+                    new_ips.append(ip & (~(1 << ctr)))
+                    new_ips.append(new_ips[-1] | (1 << ctr))
+                possible_addresses.extend(new_ips)
+        returnval['multicast']['rx_ips'] = []
+        tmp = list(set(possible_addresses))
+        for ip in tmp:
+            returnval['multicast']['rx_ips'].append(IpAddress(ip))
+        return returnval
+
     def multicast_receive(self, ip_str, group_size):
         """
         Send a request to KATCP to have this tap instance send a multicast
@@ -120,12 +187,13 @@ class SkarabFpga(CasperFpga):
         ip_high = int(ip) >> 16
         ip_low = int(ip) & 65535
 
-        mask = tengbe.IpAddress('255.255.255.252')
+        mask = tengbe.IpAddress('255.255.255.255')
         mask_high = int(mask) >> 16
         mask_low = int(mask) & 65535
 
         request = sd.ConfigureMulticastReq(
             self.seq_num, 1, ip_high, ip_low, mask_high, mask_low)
+
         resp = self.send_packet(payload=request.create_payload(),
                                 response_type='ConfigureMulticastResp',
                                 expect_response=True,
@@ -319,7 +387,6 @@ class SkarabFpga(CasperFpga):
         :param filename: the file to upload
         :return:
         """
-
         raise NotImplementedError
 
     def program_from_flash(self):
@@ -336,40 +403,34 @@ class SkarabFpga(CasperFpga):
     def boot_from_sdram(self):
         """
         Triggers a reboot of the Virtex7 FPGA and boot from SDRAM.
-        :return: nothing
+        :return:
         """
         # check if sdram was programmed prior
         if self.__sdram_programmed:
             # trigger reboot
             if self.complete_sdram_configuration():
                 LOGGER.info('Booting from SDRAM.')
-
                 # clear sdram programmed flag
                 self.__sdram_programmed = False
-
                 # if fpg file used, get design information
                 if self.prog_info['last_uploaded'].split('.')[1] == 'fpg':
-
                     super(SkarabFpga, self).get_system_information(
                         filename=self.prog_info['last_uploaded'])
                     self.__create_memory_map()
-
                 else:
                     # if not fpg file, then
                     self._CasperFpga__reset_device_info()
-
                 # update programming info
                 self.prog_info['last_programmed'] = \
                     self.prog_info['last_uploaded']
                 self.prog_info['last_uploaded'] = ''
-                return True
-
-            else:
-                LOGGER.error('Error triggering reboot')
-                return False
-        else:
-            LOGGER.error('SDRAM Not Programmed!')
-            return False
+                return
+            errmsg = 'Error triggering reboot'
+            LOGGER.error(errmsg)
+            raise SkarabSdramError(errmsg)
+        errmsg = 'SDRAM Not Programmed!'
+        LOGGER.error(errmsg)
+        raise SkarabSdramError(errmsg)
 
     def upload_to_ram(self, filename, verify=False):
         """
@@ -380,7 +441,7 @@ class SkarabFpga(CasperFpga):
         Sends chunks of bitfile to fpga via sdram_program method
         :param filename: file to upload
         :param verify: flag to enable verification of uploaded bitstream (slow)
-        :return: True if successful, else Nothing
+        :return:
         """
 
         # flag to enable/disable padding of data send over udp pkt
@@ -486,7 +547,8 @@ class SkarabFpga(CasperFpga):
             try:
                 self.sdram_program(first_packet_in_image,
                                    last_packet_in_image, image_chunk)
-                time.sleep(0.003)
+                time.sleep(0.010)
+                # print 'tick %i' % sent_pkt_counter
                 sent_pkt_counter += 1
             except Exception as exc:
                 LOGGER.error('Uploading to SDRAM Failed')
@@ -523,9 +585,10 @@ class SkarabFpga(CasperFpga):
                 sdram_verified = self.verify_sdram_contents(image_to_program)
 
                 if not sdram_verified:
-                    LOGGER.error('SDRAM verification failed! Clearing SDRAM')
+                    errmsg = 'SDRAM verification failed! Clearing SDRAM'
+                    LOGGER.error(errmsg)
                     self.clear_sdram()
-                    return
+                    raise SkarabSdramError(errmsg)
                 else:
                     LOGGER.info('SDRAM verification passed!')
 
@@ -535,13 +598,14 @@ class SkarabFpga(CasperFpga):
 
                 # set last uploaded parameter of programming info
                 self.prog_info['last_uploaded'] = filename
-                return True
-            else:
-                LOGGER.error('Error completing write transaction.')
                 return
-        else:
-            LOGGER.error('Error uploading FPGA image to SDRAM')
-            return
+            else:
+                errmsg = 'Error completing write transaction.'
+                LOGGER.error(errmsg)
+                raise SkarabSdramError(errmsg)
+        errmsg = 'Error uploading FPGA image to SDRAM'
+        LOGGER.error(errmsg)
+        raise SkarabSdramError(errmsg)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
                                   wait_complete=True):
@@ -557,11 +621,10 @@ class SkarabFpga(CasperFpga):
         """
         # put the interface into programming mode
         self.config_prog_mux(user_data=0)
-        # upload to sdram
-        if self.upload_to_ram(filename):
-            # boot from the newly programmed image
-            if not self.boot_from_sdram():
-                return False
+
+        self.upload_to_ram(filename)
+        self.boot_from_sdram()
+
         # wait for board to come back up
         # this can be reduced when the 40gbe switch issue is resolved
         timeout = timeout + time.time()
@@ -608,7 +671,9 @@ class SkarabFpga(CasperFpga):
         :return:
         """
         # the bit that tells us if the 40gbe link is up
-        reg = format(int(self.read_wishbone(0xc)), '#032b')
+        reg = format(
+            int(self.read_wishbone(sd.C_RD_ETH_IF_LINK_UP_ADDR)), '#032b'
+        )
         forty_gbe_link = int(reg[30])
         # the bit that tells us if the 1gbe link is up
         # reg = format(int(self.read_wishbone(0x4)), '#032b')
@@ -631,9 +696,8 @@ class SkarabFpga(CasperFpga):
         :return: Nothing
         """
         # clear sdram
-        self.sdram_reconfigure(
-            sd.SDRAM_PROGRAM_MODE, True, False, False, False, False, True,
-            False, False, False, 0x0, 0x0)
+        self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, True, False, False, False,
+                               False, True, False, False, False, 0x0, 0x0)
 
         # clear sdram programmed flag
         self.__sdram_programmed = False
@@ -660,9 +724,8 @@ class SkarabFpga(CasperFpga):
         f.close()
 
         # prep SDRAM for reading
-        _ = self.sdram_reconfigure(
-            sd.SDRAM_READ_MODE, False, False, False, False, True, False, True,
-            False, False, 0x0, 0x0)
+        self.sdram_reconfigure(sd.SDRAM_READ_MODE, False, False, False, False,
+                               True, False, True, False, False, 0x0, 0x0)
 
         # sdram read returns 32-bits (4 bytes)
         # so we compare 4 bytes each time
@@ -735,9 +798,7 @@ class SkarabFpga(CasperFpga):
 
         # unpacker for the 32-bit string of bytes
         unpacker = struct.Struct('!I')
-        data = unpacker.unpack(data)
-
-        return data[0]  # return the unpacked data (native Python type)
+        return unpacker.unpack(data)[0]
 
     @staticmethod
     def unpack_payload(response_payload, response_type, number_of_words,
@@ -929,16 +990,16 @@ class SkarabFpga(CasperFpga):
         """
         # should this function close the sockets and then attempt to reopen 
         # once board is powered on? shut down requires two writes
-
         LOGGER.info('Shutting board down.')
 
-        _ = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
-                                 sd.ROACH3_SHUTDOWN, False)
+        self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
+                             sd.ROACH3_SHUTDOWN, False)
 
         output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_1_ADDR,
                                       sd.ROACH3_SHUTDOWN, False)
 
-        self.seq_num = 0  # reset sequence number
+        # reset sequence number
+        self.seq_num = 0
 
         return output
 
@@ -954,7 +1015,7 @@ class SkarabFpga(CasperFpga):
         (attributes = payload components)
         """
         # create payload packet structure with data
-        request = sd.WriteRegReq(sd.WRITE_REG, self.seq_num, sd.BOARD_REG,
+        request = sd.WriteRegReq(self.seq_num, sd.BOARD_REG,
                                  reg_address, *self.data_split_and_pack(data))
         # send payload via UDP pkt and return response object (if no response
         # expected should return ok)
@@ -988,7 +1049,7 @@ class SkarabFpga(CasperFpga):
         :return: response object - object created from the response payload
         """
         # create payload packet structure with data
-        request = sd.WriteRegReq(sd.WRITE_REG, self.seq_num, sd.DSP_REG,
+        request = sd.WriteRegReq(self.seq_num, sd.DSP_REG,
                                  reg_address, *self.data_split_and_pack(data))
         # send payload via UDP pkt and return response object
         # (if no response expected should return ok)
@@ -1002,8 +1063,7 @@ class SkarabFpga(CasperFpga):
         :param reg_address: address of register to read
         :return: data read from register
         """
-        request = sd.ReadRegReq(
-            self.seq_num, sd.DSP_REG, reg_address)
+        request = sd.ReadRegReq(self.seq_num, sd.DSP_REG, reg_address)
         read_reg_resp = self.send_packet(
             request.create_payload(), 'ReadRegResp', True, sd.READ_REG, 11, 5)
         if read_reg_resp:
@@ -1048,9 +1108,8 @@ class SkarabFpga(CasperFpga):
         address_and_data = address_split
         address_and_data.extend(data_split)
         request = sd.WriteWishboneReq(self.seq_num, *address_and_data)
-        return self.send_packet(
-            request.create_payload(), 'WriteWishboneResp', True,
-            sd.WRITE_WISHBONE, 11, 5)
+        return self.send_packet(request.create_payload(), 'WriteWishboneResp',
+                                True, sd.WRITE_WISHBONE, 11, 5)
 
     def read_wishbone(self, wb_address):
         """
@@ -1248,23 +1307,19 @@ class SkarabFpga(CasperFpga):
         :return: True or False
         """
         # create request object
-        sdram_reconfigure_req = sd.SdramReconfigureReq(
+        req = sd.SdramReconfigureReq(
             self.seq_num, output_mode, clear_sdram, finished_writing,
             about_to_boot, do_reboot, reset_sdram_read_addr, clear_eth_stats,
             enable_debug, do_sdram_async_read, do_continuity_test,
             continuity_test_out_low, continuity_test_out_high)
+        resp = self.send_packet(req.create_payload(), 'SdramReconfigureResp',
+                                True, sd.SDRAM_RECONFIGURE, 19, 0)
         if do_sdram_async_read:
             # process data read here
-            sdram_reconfigure_resp = self.send_packet(
-                sdram_reconfigure_req.create_payload(),
-                'SdramReconfigureResp', True, sd.SDRAM_RECONFIGURE, 19, 0)
-            sdram_data = struct.pack('!H', sdram_reconfigure_resp.sdram_async_read_data_low) + \
-                struct.pack('!H', sdram_reconfigure_resp.sdram_async_read_data_high)
+            sdram_data = struct.pack('!H', resp.sdram_async_read_data_low) + \
+                struct.pack('!H', resp.sdram_async_read_data_high)
             return sdram_data
-
-        elif self.send_packet(sdram_reconfigure_req.create_payload(),
-                              'SdramReconfigureResp', True,
-                              sd.SDRAM_RECONFIGURE, 19, 0):
+        if resp is not None:
             return True
         else:
             LOGGER.error('Problem configuring SDRAM')
@@ -1352,7 +1407,6 @@ class SkarabFpga(CasperFpga):
                 if self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, False,
                                           False, False, False, False,
                                           False, False, False, 0x0, 0x0):
-
                     LOGGER.info('SDRAM successfully prepared')
                     return True
                 else:
