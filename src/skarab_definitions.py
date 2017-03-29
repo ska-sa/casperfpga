@@ -769,7 +769,7 @@ class ReadSpiPageResp(Command):
     def __init__(self, command_id, seq_num, address_high, address_low,
                  num_bytes, read_bytes, read_spi_page_success, padding):
         super(ReadSpiPageResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num)
+        self.header = CommandHeader(command_id, seq_num, False)
         self.address_high = address_high
         self.address_low = address_low
         self.num_bytes = num_bytes

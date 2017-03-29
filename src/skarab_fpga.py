@@ -25,6 +25,14 @@ class InvalidSkarabBitstream(ValueError):
     pass
 
 
+class InvalidResponse(ValueError):
+    pass
+
+
+class ReadFailed(ValueError):
+    pass
+
+
 class SkarabFpga(CasperFpga):
     # create dictionary of skarab_definitions module
     sd_dict = vars(sd)
@@ -423,7 +431,7 @@ class SkarabFpga(CasperFpga):
             else:
                 LOGGER.info('Valid bitstream detected')
         elif file_extension == '.bin':
-            image_to_program = filename
+            image_to_program = open(filename, 'rb').read()
             if not self.check_bitstream(image_to_program):
                 LOGGER.warning(
                     'Incompatible bin file. Attemping to convert.')
@@ -508,7 +516,27 @@ class SkarabFpga(CasperFpga):
                 LOGGER.error('Uploading to SDRAM Failed')
                 raise exc
 
-        # complete writing and trigger reset
+
+        # calculate checksum
+        checksum = self.calculate_checksum_using_bitstream(image_to_program)
+        LOGGER.debug("Calculated bitsteam checksum: %s" % checksum)
+
+        # read spartan checksum
+        spartan_checksum = self.get_spartan_checksum()
+        LOGGER.debug("Spartan bitstream checksum: %s" % spartan_checksum)
+
+
+        if spartan_checksum != checksum:
+            # checksum mismatch, so we clear sdram
+            self.clear_sdram()
+            # and raise an exception
+            LOGGER.error("Checksum mismatch! Will not attempt to boot from "
+                         "SDRAM. Try re-uploading bitstream")
+            raise InvalidSkarabBitstream("Checksum mismatch")
+
+        LOGGER.info("Checksum match. Bitstream uploaded successfully.")
+
+        # complete writing
         # check if all bytes in bin file uploaded successfully before trigger
         if sent_pkt_counter == (image_size / 8192) \
                 or sent_pkt_counter == (image_size / 8192 + 1):
@@ -777,6 +805,10 @@ class SkarabFpga(CasperFpga):
         if response_type == 'GetSensorDataResp':
             read_bytes = unpacked_data[2:93]
             unpacked_data[2:93] = [read_bytes]
+
+        if response_type == 'ReadSpiPageResp':
+            read_bytes = unpacked_data[5:269]
+            unpacked_data[5:269] = [read_bytes]
 
         # return response from skarab
         return SkarabFpga.sd_dict[response_type](*unpacked_data)
@@ -1269,6 +1301,47 @@ class SkarabFpga(CasperFpga):
         else:
             LOGGER.error('Problem configuring SDRAM')
             return False
+
+    def read_spi_page(self, spi_address, num_bytes):
+        """
+        Used to read a page from the SPI flash in the Spartan 3AN FPGA on the
+        SKARAB Motherboard. Up to a full page (264 bytes) can be read.
+
+        :param spi_address: address of the page wanting to be read
+        :param num_bytes: number of bytes in page to be read (max 264 bytes)
+        :return: list of read data
+        """
+
+        if num_bytes > 264:
+            LOGGER.error("Maximum of 264 bytes (One full page) "
+                         "can be read from a single SPI Register")
+            return False
+
+        # split 32-bit page address into 16-bit high and low
+        spi_address_high, spi_address_low = \
+            self.data_split_and_pack(spi_address)
+
+        # create payload packet structure for read request
+        request = sd.ReadSpiPageReq(self.seq_num, spi_address_high,
+                                    spi_address_low, num_bytes)
+
+        response = self.send_packet(payload=request.create_payload(),
+                                    response_type='ReadSpiPageResp',
+                                    expect_response=True,
+                                    command_id=sd.READ_SPI_PAGE,
+                                    number_of_words=271, pad_words=1)
+
+        if response is not None:
+            if response.read_spi_page_success:
+                # Then, send back ReadBytes[:NumBytes]
+                return response.read_bytes[:num_bytes]
+            else:
+                # Read was made, but unsuccessful
+                LOGGER.error("SPI Read FAILED")
+                raise ReadFailed('Attempt to perform SPI Read Failed')
+        else:
+            LOGGER.error("Bad Response Received")
+            raise InvalidResponse('Bad response received from SKARAB')
 
     # board level functions
 
@@ -2047,5 +2120,99 @@ class SkarabFpga(CasperFpga):
             return fan_speed_rpm
         else:
             return
+
+    # AP
+    @staticmethod
+    def calculate_checksum_using_file(file_name):
+        """
+        Basically summing up all the words in the input file_name, and returning a 'Checksum'
+        :param file_name: The actual filename, and not instance of the open file
+        :return: Tally of words in the (.bin) file
+        """
+
+        flash_write_checksum = 0x00
+        file_size = os.path.getsize(file_name)
+
+        # Need to scroll through file until there is nothing left to read
+        with open(file_name, 'rb') as f:
+            for i in range(file_size / 2):
+                two_bytes = f.read(2)
+                one_word = struct.unpack('H!', two_bytes)[0]
+                flash_write_checksum += one_word
+
+        if (file_size % 8192) != 0:
+            # padding required
+            num_padding_bytes = 8192 - (file_size % 8192)
+            for i in range(num_padding_bytes / 2):
+                flash_write_checksum += 0xffff
+
+        # Last thing to do, make sure it is a 16-bit word
+        flash_write_checksum &= 0xffff
+
+        return flash_write_checksum
+
+    @staticmethod
+    def calculate_checksum_using_bitstream(bitstream):
+        """
+        Summing up all the words in the input bitstream, and returning a
+        'Checksum' - Assuming that the bitstream HAS NOT been padded yet
+        :param bitstream: The actual bitstream of the file in question
+        :return: checksum
+        """
+
+        flash_write_checksum = 0x00
+
+        size = len(bitstream)
+
+        for i in range(0, size, 2):
+            # This is just getting a substring, need to convert to hex
+            two_bytes = bitstream[i:i + 2]
+            one_word = struct.unpack('!H', two_bytes)[0]
+            flash_write_checksum += one_word
+
+        if (size % 8192) != 0:
+            # padding required
+            num_padding_bytes = 8192 - (size % 8192)
+            for i in range(num_padding_bytes / 2):
+                flash_write_checksum += 0xffff
+
+        # Last thing to do, make sure it is a 16-bit word
+        flash_write_checksum &= 0xffff
+
+        return flash_write_checksum
+
+    def get_spartan_checksum(self):
+        """
+        Method for easier access to the Spartan Checksum
+        :return: spartan_flash_write_checksum
+        """
+
+        upper_address, lower_address = (0x001ffe02, 0x001ffe03)
+
+        upper_byte = self.read_spi_page(upper_address, 1)[0]
+
+        lower_byte = self.read_spi_page(lower_address, 1)[0]
+
+        spartan_flash_write_checksum = (upper_byte << 8) | lower_byte
+
+        return spartan_flash_write_checksum
+
+    def get_spartan_firmware_version(self):
+        """
+        Using read_spi_page() function to read two SPI Addresses which give
+        the major and minor version numbers of the SPARTAN Firmware Version
+        :return: String containing 'Major.Minor'
+        """
+
+        spi_address = 0x001ffe00
+
+        # Just a heads-up, read_spi_page(address, num_bytes)
+        # returns a list of bytes of length = num_bytes
+        major = self.read_spi_page(spi_address, 1)[0]
+        minor = self.read_spi_page(spi_address + 1, 1)[0]
+
+        version_number = str(major) + '.' + str(minor)
+
+        return version_number
 
 # end
