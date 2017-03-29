@@ -33,6 +33,10 @@ class ReadFailed(ValueError):
     pass
 
 
+class ProgrammingError(ValueError):
+    pass
+
+
 class SkarabFpga(CasperFpga):
     # create dictionary of skarab_definitions module
     sd_dict = vars(sd)
@@ -379,7 +383,7 @@ class SkarabFpga(CasperFpga):
             LOGGER.error('SDRAM Not Programmed!')
             return False
 
-    def upload_to_ram(self, filename, verify=False):
+    def upload_to_ram(self, filename, verify=False, check_pkt_count=False):
         """
         Opens a bitfile from which to program FPGA. Reads bitfile
         in chunks of 4096 16-bit words.
@@ -388,6 +392,8 @@ class SkarabFpga(CasperFpga):
         Sends chunks of bitfile to fpga via sdram_program method
         :param filename: file to upload
         :param verify: flag to enable verification of uploaded bitstream (slow)
+        :param check_pkt_count: flag to enable checking of number of packets
+        programmed into the SDRAM. DOES NOT WORK WHEN PROGRAMMING VIA 40GbE
         :return: True if successful, else Nothing
         """
 
@@ -536,10 +542,28 @@ class SkarabFpga(CasperFpga):
 
         LOGGER.info("Checksum match. Bitstream uploaded successfully.")
 
+        # check number of frames that have been programmed into the SDRAM
+
+        packet_counts = self.check_programming_packet_count()
+
+        LOGGER.debug(packet_counts)
+        LOGGER.debug('Host sent pkt count: {}'.format(sent_pkt_counter))
+
         # complete writing
         # check if all bytes in bin file uploaded successfully before trigger
         if sent_pkt_counter == (image_size / 8192) \
                 or sent_pkt_counter == (image_size / 8192 + 1):
+
+            # check if the number of packets sent equals the number of packets
+            # programmed into the SDRAM
+            if check_pkt_count:
+                if sent_pkt_counter != packet_counts['Ethernet Frames']:
+                    # not all bitstream packets programmed into SDRAM
+                    self.clear_sdram()
+                    raise ProgrammingError("Error programming bitstream into "
+                                           "SDRAM")
+
+                LOGGER.info('Bitream successfully programmed into SDRAM')
 
             # set finished writing to SDRAM
             finished_writing = self.sdram_reconfigure(
@@ -1344,6 +1368,44 @@ class SkarabFpga(CasperFpga):
             raise InvalidResponse('Bad response received from SKARAB')
 
     # board level functions
+
+    def check_programming_packet_count(self):
+        """
+        Checks the number of packets programmed into the SDRAM of SKARAB
+        :return: {num_ethernet_frames, num_ethernet_bad_frames,
+        num_ethernet_overload_frames}
+        """
+        sdram_reconfigure_req = \
+            sd.SdramReconfigureReq(seq_num=self.seq_num,
+                                   output_mode=sd.SDRAM_PROGRAM_MODE,
+                                   clear_sdram=False,
+                                   finished_writing=False,
+                                   about_to_boot=False,
+                                   do_reboot=False,
+                                   reset_sdram_read_address=False,
+                                   clear_ethernet_stats=False,
+                                   enable_debug_sdram_read_mode=False,
+                                   do_sdram_async_read=False,
+                                   do_continuity_test=False,
+                                   continuity_test_output_high=0x0,
+                                   continuity_test_output_low=0x0)
+
+        sdram_reconfigure_resp = self.send_packet(
+            payload=sdram_reconfigure_req.create_payload(),
+            response_type='SdramReconfigureResp',
+            expect_response=True,
+            command_id=sd.SDRAM_RECONFIGURE,
+            number_of_words=19,
+            pad_words=0)
+
+        packet_count = {'Ethernet Frames':
+                            sdram_reconfigure_resp.num_ethernet_frames,
+                        'Bad Ethernet Frames':
+                            sdram_reconfigure_resp.num_ethernet_bad_frames,
+                        'Overload Ethernet Frames':
+                            sdram_reconfigure_resp.num_ethernet_overload_frames}
+
+        return packet_count
 
     def get_firmware_version(self):
         """
