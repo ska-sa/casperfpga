@@ -428,7 +428,7 @@ class SkarabFpga(CasperFpga):
         # clear sdram programmed flag
         self.__sdram_programmed = False
         # if fpg file used, get design information
-        if self.prog_info['last_uploaded'].split('.')[1] == 'fpg':
+        if os.path.splitext(self.prog_info['last_uploaded'])[1] == '.fpg':
             super(SkarabFpga, self).get_system_information(
                 filename=self.prog_info['last_uploaded'])
             self.__create_memory_map()
