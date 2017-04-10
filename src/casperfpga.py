@@ -411,9 +411,11 @@ class CasperFpga(object):
     def get_system_information(self, filename=None, fpg_info=None):
         """
         Get information about the design running on the FPGA.
-        If filename is given, get it from file, otherwise query the host via KATCP.
+        If filename is given, get it from file, otherwise query the 
+            host via KATCP.
         :param filename: fpg filename
-        :param fpg_info: a tuple containing device_info and coreinfo dictionaries
+        :param fpg_info: a tuple containing device_info and coreinfo 
+            dictionaries
         :return: <nothing> the information is populated in the class
         """
         if (filename is None) and (fpg_info is None):
@@ -494,5 +496,28 @@ class CasperFpga(object):
                          'sys_scratchpad': standard_reg.copy(),
                          'sys_clkcounter': standard_reg.copy()}
         return sys_registers
+
+    def get_version_info(self):
+        """
+        :return: 
+        """
+        if 'git' not in self.rcs_info:
+            return []
+        if len(self.rcs_info['git']) == 0:
+            return []
+        git_info = self.rcs_info['git']
+        files = git_info.keys()
+        old_version = hasattr(git_info[files[0]], 'keys')
+        if old_version:
+            rv = []
+            for filename in files:
+                if git_info[filename]['git_info_found'] == ['1']:
+                    rv.append((filename, git_info[filename]['commit_hash'][0] +
+                               '_' + git_info[filename]['status'][0]))
+                else:
+                    rv.append((filename, '<unknown>'))
+            return rv
+        else:
+            return [(f, git_info[f]) for f in files if f != 'tag']
 
 # end
