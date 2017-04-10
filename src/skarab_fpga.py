@@ -25,6 +25,22 @@ class InvalidSkarabBitstream(ValueError):
     pass
 
 
+class SkarabSdramError(RuntimeError):
+    pass
+
+
+class InvalidResponse(ValueError):
+    pass
+
+
+class ReadFailed(ValueError):
+    pass
+
+
+class ProgrammingError(ValueError):
+    pass
+
+
 class SkarabFpga(CasperFpga):
     # create dictionary of skarab_definitions module
     sd_dict = vars(sd)
@@ -54,6 +70,7 @@ class SkarabFpga(CasperFpga):
 
         # initialize UDP socket for fabric packets
         self.skarab_fpga_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # self.skarab_fpga_sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1)
         self.skarab_ctrl_sock.setblocking(0)
 
         # create tuple for fabric packet address
@@ -105,6 +122,70 @@ class SkarabFpga(CasperFpga):
             timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=1)
         raise RuntimeError('Not yet tested')
 
+    def fortygbedeets(self):
+        from tengbe import IpAddress, Mac
+        gbebase = 0x50000
+        gbedata = []
+        for ctr in range(0, 0x40, 4):
+            gbedata.append(self.read_wishbone(gbebase + ctr))
+        gbebytes = []
+        for d in gbedata:
+            gbebytes.append((d >> 24) & 0xff)
+            gbebytes.append((d >> 16) & 0xff)
+            gbebytes.append((d >> 8) & 0xff)
+            gbebytes.append((d >> 0) & 0xff)
+        port_dump = gbebytes
+        returnval = {
+            'ip_prefix': '%i.%i.%i.' % (port_dump[0x10],
+                                        port_dump[0x11], port_dump[0x12])
+        }
+        returnval['ip'] = IpAddress('%i.%i.%i.%i' % (
+            port_dump[0x10], port_dump[0x11], port_dump[0x12], port_dump[0x13]))
+        returnval['mac'] = Mac('%i:%i:%i:%i:%i:%i' % (
+            port_dump[0x02], port_dump[0x03],
+            port_dump[0x04], port_dump[0x05],
+            port_dump[0x06], port_dump[0x07]))
+        returnval['gateway_ip'] = IpAddress('%i.%i.%i.%i' % (
+            port_dump[0x0c], port_dump[0x0d], port_dump[0x0e], port_dump[0x0f]))
+        returnval['fabric_port'] = ((port_dump[0x22] << 8) + (port_dump[0x23]))
+        returnval['fabric_en'] = bool(port_dump[0x21] & 1)
+        returnval['xaui_lane_sync'] = [
+            bool(port_dump[0x27] & 4), bool(port_dump[0x27] & 8),
+            bool(port_dump[0x27] & 16), bool(port_dump[0x27] & 32)]
+        returnval['xaui_status'] = [
+            port_dump[0x24], port_dump[0x25], port_dump[0x26], port_dump[0x27]]
+        returnval['xaui_chan_bond'] = bool(port_dump[0x27] & 64)
+        returnval['xaui_phy'] = {}
+        returnval['xaui_phy']['rx_eq_mix'] = port_dump[0x28]
+        returnval['xaui_phy']['rx_eq_pol'] = port_dump[0x29]
+        returnval['xaui_phy']['tx_preemph'] = port_dump[0x2a]
+        returnval['xaui_phy']['tx_swing'] = port_dump[0x2b]
+        returnval['multicast'] = {}
+        returnval['multicast']['base_ip'] = IpAddress(
+            '%i.%i.%i.%i' % (port_dump[0x30], port_dump[0x31],
+                             port_dump[0x32], port_dump[0x33]))
+        returnval['multicast']['ip_mask'] = IpAddress(
+            '%i.%i.%i.%i' % (port_dump[0x34], port_dump[0x35],
+                             port_dump[0x36], port_dump[0x37]))
+        returnval['multicast']['subnet_mask'] = IpAddress(
+            '%i.%i.%i.%i' % (port_dump[0x38], port_dump[0x39],
+                             port_dump[0x3a], port_dump[0x3b]))
+        possible_addresses = [int(returnval['multicast']['base_ip'])]
+        mask_int = int(returnval['multicast']['ip_mask'])
+        for ctr in range(32):
+            mask_bit = (mask_int >> ctr) & 1
+            if not mask_bit:
+                new_ips = []
+                for ip in possible_addresses:
+                    new_ips.append(ip & (~(1 << ctr)))
+                    new_ips.append(new_ips[-1] | (1 << ctr))
+                possible_addresses.extend(new_ips)
+        returnval['multicast']['rx_ips'] = []
+        tmp = list(set(possible_addresses))
+        for ip in tmp:
+            returnval['multicast']['rx_ips'].append(IpAddress(ip))
+        return returnval
+
     def multicast_receive(self, ip_str, group_size):
         """
         Send a request to KATCP to have this tap instance send a multicast
@@ -120,12 +201,13 @@ class SkarabFpga(CasperFpga):
         ip_high = int(ip) >> 16
         ip_low = int(ip) & 65535
 
-        mask = tengbe.IpAddress('255.255.255.252')
+        mask = tengbe.IpAddress('255.255.255.255')
         mask_high = int(mask) >> 16
         mask_low = int(mask) & 65535
 
         request = sd.ConfigureMulticastReq(
             self.seq_num, 1, ip_high, ip_low, mask_high, mask_low)
+
         resp = self.send_packet(payload=request.create_payload(),
                                 response_type='ConfigureMulticastResp',
                                 expect_response=True,
@@ -254,8 +336,8 @@ class SkarabFpga(CasperFpga):
             return data[offset: offset + size]
 
         else:
-            LOGGER.error('Read failed!')
-            return None
+            errmsg = 'Bulk read failed.'
+            raise ReadFailed(errmsg)
 
     def read_byte_level(self, device_name, size, offset=0):
         """
@@ -373,7 +455,6 @@ class SkarabFpga(CasperFpga):
         :param filename: the file to upload
         :return:
         """
-
         raise NotImplementedError
 
     def program_from_flash(self):
@@ -383,49 +464,36 @@ class SkarabFpga(CasperFpga):
         The SKARAB boots from flash on start up.
         :return:
         """
-
-        # trigger a reboot to boot from flash
         self.reboot_fpga()
 
     def boot_from_sdram(self):
         """
         Triggers a reboot of the Virtex7 FPGA and boot from SDRAM.
-        :return: nothing
+        :return:
         """
         # check if sdram was programmed prior
-        if self.__sdram_programmed:
-            # trigger reboot
-            if self.complete_sdram_configuration():
-                LOGGER.info('Booting from SDRAM.')
-
-                # clear sdram programmed flag
-                self.__sdram_programmed = False
-
-                # if fpg file used, get design information
-                if self.prog_info['last_uploaded'].split('.')[1] == 'fpg':
-
-                    super(SkarabFpga, self).get_system_information(
-                        filename=self.prog_info['last_uploaded'])
-                    self.__create_memory_map()
-
-                else:
-                    # if not fpg file, then
-                    self._CasperFpga__reset_device_info()
-
-                # update programming info
-                self.prog_info['last_programmed'] = \
-                    self.prog_info['last_uploaded']
-                self.prog_info['last_uploaded'] = ''
-                return True
-
-            else:
-                LOGGER.error('Error triggering reboot')
-                return False
+        if not self.__sdram_programmed:
+            errmsg = 'SDRAM not programmed.'
+            LOGGER.error(errmsg)
+            raise SkarabSdramError(errmsg)
+        # trigger reboot
+        self._complete_sdram_configuration()
+        LOGGER.info('Booting from SDRAM.')
+        # clear sdram programmed flag
+        self.__sdram_programmed = False
+        # if fpg file used, get design information
+        if os.path.splitext(self.prog_info['last_uploaded'])[1] == '.fpg':
+            super(SkarabFpga, self).get_system_information(
+                filename=self.prog_info['last_uploaded'])
+            self.__create_memory_map()
         else:
-            LOGGER.error('SDRAM Not Programmed!')
-            return False
+            # if not fpg file, then
+            self._CasperFpga__reset_device_info()
+        # update programming info
+        self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
+        self.prog_info['last_uploaded'] = ''
 
-    def upload_to_ram(self, filename, verify=False):
+    def upload_to_ram(self, filename, verify=False, check_pkt_count=False):
         """
         Opens a bitfile from which to program FPGA. Reads bitfile
         in chunks of 4096 16-bit words.
@@ -434,7 +502,9 @@ class SkarabFpga(CasperFpga):
         Sends chunks of bitfile to fpga via sdram_program method
         :param filename: file to upload
         :param verify: flag to enable verification of uploaded bitstream (slow)
-        :return: True if successful, else Nothing
+        :param check_pkt_count: flag to enable checking of number of packets
+        programmed into the SDRAM. DOES NOT WORK WHEN PROGRAMMING VIA 40GbE
+        :return:
         """
 
         # flag to enable/disable padding of data send over udp pkt
@@ -445,67 +515,38 @@ class SkarabFpga(CasperFpga):
 
         # check file extension to see what we're dealing with
         if file_extension == '.fpg':
-            # get bin file from fpg file
-            LOGGER.info('Extracting bitstream from fpg file.')
+            LOGGER.info('.fpg detected. Extracting .bin.')
             image_to_program = self.extract_bitstream(filename)
-            if not self.check_bitstream(image_to_program):
-                errmsg = 'Incompatible fpg file. Cannot program SKARAB.'
-                LOGGER.error(errmsg)
-                raise InvalidSkarabBitstream(errmsg)
-            else:
-                LOGGER.info('Valid bitstream detected')
         elif file_extension == '.hex':
-            LOGGER.warning(
-                'Hex file detected. Attempting to convert to '
-                'required bin file.')
+            LOGGER.info('.hex detected. Converting to .bin.')
             image_to_program = self.convert_hex_to_bin(filename)
-            if not self.check_bitstream(image_to_program):
-                errmsg = 'Incompatible hex file. Cannot program SKARAB.'
-                LOGGER.error(errmsg)
-                raise InvalidSkarabBitstream(errmsg)
-            else:
-                LOGGER.info('Valid bitstream detected')
         elif file_extension == '.bit':
-            LOGGER.warning(
-                'Bit file detected. Attempting to convert to required '
-                'bin file.')
+            LOGGER.info('.bit file detected. Converting to .bin.')
             image_to_program = self.convert_bit_to_bin(filename)
-            if not self.check_bitstream(image_to_program):
-                errmsg = 'Incompatible bit file. Cannot program SKARAB.'
-                LOGGER.error(errmsg)
-                raise InvalidSkarabBitstream(errmsg)
-            else:
-                LOGGER.info('Valid bitstream detected')
         elif file_extension == '.bin':
             image_to_program = open(filename, 'rb').read()
             if not self.check_bitstream(image_to_program):
-                LOGGER.warning(
-                    'Incompatible bin file. Attemping to convert.')
+                LOGGER.info('Incompatible .bin file. Attemping to convert.')
                 image_to_program = self.reorder_bytes_in_bin_file(
                     image_to_program)
-                if not self.check_bitstream(image_to_program):
-                    errmsg = 'Incompatible bin file. Cannot program SKARAB.'
-                    LOGGER.error(errmsg)
-                    raise InvalidSkarabBitstream(errmsg)
-                else:
-                    LOGGER.info('Valid bitstream detected')
-            else:
-                LOGGER.info('Valid bitstream detected ')
         else:
-            raise TypeError('Invalid file type. '
-                            'Only use .fpg, .bit, .hex or .bin files')
+            raise TypeError('Invalid file type. Only use .fpg, .bit, '
+                            '.hex or .bin files')
+
+        # check the generated bitstream
+        if not self.check_bitstream(image_to_program):
+            errmsg = 'Incompatible image file. Cannot program SKARAB.'
+            LOGGER.error(errmsg)
+            raise InvalidSkarabBitstream(errmsg)
+        LOGGER.info('Valid bitstream detected.')
 
         # at this point the bitstream is in memory
 
         # prepare SDRAM for programming
-        if not self.prepare_sdram_ram_for_programming():
-            errmsg = 'SDRAM PREPARATION FAILED. Aborting programming.'
-            LOGGER.error(errmsg)
-            raise RuntimeError(errmsg)
-
-        image_size = len(image_to_program)
+        self._prepare_sdram_ram_for_programming()
 
         # split image into chunks of 4096 words
+        image_size = len(image_to_program)
         image_chunks = [
             image_to_program[ctr:ctr+8192] for ctr in range(0, image_size, 8192)
         ]
@@ -540,10 +581,11 @@ class SkarabFpga(CasperFpga):
             try:
                 self.sdram_program(first_packet_in_image,
                                    last_packet_in_image, image_chunk)
-                time.sleep(0.003)
+                time.sleep(0.010)
+                # print 'tick %i' % sent_pkt_counter
                 sent_pkt_counter += 1
             except Exception as exc:
-                LOGGER.error('Uploading to SDRAM Failed')
+                LOGGER.error('Uploading to SDRAM failed.')
                 raise exc
 
         # if the bin file provided requires padding to 4096 word boundary
@@ -559,43 +601,73 @@ class SkarabFpga(CasperFpga):
                                    last_packet_in_image, image_chunk)
                 sent_pkt_counter += 1
             except Exception as exc:
-                LOGGER.error('Uploading to SDRAM Failed')
+                LOGGER.error('Uploading to SDRAM Failed.')
                 raise exc
 
-        # complete writing and trigger reset
+        use_checksum = False
+        if use_checksum:
+            # calculate checksum
+            local_checksum = self.calculate_checksum_using_bitstream(
+                image_to_program)
+            LOGGER.debug('Calculated bitsteam checksum: %s' % local_checksum)
+            # read spartan checksum
+            spartan_checksum = self.get_spartan_checksum()
+            LOGGER.debug('Spartan bitstream checksum: %s' % spartan_checksum)
+            if spartan_checksum != local_checksum:
+                # checksum mismatch, so we clear sdram
+                self.clear_sdram()
+                # and raise an exception
+                errmsg = 'Checksum mismatch: local(%s) spartan(%s). Will not ' \
+                         'attempt to boot from SDRAM. Try re-uploading ' \
+                         'bitstream.' % (local_checksum, spartan_checksum)
+                LOGGER.error(errmsg)
+                raise InvalidSkarabBitstream(errmsg)
+            LOGGER.info('Checksum match. Bitstream uploaded successfully.')
+
         # check if all bytes in bin file uploaded successfully before trigger
-        if sent_pkt_counter == (image_size / 8192) \
-                or sent_pkt_counter == (image_size / 8192 + 1):
+        if not(sent_pkt_counter == (image_size / 8192)
+               or sent_pkt_counter == (image_size / 8192 + 1)):
+            errmsg = 'Error uploading FPGA image to SDRAM: ' \
+                     'sent_pkt_counter = %i' % sent_pkt_counter
+            LOGGER.error(errmsg)
+            raise SkarabSdramError(errmsg)
 
-            # set finished writing to SDRAM
-            finished_writing = self.sdram_reconfigure(
-                sd.SDRAM_PROGRAM_MODE, False, True, False, False, False, False,
-                False, False, False, 0x0, 0x0)
+        # check if the number of packets sent equals the number of packets
+        # programmed into the SDRAM
+        if check_pkt_count:
+            # check number of frames that have been programmed into the SDRAM
+            # TODO - fix the remote packet counter for 40gbe
+            rx_pkt_counts = self.check_programming_packet_count()
+            LOGGER.info('Sent %i packets, %i received.' % (
+                sent_pkt_counter, rx_pkt_counts['Ethernet Frames']))
+            if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
+                # not all bitstream packets programmed into SDRAM
+                self.clear_sdram()
+                errmsg = 'Error programming bitstream into SDRAM.'
+                LOGGER.error(errmsg)
+                raise ProgrammingError(errmsg)
+            LOGGER.info('Bitstream successfully programmed into SDRAM.')
 
-            # if verification is enabled
-            if verify:
-                sdram_verified = self.verify_sdram_contents(image_to_program)
+        # set finished writing to SDRAM
+        try:
+            self.sdram_reconfigure(finished_writing=True)
+        except SkarabSdramError:
+            errmsg = 'Error completing programming.'
+            LOGGER.error(errmsg)
+            raise ProgrammingError(errmsg)
 
-                if not sdram_verified:
-                    LOGGER.error('SDRAM verification failed! Clearing SDRAM')
-                    self.clear_sdram()
-                    return
-                else:
-                    LOGGER.info('SDRAM verification passed!')
+        if verify:
+            sdram_verified = self.verify_sdram_contents(image_to_program)
+            if not sdram_verified:
+                self.clear_sdram()
+                errmsg = 'SDRAM verification failed. Clearing SDRAM.'
+                LOGGER.error(errmsg)
+                raise SkarabSdramError(errmsg)
+            LOGGER.info('SDRAM verification passed.')
 
-            if finished_writing:
-                # set sdram programmed flag
-                self.__sdram_programmed = True
-
-                # set last uploaded parameter of programming info
-                self.prog_info['last_uploaded'] = filename
-                return True
-            else:
-                LOGGER.error('Error completing write transaction.')
-                return
-        else:
-            LOGGER.error('Error uploading FPGA image to SDRAM')
-            return
+        self.__sdram_programmed = True
+        self.prog_info['last_uploaded'] = filename
+        LOGGER.info('Programming of %s completed okay.' % filename)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
                                   wait_complete=True):
@@ -611,11 +683,10 @@ class SkarabFpga(CasperFpga):
         """
         # put the interface into programming mode
         self.config_prog_mux(user_data=0)
-        # upload to sdram
-        if self.upload_to_ram(filename):
-            # boot from the newly programmed image
-            if not self.boot_from_sdram():
-                return False
+
+        self.upload_to_ram(filename)
+        self.boot_from_sdram()
+
         # wait for board to come back up
         # this can be reduced when the 40gbe switch issue is resolved
         timeout = timeout + time.time()
@@ -662,7 +733,9 @@ class SkarabFpga(CasperFpga):
         :return:
         """
         # the bit that tells us if the 40gbe link is up
-        reg = format(int(self.read_wishbone(0xc)), '#032b')
+        reg = format(
+            int(self.read_wishbone(sd.C_RD_ETH_IF_LINK_UP_ADDR)), '#032b'
+        )
         forty_gbe_link = int(reg[30])
         # the bit that tells us if the 1gbe link is up
         # reg = format(int(self.read_wishbone(0x4)), '#032b')
@@ -684,10 +757,8 @@ class SkarabFpga(CasperFpga):
         Clears sdram programmed flag.
         :return: Nothing
         """
-        # clear sdram
-        self.sdram_reconfigure(
-            sd.SDRAM_PROGRAM_MODE, True, False, False, False, False, True,
-            False, False, False, 0x0, 0x0)
+        # clear sdram and ethernet counters
+        self.sdram_reconfigure(clear_sdram=True, clear_eth_stats=True)
 
         # clear sdram programmed flag
         self.__sdram_programmed = False
@@ -714,9 +785,8 @@ class SkarabFpga(CasperFpga):
         f.close()
 
         # prep SDRAM for reading
-        _ = self.sdram_reconfigure(
-            sd.SDRAM_READ_MODE, False, False, False, False, True, False, True,
-            False, False, 0x0, 0x0)
+        self.sdram_reconfigure(output_mode=sd.SDRAM_READ_MODE,
+                               reset_sdram_read_addr=True, enable_debug=True)
 
         # sdram read returns 32-bits (4 bytes)
         # so we compare 4 bytes each time
@@ -729,9 +799,9 @@ class SkarabFpga(CasperFpga):
             file_contents = file_contents[4:]
 
             # read from sdram
-            sdram_data = self.sdram_reconfigure(
-                sd.SDRAM_READ_MODE, False, False, False, False, False,
-                False, True, True, False, 0x0, 0x0)
+            sdram_data = self.sdram_reconfigure(output_mode=sd.SDRAM_READ_MODE,
+                                                enable_debug=True,
+                                                do_sdram_async_read=True)
 
             # if mismatch, stop check and return False
             if words_from_file != sdram_data:
@@ -740,13 +810,11 @@ class SkarabFpga(CasperFpga):
                 continue
 
         # reset the sdram read address
-        self.sdram_reconfigure(sd.SDRAM_READ_MODE, False, False, False, False,
-                               True, False, True, False, False, 0x0, 0x0)
+        self.sdram_reconfigure(output_mode=sd.SDRAM_READ_MODE,
+                               reset_sdram_read_addr=True, enable_debug=True)
 
         # exit read mode and put sdram back into program mode
-        self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, False, False,
-                               False, False, False, False, False, False,
-                               0x0, 0x0)
+        self.sdram_reconfigure()
 
         # entire binfile verified
         return True
@@ -789,9 +857,7 @@ class SkarabFpga(CasperFpga):
 
         # unpacker for the 32-bit string of bytes
         unpacker = struct.Struct('!I')
-        data = unpacker.unpack(data)
-
-        return data[0]  # return the unpacked data (native Python type)
+        return unpacker.unpack(data)[0]
 
     @staticmethod
     def unpack_payload(response_payload, response_type, number_of_words,
@@ -831,6 +897,10 @@ class SkarabFpga(CasperFpga):
         if response_type == 'GetSensorDataResp':
             read_bytes = unpacked_data[2:93]
             unpacked_data[2:93] = [read_bytes]
+
+        if response_type == 'ReadSpiPageResp':
+            read_bytes = unpacked_data[5:269]
+            unpacked_data[5:269] = [read_bytes]
 
         if response_type == 'ReadHMCI2CResp':
             slave_address = unpacked_data[4:8]
@@ -960,9 +1030,7 @@ class SkarabFpga(CasperFpga):
         :return: Nothing
         """
         # trigger a reboot of the FPGA
-        _ = self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, False, False,
-                                   True, False, False, False, False, False,
-                                   0x0, 0x0)
+        self.sdram_reconfigure(do_reboot=True)
         # reset sequence numbers
         self.seq_num = 0
         # reset the sdram programmed flag
@@ -994,16 +1062,16 @@ class SkarabFpga(CasperFpga):
         """
         # should this function close the sockets and then attempt to reopen 
         # once board is powered on? shut down requires two writes
-
         LOGGER.info('Shutting board down.')
 
-        _ = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
-                                 sd.ROACH3_SHUTDOWN, False)
+        self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
+                             sd.ROACH3_SHUTDOWN, False)
 
         output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_1_ADDR,
                                       sd.ROACH3_SHUTDOWN, False)
 
-        self.seq_num = 0  # reset sequence number
+        # reset sequence number
+        self.seq_num = 0
 
         return output
 
@@ -1020,8 +1088,8 @@ class SkarabFpga(CasperFpga):
         """
         # create payload packet structure with data
 
-        request = sd.WriteRegReq(self.seq_num, sd.BOARD_REG, reg_address,
-                                 *self.data_split_and_pack(data))
+        request = sd.WriteRegReq(self.seq_num, sd.BOARD_REG,
+                                 reg_address, *self.data_split_and_pack(data))
 
         # send payload via UDP pkt and return response object (if no response
         # expected should return ok)
@@ -1057,8 +1125,8 @@ class SkarabFpga(CasperFpga):
         """
         # create payload packet structure with data
 
-        request = sd.WriteRegReq(self.seq_num, sd.DSP_REG, reg_address,
-                                 *self.data_split_and_pack(data))
+        request = sd.WriteRegReq(self.seq_num, sd.DSP_REG,
+                                 reg_address, *self.data_split_and_pack(data))
 
         # send payload via UDP pkt and return response object
         # (if no response expected should return ok)
@@ -1072,8 +1140,7 @@ class SkarabFpga(CasperFpga):
         :param reg_address: address of register to read
         :return: data read from register
         """
-        request = sd.ReadRegReq(
-            self.seq_num, sd.DSP_REG, reg_address)
+        request = sd.ReadRegReq(self.seq_num, sd.DSP_REG, reg_address)
         read_reg_resp = self.send_packet(
             request.create_payload(), 'ReadRegResp', True, sd.READ_REG, 11, 5)
         if read_reg_resp:
@@ -1118,9 +1185,8 @@ class SkarabFpga(CasperFpga):
         address_and_data = address_split
         address_and_data.extend(data_split)
         request = sd.WriteWishboneReq(self.seq_num, *address_and_data)
-        return self.send_packet(
-            request.create_payload(), 'WriteWishboneResp', True,
-            sd.WRITE_WISHBONE, 11, 5)
+        return self.send_packet(request.create_payload(), 'WriteWishboneResp',
+                                True, sd.WRITE_WISHBONE, 11, 5)
 
     def read_wishbone(self, wb_address):
         """
@@ -1294,12 +1360,19 @@ class SkarabFpga(CasperFpga):
             sdram_program_req.create_payload(), 0, False, sd.SDRAM_PROGRAM, 0,
             0, skarab_socket=self.skarab_fpga_sock, port=self.skarab_fpga_port,)
 
-    def sdram_reconfigure(self, output_mode, clear_sdram, finished_writing,
-                          about_to_boot, do_reboot, reset_sdram_read_addr,
-                          clear_eth_stats, enable_debug, do_sdram_async_read,
-                          do_continuity_test, continuity_test_out_low,
-                          continuity_test_out_high):
-
+    def sdram_reconfigure(self,
+                          output_mode=sd.SDRAM_PROGRAM_MODE,
+                          clear_sdram=False,
+                          finished_writing=False,
+                          about_to_boot=False,
+                          do_reboot=False,
+                          reset_sdram_read_addr=False,
+                          clear_eth_stats=False,
+                          enable_debug=False,
+                          do_sdram_async_read=False,
+                          do_continuity_test=False,
+                          continuity_test_out_low=0x00,
+                          continuity_test_out_high=0x00):
         """
         Used to perform various tasks realting to programming of the boot SDRAM and config
         of Virtex7 FPGA from boot SDRAM
@@ -1315,32 +1388,107 @@ class SkarabFpga(CasperFpga):
         :param do_continuity_test: test continuity of the flash bus between the Virtex7 FPGA and the Spartan 3AN FPGA
         :param continuity_test_out_low: Used in continuity debug mode, specify value to set lower 16 bits of the bus
         :param continuity_test_out_high: Used in continuity debug mode, specify value to set upper 16 bits of the bus
-        :return: True or False
+        :return: data read, if there was any
         """
         # create request object
-        sdram_reconfigure_req = sd.SdramReconfigureReq(
+        req = sd.SdramReconfigureReq(
             self.seq_num, output_mode, clear_sdram, finished_writing,
             about_to_boot, do_reboot, reset_sdram_read_addr, clear_eth_stats,
             enable_debug, do_sdram_async_read, do_continuity_test,
             continuity_test_out_low, continuity_test_out_high)
+        resp = self.send_packet(req.create_payload(), 'SdramReconfigureResp',
+                                True, sd.SDRAM_RECONFIGURE, 19, 0)
+        if resp is None:
+            args = locals()
+            args.pop('req')
+            args.pop('resp')
+            args.pop('self')
+            raise SkarabSdramError('sdram_reconfigure failed, '
+                                   'no response. %s' % args)
         if do_sdram_async_read:
             # process data read here
-            sdram_reconfigure_resp = self.send_packet(
-                sdram_reconfigure_req.create_payload(),
-                'SdramReconfigureResp', True, sd.SDRAM_RECONFIGURE, 19, 0)
-            sdram_data = struct.pack('!H', sdram_reconfigure_resp.sdram_async_read_data_low) + \
-                struct.pack('!H', sdram_reconfigure_resp.sdram_async_read_data_high)
+            sdram_data = struct.pack('!H', resp.sdram_async_read_data_low) + \
+                struct.pack('!H', resp.sdram_async_read_data_high)
             return sdram_data
 
-        elif self.send_packet(sdram_reconfigure_req.create_payload(),
-                              'SdramReconfigureResp', True,
-                              sd.SDRAM_RECONFIGURE, 19, 0):
-            return True
-        else:
-            LOGGER.error('Problem configuring SDRAM')
+    def read_spi_page(self, spi_address, num_bytes):
+        """
+        Used to read a page from the SPI flash in the Spartan 3AN FPGA on the
+        SKARAB Motherboard. Up to a full page (264 bytes) can be read.
+
+        :param spi_address: address of the page wanting to be read
+        :param num_bytes: number of bytes in page to be read (max 264 bytes)
+        :return: list of read data
+        """
+
+        if num_bytes > 264:
+            LOGGER.error('Maximum of 264 bytes (One full page) '
+                         'can be read from a single SPI Register')
             return False
 
+        # split 32-bit page address into 16-bit high and low
+        spi_address_high, spi_address_low = \
+            self.data_split_and_pack(spi_address)
+
+        # create payload packet structure for read request
+        request = sd.ReadSpiPageReq(self.seq_num, spi_address_high,
+                                    spi_address_low, num_bytes)
+
+        response = self.send_packet(payload=request.create_payload(),
+                                    response_type='ReadSpiPageResp',
+                                    expect_response=True,
+                                    command_id=sd.READ_SPI_PAGE,
+                                    number_of_words=271, pad_words=1)
+
+        if response is not None:
+            if response.read_spi_page_success:
+                # Then, send back ReadBytes[:NumBytes]
+                return response.read_bytes[:num_bytes]
+            else:
+                # Read was made, but unsuccessful
+                LOGGER.error("SPI Read FAILED")
+                raise ReadFailed('Attempt to perform SPI Read Failed')
+        else:
+            LOGGER.error("Bad Response Received")
+            raise InvalidResponse('Bad response received from SKARAB')
+
     # board level functions
+
+    def check_programming_packet_count(self):
+        """
+        Checks the number of packets programmed into the SDRAM of SKARAB
+        :return: {num_ethernet_frames, num_ethernet_bad_frames,
+        num_ethernet_overload_frames}
+        """
+        sdram_reconfigure_req = sd.SdramReconfigureReq(
+            seq_num=self.seq_num,
+            output_mode=sd.SDRAM_PROGRAM_MODE,
+            clear_sdram=False,
+            finished_writing=False,
+            about_to_boot=False,
+            do_reboot=False,
+            reset_sdram_read_address=False,
+            clear_ethernet_stats=False,
+            enable_debug_sdram_read_mode=False,
+            do_sdram_async_read=False,
+            do_continuity_test=False,
+            continuity_test_output_high=0x0,
+            continuity_test_output_low=0x0)
+        sdram_reconfigure_resp = self.send_packet(
+            payload=sdram_reconfigure_req.create_payload(),
+            response_type='SdramReconfigureResp',
+            expect_response=True,
+            command_id=sd.SDRAM_RECONFIGURE,
+            number_of_words=19,
+            pad_words=0)
+        packet_count = {
+            'Ethernet Frames': sdram_reconfigure_resp.num_ethernet_frames,
+            'Bad Ethernet Frames':
+                sdram_reconfigure_resp.num_ethernet_bad_frames,
+            'Overload Ethernet Frames':
+                sdram_reconfigure_resp.num_ethernet_overload_frames
+        }
+        return packet_count
 
     def get_firmware_version(self):
         """
@@ -1404,63 +1552,53 @@ class SkarabFpga(CasperFpga):
 
         self.write_board_reg(sd.C_WR_FRONT_PANEL_STAT_LED_ADDR, led_mask)
 
-    def prepare_sdram_ram_for_programming(self):
+    def _prepare_sdram_ram_for_programming(self):
         """
         Prepares the sdram for programming with FPGA image
-        :return: True - if sdram ready to receive FPGA image
+        :return:
         """
-
         # put sdram in flash mode to enable FPGA outputs
-        if self.sdram_reconfigure(sd.FLASH_MODE, False, False, False, False,
-                                  False, False,
-                                  False, False, False, 0x0, 0x0):
-            # clear sdram
-            if self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, True, False,
-                                      False, False, False, True,
-                                      False, False, False, 0x0, 0x0):
-                # put in sdram programming mode and clear ethernet counters
-                if self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, False,
-                                          False, False, False, False,
-                                          False, False, False, 0x0, 0x0):
+        try:
+            self.sdram_reconfigure(output_mode=sd.FLASH_MODE)
+        except SkarabSdramError:
+            errmsg = 'Error putting SDRAM in flash mode.'
+            LOGGER.error(errmsg)
+            raise SkarabSdramError(errmsg)
+        # clear sdram and clear ethernet counters
+        try:
+            self.sdram_reconfigure(clear_sdram=True, clear_eth_stats=True)
+        except SkarabSdramError:
+            errmsg = 'Error clearing SDRAM.'
+            LOGGER.error(errmsg)
+            raise SkarabSdramError(errmsg)
+        # put in sdram programming mode
+        try:
+            self.sdram_reconfigure()
+        except SkarabSdramError:
+            errmsg = 'Error putting SDRAM in programming mode.'
+            LOGGER.error(errmsg)
+            raise SkarabSdramError(errmsg)
+        LOGGER.info('SDRAM successfully prepared.')
 
-                    LOGGER.info('SDRAM successfully prepared')
-                    return True
-                else:
-                    LOGGER.error('Error putting SDRAM in programming mode.')
-                    return False
-            else:
-                LOGGER.error('Error clearing SDRAM.')
-                return False
-        else:
-            LOGGER.error('Error putting SDRAM in programming mode.')
-            return False
-
-    def complete_sdram_configuration(self):
+    def _complete_sdram_configuration(self):
         """
         Completes sdram programming and configuration. Sets to boot from sdram
         and triggers reboot
         :return: True if success
         """
-
-        # set about to boot from SDRAM
-        if self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, False, True,
-                                  False, False, False,
-                                  False, False, False, 0x0, 0x0):
-
-            # do reboot (and boot from SDRAM)
-            if self.sdram_reconfigure(sd.SDRAM_PROGRAM_MODE, False, False,
-                                      False, True, False, False,
-                                      False, False, False, 0x0, 0x0):
-                LOGGER.info('Rebooting from SDRAM.')
-                return True
-
-            else:
-                LOGGER.error('Error triggering reboot.')
-                return False
-
-        else:
-            LOGGER.error('Error enabling boot from SDRAM.')
-            return False
+        try:
+            self.sdram_reconfigure(about_to_boot=True)
+        except SkarabSdramError:
+            errmsg = 'Error enabling boot from SDRAM.'
+            LOGGER.error(errmsg)
+            raise SkarabSdramError(errmsg)
+        try:
+            self.sdram_reconfigure(do_reboot=True)
+        except SkarabSdramError:
+            errmsg = 'Error triggering reboot.'
+            LOGGER.error(errmsg)
+            raise SkarabSdramError(errmsg)
+        LOGGER.info('Rebooting from SDRAM.')
 
     def read_hmc_i2c(self, interface, slave_address, read_address, format_print=False):
         """
@@ -1492,13 +1630,10 @@ class SkarabFpga(CasperFpga):
                                    read_address)
 
         # send payload and return response object
-        response = self.send_packet(skarab_socket=self.skarab_ctrl_sock,
-                                    port=self.skarab_eth_ctrl_port,
-                                    payload=request.create_payload(),
+        response = self.send_packet(payload=request.create_payload(),
                                     response_type='ReadHMCI2CResp',
                                     expect_response=True,
                                     command_id=sd.READ_I2C,
-                                    seq_num=self.seq_num,
                                     number_of_words=15, pad_words=2)
 
         if response is not None:
@@ -1515,11 +1650,11 @@ class SkarabFpga(CasperFpga):
                 return hmc_read_word
 
             else:
-                LOGGER.error('HMC I2C read failed!')
-                return 0
+                errmsg = 'HMC I2C read failed!'
+                raise ReadFailed(errmsg)
         else:
-            LOGGER.error('Bad response received.')
-            return
+            errmsg = 'Invalid response to HMC I2C read request.'
+            raise InvalidResponse(errmsg)
 
     def get_sensor_data(self):
         """
@@ -1540,7 +1675,6 @@ class SkarabFpga(CasperFpga):
             :param bits: number of bits making up the value
             :return: sign extended value
             """
-
             sign_bit = 1 << (bits - 1)
             return (value & (sign_bit - 1)) - (value & sign_bit)
 
@@ -1556,10 +1690,8 @@ class SkarabFpga(CasperFpga):
             if value & 0x8000 != 0:
                 value = sign_extend(value,
                                     16)  # 16 bits represent the temperature
-
             value = int(value)
             value = float(value)
-
             return round(value / 100.0, 2)
 
         def voltage_current_monitor_temperature_check(value):
@@ -2176,5 +2308,90 @@ class SkarabFpga(CasperFpga):
             return fan_speed_rpm
         else:
             return
+
+    # AP
+    @staticmethod
+    def calculate_checksum_using_file(file_name):
+        """
+        Basically summing up all the words in the input file_name, and returning a 'Checksum'
+        :param file_name: The actual filename, and not instance of the open file
+        :return: Tally of words in the (.bin) file
+        """
+
+        flash_write_checksum = 0x00
+        file_size = os.path.getsize(file_name)
+
+        # Need to scroll through file until there is nothing left to read
+        with open(file_name, 'rb') as f:
+            for i in range(file_size / 2):
+                two_bytes = f.read(2)
+                one_word = struct.unpack('H!', two_bytes)[0]
+                flash_write_checksum += one_word
+
+        if (file_size % 8192) != 0:
+            # padding required
+            num_padding_bytes = 8192 - (file_size % 8192)
+            for i in range(num_padding_bytes / 2):
+                flash_write_checksum += 0xffff
+
+        # Last thing to do, make sure it is a 16-bit word
+        flash_write_checksum &= 0xffff
+
+        return flash_write_checksum
+
+    @staticmethod
+    def calculate_checksum_using_bitstream(bitstream):
+        """
+        Summing up all the words in the input bitstream, and returning a
+        'Checksum' - Assuming that the bitstream HAS NOT been padded yet
+        :param bitstream: The actual bitstream of the file in question
+        :return: checksum
+        """
+
+        flash_write_checksum = 0x00
+
+        size = len(bitstream)
+
+        for i in range(0, size, 2):
+            # This is just getting a substring, need to convert to hex
+            two_bytes = bitstream[i:i + 2]
+            one_word = struct.unpack('!H', two_bytes)[0]
+            flash_write_checksum += one_word
+
+        if (size % 8192) != 0:
+            # padding required
+            num_padding_bytes = 8192 - (size % 8192)
+            for i in range(num_padding_bytes / 2):
+                flash_write_checksum += 0xffff
+
+        # Last thing to do, make sure it is a 16-bit word
+        flash_write_checksum &= 0xffff
+
+        return flash_write_checksum
+
+    def get_spartan_checksum(self):
+        """
+        Method for easier access to the Spartan Checksum
+        :return: spartan_flash_write_checksum
+        """
+        upper_address, lower_address = (0x001ffe02, 0x001ffe03)
+        upper_byte = self.read_spi_page(upper_address, 1)[0]
+        lower_byte = self.read_spi_page(lower_address, 1)[0]
+        spartan_flash_write_checksum = (upper_byte << 8) | lower_byte
+        return spartan_flash_write_checksum
+
+    def get_spartan_firmware_version(self):
+        """
+        Using read_spi_page() function to read two SPI Addresses which give
+        the major and minor version numbers of the SPARTAN Firmware Version
+        :return: String containing 'Major.Minor'
+        """
+        spi_address = 0x001ffe00
+        # Just a heads-up, read_spi_page(address, num_bytes)
+        # returns a list of bytes of length = num_bytes
+        major = self.read_spi_page(spi_address, 1)[0]
+        minor = self.read_spi_page(spi_address + 1, 1)[0]
+        version_number = str(major) + '.' + str(minor)
+        return version_number
 
 # end

@@ -1,20 +1,20 @@
 #!/usr/bin/env python
 
-__author__ = 'paulp'
-
 import argparse
 
 from casperfpga import katcp_fpga
 from casperfpga import dcp_fpga
 
-parser = argparse.ArgumentParser(description='Program an FPGA.',
-                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser = argparse.ArgumentParser(
+    description='Program an FPGA.',
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(dest='hostname', type=str, action='store',
                     help='the hostname of the FPGA')
-parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
-                    help='katcp (default) or dcp?')
+parser.add_argument('--comms', dest='comms', action='store',
+                    default='katcp', type=str, help='katcp (default) or dcp?')
 parser.add_argument('--loglevel', dest='log_level', action='store', default='',
-                    help='log level to use, default None, options INFO, DEBUG, ERROR')
+                    help='log level to use, default None, '
+                         'options INFO, DEBUG, ERROR')
 args = parser.parse_args()
 
 if args.comms == 'katcp':
