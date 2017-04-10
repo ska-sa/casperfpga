@@ -121,6 +121,8 @@ READ_HMC_I2C = 0x0031
 # SKA SA Defined Command ID's
 GET_SENSOR_DATA = 0x0043
 SET_FAN_SPEED = 0x0045
+BIG_READ_WISHBONE = 0x0047
+BIG_WRITE_WISHBONE = 0x0049
 
 # I2C BUS DEFINES
 MB_I2C_BUS_ID = 0x0
@@ -527,17 +529,6 @@ class ReadWishboneReq(Command):
         self.header = CommandHeader(READ_WISHBONE, seq_num)
         self.address_high = address_high
         self.address_low = address_low
-
-
-class ReadWishboneReq_refactor(Command):
-    def __init__(self, seq_num, address_high, address_low):
-        super(ReadWishboneReq_refactor, self).__init__()
-        self.header = CommandHeader(READ_WISHBONE, seq_num)
-        self.address_high = address_high
-        self.address_low = address_low
-        self.response_type = 'sReadWishboneResp'
-        self.expect_response = True
-        self.id = READ_WISHBONE
 
 
 class ReadWishboneResp(Command):
@@ -1129,6 +1120,28 @@ class ReadHMCI2CResp(Command):
         self.read_bytes = read_bytes
         self.read_success = read_success
         self.padding = padding
+
+
+class BigReadWishboneReq(Command):
+    def __init__(self, seq_num, start_address_high, start_address_low,
+                 number_of_reads):
+        super(BigReadWishboneReq, self).__init__()
+        self.header = CommandHeader(BIG_READ_WISHBONE, seq_num)
+        self.start_address_high = start_address_high
+        self.start_address_low = start_address_low
+        self.number_of_reads = number_of_reads
+
+
+class BigReadWishboneResp(Command):
+    def __init__(self, command_id, seq_num, start_address_high,
+                 start_address_low, number_of_reads, read_data):
+        super(BigReadWishboneResp, self).__init__()
+        self.header = CommandHeader(command_id, seq_num, False)
+        self.start_address_high = start_address_high
+        self.start_address_low = start_address_low
+        self.read_data = read_data
+        self.number_of_reads = number_of_reads
+        # self.padding = padding
 
 
 # Mezzanine Site Identifiers

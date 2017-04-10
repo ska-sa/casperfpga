@@ -157,6 +157,10 @@ class SkarabFpga(CasperFpga):
         # map device name to address, if can't find, bail
         if device_name in self.memory_devices.keys():
             addr = self.memory_devices[device_name].address
+        elif type(device_name) == int and 0 <= device_name < 2 ** 32:
+            # also support absolute address values
+            LOGGER.warning('Absolute address given.')
+            addr = device_name
         else:
             LOGGER.error('Unknown device name')
             raise KeyError
@@ -202,6 +206,56 @@ class SkarabFpga(CasperFpga):
 
         # return the number of bytes requested
         return data[offset: offset + size]
+
+    def bulk_read(self, device_name, size, offset=0):
+        """
+        Return size_bytes of binary data with carriage-return escape-sequenced.
+        :param device_name: name of memory device from which to read
+        :param size: how many bytes to read
+        :param offset: start at this offset, offset in bytes
+        :return: binary data string
+        """
+
+        # map device name to address, if can't find, bail
+        if device_name in self.memory_devices.keys():
+            addr = self.memory_devices[device_name].address
+        elif type(device_name) == int and 0 <= device_name < 2 ** 32:
+            # also support absolute address values
+            LOGGER.warning('Absolute address given.')
+            addr = device_name
+        else:
+            LOGGER.error("Unknown device name")
+            raise KeyError
+
+        # can only read 32-bits (4 bytes) at a time
+        # work out how many reads we require
+        num_reads = int(math.ceil(size / 4.0))
+
+        start_addr_high, start_addr_low = self.data_split_and_pack(addr)
+
+        # create payload packet structure for read request
+        request = sd.BigReadWishboneReq(self.seq_num,
+                                        start_addr_high, start_addr_low,
+                                        num_reads)
+        # send read request
+        response = self.send_packet(payload=request.create_payload(),
+                                    response_type='BigReadWishboneResp',
+                                    expect_response=True,
+                                    command_id=sd.BIG_READ_WISHBONE,
+                                    number_of_words=999, pad_words=0)
+
+        if response is not None:
+
+            data = ''
+            read_data = response.read_data  # list of 16-bit words
+            data += data.join([struct.pack('!H', word) for word in read_data])
+
+            # return the number of bytes requested
+            return data[offset: offset + size]
+
+        else:
+            LOGGER.error('Read failed!')
+            return None
 
     def read_byte_level(self, device_name, size, offset=0):
         """
@@ -782,7 +836,12 @@ class SkarabFpga(CasperFpga):
             slave_address = unpacked_data[4:8]
             read_bytes = unpacked_data[8:12]
             unpacked_data[4:8] = [slave_address]
-            unpacked_data[5:9] = [read_bytes]  # note the indices change after the first replacement!
+            # note the indices change after the first replacement!
+            unpacked_data[5:9] = [read_bytes]
+
+        if response_type == 'BigReadWishboneResp':
+            read_bytes = unpacked_data[5:]
+            unpacked_data[5:] = [read_bytes]
 
         # return response from skarab
         return SkarabFpga.sd_dict[response_type](*unpacked_data)
