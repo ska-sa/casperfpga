@@ -237,7 +237,7 @@ class SkarabFpga(CasperFpga):
         :return: binary data string
         """
         # map device name to address, if can't find, bail
-        if device_name in self.memory_devices.keys():
+        if device_name in self.memory_devices:
             addr = self.memory_devices[device_name].address
         elif type(device_name) == int and 0 <= device_name < 2 ** 32:
             # also support absolute address values
@@ -299,7 +299,7 @@ class SkarabFpga(CasperFpga):
         """
 
         # map device name to address, if can't find, bail
-        if device_name in self.memory_devices.keys():
+        if device_name in self.memory_devices:
             addr = self.memory_devices[device_name].address
         elif type(device_name) == int and 0 <= device_name < 2 ** 32:
             # also support absolute address values
@@ -326,18 +326,16 @@ class SkarabFpga(CasperFpga):
                                     command_id=sd.BIG_READ_WISHBONE,
                                     number_of_words=999, pad_words=0)
 
-        if response is not None:
-
-            data = ''
-            read_data = response.read_data  # list of 16-bit words
-            data += data.join([struct.pack('!H', word) for word in read_data])
-
-            # return the number of bytes requested
-            return data[offset: offset + size]
-
-        else:
+        if response is None:
             errmsg = 'Bulk read failed.'
             raise ReadFailed(errmsg)
+
+        data = ''
+        read_data = response.read_data  # list of 16-bit words
+        data += data.join([struct.pack('!H', word) for word in read_data])
+
+        # return the number of bytes requested
+        return data[offset: offset + size]
 
     def read_byte_level(self, device_name, size, offset=0):
         """
@@ -1636,25 +1634,25 @@ class SkarabFpga(CasperFpga):
                                     command_id=sd.READ_HMC_I2C,
                                     number_of_words=15, pad_words=2)
 
-        if response is not None:
-            if response.read_success:
-                hmc_read_bytes = response.read_bytes  # this is the 4 bytes
-                # read
-                # from the register
-                # want to create a 32 bit value
-
-                hmc_read_word = struct.unpack('!I', struct.pack('!4B', *hmc_read_bytes))[0]
-                if format_print:
-                    print 'Binary: \t {:#032b}'.format(hmc_read_word)
-                    print 'Hex:    \t ' + '0x' + '{:08x}'.format(hmc_read_word)
-                return hmc_read_word
-
-            else:
-                errmsg = 'HMC I2C read failed!'
-                raise ReadFailed(errmsg)
-        else:
+        if response is None:
             errmsg = 'Invalid response to HMC I2C read request.'
             raise InvalidResponse(errmsg)
+
+        if not response.read_success:
+            errmsg = 'HMC I2C read failed!'
+            raise ReadFailed(errmsg)
+
+        hmc_read_bytes = response.read_bytes  # this is the 4 bytes
+        # read
+        # from the register
+        # want to create a 32 bit value
+
+        hmc_read_word = struct.unpack('!I', struct.pack('!4B', *hmc_read_bytes))[0]
+        if format_print:
+            LOGGER.info('Binary: \t {:#032b}'.format(hmc_read_word))
+            LOGGER.info('Hex:    \t ' + '0x' + '{:08x}'.format(
+                hmc_read_word))
+        return hmc_read_word
 
     def get_sensor_data(self):
         """
