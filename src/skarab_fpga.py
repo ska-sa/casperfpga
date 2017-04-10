@@ -1633,7 +1633,7 @@ class SkarabFpga(CasperFpga):
         response = self.send_packet(payload=request.create_payload(),
                                     response_type='ReadHMCI2CResp',
                                     expect_response=True,
-                                    command_id=sd.READ_I2C,
+                                    command_id=sd.READ_HMC_I2C,
                                     number_of_words=15, pad_words=2)
 
         if response is not None:
