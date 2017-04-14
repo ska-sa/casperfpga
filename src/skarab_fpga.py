@@ -332,8 +332,12 @@ class SkarabFpga(CasperFpga):
         :return: binary data string
         """
         # map device name to address, if can't find, bail
-        if device_name in self.memory_devices.keys():
+        if device_name in self.memory_devices:
             addr = self.memory_devices[device_name].address
+        elif type(device_name) == int and 0 <= device_name < 2 ** 32:
+            # also support absolute address values
+            LOGGER.warning('Absolute address given.')
+            addr = device_name
         else:
             LOGGER.error('Unknown device name')
             raise KeyError
@@ -376,6 +380,54 @@ class SkarabFpga(CasperFpga):
 
             # increment addr by 4 to read the next 4 bytes (next 32-bit reg)
             addr += 4
+
+        # return the number of bytes requested
+        return data[offset: offset + size]
+
+    def bulk_read(self, device_name, size, offset=0):
+        """
+        Return size_bytes of binary data with carriage-return escape-sequenced.
+        :param device_name: name of memory device from which to read
+        :param size: how many bytes to read
+        :param offset: start at this offset, offset in bytes
+        :return: binary data string
+        """
+
+        # map device name to address, if can't find, bail
+        if device_name in self.memory_devices:
+            addr = self.memory_devices[device_name].address
+        elif type(device_name) == int and 0 <= device_name < 2 ** 32:
+            # also support absolute address values
+            LOGGER.warning('Absolute address given.')
+            addr = device_name
+        else:
+            LOGGER.error("Unknown device name")
+            raise KeyError
+
+        # can only read 32-bits (4 bytes) at a time
+        # work out how many reads we require
+        num_reads = int(math.ceil(size / 4.0))
+
+        start_addr_high, start_addr_low = self.data_split_and_pack(addr)
+
+        # create payload packet structure for read request
+        request = sd.BigReadWishboneReq(self.seq_num,
+                                        start_addr_high, start_addr_low,
+                                        num_reads)
+        # send read request
+        response = self.send_packet(payload=request.create_payload(),
+                                    response_type='BigReadWishboneResp',
+                                    expect_response=True,
+                                    command_id=sd.BIG_READ_WISHBONE,
+                                    number_of_words=999, pad_words=0)
+
+        if response is None:
+            errmsg = 'Bulk read failed.'
+            raise ReadFailed(errmsg)
+
+        data = ''
+        read_data = response.read_data  # list of 16-bit words
+        data += data.join([struct.pack('!H', word) for word in read_data])
 
         # return the number of bytes requested
         return data[offset: offset + size]
@@ -564,7 +616,6 @@ class SkarabFpga(CasperFpga):
             LOGGER.info('.bit file detected. Converting to .bin.')
             image_to_program = self.convert_bit_to_bin(filename)
         elif file_extension == '.bin':
-            LOGGER.info('Reading .bin file.')
             image_to_program = open(filename, 'rb').read()
             if not self.check_bitstream(image_to_program):
                 LOGGER.info('Incompatible .bin file. Attemping to convert.')
@@ -950,6 +1001,17 @@ class SkarabFpga(CasperFpga):
             read_bytes = unpacked_data[5:269]
             unpacked_data[5:269] = [read_bytes]
 
+        if response_type == 'ReadHMCI2CResp':
+            slave_address = unpacked_data[4:8]
+            read_bytes = unpacked_data[8:12]
+            unpacked_data[4:8] = [slave_address]
+            # note the indices change after the first replacement!
+            unpacked_data[5:9] = [read_bytes]
+
+        if response_type == 'BigReadWishboneResp':
+            read_bytes = unpacked_data[5:]
+            unpacked_data[5:] = [read_bytes]
+
         # return response from skarab
         return SkarabFpga.sd_dict[response_type](*unpacked_data)
 
@@ -1124,8 +1186,10 @@ class SkarabFpga(CasperFpga):
         (attributes = payload components)
         """
         # create payload packet structure with data
+
         request = sd.WriteRegReq(self.seq_num, sd.BOARD_REG,
                                  reg_address, *self.data_split_and_pack(data))
+
         # send payload via UDP pkt and return response object (if no response
         # expected should return ok)
         response = self.send_packet(request.create_payload(), 'WriteRegResp',
@@ -1140,6 +1204,7 @@ class SkarabFpga(CasperFpga):
         :return: data read from register
         """
         request = sd.ReadRegReq(self.seq_num, sd.BOARD_REG, reg_address)
+
         read_reg_resp = self.send_packet(
             request.create_payload(), 'ReadRegResp', True, sd.READ_REG,
             11, 5, retries=retries)
@@ -1158,8 +1223,10 @@ class SkarabFpga(CasperFpga):
         :return: response object - object created from the response payload
         """
         # create payload packet structure with data
+
         request = sd.WriteRegReq(self.seq_num, sd.DSP_REG,
                                  reg_address, *self.data_split_and_pack(data))
+
         # send payload via UDP pkt and return response object
         # (if no response expected should return ok)
         return self.send_packet(
@@ -1631,6 +1698,62 @@ class SkarabFpga(CasperFpga):
             LOGGER.error(errmsg)
             raise SkarabSdramError(errmsg)
         LOGGER.info('Rebooting from SDRAM.')
+
+    def read_hmc_i2c(self, interface, slave_address, read_address, format_print=False):
+        """
+        Read a register on the HMC device via the I2C interface
+        Prints the data in binary (32-bit) and hexadecimal formats
+        Also returns the data
+        :param interface: identifier for i2c interface:
+                          0 - SKARAB Motherboard i2c
+                          1 - Mezzanine 0 i2c
+                          2 - Mezzanine 1 i2c
+                          3 - Mezzanine 2 i2c
+                          4 - Mezzanine 3 i2c
+        :param slave_address: I2C slave address of device to read
+        :param read_address: register address on device to read
+        :return: read data / None if fails
+        """
+
+        response_type = 'sReadHMCI2CResp'
+        expect_response = True
+
+        # handle read address (pack it as 4 16-bit words)
+        # TODO: handle this in the createPayload method
+        read_address = ''.join([struct.pack('!H', x) for x in
+                                struct.unpack('!4B', struct.pack('!I',
+                                                                 read_address))])
+
+        # create payload packet structure
+        request = sd.ReadHMCI2CReq(self.seq_num, interface, slave_address,
+                                   read_address)
+
+        # send payload and return response object
+        response = self.send_packet(payload=request.create_payload(),
+                                    response_type='ReadHMCI2CResp',
+                                    expect_response=True,
+                                    command_id=sd.READ_HMC_I2C,
+                                    number_of_words=15, pad_words=2)
+
+        if response is None:
+            errmsg = 'Invalid response to HMC I2C read request.'
+            raise InvalidResponse(errmsg)
+
+        if not response.read_success:
+            errmsg = 'HMC I2C read failed!'
+            raise ReadFailed(errmsg)
+
+        hmc_read_bytes = response.read_bytes  # this is the 4 bytes
+        # read
+        # from the register
+        # want to create a 32 bit value
+
+        hmc_read_word = struct.unpack('!I', struct.pack('!4B', *hmc_read_bytes))[0]
+        if format_print:
+            LOGGER.info('Binary: \t {:#032b}'.format(hmc_read_word))
+            LOGGER.info('Hex:    \t ' + '0x' + '{:08x}'.format(
+                hmc_read_word))
+        return hmc_read_word
 
     def get_sensor_data(self):
         """
