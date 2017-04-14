@@ -8,7 +8,7 @@ import os
 import zlib
 import skarab_definitions as sd
 
-from casperfpga import CasperFpga
+from casperfpga import CasperFpga, tengbe as caspertengbe
 from utils import parse_fpg
 
 __author__ = 'tyronevb'
@@ -41,93 +41,104 @@ class ProgrammingError(ValueError):
     pass
 
 
-class SkarabFpga(CasperFpga):
-    # create dictionary of skarab_definitions module
-    sd_dict = vars(sd)
-
-    def __init__(self, host):
+class FortyGbe(object):
+    """
+    
+    """
+    def __init__(self, parent, position):
         """
-        Initialized SKARAB FPGA object
-        :param host: IP Address of the targeted SKARAB Board
-        :return: none
+        
+        :param parent: 
+        :param position: 
         """
-        super(SkarabFpga, self).__init__(host)
+        self.parent = parent
+        self.position = position
 
-        self.skarab_ip_address = host
-
-        # sequence number for control packets
-        self.seq_num = 0
-
-        # initialize UDP socket for ethernet control packets
-        self.skarab_ctrl_sock = socket.socket(
-            socket.AF_INET, socket.SOCK_DGRAM)
-        # prevent socket from blocking
-        self.skarab_ctrl_sock.setblocking(0)
-
-        # create tuple for ethernet control packet address
-        self.skarab_eth_ctrl_port = (
-            self.skarab_ip_address, sd.ETHERNET_CONTROL_PORT_ADDRESS)
-
-        # initialize UDP socket for fabric packets
-        self.skarab_fpga_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # self.skarab_fpga_sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1)
-        self.skarab_ctrl_sock.setblocking(0)
-
-        # create tuple for fabric packet address
-        self.skarab_fpga_port = (
-            self.skarab_ip_address, sd.ETHERNET_FABRIC_PORT_ADDRESS)
-
-        # flag for keeping track of SDRAM state
-        self.__sdram_programmed = False
-
-        # dict for programming/uploading info
-        self.prog_info = {'last_uploaded': '', 'last_programmed': ''}
-
-        # dict for sensor data, empty at initialization
-        self.sensor_data = {}
-
-        # check if connected to host
-        if self.is_connected():
-            LOGGER.info(
-                '%s: port(%s) created%s.' % (
-                    self.skarab_ip_address, sd.ETHERNET_CONTROL_PORT_ADDRESS,
-                    ' & connected'))
-        else:
-            LOGGER.info(
-                'Error connecting to %s: port%s' % (
-                    self.skarab_ip_address, sd.ETHERNET_CONTROL_PORT_ADDRESS))
-
-    def is_connected(self, retries=3):
+    def _wbone_rd(self, addr):
         """
-        'ping' the board to see if it is connected and running.
-        Tries to read a register
-        :return: True or False
+        
+        :param addr: 
+        :return: 
         """
-        data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=retries)
-        return True if data else False
+        return self.parent.read_wishbone(addr)
 
-    def loopbacktest(self, iface):
+    def _wbone_wr(self, addr, val):
         """
-        Run the loopback test.
-        :param iface:
-        :return:
+        
+        :param addr: 
+        :param val: 
+        :return: 
         """
-        request = sd.DebugLoopbackTestReq(self.seq_num, iface, 0x77)
-        resp = self.send_packet(
-            payload=request.create_payload(),
-            response_type='DebugLoopbackTestResp',
-            expect_response=True,
-            command_id=sd.DEBUG_LOOPBACK_TEST,
-            number_of_words=11, pad_words=5,
-            timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=1)
-        raise RuntimeError('Not yet tested')
+        return self.parent.write_wishbone(addr, val)
 
-    def fortygbedeets(self):
+    def enable(self):
+        """
+
+        :return: 
+        """
+        en_port = self._wbone_rd(0x50000 + 0x20)
+        if en_port >> 16 == 1:
+            return
+        en_port_new = (1 << 16) + (en_port & (2 ** 16 - 1))
+        self._wbone_wr(0x50000 + 0x20, en_port_new)
+        if self._wbone_rd(0x50000 + 0x20) != en_port_new:
+            errmsg = 'Error enabling 40gbe port'
+            LOGGER.error(errmsg)
+            raise ValueError(errmsg)
+
+    def disable(self):
+        """
+
+        :return: 
+        """
+        en_port = self._wbone_rd(0x50000 + 0x20)
+        if en_port >> 16 == 0:
+            return
+        old_port = en_port & (2 ** 16 - 1)
+        self._wbone_wr(0x50000 + 0x20, old_port)
+        if self._wbone_rd(0x50000 + 0x20) != old_port:
+            errmsg = 'Error disabling 40gbe port'
+            LOGGER.error(errmsg)
+            raise ValueError(errmsg)
+
+    def get_ip(self):
+        """
+        
+        :return: 
+        """
+        ip = self._wbone_rd(0x50000 + 0x10)
+        return caspertengbe.IpAddress(ip)
+
+    def get_port(self):
+        """
+
+        :return: 
+        """
+        en_port = self._wbone_rd(0x50000 + 0x20)
+        return en_port & (2 ** 16 - 1)
+
+    def set_port(self, port):
+        """
+
+        :param port: 
+        :return: 
+        """
+        en_port = self._wbone_rd(0x50000 + 0x20)
+        if en_port & (2 ** 16 - 1) == port:
+            return
+        en_port_new = ((en_port >> 16) << 16) + port
+        self._wbone_wr(0x50000 + 0x20, en_port_new)
+        if self._wbone_rd(0x50000 + 0x20) != en_port_new:
+            errmsg = 'Error setting 40gbe port to 0x%04x' % port
+            LOGGER.error(errmsg)
+            raise ValueError(errmsg)
+
+    def details(self):
         from tengbe import IpAddress, Mac
         gbebase = 0x50000
         gbedata = []
         for ctr in range(0, 0x40, 4):
-            gbedata.append(self.read_wishbone(gbebase + ctr))
+            gbedata.append(self._wbone_rd(gbebase + ctr))
         gbebytes = []
         for d in gbedata:
             gbebytes.append((d >> 24) & 0xff)
@@ -135,10 +146,8 @@ class SkarabFpga(CasperFpga):
             gbebytes.append((d >> 8) & 0xff)
             gbebytes.append((d >> 0) & 0xff)
         port_dump = gbebytes
-        returnval = {
-            'ip_prefix': '%i.%i.%i.' % (port_dump[0x10],
-                                        port_dump[0x11], port_dump[0x12])
-        }
+        returnval = {'ip_prefix': '%i.%i.%i.' % (
+            port_dump[0x10], port_dump[0x11], port_dump[0x12])}
         returnval['ip'] = IpAddress('%i.%i.%i.%i' % (
             port_dump[0x10], port_dump[0x11], port_dump[0x12], port_dump[0x13]))
         returnval['mac'] = Mac('%i:%i:%i:%i:%i:%i' % (
@@ -206,13 +215,14 @@ class SkarabFpga(CasperFpga):
         mask_low = int(mask) & 65535
 
         request = sd.ConfigureMulticastReq(
-            self.seq_num, 1, ip_high, ip_low, mask_high, mask_low)
+            self.parent.seq_num, 1, ip_high, ip_low, mask_high, mask_low)
 
-        resp = self.send_packet(payload=request.create_payload(),
-                                response_type='ConfigureMulticastResp',
-                                expect_response=True,
-                                command_id=sd.MULTICAST_REQUEST,
-                                number_of_words=11, pad_words=4)
+        resp = self.parent.send_packet(
+            payload=request.create_payload(),
+            response_type='ConfigureMulticastResp',
+            expect_response=True,
+            command_id=sd.MULTICAST_REQUEST,
+            number_of_words=11, pad_words=4)
 
         resp_ip = tengbe.IpAddress(
             resp.fabric_multicast_ip_address_high << 16 |
@@ -227,6 +237,91 @@ class SkarabFpga(CasperFpga):
         LOGGER.info('Multicast mask: {}'.format(resp_mask.ip_str))
 
         raise NotImplementedError
+
+
+class SkarabFpga(CasperFpga):
+    # create dictionary of skarab_definitions module
+    sd_dict = vars(sd)
+
+    def __init__(self, host):
+        """
+        Initialized SKARAB FPGA object
+        :param host: IP Address of the targeted SKARAB Board
+        :return: none
+        """
+        super(SkarabFpga, self).__init__(host)
+
+        self.skarab_ip_address = host
+
+        # sequence number for control packets
+        self.seq_num = 0
+
+        # initialize UDP socket for ethernet control packets
+        self.skarab_ctrl_sock = socket.socket(
+            socket.AF_INET, socket.SOCK_DGRAM)
+        # prevent socket from blocking
+        self.skarab_ctrl_sock.setblocking(0)
+
+        # create tuple for ethernet control packet address
+        self.skarab_eth_ctrl_port = (
+            self.skarab_ip_address, sd.ETHERNET_CONTROL_PORT_ADDRESS)
+
+        # initialize UDP socket for fabric packets
+        self.skarab_fpga_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # self.skarab_fpga_sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1)
+        self.skarab_ctrl_sock.setblocking(0)
+
+        # create tuple for fabric packet address
+        self.skarab_fpga_port = (
+            self.skarab_ip_address, sd.ETHERNET_FABRIC_PORT_ADDRESS)
+
+        # flag for keeping track of SDRAM state
+        self.__sdram_programmed = False
+
+        # dict for programming/uploading info
+        self.prog_info = {'last_uploaded': '', 'last_programmed': ''}
+
+        # dict for sensor data, empty at initialization
+        self.sensor_data = {}
+
+        self.gbes = []
+        self.gbes.append(FortyGbe(self, 0))
+
+        # check if connected to host
+        if self.is_connected():
+            LOGGER.info(
+                '%s: port(%s) created%s.' % (
+                    self.skarab_ip_address, sd.ETHERNET_CONTROL_PORT_ADDRESS,
+                    ' & connected'))
+        else:
+            LOGGER.info(
+                'Error connecting to %s: port%s' % (
+                    self.skarab_ip_address, sd.ETHERNET_CONTROL_PORT_ADDRESS))
+
+    def is_connected(self, retries=3):
+        """
+        'ping' the board to see if it is connected and running.
+        Tries to read a register
+        :return: True or False
+        """
+        data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=retries)
+        return True if data else False
+
+    def loopbacktest(self, iface):
+        """
+        Run the loopback test.
+        :param iface:
+        :return:
+        """
+        request = sd.DebugLoopbackTestReq(self.seq_num, iface, 0x77)
+        resp = self.send_packet(
+            payload=request.create_payload(),
+            response_type='DebugLoopbackTestResp',
+            expect_response=True,
+            command_id=sd.DEBUG_LOOPBACK_TEST,
+            number_of_words=11, pad_words=5,
+            timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=1)
+        raise RuntimeError('Not yet tested')
 
     def read(self, device_name, size, offset=0):
         """
@@ -452,7 +547,6 @@ class SkarabFpga(CasperFpga):
         programmed into the SDRAM. DOES NOT WORK WHEN PROGRAMMING VIA 40GbE
         :return:
         """
-
         # flag to enable/disable padding of data send over udp pkt
         padding = True
 
@@ -628,6 +722,13 @@ class SkarabFpga(CasperFpga):
         and hex files)
         :return: True, if success
         """
+        # set the port back to fabric programming
+        if self.gbes[0].get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
+            LOGGER.info('Resetting 40gbe port to 0x%04x' %
+                        sd.ETHERNET_FABRIC_PORT_ADDRESS)
+            self.gbes[0].set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
+            time.sleep(1)
+
         # put the interface into programming mode
         self.config_prog_mux(user_data=0)
 
