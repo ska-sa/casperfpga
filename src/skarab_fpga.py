@@ -2369,7 +2369,8 @@ class SkarabFpga(CasperFpga):
 
         return flash_write_checksum
 
-    def calculate_checksum_using_bitstream(self, bitstream):
+    @staticmethod
+    def calculate_checksum_using_bitstream(bitstream):
         """
         Summing up all the words in the input bitstream, and returning a
         'Checksum' 
