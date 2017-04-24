@@ -6,6 +6,7 @@ import struct
 import time
 import os
 import zlib
+import hashlib
 import skarab_definitions as sd
 
 from casperfpga import CasperFpga, tengbe as caspertengbe
@@ -662,6 +663,30 @@ class SkarabFpga(CasperFpga):
         # prepare SDRAM for programming
         self._prepare_sdram_ram_for_programming()
 
+        if file_extension == '.fpg':
+
+            # As per Wes, allowing for backwards compatibility
+            # - Check if the md5sums exist, i.e. only need to check if the md5_bitstream key exists
+            self.get_system_information(filename)  # This will hopefully populate fpga.system_info
+            meta_data_dict = self.system_info
+
+            if 'md5_bitstream' in meta_data_dict.keys():
+                # Calculate and compare MD5 sums here, before carrying on
+                fpgfile_md5sum = meta_data_dict['md5_bitstream']  # system_info is a dictionary
+                bitstream_md5sum = hashlib.md5(image_to_program).hexdigest()
+
+                if bitstream_md5sum != fpgfile_md5sum:
+                    # Problem
+                    errmsg = "bitstream_md5sum != fpgfile_md5sum"
+                    LOGGER.error(errmsg)
+                    raise InvalidSkarabBitstream(errmsg)
+            else:
+                # .fpg file was created using an older version of mlib_devel
+                errmsg = "An older version of mlib_devel generated " + filename + "." \
+                            " Please update to include the md5sum on the bitstream in the .fpg header."
+                LOGGER.error(errmsg)
+                raise InvalidSkarabBitstream(errmsg)
+
         # split image into chunks of 4096 words
         image_size = len(image_to_program)
         image_chunks = [
@@ -726,7 +751,7 @@ class SkarabFpga(CasperFpga):
             # calculate checksum
             local_checksum = self.calculate_checksum_using_bitstream(
                 image_to_program)
-            LOGGER.debug('Calculated bitsteam checksum: %s' % local_checksum)
+            LOGGER.debug('Calculated bitstream checksum: %s' % local_checksum)
             # read spartan checksum
             spartan_checksum = self.get_spartan_checksum()
             LOGGER.debug('Spartan bitstream checksum: %s' % spartan_checksum)
@@ -2438,13 +2463,20 @@ class SkarabFpga(CasperFpga):
             return
 
     # AP
-    @staticmethod
-    def calculate_checksum_using_file(file_name):
+    def calculate_checksum_using_file(self, file_name):
         """
         Basically summing up all the words in the input file_name, and returning a 'Checksum'
         :param file_name: The actual filename, and not instance of the open file
-        :return: Tally of words in the (.bin) file
+        :return: Tally of words in the bitstream of the input file
         """
+
+        # Need to handle how the bitstream is defined
+        file_extension = os.path.splitext(file_name)[1]
+
+        if file_extension == '.fpg':
+            bitstream = self.extract_bitstream(file_name)
+        else:
+            bitstream = file_name
 
         flash_write_checksum = 0x00
         file_size = os.path.getsize(file_name)
@@ -2453,7 +2485,7 @@ class SkarabFpga(CasperFpga):
         with open(file_name, 'rb') as f:
             for i in range(file_size / 2):
                 two_bytes = f.read(2)
-                one_word = struct.unpack('H!', two_bytes)[0]
+                one_word = struct.unpack('!H', two_bytes)[0]
                 flash_write_checksum += one_word
 
         if (file_size % 8192) != 0:
@@ -2471,14 +2503,15 @@ class SkarabFpga(CasperFpga):
     def calculate_checksum_using_bitstream(bitstream):
         """
         Summing up all the words in the input bitstream, and returning a
-        'Checksum' - Assuming that the bitstream HAS NOT been padded yet
-        :param bitstream: The actual bitstream of the file in question
+        'Checksum' 
+        - Assuming that the bitstream in filename HAS NOT been padded yet
+        :param bitstream: Of the file being analysed
         :return: checksum
         """
 
-        flash_write_checksum = 0x00
-
         size = len(bitstream)
+
+        flash_write_checksum = 0x00
 
         for i in range(0, size, 2):
             # This is just getting a substring, need to convert to hex
@@ -2521,5 +2554,50 @@ class SkarabFpga(CasperFpga):
         minor = self.read_spi_page(spi_address + 1, 1)[0]
         version_number = str(major) + '.' + str(minor)
         return version_number
+
+    def compare_md5_checksums(self, filename):
+        '''
+        Easier way to do comparisons against the MD5 Checksums in the .fpg file header. Two MD5 Checksums:
+        - md5_header: MD5 Checksum calculated on the .fpg-header
+        - md5_bitstream: MD5 Checksum calculated on the actual bitstream, starting after '?quit'
+        :param filename: Of the input .fpg file to be analysed
+        :return: Boolean - True/False - 1/0 - Success/Fail
+        '''
+
+        # Before we kick off, make sure the input file is indeed an .fpg file
+        file_extension = os.path.splitext(filename)[1]
+
+        if file_extension != '.fpg':
+            # Input file was not an fpg file
+            errmsg = "Input file was not an fpg file"
+            LOGGER.error(errmsg)
+            raise InvalidSkarabBitstream(errmsg)
+
+        # Extract bitstream from the .fpg file
+        bitstream = self.extract_bitstream(filename)
+
+        # First, tokenize the meta-data in the .fpg-header
+        self.get_system_information(filename)
+        meta_data_dict = self.system_info
+
+        if 'md5_bitstream' in meta_data_dict.keys():
+            # Calculate and compare MD5 sums here, before carrying on
+            fpgfile_md5sum = meta_data_dict['md5_bitstream']  # system_info is a dictionary
+            bitstream_md5sum = hashlib.md5(bitstream).hexdigest()
+
+            if bitstream_md5sum != fpgfile_md5sum:
+                # Problem
+                errmsg = "bitstream_md5sum != fpgfile_md5sum"
+                LOGGER.error(errmsg)
+                raise InvalidSkarabBitstream(errmsg)
+        else:
+            # .fpg file was created using an older version of mlib_devel
+            errmsg = "An older version of mlib_devel generated " + filename + "." \
+                      " Please update to include the md5sum on the bitstream in the .fpg header."
+            LOGGER.error(errmsg)
+            raise InvalidSkarabBitstream(errmsg)
+
+        # If it got here, checksums matched
+        return True
 
 # end
