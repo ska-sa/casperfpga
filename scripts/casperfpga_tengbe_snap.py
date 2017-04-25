@@ -89,13 +89,15 @@ if args.listcores:
 
 # read the snap block based on the direction chosen
 if args.direction == 'tx':
-    key_order = ['led_tx', 'eof', 'valid', 'tx_full', 'tx_over', 'link_up', 'ip', 'data']
+    key_order = ['led_tx', 'eof', 'valid', 'tx_full', 'tx_over',
+                 'link_up', 'ip', 'data']
     data_key = 'data'
     ip_key = 'ip'
     eof_key = 'eof'
     coredata = fpga.tengbes[args.core].read_txsnap()
 else:
-    key_order = ['led_up', 'led_rx', 'valid_in', 'eof_in', 'bad_frame', 'overrun', 'ip_in', 'data_in']
+    key_order = ['led_up', 'led_rx', 'valid_in', 'eof_in', 'bad_frame',
+                 'overrun', 'ip_in', 'data_in']
     data_key = 'data_in'
     ip_key = 'ip_in'
     eof_key = 'eof_in'
@@ -104,11 +106,11 @@ fpga.disconnect()
 
 if args.spead:
     if args.spead_check:
-        spead_processor = casperspead.SpeadProcessor(args.spead_version,
-                                                     args.spead_flavour,
-                                                     args.spead_packetlen,
-                                                     args.spead_numheaders)
-        expected_packet_length = args.spead_packetlen + args.spead_numheaders + 1
+        spead_processor = casperspead.SpeadProcessor(
+            args.spead_version, args.spead_flavour, args.spead_packetlen,
+            args.spead_numheaders)
+        expected_packet_length = args.spead_packetlen + \
+                                 args.spead_numheaders + 1
     else:
         spead_processor = casperspead.SpeadProcessor(None, None, None, None)
         expected_packet_length = -1
@@ -118,9 +120,9 @@ if args.spead:
     for pkt in gbe_packets:
         if (expected_packet_length > -1) and \
                 (len(pkt[data_key]) != expected_packet_length):
-            raise RuntimeError('Gbe packet not correct length - '
-                               'should be {}. is {}'.format(expected_packet_length,
-                                                            len(pkt[data_key])))
+            raise RuntimeError(
+                'Gbe packet not correct length - should be {}. is {}'.format(
+                    expected_packet_length, len(pkt[data_key])))
         gbe_data.append(pkt[data_key])
     spead_processor.process_data(gbe_data)
     spead_data = []

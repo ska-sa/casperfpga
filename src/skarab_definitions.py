@@ -1122,6 +1122,9 @@ class ReadHMCI2CResp(Command):
         self.padding = padding
 
 
+MAX_READ_32WORDS = 497
+
+
 class BigReadWishboneReq(Command):
     def __init__(self, seq_num, start_address_high, start_address_low,
                  number_of_reads):

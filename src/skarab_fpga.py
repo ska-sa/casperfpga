@@ -9,8 +9,9 @@ import zlib
 import hashlib
 import skarab_definitions as sd
 
-from casperfpga import CasperFpga
+from casperfpga import CasperFpga, tengbe as caspertengbe
 from utils import parse_fpg
+import tengbe
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
@@ -42,7 +43,216 @@ class ProgrammingError(ValueError):
     pass
 
 
+class SequenceSetError(RuntimeError):
+    pass
+
+
+class UnknownDeviceError(ValueError):
+    pass
+
+
+class FortyGbe(object):
+    """
+    
+    """
+    def __init__(self, parent, position):
+        """
+        
+        :param parent: 
+        :param position: 
+        """
+        self.parent = parent
+        self.position = position
+
+    def _wbone_rd(self, addr):
+        """
+        
+        :param addr: 
+        :return: 
+        """
+        return self.parent.read_wishbone(addr)
+
+    def _wbone_wr(self, addr, val):
+        """
+        
+        :param addr: 
+        :param val: 
+        :return: 
+        """
+        return self.parent.write_wishbone(addr, val)
+
+    def enable(self):
+        """
+
+        :return: 
+        """
+        en_port = self._wbone_rd(0x50000 + 0x20)
+        if en_port >> 16 == 1:
+            return
+        en_port_new = (1 << 16) + (en_port & (2 ** 16 - 1))
+        self._wbone_wr(0x50000 + 0x20, en_port_new)
+        if self._wbone_rd(0x50000 + 0x20) != en_port_new:
+            errmsg = 'Error enabling 40gbe port'
+            LOGGER.error(errmsg)
+            raise ValueError(errmsg)
+
+    def disable(self):
+        """
+
+        :return: 
+        """
+        en_port = self._wbone_rd(0x50000 + 0x20)
+        if en_port >> 16 == 0:
+            return
+        old_port = en_port & (2 ** 16 - 1)
+        self._wbone_wr(0x50000 + 0x20, old_port)
+        if self._wbone_rd(0x50000 + 0x20) != old_port:
+            errmsg = 'Error disabling 40gbe port'
+            LOGGER.error(errmsg)
+            raise ValueError(errmsg)
+
+    def get_ip(self):
+        """
+        
+        :return: 
+        """
+        ip = self._wbone_rd(0x50000 + 0x10)
+        return caspertengbe.IpAddress(ip)
+
+    def get_port(self):
+        """
+
+        :return: 
+        """
+        en_port = self._wbone_rd(0x50000 + 0x20)
+        return en_port & (2 ** 16 - 1)
+
+    def set_port(self, port):
+        """
+
+        :param port: 
+        :return: 
+        """
+        en_port = self._wbone_rd(0x50000 + 0x20)
+        if en_port & (2 ** 16 - 1) == port:
+            return
+        en_port_new = ((en_port >> 16) << 16) + port
+        self._wbone_wr(0x50000 + 0x20, en_port_new)
+        if self._wbone_rd(0x50000 + 0x20) != en_port_new:
+            errmsg = 'Error setting 40gbe port to 0x%04x' % port
+            LOGGER.error(errmsg)
+            raise ValueError(errmsg)
+
+    def details(self):
+        """
+        Get the details of the ethernet mac on this device
+        :return: 
+        """
+        from tengbe import IpAddress, Mac
+        gbebase = 0x50000
+        gbedata = []
+        for ctr in range(0, 0x40, 4):
+            gbedata.append(self._wbone_rd(gbebase + ctr))
+        gbebytes = []
+        for d in gbedata:
+            gbebytes.append((d >> 24) & 0xff)
+            gbebytes.append((d >> 16) & 0xff)
+            gbebytes.append((d >> 8) & 0xff)
+            gbebytes.append((d >> 0) & 0xff)
+        pd = gbebytes
+        returnval = {
+            'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
+            'ip': IpAddress('%i.%i.%i.%i' % (pd[0x10], pd[0x11],
+                                             pd[0x12], pd[0x13])),
+            'mac': Mac('%i:%i:%i:%i:%i:%i' % (pd[0x02], pd[0x03], pd[0x04],
+                                              pd[0x05], pd[0x06], pd[0x07])),
+            'gateway_ip': IpAddress('%i.%i.%i.%i' % (pd[0x0c], pd[0x0d],
+                                                     pd[0x0e], pd[0x0f])),
+            'fabric_port': ((pd[0x22] << 8) + (pd[0x23])),
+            'fabric_en': bool(pd[0x21] & 1),
+            'xaui_lane_sync': [
+                bool(pd[0x27] & 4), bool(pd[0x27] & 8),
+                bool(pd[0x27] & 16), bool(pd[0x27] & 32)],
+            'xaui_status': [
+                pd[0x24], pd[0x25], pd[0x26], pd[0x27]],
+            'xaui_chan_bond': bool(pd[0x27] & 64),
+            'xaui_phy': {
+                'rx_eq_mix': pd[0x28],
+                'rx_eq_pol': pd[0x29],
+                'tx_preemph': pd[0x2a],
+                'tx_swing': pd[0x2b]},
+            'multicast': {
+                'base_ip': IpAddress('%i.%i.%i.%i' % (pd[0x30], pd[0x31],
+                                                      pd[0x32], pd[0x33])),
+                'ip_mask': IpAddress('%i.%i.%i.%i' % (pd[0x34], pd[0x35],
+                                                      pd[0x36], pd[0x37])),
+                'subnet_mask': IpAddress('%i.%i.%i.%i' % (pd[0x38], pd[0x39],
+                                                          pd[0x3a], pd[0x3b]))}
+        }
+        possible_addresses = [int(returnval['multicast']['base_ip'])]
+        mask_int = int(returnval['multicast']['ip_mask'])
+        for ctr in range(32):
+            mask_bit = (mask_int >> ctr) & 1
+            if not mask_bit:
+                new_ips = []
+                for ip in possible_addresses:
+                    new_ips.append(ip & (~(1 << ctr)))
+                    new_ips.append(new_ips[-1] | (1 << ctr))
+                possible_addresses.extend(new_ips)
+        returnval['multicast']['rx_ips'] = []
+        tmp = list(set(possible_addresses))
+        for ip in tmp:
+            returnval['multicast']['rx_ips'].append(IpAddress(ip))
+        return returnval
+
+    def multicast_receive(self, ip_str, group_size):
+        """
+        Send a request to KATCP to have this tap instance send a multicast
+        group join request.
+        :param ip_str: A dotted decimal string representation of the base
+        mcast IP address.
+        :param group_size: An integer for how many mcast addresses from
+        base to respond to.
+        :return:
+        """
+
+        ip = tengbe.IpAddress('239.2.0.64')
+        ip_high = ip.ip_int >> 16
+        ip_low = ip.ip_int & 65535
+
+        mask = tengbe.IpAddress('255.255.255.255')
+        mask_high = mask.ip_int >> 16
+        mask_low = mask.ip_int & 65535
+
+        request = sd.ConfigureMulticastReq(
+            self.parent.seq_num, 1, ip_high, ip_low, mask_high, mask_low)
+
+        resp = self.parent.send_packet(
+            payload=request.create_payload(),
+            response_type='ConfigureMulticastResp',
+            expect_response=True,
+            command_id=sd.MULTICAST_REQUEST,
+            number_of_words=11, pad_words=4)
+
+        resp_ip = tengbe.IpAddress(
+            resp.fabric_multicast_ip_address_high << 16 |
+            resp.fabric_multicast_ip_address_low)
+
+        resp_mask = tengbe.IpAddress(
+            resp.fabric_multicast_ip_address_mask_high << 16 |
+            resp.fabric_multicast_ip_address_mask_low)
+
+        LOGGER.info('Multicast Configured')
+        LOGGER.info('Multicast address: {}'.format(resp_ip.ip_str))
+        LOGGER.info('Multicast mask: {}'.format(resp_mask.ip_str))
+
+        raise NotImplementedError
+
+
 class SkarabFpga(CasperFpga):
+    """
+    
+    """
     # create dictionary of skarab_definitions module
     sd_dict = vars(sd)
 
@@ -57,7 +267,7 @@ class SkarabFpga(CasperFpga):
         self.skarab_ip_address = host
 
         # sequence number for control packets
-        self.seq_num = 0
+        self._seq_num = 0
 
         # initialize UDP socket for ethernet control packets
         self.skarab_ctrl_sock = socket.socket(
@@ -71,7 +281,8 @@ class SkarabFpga(CasperFpga):
 
         # initialize UDP socket for fabric packets
         self.skarab_fpga_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # self.skarab_fpga_sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1)
+        # self.skarab_fpga_sock.setsockopt(socket.SOL_SOCKET,
+        #                                  socket.SO_SNDBUF, 1)
         self.skarab_ctrl_sock.setblocking(0)
 
         # create tuple for fabric packet address
@@ -86,6 +297,9 @@ class SkarabFpga(CasperFpga):
 
         # dict for sensor data, empty at initialization
         self.sensor_data = {}
+
+        self.gbes = []
+        self.gbes.append(FortyGbe(self, 0))
 
         # check if connected to host
         if self.is_connected():
@@ -123,111 +337,22 @@ class SkarabFpga(CasperFpga):
             timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=1)
         raise RuntimeError('Not yet tested')
 
-    def fortygbedeets(self):
-        from tengbe import IpAddress, Mac
-        gbebase = 0x50000
-        gbedata = []
-        for ctr in range(0, 0x40, 4):
-            gbedata.append(self.read_wishbone(gbebase + ctr))
-        gbebytes = []
-        for d in gbedata:
-            gbebytes.append((d >> 24) & 0xff)
-            gbebytes.append((d >> 16) & 0xff)
-            gbebytes.append((d >> 8) & 0xff)
-            gbebytes.append((d >> 0) & 0xff)
-        port_dump = gbebytes
-        returnval = {
-            'ip_prefix': '%i.%i.%i.' % (port_dump[0x10],
-                                        port_dump[0x11], port_dump[0x12])
-        }
-        returnval['ip'] = IpAddress('%i.%i.%i.%i' % (
-            port_dump[0x10], port_dump[0x11], port_dump[0x12], port_dump[0x13]))
-        returnval['mac'] = Mac('%i:%i:%i:%i:%i:%i' % (
-            port_dump[0x02], port_dump[0x03],
-            port_dump[0x04], port_dump[0x05],
-            port_dump[0x06], port_dump[0x07]))
-        returnval['gateway_ip'] = IpAddress('%i.%i.%i.%i' % (
-            port_dump[0x0c], port_dump[0x0d], port_dump[0x0e], port_dump[0x0f]))
-        returnval['fabric_port'] = ((port_dump[0x22] << 8) + (port_dump[0x23]))
-        returnval['fabric_en'] = bool(port_dump[0x21] & 1)
-        returnval['xaui_lane_sync'] = [
-            bool(port_dump[0x27] & 4), bool(port_dump[0x27] & 8),
-            bool(port_dump[0x27] & 16), bool(port_dump[0x27] & 32)]
-        returnval['xaui_status'] = [
-            port_dump[0x24], port_dump[0x25], port_dump[0x26], port_dump[0x27]]
-        returnval['xaui_chan_bond'] = bool(port_dump[0x27] & 64)
-        returnval['xaui_phy'] = {}
-        returnval['xaui_phy']['rx_eq_mix'] = port_dump[0x28]
-        returnval['xaui_phy']['rx_eq_pol'] = port_dump[0x29]
-        returnval['xaui_phy']['tx_preemph'] = port_dump[0x2a]
-        returnval['xaui_phy']['tx_swing'] = port_dump[0x2b]
-        returnval['multicast'] = {}
-        returnval['multicast']['base_ip'] = IpAddress(
-            '%i.%i.%i.%i' % (port_dump[0x30], port_dump[0x31],
-                             port_dump[0x32], port_dump[0x33]))
-        returnval['multicast']['ip_mask'] = IpAddress(
-            '%i.%i.%i.%i' % (port_dump[0x34], port_dump[0x35],
-                             port_dump[0x36], port_dump[0x37]))
-        returnval['multicast']['subnet_mask'] = IpAddress(
-            '%i.%i.%i.%i' % (port_dump[0x38], port_dump[0x39],
-                             port_dump[0x3a], port_dump[0x3b]))
-        possible_addresses = [int(returnval['multicast']['base_ip'])]
-        mask_int = int(returnval['multicast']['ip_mask'])
-        for ctr in range(32):
-            mask_bit = (mask_int >> ctr) & 1
-            if not mask_bit:
-                new_ips = []
-                for ip in possible_addresses:
-                    new_ips.append(ip & (~(1 << ctr)))
-                    new_ips.append(new_ips[-1] | (1 << ctr))
-                possible_addresses.extend(new_ips)
-        returnval['multicast']['rx_ips'] = []
-        tmp = list(set(possible_addresses))
-        for ip in tmp:
-            returnval['multicast']['rx_ips'].append(IpAddress(ip))
-        return returnval
-
-    def multicast_receive(self, ip_str, group_size):
+    def _get_device_address(self, device_name):
         """
-        Send a request to KATCP to have this tap instance send a multicast
-        group join request.
-        :param ip_str: A dotted decimal string representation of the base
-        mcast IP address.
-        :param group_size: An integer for how many mcast addresses from
-        base to respond to.
-        :return:
+        
+        :param device_name: 
+        :return: 
         """
-        import tengbe
-        ip = tengbe.IpAddress('239.2.0.64')
-        ip_high = int(ip) >> 16
-        ip_low = int(ip) & 65535
-
-        mask = tengbe.IpAddress('255.255.255.255')
-        mask_high = int(mask) >> 16
-        mask_low = int(mask) & 65535
-
-        request = sd.ConfigureMulticastReq(
-            self.seq_num, 1, ip_high, ip_low, mask_high, mask_low)
-
-        resp = self.send_packet(payload=request.create_payload(),
-                                response_type='ConfigureMulticastResp',
-                                expect_response=True,
-                                command_id=sd.MULTICAST_REQUEST,
-                                number_of_words=11, pad_words=4)
-
-        resp_ip = tengbe.IpAddress(
-            resp.fabric_multicast_ip_address_high << 16 |
-            resp.fabric_multicast_ip_address_low)
-
-        resp_mask = tengbe.IpAddress(
-            resp.fabric_multicast_ip_address_mask_high << 16 |
-            resp.fabric_multicast_ip_address_mask_low)
-
-        LOGGER.info('Multicast Configured')
-        LOGGER.info('Multicast address: {}'.format(resp_ip.ip_str))
-        LOGGER.info('Multicast mask: {}'.format(resp_mask.ip_str))
-
-        raise NotImplementedError
+        # map device name to address, if can't find, bail
+        if device_name in self.memory_devices:
+            return self.memory_devices[device_name].address
+        elif type(device_name) == int and 0 <= device_name < 2 ** 32:
+            # also support absolute address values
+            LOGGER.warning('Absolute address given: 0x%06x' % device_name)
+            return device_name
+        errmsg = 'Could not find device: %s' % device_name
+        LOGGER.error(errmsg)
+        raise UnknownDeviceError(errmsg)
 
     def read(self, device_name, size, offset=0):
         """
@@ -237,60 +362,69 @@ class SkarabFpga(CasperFpga):
         :param offset: start at this offset, offset in bytes
         :return: binary data string
         """
-        # map device name to address, if can't find, bail
-        if device_name in self.memory_devices:
-            addr = self.memory_devices[device_name].address
-        elif type(device_name) == int and 0 <= device_name < 2 ** 32:
-            # also support absolute address values
-            LOGGER.warning('Absolute address given.')
-            addr = device_name
-        else:
-            LOGGER.error('Unknown device name')
-            raise KeyError
-
+        if size > 4:
+            # use a bulk read if more than 4 bytes are requested
+            return self._bulk_read(device_name, size, offset)
+        addr = self._get_device_address(device_name)
         # can only read 32-bits (4 bytes) at a time
         # work out how many reads we require
-        num_reads = int(math.ceil(size / 4.0))
-
-        # string to store binary data read
-        data = ''
-
+        num_reads = int(math.ceil((size + offset) / 4.0))
+        # LOGGER.info(
+        #     'size(%i) offset(%i) addr(0x%06x) '
+        #     'numreads(%i)' % (size, offset, addr, num_reads))
         # address to read is starting address plus offset
         addr += offset
+        data = ''
         for readctr in range(num_reads):
-
             addr_high, addr_low = self.data_split_and_pack(addr)
-
-            # # create payload packet structure for read request
-            # request = sd.ReadWishboneReq_refactor(
-            #     self.seq_num, addr_high, addr_low)
-            #
-            # # send read request
-            # resp = self.send_packet_refactor(
-            #     request, number_of_words=11, pad_words=5)
-
             # create payload packet structure for read request
             request = sd.ReadWishboneReq(self.seq_num, addr_high, addr_low)
-            resp = self.send_packet(payload=request.create_payload(),
-                                    response_type='ReadWishboneResp',
-                                    expect_response=True,
-                                    command_id=sd.READ_WISHBONE,
-                                    number_of_words=11, pad_words=5)
-
+            resp = self.send_packet(
+                payload=request.create_payload(),
+                response_type='ReadWishboneResp', expect_response=True,
+                command_id=sd.READ_WISHBONE, number_of_words=11, pad_words=5)
             # merge high and low binary data for the current read
             new_read = struct.pack('!H', resp.read_data_high) + \
                 struct.pack('!H', resp.read_data_low)
-
             # append current read to read data
             data += new_read
-
             # increment addr by 4 to read the next 4 bytes (next 32-bit reg)
             addr += 4
-
         # return the number of bytes requested
         return data[offset: offset + size]
 
-    def bulk_read(self, device_name, size, offset=0):
+    def _bulk_read_req(self, address, words_to_read):
+        """
+        
+        :param address: the address at which to read
+        :param words_to_read: how many 32-bit words should be read
+        :return: binary data string 
+        """
+        # LOGGER.info('reading @ 0x%06x - %i words' % (address, words_to_read))
+        if words_to_read > sd.MAX_READ_32WORDS:
+            raise RuntimeError('Cannot read more than %i words - '
+                               'asked for %i' % (sd.MAX_READ_32WORDS,
+                                                 words_to_read))
+        start_addr_high, start_addr_low = self.data_split_and_pack(address)
+        # create payload packet structure for read request
+        # the uBlaze will only read as much as you tell it to, but will
+        # return the the whole lot, zeros in the rest
+        request = sd.BigReadWishboneReq(
+            self.seq_num, start_addr_high, start_addr_low, words_to_read)
+        # send read request
+        response = self.send_packet(
+            payload=request.create_payload(),
+            response_type='BigReadWishboneResp', expect_response=True,
+            command_id=sd.BIG_READ_WISHBONE, number_of_words=999,
+            pad_words=0)
+        if response is None:
+            errmsg = 'Bulk read failed.'
+            raise ReadFailed(errmsg)
+        # response.read_data is a list of 16-bit words, pack it
+        read_data = response.read_data[0:words_to_read*2]
+        return struct.pack('>%iH' % len(read_data), *read_data)
+
+    def _bulk_read(self, device_name, size, offset=0):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
@@ -298,45 +432,30 @@ class SkarabFpga(CasperFpga):
         :param offset: start at this offset, offset in bytes
         :return: binary data string
         """
-
-        # map device name to address, if can't find, bail
-        if device_name in self.memory_devices:
-            addr = self.memory_devices[device_name].address
-        elif type(device_name) == int and 0 <= device_name < 2 ** 32:
-            # also support absolute address values
-            LOGGER.warning('Absolute address given.')
-            addr = device_name
-        else:
-            LOGGER.error("Unknown device name")
-            raise KeyError
-
-        # can only read 32-bits (4 bytes) at a time
-        # work out how many reads we require
-        num_reads = int(math.ceil(size / 4.0))
-
-        start_addr_high, start_addr_low = self.data_split_and_pack(addr)
-
-        # create payload packet structure for read request
-        request = sd.BigReadWishboneReq(self.seq_num,
-                                        start_addr_high, start_addr_low,
-                                        num_reads)
-        # send read request
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='BigReadWishboneResp',
-                                    expect_response=True,
-                                    command_id=sd.BIG_READ_WISHBONE,
-                                    number_of_words=999, pad_words=0)
-
-        if response is None:
-            errmsg = 'Bulk read failed.'
-            raise ReadFailed(errmsg)
-
+        addr = self._get_device_address(device_name)
+        # LOGGER.info('addr(0x%06x) size(%i) offset(%i)' % (addr, size, offset))
+        bounded_offset = int(math.floor(offset / 4.0) * 4.0)
+        offset_diff = offset - bounded_offset
+        # LOGGER.info('bounded_offset(%i)' % bounded_offset)
+        addr += bounded_offset
+        size += offset_diff
+        # LOGGER.info('offset_addr(0x%06x) offset_size(%i)' % (addr, size))
+        num_words_to_read = int(math.ceil(size / 4.0))
+        maxreadwords = 1.0 * sd.MAX_READ_32WORDS
+        num_reads = int(math.ceil(num_words_to_read / maxreadwords))
+        # LOGGER.info('words_to_read(0x%06x) loops(%i)' % (num_words_to_read,
+        #                                                  num_reads))
         data = ''
-        read_data = response.read_data  # list of 16-bit words
-        data += data.join([struct.pack('!H', word) for word in read_data])
-
+        data_left = num_words_to_read
+        for rdctr in range(num_reads):
+            to_read = (sd.MAX_READ_32WORDS if data_left > sd.MAX_READ_32WORDS
+                       else data_left)
+            data += self._bulk_read_req(addr, to_read)
+            data_left -= sd.MAX_READ_32WORDS
+            addr += to_read * 4
+        # LOGGER.info('returning data[%i:%i]' % (offset_diff, size))
         # return the number of bytes requested
-        return data[offset: offset + size]
+        return data[offset_diff: size]
 
     def read_byte_level(self, device_name, size, offset=0):
         """
@@ -487,6 +606,7 @@ class SkarabFpga(CasperFpga):
             self.__create_memory_map()
         else:
             # if not fpg file, then
+            raise NotImplementedError
             self._CasperFpga__reset_device_info()
         # update programming info
         self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
@@ -505,7 +625,6 @@ class SkarabFpga(CasperFpga):
         programmed into the SDRAM. DOES NOT WORK WHEN PROGRAMMING VIA 40GbE
         :return:
         """
-
         # flag to enable/disable padding of data send over udp pkt
         padding = True
 
@@ -704,6 +823,13 @@ class SkarabFpga(CasperFpga):
         and hex files)
         :return: True, if success
         """
+        # set the port back to fabric programming
+        if self.gbes[0].get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
+            LOGGER.info('Resetting 40gbe port to 0x%04x' %
+                        sd.ETHERNET_FABRIC_PORT_ADDRESS)
+            self.gbes[0].set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
+            time.sleep(1)
+
         # put the interface into programming mode
         self.config_prog_mux(user_data=0)
 
@@ -939,12 +1065,13 @@ class SkarabFpga(CasperFpga):
         # return response from skarab
         return SkarabFpga.sd_dict[response_type](*unpacked_data)
 
-    def increment_seq(self):
-        """
-        The ONLY place seq_num should be incremented
-        :return:
-        """
-        self.seq_num = 0 if self.seq_num >= 0xffff else self.seq_num + 1
+    @property
+    def seq_num(self):
+        return self._seq_num
+
+    @seq_num.setter
+    def seq_num(self, value):
+        self._seq_num = 0 if self._seq_num >= 0xffff else self._seq_num + 1
 
     def send_packet(self, payload, response_type,
                     expect_response, command_id, number_of_words,
@@ -984,7 +1111,7 @@ class SkarabFpga(CasperFpga):
                 skarab_socket.sendto(payload, port)
                 if not expect_response:
                     LOGGER.debug('No response expected, returning')
-                    self.increment_seq()
+                    self.seq_num += 1
                     return None
                 LOGGER.debug('Waiting for response.')
                 # wait for response until timeout
@@ -1014,7 +1141,7 @@ class SkarabFpga(CasperFpga):
                         LOGGER.error(errmsg)
                         raise SkarabSendPacketError(errmsg)
                     LOGGER.debug('Response packet received')
-                    self.increment_seq()
+                    self.seq_num += 1
                     return response_payload
                 else:
                     # no data received, retransmit
@@ -1042,7 +1169,7 @@ class SkarabFpga(CasperFpga):
             # read away the data in the recv buffer
             _ = skarab_socket.recvfrom(4096)
             # increment sequence number to re-synchronize request/response msgs
-            self.increment_seq()
+            self.seq_num += 1
         return True
 
     # low level access functions
@@ -1055,7 +1182,7 @@ class SkarabFpga(CasperFpga):
         # trigger a reboot of the FPGA
         self.sdram_reconfigure(do_reboot=True)
         # reset sequence numbers
-        self.seq_num = 0
+        self._seq_num = 0
         # reset the sdram programmed flag
         self.__sdram_programmed = False
         # clear prog_info
@@ -1069,13 +1196,10 @@ class SkarabFpga(CasperFpga):
         """
         output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
                                       sd.ROACH3_FPGA_RESET, False)
-
         # reset seq num?
-        # self.seq_num = 0
-
+        # self._seq_num = 0
         # sleep to allow DHCP configuration
         time.sleep(1)
-
         return output
 
     def shutdown_skarab(self):
@@ -1086,16 +1210,12 @@ class SkarabFpga(CasperFpga):
         # should this function close the sockets and then attempt to reopen 
         # once board is powered on? shut down requires two writes
         LOGGER.info('Shutting board down.')
-
         self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
                              sd.ROACH3_SHUTDOWN, False)
-
         output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_1_ADDR,
                                       sd.ROACH3_SHUTDOWN, False)
-
         # reset sequence number
-        self.seq_num = 0
-
+        self._seq_num = 0
         return output
 
     def write_board_reg(self, reg_address, data, expect_response=True):
@@ -1366,14 +1486,18 @@ class SkarabFpga(CasperFpga):
 
     def sdram_program(self, first_packet, last_packet, write_words):
         """
-        Used to program a block of 4096 words to the boot SDRAM. These 4096 words are a chunk
-        of the FPGA image to program to SDRAM and boot from.
+        Used to program a block of 4096 words to the boot SDRAM. 
+        These 4096 words are a chunk of the FPGA image to program to 
+        SDRAM and boot from.
 
-        This data is sent over UDP packets to the fabric UDP port, not the control port- uC does not handle
-        these packets. No response is generated.
+        This data is sent over UDP packets to the fabric UDP port, not the 
+        control port- uC does not handle these packets. 
+        No response is generated.
 
-        :param first_packet: flag to indicate this pkt is the first pkt of the image
-        :param last_packet: flag to indicate this pkt is the last pkt of the image
+        :param first_packet: flag to indicate this pkt is the first pkt 
+            of the image
+        :param last_packet: flag to indicate this pkt is the last pkt of 
+            the image
         :param write_words: chunk of 4096 words from FPGA Image
         :return: None
         """
@@ -1397,20 +1521,30 @@ class SkarabFpga(CasperFpga):
                           continuity_test_out_low=0x00,
                           continuity_test_out_high=0x00):
         """
-        Used to perform various tasks realting to programming of the boot SDRAM and config
-        of Virtex7 FPGA from boot SDRAM
+        Used to perform various tasks realting to programming of the boot 
+        SDRAM and config of Virtex7 FPGA from boot SDRAM
         :param output_mode: specifies the mode of the flash SDRAM interface
         :param clear_sdram: clear any existing FPGA image from the SDRAM
-        :param finished_writing: indicate writing FPGA image to SDRAM is complete
-        :param about_to_boot: enable booting from the newly programmed image in SDRAM
-        :param do_reboot: trigger reboot of the Virtex7 FPGA and boot from image in SDRAM
-        :param reset_sdram_read_addr: reset the SDRAM read address so that reading SDRAM can start at 0x0
-        :param clear_eth_stats: clear ethernet packet statistics with regards to FPGA image containing packets
-        :param enable_debug: enable debug mode for reading data currently stored in SDRAM
-        :param do_sdram_async_read: used in debug mode to read the 32-bits of the SDRAM and advance read pointer by one
-        :param do_continuity_test: test continuity of the flash bus between the Virtex7 FPGA and the Spartan 3AN FPGA
-        :param continuity_test_out_low: Used in continuity debug mode, specify value to set lower 16 bits of the bus
-        :param continuity_test_out_high: Used in continuity debug mode, specify value to set upper 16 bits of the bus
+        :param finished_writing: indicate writing FPGA image to SDRAM 
+            is complete
+        :param about_to_boot: enable booting from the newly programmed image 
+            in SDRAM
+        :param do_reboot: trigger reboot of the Virtex7 FPGA and boot from 
+            image in SDRAM
+        :param reset_sdram_read_addr: reset the SDRAM read address so that 
+            reading SDRAM can start at 0x0
+        :param clear_eth_stats: clear ethernet packet statistics with regards 
+            to FPGA image containing packets
+        :param enable_debug: enable debug mode for reading data currently 
+            stored in SDRAM
+        :param do_sdram_async_read: used in debug mode to read the 32-bits 
+            of the SDRAM and advance read pointer by one
+        :param do_continuity_test: test continuity of the flash bus between 
+            the Virtex7 FPGA and the Spartan 3AN FPGA
+        :param continuity_test_out_low: Used in continuity debug mode, 
+            specify value to set lower 16 bits of the bus
+        :param continuity_test_out_high: Used in continuity debug mode, 
+            specify value to set upper 16 bits of the bus
         :return: data read, if there was any
         """
         # create request object
@@ -1623,7 +1757,8 @@ class SkarabFpga(CasperFpga):
             raise SkarabSdramError(errmsg)
         LOGGER.info('Rebooting from SDRAM.')
 
-    def read_hmc_i2c(self, interface, slave_address, read_address, format_print=False):
+    def read_hmc_i2c(self, interface, slave_address, read_address,
+                     format_print=False):
         """
         Read a register on the HMC device via the I2C interface
         Prints the data in binary (32-bit) and hexadecimal formats
@@ -1638,27 +1773,22 @@ class SkarabFpga(CasperFpga):
         :param read_address: register address on device to read
         :return: read data / None if fails
         """
-
         response_type = 'sReadHMCI2CResp'
         expect_response = True
-
         # handle read address (pack it as 4 16-bit words)
         # TODO: handle this in the createPayload method
-        read_address = ''.join([struct.pack('!H', x) for x in
-                                struct.unpack('!4B', struct.pack('!I',
-                                                                 read_address))])
+        unpacked = struct.unpack('!4B', struct.pack('!I', read_address))
+        read_address = ''.join([struct.pack('!H', x) for x in unpacked])
 
         # create payload packet structure
         request = sd.ReadHMCI2CReq(self.seq_num, interface, slave_address,
                                    read_address)
-
         # send payload and return response object
         response = self.send_packet(payload=request.create_payload(),
                                     response_type='ReadHMCI2CResp',
                                     expect_response=True,
                                     command_id=sd.READ_HMC_I2C,
                                     number_of_words=15, pad_words=2)
-
         if response is None:
             errmsg = 'Invalid response to HMC I2C read request.'
             raise InvalidResponse(errmsg)
@@ -1798,8 +1928,8 @@ class SkarabFpga(CasperFpga):
             :param value: fan speed value
             :return: OK, WARNING or ERROR
             """
-
-            if value > ((self.sensor_data[fan_name.replace('_rpm','_pwm')] + 10.0) / 100.0) * \
+            # TODO - this statement it too long and unreadable!
+            if value > ((self.sensor_data[fan_name.replace('_rpm', '_pwm')] + 10.0) / 100.0) * \
                     sd.fan_speed_ranges[fan_name][0] or value < ((self.sensor_data[fan_name.replace('_rpm','_pwm')] - 10.0) / 100.0) * \
                     sd.fan_speed_ranges[fan_name][0]:
                 return 'ERROR'
