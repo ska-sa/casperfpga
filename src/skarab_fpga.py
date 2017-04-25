@@ -2349,18 +2349,18 @@ class SkarabFpga(CasperFpga):
             bitstream = file_name
 
         flash_write_checksum = 0x00
-        file_size = os.path.getsize(file_name)
+        size = len(bitstream)
 
         # Need to scroll through file until there is nothing left to read
-        with open(file_name, 'rb') as f:
-            for i in range(file_size / 2):
-                two_bytes = f.read(2)
-                one_word = struct.unpack('!H', two_bytes)[0]
-                flash_write_checksum += one_word
+        for i in range(0, size, 2):
+            # This is just getting a substring, need to convert to hex
+            two_bytes = bitstream[i:i + 2]
+            one_word = struct.unpack('!H', two_bytes)[0]
+            flash_write_checksum += one_word
 
-        if (file_size % 8192) != 0:
+        if (size % 8192) != 0:
             # padding required
-            num_padding_bytes = 8192 - (file_size % 8192)
+            num_padding_bytes = 8192 - (size % 8192)
             for i in range(num_padding_bytes / 2):
                 flash_write_checksum += 0xffff
 
