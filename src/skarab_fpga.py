@@ -2475,8 +2475,16 @@ class SkarabFpga(CasperFpga):
 
         if file_extension == '.fpg':
             bitstream = self.extract_bitstream(file_name)
+        elif file_extension == '.bin':
+            bitstream = open(file_name, 'rb')
+        elif file_extension == '.hex':
+            bitstream = self.convert_hex_to_bin(file_name)
+        elif file_extension == '.bit':
+            bitstream = self.convert_bit_to_bin(file_name)
         else:
-            bitstream = file_name
+            # Problem
+            errmsg = "Unrecognised file extension"
+            raise InvalidSkarabBitstream(errmsg)
 
         flash_write_checksum = 0x00
         size = len(bitstream)
