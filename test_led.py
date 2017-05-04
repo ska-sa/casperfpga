@@ -1,7 +1,7 @@
 import corr
 import i2cSnap
 import time
-import device
+from gpio import PCF8574
 import sys
 
 HOST = '10.1.0.23'
@@ -14,8 +14,8 @@ time.sleep(0.1)
 i2c = i2cSnap.I2C(r, 'i2c_ant1')
 i2c.clockSpeed(200)
 
-led0 = device.GPIO(i2c,LED0_ADDR)
-led1 = device.GPIO(i2c,LED1_ADDR)
+led0 = PCF8574(i2c,LED0_ADDR)
+led1 = PCF8574(i2c,LED1_ADDR)
 
 i=0
 while(True):
