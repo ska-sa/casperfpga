@@ -55,7 +55,7 @@ class FortyGbe(object):
     """
     
     """
-    def __init__(self, parent, position):
+    def __init__(self, parent, position, base_addr=0x50000):
         """
         
         :param parent: 
@@ -63,6 +63,8 @@ class FortyGbe(object):
         """
         self.parent = parent
         self.position = position
+        self.base_addr = base_addr
+
 
     def _wbone_rd(self, addr):
         """
@@ -86,12 +88,12 @@ class FortyGbe(object):
 
         :return: 
         """
-        en_port = self._wbone_rd(0x50000 + 0x20)
+        en_port = self._wbone_rd(self.base_addr + 0x20)
         if en_port >> 16 == 1:
             return
         en_port_new = (1 << 16) + (en_port & (2 ** 16 - 1))
-        self._wbone_wr(0x50000 + 0x20, en_port_new)
-        if self._wbone_rd(0x50000 + 0x20) != en_port_new:
+        self._wbone_wr(self.base_addr + 0x20, en_port_new)
+        if self._wbone_rd(self.base_addr + 0x20) != en_port_new:
             errmsg = 'Error enabling 40gbe port'
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
@@ -101,12 +103,12 @@ class FortyGbe(object):
 
         :return: 
         """
-        en_port = self._wbone_rd(0x50000 + 0x20)
+        en_port = self._wbone_rd(self.base_addr + 0x20)
         if en_port >> 16 == 0:
             return
         old_port = en_port & (2 ** 16 - 1)
-        self._wbone_wr(0x50000 + 0x20, old_port)
-        if self._wbone_rd(0x50000 + 0x20) != old_port:
+        self._wbone_wr(self.base_addr + 0x20, old_port)
+        if self._wbone_rd(self.base_addr + 0x20) != old_port:
             errmsg = 'Error disabling 40gbe port'
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
@@ -116,7 +118,7 @@ class FortyGbe(object):
         
         :return: 
         """
-        ip = self._wbone_rd(0x50000 + 0x10)
+        ip = self._wbone_rd(self.base_addr + 0x10)
         return caspertengbe.IpAddress(ip)
 
     def get_port(self):
@@ -124,7 +126,7 @@ class FortyGbe(object):
 
         :return: 
         """
-        en_port = self._wbone_rd(0x50000 + 0x20)
+        en_port = self._wbone_rd(self.base_addr + 0x20)
         return en_port & (2 ** 16 - 1)
 
     def set_port(self, port):
@@ -133,12 +135,12 @@ class FortyGbe(object):
         :param port: 
         :return: 
         """
-        en_port = self._wbone_rd(0x50000 + 0x20)
+        en_port = self._wbone_rd(self.base_addr + 0x20)
         if en_port & (2 ** 16 - 1) == port:
             return
         en_port_new = ((en_port >> 16) << 16) + port
-        self._wbone_wr(0x50000 + 0x20, en_port_new)
-        if self._wbone_rd(0x50000 + 0x20) != en_port_new:
+        self._wbone_wr(self.base_addr + 0x20, en_port_new)
+        if self._wbone_rd(self.base_addr + 0x20) != en_port_new:
             errmsg = 'Error setting 40gbe port to 0x%04x' % port
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
@@ -149,7 +151,7 @@ class FortyGbe(object):
         :return: 
         """
         from tengbe import IpAddress, Mac
-        gbebase = 0x50000
+        gbebase = self.base_addr
         gbedata = []
         for ctr in range(0, 0x40, 4):
             gbedata.append(self._wbone_rd(gbebase + ctr))
@@ -300,6 +302,7 @@ class SkarabFpga(CasperFpga):
 
         self.gbes = []
         self.gbes.append(FortyGbe(self, 0))
+        self.gbes.append(FortyGbe(self, 0, 0x50000-16384))
 
         # check if connected to host
         if self.is_connected():
@@ -823,11 +826,17 @@ class SkarabFpga(CasperFpga):
         and hex files)
         :return: True, if success
         """
+
         # set the port back to fabric programming
         if self.gbes[0].get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
             LOGGER.info('Resetting 40gbe port to 0x%04x' %
                         sd.ETHERNET_FABRIC_PORT_ADDRESS)
             self.gbes[0].set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
+        # set the port back to fabric programming
+        if self.gbes[1].get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
+            LOGGER.info('Resetting 1gbe port to 0x%04x' %
+                        sd.ETHERNET_FABRIC_PORT_ADDRESS)
+            self.gbes[1].set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
             time.sleep(1)
 
         # put the interface into programming mode
