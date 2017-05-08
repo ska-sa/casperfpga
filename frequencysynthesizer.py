@@ -42,7 +42,7 @@ class LMX2581(WishBoneDevice):
 	M06_RDADDR = 0b1111 << 5
 	M06_UWIRE_LOCK = 1 << 4
 
-	M05_out_LDEN = 1 << 24
+	M05_OUT_LDEN = 1 << 24
 	M05_OSC_FREQ = 0b111 << 21
 	M05_BUFEN_DIS = 1 << 20
 	M05_VCO_SEL_MODE = 0b11 << 15
@@ -81,31 +81,29 @@ class LMX2581(WishBoneDevice):
 	M00_PLL_N = 0b111111111111 << 16 # PLL[11:0] PLL Feedback Divider Value
 	M00_PLL_NUM = 0b111111111111 << 4 # PLL_NUM[11:0] PLL Fractional Numerator
 	
-	Fosc = 10
+	FOSC = 10
 
 	# Using recommanded parameter settings in the following datasheet
 	# http://www.ti.com/lit/ds/symlink/lmx2581.pdf
 	# Also borrow some lines from https://github.com/domagalski/snap-synth
 
 	def __init__(self, interface, controller_name):
-		super(FrequencySynthesizer, self).__init__(interface, controller_name)
+		super(FrequencySynthesizer, self).__init__(interface, controller_name) 
+
+	def init(self):
 
 		# Here is the booting sequence of LMX2581 according to 8.5.2
 		# After reset, pretty much registers load their default/optimal values
 		# No further intervention is needed.
+
 		self.reset()
 
 		# Program some registers
-		# Set DLD_ERR_CNT to 4 according to 8.6.1.2.1
-		self.write(4, self.A03, self.M13_DLD_ERR_CNT)
-		# Set DLD_PASS_CNT to 32 according to 8.6.1.2.2
-		self.write(32, self.A03, self.M13_DLD_PASS_CNT)
-		# Disable OSC_2X
-		self.write(0, self.A02, self.M02_OSC_2X)
-		# Bypass PLL_R (setting it to 1)
-		self.write(1, self.A01, self.M01_PLL_R)
-		# Register R13: Page 30: 8.6.1.2.3
-		freq_pd = f_osc / PLL_R
+
+		# Register R15: ... to be complete
+
+		# Register R13: Page 30: 8.6.1.2
+		freq_pd = self.FOSC / 1
 		if freq_pd > 130:
 			DLD_TOL = 0
 		elif freq_pd > 80 and freq_pd < 130:
@@ -118,12 +116,79 @@ class LMX2581(WishBoneDevice):
 			DLD_TOL = 4
 		else:
 			DLD_TOL = 5
-		self.write(DLD_TOL, self.A13, self.M13_DLD_TOL)
+		r13 = self._set(0x4100,4,self.M13_DLD_ERR_CNT)
+		r13 = self._set(r13, 32, self.M13_DLD_PASS_CNT)
+		r13 = self._set(r13, DLD_TOL, self.M13_DLD_TOL)
+		self.write(r13, self.A13)
 
-		# blablablabla...
-		
-		# Program R0 again or just set initial frequency now
-		self.setFreq(500)
+		# Register R07: Page 31: 8.6.1.4
+		r07 = self._set(0, 0, self.M07_FL_SELECT)
+		r07 = self._set(r07, 2, self.M07_FL_PINMODE)
+		r07 = self._set(r07, 0, self.M07_FL_INV)
+		r07 = self._set(r07, 4, self.M07_MUXOUT_SELECT)
+		r07 = self._set(r07, 0, self.M07_MUX_INV)
+		r07 = self._set(r07, 1, self.M07_MUXOUT_PINMODE)
+		r07 = self._set(r07, 2, self.M07_LD_SELECT)
+		r07 = self._set(r07, 0, self.M07_LD_INV)
+		r07 = self._set(r07, 0, self.M07_LD_PINMODE)
+		self.write(r07, self.A07)
+
+		# Register R06: Page 33: 8.6.1.5
+		# Point RDADDR to R06, because its good for diagnostics
+		r06 = self._set(0x400, 6, self.M06_RDADDR)
+		self.write(r06, self.A06)
+
+		# Register R05: Page 34: 8.6.1.6
+		r05 = self._set(0, 0, self.M05_OUT_LDEN)
+		r05 = self._set(r05, 0, self.M05_OSC_FREQ)
+		r05 = self._set(r05, 0, self.M05_BUFEN_DIS)
+		r05 = self._set(r05, 0, self.M05_VCO_SEL_MODE)
+		r05 = self._set(r05, 0, self.M05_OUTB_MUX)
+		r05 = self._set(r05, 0, self.M05_OUTA_MUX)
+		r05 = self._set(r05, 0, self.M05_0_DLY)
+		r05 = self._set(r05, 0, self.M05_MODE)
+		r05 = self._set(r05, 0, self.M05_PWDN_MODE)
+		r05 = self._set(r05, 0, self.M05_RESET)
+		self.write(r05, self.A05)
+
+		# Register R04: Page 36: 8.6.1.7
+		r04 = self._set(0, 0, self.M04_PFD_DLY)
+		r04 = self._set(r04, 0, self.M04_PFD_DLY)
+		r04 = self._set(r04, 0, self.M04_FL_FRCE)
+		r04 = self._set(r04, 0, self.M04_FL_TOC)
+		r04 = self._set(r04, 0, self.M04_FL_CPG)
+		r04 = self._set(r04, 0, self.M04_CPG_BLEED)
+		self.write(r04, self.A04)
+
+		# Register R03: Page 38: 8.6.1.8
+		r03 = self._set(0x20000000, 0, self.M03_VCO_DIV)
+		r03 = self._set(r03, 15, self.M03_OUTB_PWR)
+		r03 = self._set(r03, 15, self.M03_OUTA_PWR)
+		r03 = self._set(r03, 0, self.M03_OUTB_PD)
+		r03 = self._set(r03, 0, self.M03_OUTA_PD)
+		self.write(r03, self.A03)
+
+		# Register R02: Page 39: 8.6.1.9
+		r02 = self._set(0x04000000, 0, self.M02_OSC_2X)
+		r02 = self._set(r02, 1, self.M02_CPP)
+		r02 = self._set(r02, 0, self.M02_PLL_DEN)
+		self.write(r02, self.A02)
+
+		# Register R01: Page 40: 8.6.1.10
+		r01 = self._set(0, 0, self.M01_CPG)
+		r01 = self._set(r01, 0, self.M01_VCO_SEL)
+		r01 = self._set(r01, 0, self.M01_PLL_NUM)
+		r01 = self._set(r01, 0, self.M01_FRAC_ORDER)
+		r01 = self._set(r01, 1, self.M01_PLL_R)
+		self.write(r01, self.A01)
+
+		# Register R00: Page 41: 8.6.1.11
+		r00 = self._set(0, 0, self.M00_ID)
+		r00 = self._set(r00, 0, self.M00_FRAC_DITHER)
+		r00 = self._set(r00, 0, self.M00_NO_FCAL)
+		r00 = self._set(r00, 7, self.M00_PLL_N)
+		r00 = self._set(r00, 0, self.M00_PLL_NUM)
+		self.write(r00, self.A00)
 
 	def powerUp(self):
 		self.write(0, self.A05, self.M05_PWDN_MODE)
@@ -131,7 +196,7 @@ class LMX2581(WishBoneDevice):
 	def powerDown(self):
 		self.write(1, self.A05, self.M05_PWDN_MODE)
 
-	def outputPower(self,p=47):
+	def outputPower(self,p=15):
 		self.write(p, self.A03, self.M03_OUTA_PWR)
 		self.write(p, self.A03, self.M03_OUTB_PWR)
 
@@ -167,9 +232,9 @@ class LMX2581(WishBoneDevice):
 
 		return (PLL_N, PLL_NUM, PLL_DEN, VCO_DIV)
 
-	def setFreq(self, synth_mhz, f_osc=10):
+	def setFreq(self, synth_mhz):
 
-		PLL_N, PLL_NUM, PLL_DEN, VCO_DIV = self.get_osc_values(synth_mhz,f_osc)
+		PLL_N, PLL_NUM, PLL_DEN, VCO_DIV = self.get_osc_values(synth_mhz,self.FOSC)
 
 		# Select the VCO frequency
 		# VCO1: 1800 to 2270 NHz
@@ -242,7 +307,7 @@ class LMX2581(WishBoneDevice):
 
 	def write(self, data, addr=0, mask=0):
 		if mask:
-			r = self.read(addr) << 4
+			r = self.read(addr)
 			r = self._set(r, data, mask)
 			self.write(r, addr)
 		else:
@@ -251,7 +316,7 @@ class LMX2581(WishBoneDevice):
 
 	def read(self, addr):
 		# Tell PLL which register to read
-		self.write(addr * self.M06_RDADDR, self.A06)
+		self.write(addr, self.A06, self.M06_RDADDR)
 		# Read the register by a dummy write
 		self.write(self.CMD10)
 		return self._read()
