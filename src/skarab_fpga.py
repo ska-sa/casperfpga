@@ -69,7 +69,6 @@ class FortyGbe(object):
         self.position = position
         self.base_addr = base_addr
 
-
     def _wbone_rd(self, addr):
         """
         
@@ -361,15 +360,16 @@ class SkarabFpga(CasperFpga):
         LOGGER.error(errmsg)
         raise UnknownDeviceError(errmsg)
 
-    def read(self, device_name, size, offset=0):
+    def read(self, device_name, size, offset=0, use_bulk=True):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
+        :param use_bulk: use the bulk read function
         :return: binary data string
         """
-        if size > 4:
+        if (size > 4) and use_bulk:
             # use a bulk read if more than 4 bytes are requested
             return self._bulk_read(device_name, size, offset)
         addr = self._get_device_address(device_name)
