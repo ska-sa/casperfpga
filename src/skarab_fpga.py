@@ -59,7 +59,7 @@ class FortyGbe(object):
     """
     
     """
-    def __init__(self, parent, position):
+    def __init__(self, parent, position, base_addr=0x50000):
         """
         
         :param parent: 
@@ -67,6 +67,8 @@ class FortyGbe(object):
         """
         self.parent = parent
         self.position = position
+        self.base_addr = base_addr
+
 
     def _wbone_rd(self, addr):
         """
@@ -90,12 +92,12 @@ class FortyGbe(object):
 
         :return: 
         """
-        en_port = self._wbone_rd(0x50000 + 0x20)
+        en_port = self._wbone_rd(self.base_addr + 0x20)
         if en_port >> 16 == 1:
             return
         en_port_new = (1 << 16) + (en_port & (2 ** 16 - 1))
-        self._wbone_wr(0x50000 + 0x20, en_port_new)
-        if self._wbone_rd(0x50000 + 0x20) != en_port_new:
+        self._wbone_wr(self.base_addr + 0x20, en_port_new)
+        if self._wbone_rd(self.base_addr + 0x20) != en_port_new:
             errmsg = 'Error enabling 40gbe port'
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
@@ -105,12 +107,12 @@ class FortyGbe(object):
 
         :return: 
         """
-        en_port = self._wbone_rd(0x50000 + 0x20)
+        en_port = self._wbone_rd(self.base_addr + 0x20)
         if en_port >> 16 == 0:
             return
         old_port = en_port & (2 ** 16 - 1)
-        self._wbone_wr(0x50000 + 0x20, old_port)
-        if self._wbone_rd(0x50000 + 0x20) != old_port:
+        self._wbone_wr(self.base_addr + 0x20, old_port)
+        if self._wbone_rd(self.base_addr + 0x20) != old_port:
             errmsg = 'Error disabling 40gbe port'
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
@@ -120,7 +122,7 @@ class FortyGbe(object):
         
         :return: 
         """
-        ip = self._wbone_rd(0x50000 + 0x10)
+        ip = self._wbone_rd(self.base_addr + 0x10)
         return caspertengbe.IpAddress(ip)
 
     def get_port(self):
@@ -128,7 +130,7 @@ class FortyGbe(object):
 
         :return: 
         """
-        en_port = self._wbone_rd(0x50000 + 0x20)
+        en_port = self._wbone_rd(self.base_addr + 0x20)
         return en_port & (2 ** 16 - 1)
 
     def set_port(self, port):
@@ -137,12 +139,12 @@ class FortyGbe(object):
         :param port: 
         :return: 
         """
-        en_port = self._wbone_rd(0x50000 + 0x20)
+        en_port = self._wbone_rd(self.base_addr + 0x20)
         if en_port & (2 ** 16 - 1) == port:
             return
         en_port_new = ((en_port >> 16) << 16) + port
-        self._wbone_wr(0x50000 + 0x20, en_port_new)
-        if self._wbone_rd(0x50000 + 0x20) != en_port_new:
+        self._wbone_wr(self.base_addr + 0x20, en_port_new)
+        if self._wbone_rd(self.base_addr + 0x20) != en_port_new:
             errmsg = 'Error setting 40gbe port to 0x%04x' % port
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
@@ -153,7 +155,7 @@ class FortyGbe(object):
         :return: 
         """
         from tengbe import IpAddress, Mac
-        gbebase = 0x50000
+        gbebase = self.base_addr
         gbedata = []
         for ctr in range(0, 0x40, 4):
             gbedata.append(self._wbone_rd(gbebase + ctr))
@@ -304,6 +306,7 @@ class SkarabFpga(CasperFpga):
 
         self.gbes = []
         self.gbes.append(FortyGbe(self, 0))
+        self.gbes.append(FortyGbe(self, 0, 0x50000-16384))
 
         # check if connected to host
         if self.is_connected():
@@ -839,11 +842,17 @@ class SkarabFpga(CasperFpga):
         and hex files)
         :return: True, if success
         """
+
         # set the port back to fabric programming
         if self.gbes[0].get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
             LOGGER.info('Resetting 40gbe port to 0x%04x' %
                         sd.ETHERNET_FABRIC_PORT_ADDRESS)
             self.gbes[0].set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
+        # set the port back to fabric programming
+        if self.gbes[1].get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
+            LOGGER.info('Resetting 1gbe port to 0x%04x' %
+                        sd.ETHERNET_FABRIC_PORT_ADDRESS)
+            self.gbes[1].set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
             time.sleep(1)
 
         # put the interface into programming mode
@@ -2491,22 +2500,30 @@ class SkarabFpga(CasperFpga):
 
         if file_extension == '.fpg':
             bitstream = self.extract_bitstream(file_name)
+        elif file_extension == '.bin':
+            bitstream = open(file_name, 'rb').read()
+        elif file_extension == '.hex':
+            bitstream = self.convert_hex_to_bin(file_name)
+        elif file_extension == '.bit':
+            bitstream = self.convert_bit_to_bin(file_name)
         else:
-            bitstream = file_name
+            # Problem
+            errmsg = "Unrecognised file extension"
+            raise InvalidSkarabBitstream(errmsg)
 
         flash_write_checksum = 0x00
-        file_size = os.path.getsize(file_name)
+        size = len(bitstream)
 
         # Need to scroll through file until there is nothing left to read
-        with open(file_name, 'rb') as f:
-            for i in range(file_size / 2):
-                two_bytes = f.read(2)
-                one_word = struct.unpack('!H', two_bytes)[0]
-                flash_write_checksum += one_word
+        for i in range(0, size, 2):
+            # This is just getting a substring, need to convert to hex
+            two_bytes = bitstream[i:i + 2]
+            one_word = struct.unpack('!H', two_bytes)[0]
+            flash_write_checksum += one_word
 
-        if (file_size % 8192) != 0:
+        if (size % 8192) != 0:
             # padding required
-            num_padding_bytes = 8192 - (file_size % 8192)
+            num_padding_bytes = 8192 - (size % 8192)
             for i in range(num_padding_bytes / 2):
                 flash_write_checksum += 0xffff
 
