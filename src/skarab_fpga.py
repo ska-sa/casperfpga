@@ -19,6 +19,10 @@ __date__ = 'April 2016'
 LOGGER = logging.getLogger(__name__)
 
 
+class SkarabProgrammingError(RuntimeError):
+    pass
+
+
 class SkarabSendPacketError(ValueError):
     pass
 
@@ -812,7 +816,19 @@ class SkarabFpga(CasperFpga):
         LOGGER.info('Programming of %s completed okay.' % filename)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
-                                  wait_complete=True):
+                                  wait_complete=True, attempts=2):
+        attempt_ctr = 0
+        while attempt_ctr < attempts:
+            res = self._upload_to_ram_and_program(filename, port, timeout,
+                                                  wait_complete)
+            if res:
+                return
+        raise SkarabProgrammingError('Gave up programming after %i attempt%s'
+                                     '' % (attempts,
+                                           's' if attempts > 1 else ''))
+
+    def _upload_to_ram_and_program(self, filename, port=-1, timeout=60,
+                                   wait_complete=True):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
