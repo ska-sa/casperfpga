@@ -753,15 +753,19 @@ class SkarabFpga(CasperFpga):
                 LOGGER.error('Uploading to SDRAM Failed.')
                 raise exc
 
+        # Moving checksum COMPARISON to be bypassed
+        # - But still Calculating and printing the values
+
+        # calculate checksum
+        local_checksum = self.calculate_checksum_using_bitstream(
+            image_to_program)
+        # read spartan checksum
+        spartan_checksum = self.get_spartan_checksum()
+        LOGGER.info('Spartan bitstream checksum: %s' % spartan_checksum)
+        LOGGER.info('Calculated bitstream checksum: %s' % local_checksum)
+
         use_checksum = False
         if use_checksum:
-            # calculate checksum
-            local_checksum = self.calculate_checksum_using_bitstream(
-                image_to_program)
-            LOGGER.debug('Calculated bitstream checksum: %s' % local_checksum)
-            # read spartan checksum
-            spartan_checksum = self.get_spartan_checksum()
-            LOGGER.debug('Spartan bitstream checksum: %s' % spartan_checksum)
             if spartan_checksum != local_checksum:
                 # checksum mismatch, so we clear sdram
                 self.clear_sdram()
@@ -783,12 +787,14 @@ class SkarabFpga(CasperFpga):
 
         # check if the number of packets sent equals the number of packets
         # programmed into the SDRAM
+
+        # check number of frames that have been programmed into the SDRAM
+        # TODO - fix the remote packet counter for 40gbe
+        rx_pkt_counts = self.check_programming_packet_count()
+        LOGGER.info('Sent %i packets, %i received.' % (
+            sent_pkt_counter, rx_pkt_counts['Ethernet Frames']))
+
         if check_pkt_count:
-            # check number of frames that have been programmed into the SDRAM
-            # TODO - fix the remote packet counter for 40gbe
-            rx_pkt_counts = self.check_programming_packet_count()
-            LOGGER.info('Sent %i packets, %i received.' % (
-                sent_pkt_counter, rx_pkt_counts['Ethernet Frames']))
             if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
                 # not all bitstream packets programmed into SDRAM
                 self.clear_sdram()
@@ -806,17 +812,21 @@ class SkarabFpga(CasperFpga):
             raise ProgrammingError(errmsg)
 
         if verify:
-            sdram_verified = self.verify_sdram_contents(image_to_program)
+            # SDRAM Verification usually takes the order of n-minutes
+            # sdram_verified = self.verify_sdram_contents(image_to_program)
+            sdram_verified = self.verify_sdram_contents(filename)
             if not sdram_verified:
                 self.clear_sdram()
                 errmsg = 'SDRAM verification failed. Clearing SDRAM.'
                 LOGGER.error(errmsg)
                 raise SkarabSdramError(errmsg)
             LOGGER.info('SDRAM verification passed.')
+            LOGGER.info('Programming of %s completed okay.' % filename)
+        else:
+            LOGGER.info('%s uploaded to RAM without being Verified.' % filename)
 
         self.__sdram_programmed = True
         self.prog_info['last_uploaded'] = filename
-        LOGGER.info('Programming of %s completed okay.' % filename)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
                                   wait_complete=True, attempts=2):
@@ -826,6 +836,7 @@ class SkarabFpga(CasperFpga):
                                                   wait_complete)
             if res:
                 return
+            LOGGER.info('Programming failed, retrying now...')
         raise SkarabProgrammingError('Gave up programming after %i attempt%s'
                                      '' % (attempts,
                                            's' if attempts > 1 else ''))
@@ -951,12 +962,28 @@ class SkarabFpga(CasperFpga):
         :return: True if successful
         """
 
-        # open binfile
-        f = open(filename, 'rb')
+        # get file extension
+        file_extension = os.path.splitext(filename)[1]
 
-        # read contents of file
-        file_contents = f.read()
-        f.close()
+        # check file extension to see what we're dealing with
+        if file_extension == '.fpg':
+            LOGGER.info('.fpg detected. Extracting .bin.')
+            file_contents = self.extract_bitstream(filename)
+        elif file_extension == '.hex':
+            LOGGER.info('.hex detected. Converting to .bin.')
+            file_contents = self.convert_hex_to_bin(filename)
+        elif file_extension == '.bit':
+            LOGGER.info('.bit file detected. Converting to .bin.')
+            file_contents = self.convert_bit_to_bin(filename)
+        elif file_extension == '.bin':
+            file_contents = open(filename, 'rb').read()
+            if not self.check_bitstream(file_contents):
+                LOGGER.info('Incompatible .bin file. Attemping to convert.')
+                file_contents = self.reorder_bytes_in_bin_file(
+                    file_contents)
+        else:
+            raise TypeError('Invalid file type. Only use .fpg, .bit, '
+                            '.hex or .bin files')
 
         # prep SDRAM for reading
         self.sdram_reconfigure(output_mode=sd.SDRAM_READ_MODE,
