@@ -792,7 +792,7 @@ class SkarabFpga(CasperFpga):
         # check number of frames that have been programmed into the SDRAM
         # TODO - fix the remote packet counter for 40gbe
         rx_pkt_counts = self.check_programming_packet_count()
-        LOGGER.info('Sent %i packets, %i received.' % (
+        LOGGER.info('PACKET COUNTER - Sent %i packets, %i received.' % (
             sent_pkt_counter, rx_pkt_counts['Ethernet Frames']))
 
         if check_pkt_count:
