@@ -17,6 +17,7 @@ for host in hosts:
     print '\t', host
 
 results = {host: [0, 0] for host in hosts}
+results_details = {host: [] for host in hosts}
 loops = 10
 loopctr = 0
 while loopctr < loops:
@@ -28,7 +29,7 @@ while loopctr < loops:
             print f.get_firmware_version(),
             print f.get_embedded_software_ver(),
             res = f.upload_to_ram_and_program(
-                '/home/paulp/bofs/spead_test_2017-4-6_1412.fpg')
+                '/home/paulp/bofs/spead_test_2017-4-10_1528.fpg')
             if not res:
                 raise RuntimeError
             results[host][0] += 1

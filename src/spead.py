@@ -125,10 +125,12 @@ class SpeadPacket(object):
             hdr_id, hdr_data = SpeadPacket.decode_item_pointer(
                 data[ctr], main_header['id_bits'], main_header['address_bits'])
             if hdr_id in headers.keys():
-                print headers
-                print 'but new header: {}'.format(hdr_id)
-                raise SpeadPacket.SpeadPacketError(
-                    'Header ID 0x%04x already in packet headers.' % hdr_id)
+                # HACK - the padded headers are 0x00 - d'oh.
+                if hdr_id != 0x00:
+                    print 'Current headers:', headers
+                    print 'but new header: {}'.format(hdr_id)
+                    raise SpeadPacket.SpeadPacketError(
+                        'Header ID 0x%04x already in packet headers.' % hdr_id)
             headers[hdr_id] = hdr_data
             if hdr_id == 0x0004:
                 hdr_pkt_len_bytes = hdr_data
@@ -148,12 +150,14 @@ class SpeadPacket(object):
             pktlen += 1
         if (expected_length is not None) and (pktlen != expected_length):
             raise SpeadPacket.SpeadPacketError(
-                'Packet is not the expected length, expected %i, got %i' % (
+                'Packet is not the expected length, expected(%i) packet(%i)' % (
                     expected_length, pktlen))
         if pktlen*8 != hdr_pkt_len_bytes:
             raise SpeadPacket.SpeadPacketError(
                 'Packet is not the same length as indicated in the SPEAD '
-                'header, expected %i, got %i' % (pktlen*8, hdr_pkt_len_bytes))
+                'header: hdr(%i) packet(%i)\nCheck the magic header, number '
+                'of headers and '
+                'headers 2 and 4.' % (hdr_pkt_len_bytes, pktlen*8))
         obj = cls(headers, pktdata)
         return obj
 
@@ -220,6 +224,11 @@ class SpeadProcessor(object):
             except TypeError:
                 pkt_data = pkt
                 pkt_ip = None
+            except KeyError:
+                if 'ip' not in pkt:
+                    pkt_ip = None
+                if 'data' not in pkt:
+                    raise RuntimeError('Could not find data key')
             spead_pkt = SpeadPacket.from_data(
                 pkt_data, self.version, self.flavour,
                 self.expected_num_headers, self.expected_packet_length)

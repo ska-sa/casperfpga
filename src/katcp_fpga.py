@@ -255,11 +255,9 @@ class KatcpFpga(CasperFpga, katcp.CallbackClient):
         :param offset: start at this offset
         :return: binary data string
         """
-        reply, _ = self.katcprequest(name='read',
-                                     request_timeout=self._timeout,
-                                     require_ok=True,
-                                     request_args=(device_name, str(offset),
-                                                   str(size)))
+        reply, _ = self.katcprequest(
+            name='read', request_timeout=self._timeout, require_ok=True,
+            request_args=(device_name, str(offset), str(size)))
         return reply.arguments[1]
 
     def blindwrite(self, device_name, data, offset=0):

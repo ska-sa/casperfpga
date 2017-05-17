@@ -17,6 +17,12 @@ class AttributeContainer(object):
         :param item_to_get: the name of the attribute we want to get
         :return: the attribute value
         """
+        # TODO - add regex support to allow wildcards
+        # import re
+        # # add regex support
+        # try:
+        #     regex = re.compile(item_to_get)
+        # except re.error:
         return self.__getattribute__(item_to_get)
 
     def __setattr__(self, name, value):
