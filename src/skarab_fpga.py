@@ -225,7 +225,7 @@ class FortyGbe(object):
         ip_high = ip.ip_int >> 16
         ip_low = ip.ip_int & 65535
 
-        mask = tengbe.IpAddress('255.255.255.255')
+        mask = tengbe.IpAddress('255.255.255.240')
         mask_high = mask.ip_int >> 16
         mask_low = mask.ip_int & 65535
 
@@ -250,8 +250,6 @@ class FortyGbe(object):
         LOGGER.info('Multicast Configured')
         LOGGER.info('Multicast address: {}'.format(resp_ip.ip_str))
         LOGGER.info('Multicast mask: {}'.format(resp_mask.ip_str))
-
-        raise NotImplementedError
 
 
 class SkarabFpga(CasperFpga):
@@ -373,17 +371,21 @@ class SkarabFpga(CasperFpga):
             # use a bulk read if more than 4 bytes are requested
             return self._bulk_read(device_name, size, offset)
         addr = self._get_device_address(device_name)
-        # can only read 32-bits (4 bytes) at a time
-        # work out how many reads we require
-        num_reads = int(math.ceil((size + offset) / 4.0))
-        # LOGGER.info(
-        #     'size(%i) offset(%i) addr(0x%06x) '
-        #     'numreads(%i)' % (size, offset, addr, num_reads))
+        # can only read 4 bytes at a time
+        # work out how many reads we require, and from where
+        offset_bytes = int(offset / 4) * 4
+        offset_diff = offset - offset_bytes
+        num_bytes_corrected = size + offset_diff
+        num_reads = int(math.ceil(num_bytes_corrected / 4.0))
+        addr_start = addr + offset - offset_diff
+        # LOGGER.info('size(%i) offset(%i) addr(0x%06x) => offset_corrected(%i) '
+        #             'size_corrected(%i) addr_start(0x%06x) numreads(%i)' % (
+        #     size, offset, addr, offset_bytes, num_bytes_corrected,
+        #     addr_start, num_reads))
         # address to read is starting address plus offset
-        addr += offset
         data = ''
         for readctr in range(num_reads):
-            addr_high, addr_low = self.data_split_and_pack(addr)
+            addr_high, addr_low = self.data_split_and_pack(addr_start)
             # create payload packet structure for read request
             request = sd.ReadWishboneReq(self.seq_num, addr_high, addr_low)
             resp = self.send_packet(
@@ -395,10 +397,10 @@ class SkarabFpga(CasperFpga):
                 struct.pack('!H', resp.read_data_low)
             # append current read to read data
             data += new_read
-            # increment addr by 4 to read the next 4 bytes (next 32-bit reg)
-            addr += 4
+            # increment addr_start by four
+            addr_start += 4
         # return the number of bytes requested
-        return data[offset: offset + size]
+        return data[offset_diff: offset_diff + size]
 
     def _bulk_read_req(self, address, words_to_read):
         """
@@ -825,7 +827,7 @@ class SkarabFpga(CasperFpga):
             res = self._upload_to_ram_and_program(filename, port, timeout,
                                                   wait_complete)
             if res:
-                return
+                return True
         raise SkarabProgrammingError('Gave up programming after %i attempt%s'
                                      '' % (attempts,
                                            's' if attempts > 1 else ''))
