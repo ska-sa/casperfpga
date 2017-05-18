@@ -42,6 +42,23 @@ class LMX2581(WishBoneDevice):
 	M06_RDADDR = 0b1111 << 5
 	M06_UWIRE_LOCK = 1 << 4
 
+	MASK_DIAG = {
+		'VCO_SELECT': 0b11 << 18,
+		'FIN_DETECT': 0b1 << 17,
+		'OSCIN_DETECT': 0b1 << 16,
+		'VCO_DETECT': 0b1 << 15,
+		'CAL_RUNNING': 0b1 << 10,
+		'VCO_RAIL_HIGH': 0b1 << 9,
+		'VCO_RAIL_LOW': 0b1 << 8,
+		'VCO_TUNE_HIGH': 0b1 << 6,
+		'VCO_TUNE_VALID': 0b1 << 5,
+		'FLOUT_ON': 0b1 << 4,
+		'DLD': 0b1 << 3,
+		'LD_PINSTATE': 0b1 << 2,
+		'CE_PINSTATE': 0b1 << 1,
+		'BUFEN_PINSTATE': 0b1 << 0
+	}
+
 	M05_OUT_LDEN = 1 << 24
 	M05_OSC_FREQ = 0b111 << 21
 	M05_BUFEN_DIS = 1 << 20
@@ -88,7 +105,7 @@ class LMX2581(WishBoneDevice):
 	# Also borrow some lines from https://github.com/domagalski/snap-synth
 
 	def __init__(self, interface, controller_name):
-		super(FrequencySynthesizer, self).__init__(interface, controller_name) 
+		super(LMX2581, self).__init__(interface, controller_name) 
 
 	def init(self):
 
@@ -276,7 +293,7 @@ class LMX2581(WishBoneDevice):
 
 		# 1. (optional) If the OUTx_MUX State is changing, program Register R5
 		# 2. (optional) If the VCO_DIV state is changing, program Register R3.
-		# See VCO_DIV[4:0] — VCO Divider Value if programming a to a value of 4.
+		# See VCO_DIV[4:0] - VCO Divider Value if programming a to a value of 4.
 		if VCD_DIV == None:
 			self.write(0, self.A05, self.M05_OUTA_MUX)
 			self.write(0, self.A05, self.M05_OUTB_MUX)
@@ -305,28 +322,43 @@ class LMX2581(WishBoneDevice):
 		self.write(0, self.A00, self.M00_NO_FCAL)
 		
 
-	def write(self, data, addr=0, mask=0):
-		if mask:
+	def write(self, data, addr=None, mask=None):
+		if mask and addr:
 			r = self.read(addr)
 			r = self._set(r, data, mask)
 			self.write(r, addr)
-		else:
-			cmd = (data & 0xfff0) | (addr & 0xf)
+		elif not mask and addr:
+			cmd = (data & 0xfffffff0) | (addr & 0xf)
 			self._write(cmd)
+		elif not mask and not addr:
+			self._write(cmd)
+		else:
+			raise ValueError("Invalid parameter for wirte method")
 
 	def read(self, addr):
-		# Tell PLL which register to read
-		self.write(addr, self.A06, self.M06_RDADDR)
-		# Read the register by a dummy write
+		# Tell LMX2581 which register to read
+		r06 = self._set(0x400, 6, self.M06_RDADDR)
+		self.write(r06, self.A06)
+		# Read the register by issuing a dummy write
 		self.write(self.CMD10)
 		return self._read()
 
-	def _set(self, d1, d2, mask=0):
+	def _set(self, d1, d2, mask=None):
 		# Update some bits of d1 with d2, while keep other bits unchanged
 		if mask:
 			d1 = d1 & ~mask
 			d2 = d2 * (mask & -mask)
 		return d1 | d2
 
+	def _get(self, data, mask):
+		return data / (mask & -mask)
+
 	def reset(self):
 		self.write(self.M05_RESET, self.A05)
+
+	def getDiagnoses(self):
+		result = {}
+		diag = self.read(self.A06)
+		for name,mask in MASK_DIAG:
+			result[name] = self._get(diag, mask)
+		return result
