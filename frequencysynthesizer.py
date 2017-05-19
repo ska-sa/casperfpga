@@ -5,18 +5,6 @@ import math
 class LMX2581(WishBoneDevice):
 	""" LMX2581 Frequency Synthesizer """
 
-	# Wishbone address
-#	A15 = 0b1111
-#	A13 = 0b1101 
-#	A07 = 0b0111
-#	A06 = 0b0110
-#	A05 = 0b0101
-#	A04 = 0b0100
-#	A03 = 0b0011
-#	A02 = 0b0010
-#	A01 = 0b0001
-#	A00 = 0b0000
-
 	DICTS = [
 	#00
 		{
@@ -242,15 +230,15 @@ class LMX2581(WishBoneDevice):
 #		r00 = self._set(r00, 0, self.M00_PLL_NUM)
 #		self.write(r00, self.A00)
 #
-#	def powerUp(self):
-#		self.write(0, self.A05, self.M05_PWDN_MODE)
-#
-#	def powerDown(self):
-#		self.write(1, self.A05, self.M05_PWDN_MODE)
-#
-#	def outputPower(self,p=15):
-#		self.write(p, self.A03, self.M03_OUTA_PWR)
-#		self.write(p, self.A03, self.M03_OUTB_PWR)
+	def powerUp(self):
+		self.setWord(0, "PWDN_MODE")
+
+	def powerDown(self):
+		self.setWord(1, "PWDN_MODE")
+
+	def outputPower(self,p=15):
+		self.setWord(p, "OUTA_PWR")
+		self.setWord(p, "OUTB_PWR")
 #
 #	def get_osc_values(self, synth_mhz, ref_signal):
 #		"""
@@ -406,6 +394,14 @@ class LMX2581(WishBoneDevice):
 				result[name] = self._get(diag, mask)
 			return result
 
+	def getRegister(self,rid=None):
+		if rid==None:
+			regIdLst = [15,13,7,6,5,4,3,2,1,0]
+			return [self.getRegister(regId) for regId in regIdLst]
+		else:
+			rval = self.read(rid)
+			return {name: self._get(rval,mask) for name, mask in self.DICTS[rid].items()}
+
 	def getWord(self,name):
 		rid = self.getRegId(name)
 		rval = self.read(rid)
@@ -414,7 +410,7 @@ class LMX2581(WishBoneDevice):
 	def setWord(self,value,name):
 		rid = self.getRegId(name)
 		self.write(value,rid,self.DICTS[rid][name])
-		
+
 	def getRegId(self,name):
 		rid = None
 		for d in self.DICTS:
@@ -426,6 +422,11 @@ class LMX2581(WishBoneDevice):
 		if rid == None:
 			raise ValueError("Invalid parameter")
 		return rid
-			
-				
+
+	def loadCfgFromFile(self,filename):
+		f = open(filename)
+		lines = [l.split("\t") for l in f.read().splitlines()]
+		regs = [int(l[1].rstrip(),0) for l in lines]
+		for reg in regs:
+			self.write(reg)
 				
