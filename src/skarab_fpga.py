@@ -695,7 +695,7 @@ class SkarabFpga(CasperFpga):
                 errmsg = "An older version of mlib_devel generated " + filename + "." \
                             " Please update to include the md5sum on the bitstream in the .fpg header."
                 LOGGER.error(errmsg)
-                raise InvalidSkarabBitstream(errmsg)
+                #raise InvalidSkarabBitstream(errmsg)
 
         # split image into chunks of 4096 words
         image_size = len(image_to_program)
@@ -839,7 +839,7 @@ class SkarabFpga(CasperFpga):
                                                   wait_complete)
             if res:
                 return True
-        raise SkarabProgrammingError('Gave up programming after %i attempt%s'
+        raise ProgrammingError('Gave up programming after %i attempt%s'
                                      '' % (attempts,
                                            's' if attempts > 1 else ''))
 
