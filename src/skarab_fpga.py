@@ -839,9 +839,9 @@ class SkarabFpga(CasperFpga):
                                                   wait_complete)
             if res:
                 return True
-        raise SkarabProgrammingError(
-            'Gave up programming after %i attempt%s' % (
-                attempts, 's' if attempts > 1 else ''))
+        raise ProgrammingError('Gave up programming after %i attempt%s'
+                                     '' % (attempts,
+                                           's' if attempts > 1 else ''))
 
     def _upload_to_ram_and_program(self, filename, port=-1, timeout=60,
                                    wait_complete=True):
@@ -1180,6 +1180,13 @@ class SkarabFpga(CasperFpga):
                     response_payload, address = data
                     LOGGER.debug('Response = %s' % repr(response_payload))
                     LOGGER.debug('Response length = %d' % len(response_payload))
+
+                    # check the opcode of the response i.e. first two bytes
+                    if response_payload[:2] == '\xff\xff':
+                        # SKARAB received an unsupported opcode
+                        errmsg = 'SKARAB received unsupported opcode'
+                        raise SkarabSendPacketError(errmsg)
+
                     response_payload = self.unpack_payload(
                         response_payload, response_type,
                         number_of_words, pad_words)
