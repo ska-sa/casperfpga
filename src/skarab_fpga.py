@@ -826,7 +826,7 @@ class SkarabFpga(CasperFpga):
             LOGGER.info('SDRAM verification passed.')
             LOGGER.info('Programming of %s completed okay.' % filename)
         else:
-            LOGGER.info('%s uploaded to RAM without being Verified.' % filename)
+            LOGGER.info('%s uploaded to RAM without being verified.' % filename)
 
         self.__sdram_programmed = True
         self.prog_info['last_uploaded'] = filename
@@ -839,9 +839,9 @@ class SkarabFpga(CasperFpga):
                                                   wait_complete)
             if res:
                 return True
-        raise SkarabProgrammingError('Gave up programming after %i attempt%s'
-                                     '' % (attempts,
-                                           's' if attempts > 1 else ''))
+        raise SkarabProgrammingError(
+            'Gave up programming after %i attempt%s' % (
+                attempts, 's' if attempts > 1 else ''))
 
     def _upload_to_ram_and_program(self, filename, port=-1, timeout=60,
                                    wait_complete=True):

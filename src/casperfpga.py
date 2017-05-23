@@ -511,11 +511,13 @@ class CasperFpga(object):
         if old_version:
             rv = []
             for filename in files:
-                if git_info[filename]['git_info_found'] == ['1']:
-                    rv.append((filename, git_info[filename]['commit_hash'][0] +
-                               '_' + git_info[filename]['status'][0]))
-                else:
-                    rv.append((filename, '<unknown>'))
+                if 'git_info_found' in git_info[filename].keys():
+                    if git_info[filename]['git_info_found'] == ['1']:
+                        rv.append(
+                            (filename, git_info[filename]['commit_hash'][0] +
+                             '_' + git_info[filename]['status'][0]))
+                    continue
+                rv.append((filename, str(git_info[filename])))
             return rv
         else:
             return [(f, git_info[f]) for f in files if f != 'tag']
