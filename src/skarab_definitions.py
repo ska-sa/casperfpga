@@ -979,12 +979,13 @@ class GetEmbeddedSoftwareVersionReq(Command):
 
 class GetEmbeddedSoftwareVersionResp(Command):
     def __init__(self, command_id, seq_num, version_major, version_minor,
-                 qsfp_bootloader_version_major, qsfp_bootloader_version_minor,
-                 padding):
+                 version_patch, qsfp_bootloader_version_major,
+                 qsfp_bootloader_version_minor, padding):
         super(GetEmbeddedSoftwareVersionResp, self).__init__()
         self.header = CommandHeader(command_id, seq_num, False)
         self.version_major = version_major
         self.version_minor = version_minor
+        self.version_patch = version_patch
         self.qsfp_bootloader_version_major = qsfp_bootloader_version_major
         self.qsfp_bootloader_version_minor = qsfp_bootloader_version_minor
         self.padding = padding

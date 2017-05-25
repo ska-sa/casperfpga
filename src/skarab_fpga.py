@@ -1455,11 +1455,12 @@ class SkarabFpga(CasperFpga):
             expect_response=True,
             command_id=sd.GET_EMBEDDED_SOFTWARE_VERS,
             number_of_words=11,
-            pad_words=5)
+            pad_words=4)
         if get_embedded_ver_resp:
-            major = get_embedded_ver_resp.version_major & 0x3F
+            major = get_embedded_ver_resp.version_major
             minor = get_embedded_ver_resp.version_minor
-            return '{}.{}'.format(major, minor)
+            patch = get_embedded_ver_resp.version_patch
+            return '{}.{}.{}'.format(major, minor, patch)
         return None
 
     def write_wishbone(self, wb_address, data):
