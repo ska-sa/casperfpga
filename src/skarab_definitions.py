@@ -694,7 +694,7 @@ class ReadFlashWordsResp(Command):
     def __init__(self, command_id, seq_num, address_high, address_low, 
                  num_words, read_words, padding):
         super(ReadFlashWordsResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num)
+        self.header = CommandHeader(command_id, seq_num, False)
         self.address_high = address_high
         self.address_low = address_low
         self.num_words = num_words
@@ -723,7 +723,7 @@ class ProgramFlashWordsResp(Command):
                  total_num_words, packet_num_words, do_buffered_programming,
                  start_program, finish_program, program_success, padding):
         super(ProgramFlashWordsResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num)
+        self.header = CommandHeader(command_id, seq_num, False)
         self.address_high = address_high
         self.address_low = address_low
         self.total_num_words = total_num_words
@@ -747,7 +747,7 @@ class EraseFlashBlockResp(Command):
     def __init__(self, command_id, seq_num, block_address_high, 
                  block_address_low, erase_success, padding):
         super(EraseFlashBlockResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num)
+        self.header = CommandHeader(command_id, seq_num, False)
         self.block_address_high = block_address_high
         self.block_address_low = block_address_low
         self.erase_success = erase_success
@@ -787,10 +787,11 @@ class ProgramSpiPageReq(Command):
         self.write_bytes = write_bytes
 
 
-class ProgramSpiPageResp(object):
+class ProgramSpiPageResp(Command):
     def __init__(self, command_id, seq_num, address_high, address_low,
                  num_bytes, verify_bytes, program_spi_page_success, padding):
-        self.header = CommandHeader(command_id, seq_num)
+        super(ProgramSpiPageResp, self).__init__()
+        self.header = CommandHeader(command_id, seq_num, False)
         self.address_high = address_high
         self.address_low = address_low
         self.num_bytes = num_bytes
