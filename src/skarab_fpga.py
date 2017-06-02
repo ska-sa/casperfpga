@@ -615,8 +615,11 @@ class SkarabFpga(CasperFpga):
             self.__create_memory_map()
         else:
             # if not fpg file, then
-            raise NotImplementedError
-            self._CasperFpga__reset_device_info()
+            # raise NotImplementedError
+            # self._CasperFpga__reset_device_info()
+            infomsg = 'Now allowing for programming of .bin files et al'
+            LOGGER.info(infomsg)
+
         # update programming info
         self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
         self.prog_info['last_uploaded'] = ''
