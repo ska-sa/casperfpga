@@ -147,7 +147,7 @@ class HMCAD1511(WishBoneDevice):
 
 	# Put some initialization here so that instantiate a HMCAD1511 object
 	# wouldn't accidently reset/interrupt the running ADCs.
-	def init()
+	def init():
 		self.reset()
 		self.powerDown()
 		# Set LVDS bit clock phase if other than default is used
@@ -155,7 +155,7 @@ class HMCAD1511(WishBoneDevice):
 		self.interleavingMode(numChannel=4,clkDivide=4)
 		self.inputSelect([1,2,3,4])
 
-	def _bitCtrl(self, sda=0, state):	
+	def _bitCtrl(self, state, sda=0):	
 		# state: 0 - idle, 1 - start, 2 - transmit, 3 - stop
 		if state == self.STATE_3WIRE_START:
 			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | ~self.csn
@@ -268,7 +268,7 @@ class HMCAD1511(WishBoneDevice):
 			raise ValueError("Invalid parameter")
 		maxdB = 20*math.log(1+sum(self.FGAIN),10)
 		mindB = 20*math.log(1-sum(self.FGAIN),10)
-		if not all(e > maxdB,10) for e in gains):
+		if not all(e > maxdB for e in gains):
 			raise ValueError("Fine gain cannot be bigger than %d dB" % maxdB)
 		if not all(e < mindB for e in gains):
 			raise ValueError("Fine gain cannot be smaller than %d dB" % mindB)
@@ -278,25 +278,25 @@ class HMCAD1511(WishBoneDevice):
 		rid, mask = self._getMask('fgain_branch1')
 		val = self._set(0x0, cfgs[0], mask)
 		rid, mask = self._getMask('fgain_branch2')
-		val = self._set(val cfgs[1], mask)
+		val = self._set(val, cfgs[1], mask)
 		self.write(val, rid)
 
 		rid, mask = self._getMask('fgain_branch3')
 		val = self._set(0x0, cfgs[2], mask)
 		rid, mask = self._getMask('fgain_branch4')
-		val = self._set(val cfgs[3], mask)
+		val = self._set(val, cfgs[3], mask)
 		self.write(val, rid)
 
 		rid, mask = self._getMask('fgain_branch5')
 		val = self._set(0x0, cfgs[4], mask)
 		rid, mask = self._getMask('fgain_branch6')
-		val = self._set(val cfgs[5], mask)
+		val = self._set(val, cfgs[5], mask)
 		self.write(val, rid)
 
 		rid, mask = self._getMask('fgain_branch7')
 		val = self._set(0x0, cfgs[6], mask)
 		rid, mask = self._getMask('fgain_branch8')
-		val = self._set(val cfgs[7], mask)
+		val = self._set(val, cfgs[7], mask)
 		self.write(val, rid)
 		
 	def _calFGainCfg(gain):
@@ -336,7 +336,7 @@ class HMCAD1511(WishBoneDevice):
 	#	inputSelect([1,1,1,1])	(in one channel mode)
 	def inputSelect(inputs):
 		opts = [1, 2, 3, 4]
-		if not all(i in opts for i in inputs)
+		if not all(i in opts for i in inputs):
 			raise ValueError("Invalid parameter")
 
 		rid, mask = self._getMask('inp_sel_adc1')
