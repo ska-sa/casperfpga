@@ -1,6 +1,6 @@
 from wishbonedevice import WishBoneDevice
 import numpy as np
-import struct
+import struct,math
 
 class HMCAD1511(WishBoneDevice):
 
@@ -147,7 +147,7 @@ class HMCAD1511(WishBoneDevice):
 
 	# Put some initialization here so that instantiate a HMCAD1511 object
 	# wouldn't accidently reset/interrupt the running ADCs.
-	def init():
+	def init(self):
 		self.reset()
 		self.powerDown()
 		# Set LVDS bit clock phase if other than default is used
@@ -192,11 +192,11 @@ class HMCAD1511(WishBoneDevice):
 
 	def _getMask(self, name):
 		rid = None
-		for d in self.DICTS:
+		for d in self.DICT:
 			if d == None:
 				continue
 			if name in d:
-				rid = self.DICTS.index(d)
+				rid = self.DICT.index(d)
 				return rid, d.get(name)
 		if rid == None:
 			raise ValueError("Invalid parameter")
@@ -208,7 +208,7 @@ class HMCAD1511(WishBoneDevice):
 	# 	test('single_custom_part', 0xaaaa)
 	# 	test('pat_deskew')
 	# 	test('pat_sync')
-	def test(mode='off', _bits_custom1=None, _bits_custom2=None):
+	def test(self, mode='off', _bits_custom1=None, _bits_custom2=None):
 		if mode == 'en_ramp':
 			rid, mask = self._getMask('pat_deskew')
 			self.write(self._set(0x0, 0b00, mask), rid)
@@ -259,7 +259,7 @@ class HMCAD1511(WishBoneDevice):
 	# rounded towards 0 dB
 	# Fine gain range for HMCAD1511: -0.0670dB ~ 0.0665dB
 	# E.g.	fGain([-0.06, -0.04, -0.02, 0, 0, 0.02, 0.04, 0.06])
-	def fGain(gains):
+	def fGain(self, gains):
 		if not isinstance(gains, list):
 			raise ValueError("Invalid parameter")
 		if not all(isinstance(e, float) for e in gains):
@@ -299,7 +299,7 @@ class HMCAD1511(WishBoneDevice):
 		val = self._set(val, cfgs[7], mask)
 		self.write(val, rid)
 		
-	def _calFGainCfg(gain):
+	def _calFGainCfg(self, gain):
 		x = np.float32(1+abs((10**(gain/20.))-1))
 		unpacked = struct.unpack('!I',struct.pack('!f',x))[0]
 		cfg = (unpacked & 0xfc00) >> 10
@@ -313,12 +313,12 @@ class HMCAD1511(WishBoneDevice):
 	# numChannel=4	--	2 ADCs per channel
 	# E.g.	interleavingMode(1)
 	#	interleavingMode(4, 4)
-	def interleavingMode(numChannel, clkDivide=1):
+	def interleavingMode(self, numChannel, clkDivide=1):
 		modes = [1,2,4]
 		divs = [1,2,4,8]
 		if not numChannel in modes:
 			raise ValueError("Invalid parameter")
-		if not clkDivde in divs:
+		if not clkDivide in divs:
 			raise ValueError("Invalid parameter")
 
 		self.powerDown()
@@ -334,7 +334,7 @@ class HMCAD1511(WishBoneDevice):
 	# Input select
 	# E.g.	inputSelect([1,2,3,4])	(in four channel mode)
 	#	inputSelect([1,1,1,1])	(in one channel mode)
-	def inputSelect(inputs):
+	def inputSelect(self, inputs):
 		opts = [1, 2, 3, 4]
 		if not all(i in opts for i in inputs):
 			raise ValueError("Invalid parameter")
@@ -352,7 +352,7 @@ class HMCAD1511(WishBoneDevice):
 		self.write(val, rid)
 
 	# Reset
-	def reset():
+	def reset(self):
 		rid, mask = self._getMask('rst')
 		val = self._set(0x0, 1, mask)
 		self.write(val, rid)
@@ -360,12 +360,12 @@ class HMCAD1511(WishBoneDevice):
 	# Power up and down
 	# PD pins of the ADC chips are directly grounded
 
-	def powerUp():
+	def powerUp(self):
 		rid, mask = self._getMask('pd')
 		val = self._set(0x0, 0, mask)
 		self.write(val, rid)
 
-	def powerDown():
+	def powerDown(self):
 		rid, mask = self._getMask('pd')
 		val = self._set(0x0, 1, mask)
 		self.write(val, rid)
