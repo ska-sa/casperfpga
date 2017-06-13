@@ -655,17 +655,16 @@ class SkarabFpga(CasperFpga):
             image_to_program = self.convert_bit_to_bin(filename)
         elif file_extension == '.bin':
             LOGGER.info('Reading .bin file.')
-            image_to_program = open(filename, 'rb').read()
-            if not self.check_bitstream(image_to_program):
-                LOGGER.info('Incompatible .bin file. Attemping to convert.')
-                image_to_program = self.reorder_bytes_in_bin_file(
-                    image_to_program)
+            (result, image_to_program) = self.check_bitstream(open(filename, 'rb').read())
+            if not result:
+                LOGGER.info('Incompatible .bin file.')
         else:
             raise TypeError('Invalid file type. Only use .fpg, .bit, '
                             '.hex or .bin files')
 
         # check the generated bitstream
-        if not self.check_bitstream(image_to_program):
+        (result, image_to_program) = self.check_bitstream(image_to_program)
+        if not result:
             errmsg = 'Incompatible image file. Cannot program SKARAB.'
             LOGGER.error(errmsg)
             raise InvalidSkarabBitstream(errmsg)
@@ -840,6 +839,7 @@ class SkarabFpga(CasperFpga):
         while attempt_ctr < attempts:
             res = self._upload_to_ram_and_program(filename, port, timeout,
                                                   wait_complete)
+            attempt_ctr += 1
             if res:
                 return True
         raise ProgrammingError('Gave up programming after %i attempt%s'
@@ -981,14 +981,23 @@ class SkarabFpga(CasperFpga):
             LOGGER.info('.bit file detected. Converting to .bin.')
             file_contents = self.convert_bit_to_bin(filename)
         elif file_extension == '.bin':
-            file_contents = open(filename, 'rb').read()
-            if not self.check_bitstream(file_contents):
-                LOGGER.info('Incompatible .bin file. Attemping to convert.')
-                file_contents = self.reorder_bytes_in_bin_file(
-                    file_contents)
+            LOGGER.info('Reading .bin file.')
+            (result, image_to_program) = self.check_bitstream(open(filename, 'rb').read())
+            if not result:
+                LOGGER.info('Incompatible .bin file.')
         else:
             raise TypeError('Invalid file type. Only use .fpg, .bit, '
                             '.hex or .bin files')
+
+        # check the generated bitstream
+        (result, image_to_program) = self.check_bitstream(image_to_program)
+        if not result:
+            errmsg = 'Incompatible image file. Cannot program SKARAB.'
+            LOGGER.error(errmsg)
+            raise InvalidSkarabBitstream(errmsg)
+        LOGGER.info('Valid bitstream detected.')
+
+        # at this point the bitstream is in memory
 
         # prep SDRAM for reading
         self.sdram_reconfigure(output_mode=sd.SDRAM_READ_MODE,
@@ -1689,16 +1698,16 @@ class SkarabFpga(CasperFpga):
             LOGGER.error(errmsg)
             raise InvalidResponse(errmsg)
 
-    def verify_words(self, filename, flash_address=sd.DEFAULT_START_ADDRESS):
+    def verify_words(self, bitstream, flash_address=sd.DEFAULT_START_ADDRESS):
         '''
         This method reads back the programmed words from the flash device and checks it
         against the data in the input .bin file uploaded to the Flash Memory.
-        :param filename: Of the input .bin file that was programmed to Flash Memory
+        :param bitstream: Of the input .bin file that was programmed to Flash Memory
         :param flash_address: 32-bit Address in the NOR flash to START reading from
         :return: Boolean success/fail
         '''
 
-        bitstream = open(filename, 'rb').read()
+        # bitstream = open(filename, 'rb').read()
         bitstream_chunks = [bitstream[i:i+512] for i in range(0, len(bitstream), 512)]   # Now we have 512-byte chunks
         # Using 512-byte chunks = 256-word chunks because we are reading 256 words at a time from the Flash Memory
 
@@ -1827,18 +1836,18 @@ class SkarabFpga(CasperFpga):
             LOGGER.error(errmsg)
             raise InvalidResponse(errmsg)
 
-    def program_words(self, filename, flash_address=sd.DEFAULT_START_ADDRESS):
+    def program_words(self, bitstream, flash_address=sd.DEFAULT_START_ADDRESS):
         '''
         Higher level function call to Program n-many words from an input .hex (eventually .bin) file
         This method scrolls through the words in the bitstream, and packs them into 256+256 words
         This method erases the required number of blocks in the flash
         - Only the required number of flash blocks are erased
-        :param filename: Of the input .bin file to write to Flash Memory
+        :param bitstream: Of the input .bin file to write to Flash Memory
         :param flash_address: Address in Flash Memory from where to start programming
         :return: Boolean Success/Fail - 1/0
         '''
 
-        bitstream = open(filename, 'rb').read()
+        # bitstream = open(filename, 'rb').read()
         # As per upload_to_ram() except now we're programming in chunks of 512 words
         size = len(bitstream)
         # Split image into chunks of 512 words = 1024 bytes
@@ -1991,7 +2000,7 @@ class SkarabFpga(CasperFpga):
     def virtex_flash_reconfig(self, filename, flash_address=sd.DEFAULT_START_ADDRESS, blind_reconfig=False):
         '''
         This is the entire function that makes the necessary calls to reconfigure the
-        :param filename: The actual .hex file that is to be written to the Virtex FPGA
+        :param filename: The actual .bin file that is to be written to the Virtex FPGA
         :param flash_address: 32-bit Address in the NOR flash to start programming from
         :param blind_reconfig: Reconfigure the board and don't wait to Verify what has been written
         :return: Success/Fail - 0/1
@@ -2000,19 +2009,34 @@ class SkarabFpga(CasperFpga):
         # For completeness, make sure the input file is of a .bin disposition
         file_extension = os.path.splitext(filename)[1]
 
-        if file_extension != '.bin':
-            # Problem
-            errmsg = "Input file was not a .bin file"
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
+        # if file_extension != '.bin':
+        #     # Problem
+        #     errmsg = "Input file was not a .bin file"
+        #     LOGGER.error(errmsg)
+        #     raise InvalidSkarabBitstream(errmsg)
         # else: Continue
 
-        if not self.check_bitstream(open(filename, 'rb').read()):
-            errmsg = "Incompatible .bin file detected. Cannot Program Flash Memory."
+        if file_extension == '.hex':
+            LOGGER.info('.hex detected. Converting to .bin.')
+            image_to_program = self.convert_hex_to_bin(filename)
+        elif file_extension == '.bin':
+            LOGGER.info('.bin file detected.')
+            image_to_program = open(filename, 'rb').read()
+        else:
+            # File extension was neither .hex nor .bin
+            errmsg = 'Please use .hex or .bin file to reconfigure Flash Memory'
+            LOGGER.error(errmsg)
+            raise InvalidSkarabBitstream(errmsg)
+
+        (result, image_to_program) = self.check_bitstream(image_to_program)
+        if not result:
+            errmsg = "Incompatible .bin file detected."
             LOGGER.error(errmsg)
             raise InvalidSkarabBitstream(errmsg)
 
         LOGGER.debug("VIRTEX FLASH RECONFIG: Analysing Words")
+        # Can still analyse the filename, as the file size should still be the same
+        # Regardless of swapping the endianness
         num_words, num_memory_blocks = self.analyse_file(filename)
 
         if (num_words == 0) or (num_memory_blocks == 0):
@@ -2031,7 +2055,7 @@ class SkarabFpga(CasperFpga):
         # else: Continue
 
         LOGGER.debug("VIRTEX FLASH RECONFIG: Programming Words to Flash Memory")
-        if not self.program_words(filename, flash_address):
+        if not self.program_words(image_to_program, flash_address):
             # Problem
             errmsg = "Failed to Program Flash Memory Blocks"
             LOGGER.error(errmsg)
@@ -2040,7 +2064,7 @@ class SkarabFpga(CasperFpga):
 
         if not blind_reconfig:
             LOGGER.debug("VIRTEX FLASH RECONFIG: Verifying words that were written to Flash Memory")
-            if not self.verify_words(filename):
+            if not self.verify_words(image_to_program):
                 # Problem
                 errmsg = "Failed to Program Flash Memory Blocks"
                 LOGGER.error(errmsg)
@@ -2715,35 +2739,44 @@ class SkarabFpga(CasperFpga):
 
         return bitstream
 
-    @staticmethod
-    def check_bitstream(bitstream):
+    def check_bitstream(self, bitstream):
         """
         Checks the bitstream to see if it is valid.
         i.e. if it contains a known, correct substring in its header
-        :param bitstream: bitstream to check
-        :return: True or False
+        If bitstream endianness is incorrect, byte-swap data and return altered bitstream
+        :param bitstream: Of the input (.bin) file to be checked
+        :return: tuple - (True/False, bitstream)
         """
 
         # check if filename or bitstream:
-        #if '.bin' in bitstream:
+        # if '.bin' in bitstream:
         #    # filename given
-        #    bitstream = open(bitstream, 'rb')
-        #    contents = bitstream.read()
+        #    contents = open(bitstream, 'rb')
         #    bitstream.close()
-        #else:
-        contents = bitstream
+        # else:
+        #     contents = bitstream
 
+        # bitstream = open(filename, 'rb').read()
         valid_string = '\xff\xff\x00\x00\x00\xdd\x88\x44\x00\x22\xff\xff'
 
         # check if the valid header substring exists
-        if contents.find(valid_string) == 30:
-            return True
+        if bitstream.find(valid_string) == 30:
+            return True, bitstream
         else:
-            read_header = contents[30:41]
+            # Swap header endianness and compare again
+            swapped_string = '\xff\xff\x00\x00\xdd\x00\x44\x88\x22\x00'
+
+            if bitstream.find(swapped_string) == 30:
+                # Input bitstream has its endianness swapped
+                reordered_bitstream = self.reorder_bytes_in_bitstream(bitstream)
+                return True, reordered_bitstream
+
+            # else: Still problem
+            read_header = bitstream[30:41]
             LOGGER.error(
                 'Incompatible bitstream detected.\nExpected header: {}\nRead '
                 'header: {}'.format(repr(valid_string), repr(read_header)))
-            return False
+            return False, None
 
     @staticmethod
     def reorder_bytes_in_bin_file(filename, extract_to_disk=False):
@@ -2779,6 +2812,26 @@ class SkarabFpga(CasperFpga):
             LOGGER.info('Output binary filename: {}'.format(new_file_name))
 
         return bitstream
+
+    @staticmethod
+    def reorder_bytes_in_bitstream(bitstream):
+        """
+        Reorders the bytes in a given binary bitstream to make it compatible for
+        programming the SKARAB. This function only handles the case where
+        the two bytes making up a word need to be swapped.
+        :param bitstream: binary bitstream to reorder
+        :return: reordered_bitstream
+        """
+
+        num_words = len(bitstream) / 2
+
+        data_format_pack = '<' + str(num_words) + 'H'
+        data_format_unpack = '>' + str(num_words) + 'H'
+
+        reordered_bitstream = struct.pack(data_format_pack, *struct.unpack(
+            data_format_unpack, bitstream))
+
+        return reordered_bitstream
 
     def get_system_information(self, filename=None, fpg_info=None):
         """
