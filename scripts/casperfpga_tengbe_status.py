@@ -2,13 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103
 # pylint: disable-msg=C0301
-"""
-View the status of a given xengine.
 
-Created on Fri Jan  3 10:40:53 2014
-
-@author: paulp
-"""
 import sys
 import time
 import argparse
@@ -53,7 +47,8 @@ if args.log_level != '':
     except AttributeError:
         raise RuntimeError('No such log level: %s' % log_level)
 # import logging
-# logging.basicConfig(filename='/tmp/casperfpga_tengbe_status_curses.log', level=logging.DEBUG)
+# logging.basicConfig(filename='/tmp/casperfpga_tengbe_status_curses.log',
+#                     level=logging.DEBUG)
 # logging.info('****************************************************')
 
 if args.comms == 'katcp':
@@ -75,7 +70,7 @@ fpgas = utils.threaded_create_fpgas_from_hosts(HOSTCLASS, hosts)
 utils.threaded_fpga_function(fpgas, 10, 'test_connection')
 utils.threaded_fpga_function(fpgas, 15, 'get_system_information')
 for fpga in fpgas:
-    numgbes = len(fpga.tengbes)
+    numgbes = len(fpga.gbes)
     if numgbes < 1:
         raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
     print '%s: found %i 10gbe core%s.' % (
@@ -100,7 +95,7 @@ def get_gbe_data(fpga):
     Get 10gbe data counters from the fpga.
     """
     returndata = {}
-    for gbecore in fpga.tengbes:
+    for gbecore in fpga.gbes:
         ctr_data = gbecore.read_counters()
         for regname in ctr_data:
             regdata = ctr_data[regname]
@@ -118,8 +113,8 @@ def get_tap_data(fpga):
     What it says on the tin.
     """
     data = {}
-    for gbecore in fpga.tengbes.names():
-        data[gbecore] = fpga.tengbes[gbecore].tap_info()
+    for gbecore in fpga.gbes.names():
+        data[gbecore] = fpga.gbes[gbecore].tap_info()
     return data
 
 # get gbe and tap data
@@ -164,7 +159,7 @@ signal.signal(signal.SIGHUP, exit_gracefully)
 max_1st_col_offset = -1
 for fpga in fpgas:
     max_1st_col_offset = max(max_1st_col_offset, len(fpga.host))
-    for gbe_name in fpga.tengbes.names():
+    for gbe_name in fpga.gbes.names():
         max_1st_col_offset = max(max_1st_col_offset, len(gbe_name))
 max_fldname = -1
 for hdr in fpga_headers:

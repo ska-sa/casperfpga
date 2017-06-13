@@ -96,7 +96,7 @@
 #         self.registers = AttributeContainer()
 #         self.snapshots = AttributeContainer()
 #         self.sbrams = AttributeContainer()
-#         self.tengbes = AttributeContainer()
+#         self.gbes = AttributeContainer()
 #         self.katadcs = AttributeContainer()
 #         self.qdrs = AttributeContainer()
 #
