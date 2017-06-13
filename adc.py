@@ -19,11 +19,6 @@ class HMCAD1511(WishBoneDevice):
 	M_ADC1_CS4 = 1 << 7
 	M_ADC_SDA = 1 << 8
 	M_ADC_SCL = 1 << 9
-	M_G_ZDOK_REV = 0b11 << 28
-	M_LOCKED = 0b11 << 24
-	M_G_NUM_UNITS = 0b1111 << 20
-	M_CONTROLLER_REV = 0b11 << 18
-	M_G_ROACH2_REV = 0b11 << 16
 
 	# Wishbone address
 	A_WB_W_3WIRE = 0 << 2
@@ -35,6 +30,19 @@ class HMCAD1511(WishBoneDevice):
 	A_WB_R_CTRL = 1 << 2
 	A_WB_R_DELAY_STROBE_L = 2 << 2
 	A_WB_R_DELAY_STROBE_H = 3 << 2
+
+	WB_DICT = [None] * ((0b11 << 2) + 1)
+
+	WB_DICT[0b00 << 2] = {	'G_ZDOK_REV' : 0b11 << 28,
+				'ADC16_LOCKED' : 0b11 << 24,
+				'G_NUM_UNITS' : 0b1111 << 20,
+				'CONTROLLER_REV' : 0b11 << 18,
+				'G_ROACH2_REV' : 0b11 << 16,
+				'ADC16_ADC3WIRE_REG' : 0b1111111111111111 << 0,}
+
+	WB_DICT[0b01 << 2] = {'ADC16_CTRL_REG' : 0xffffffff << 0}
+	WB_DICT[0b10 << 2] = {'ADC16_DELAY_STROBE_REG_H' : 0xffffffff << 0}
+	WB_DICT[0b11 << 2] = {'ADC16_DELAY_STROBE_REG_L' : 0xffffffff << 0}
 
 	STATE_3WIRE_START = 1
 	STATE_3WIRE_TRANS = 2
@@ -136,14 +144,16 @@ class HMCAD1511(WishBoneDevice):
 	def __init__(self, interface, controller_name, csn=0xff):
 		super(HMCAD1511, self).__init__(interface, controller_name)
 
-		# csn is low active for HMCAD1511, set csn to 0xff if you want
-		# all ADC chips share the same configuartion. Or if you want
-		# to config them separately (e.g. calibrating interleaving
-		# adc gain error for each ADC chip), set csn to 0b1, 0b10,
-		# 0b100, 0b1000... for different HMCAD1511 python objects
+		# Set csn to 0xff if you want all ADC chips share the same
+		# configuartion. Or if you want to config them separately
+		# (e.g. calibrating interleaving adc gain error for each
+		# ADC chip), set csn to 0b1, 0b10, 0b100, 0b1000... for
+		# different HMCAD1511 python objects
 		if not isinstance(csn,int):
 			raise ValueError("Invalid parameter")
 		self.csn = csn & 0xff
+		self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
+		self.A_ADC_W_LIST = [self.DICT.index(a) for a in self.DICT if a != None]
 
 	# Put some initialization here so that instantiate a HMCAD1511 object
 	# wouldn't accidently reset/interrupt the running ADCs.
@@ -157,16 +167,18 @@ class HMCAD1511(WishBoneDevice):
 
 	def _bitCtrl(self, state, sda=0):	
 		# state: 0 - idle, 1 - start, 2 - transmit, 3 - stop
+		# csn active low for HMCAD1511, but inverted in wb_adc16_controller
+		# HDL design
 		if state == self.STATE_3WIRE_START:
-			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | ~self.csn
+			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.csn
 			self._write(cmd, self.A_WB_W_3WIRE)
 		elif state == self.STATE_3WIRE_TRANS:
-			cmd = (0 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | ~self.csn
+			cmd = (0 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.csn
 			self._write(cmd, self.A_WB_W_3WIRE)
-			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | ~self.csn
+			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.csn
 			self._write(cmd, self.A_WB_W_3WIRE)
 		elif state == self.STATE_3WIRE_STOP:
-			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.csn
+			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | 0x00
 			self._write(cmd, self.A_WB_W_3WIRE)
 
 	# wishbone data[9:0] <==> SCL, SDA, csn[7:0]
@@ -183,12 +195,21 @@ class HMCAD1511(WishBoneDevice):
 		addr_data = (addr << 16) | data
 		self._wordCtrl(addr_data)
 		
+        def read(self, addr):
+	# Can only read wb_adc16_controller registers
+	# HMCAD1511 is not readable
+                return self._read(addr=addr)
+		
 	def _set(self, d1, d2, mask=None):
 		# Update some bits of d1 with d2, while keep other bits unchanged
 		if mask:
 			d1 = d1 & ~mask
 			d2 = d2 * (mask & -mask)
 		return d1 | d2
+
+	def _get(self, data, mask):
+		data = data & mask
+		return data / (mask & -mask)
 
 	def _getMask(self, name):
 		rid = None
@@ -369,3 +390,13 @@ class HMCAD1511(WishBoneDevice):
 		rid, mask = self._getMask('pd')
 		val = self._set(0x0, 1, mask)
 		self.write(val, rid)
+
+	def getRegister(self, rid=None):
+		if rid==None:
+			return [self.getRegister(regId) for regId in self.A_WB_R_LIST]
+		elif rid in self.A_WB_R_LIST:
+			rval = self.read(rid)
+			return {name: self._get(rval,mask) for name, mask in self.WB_DICT[rid].items()}
+		else:
+			raise ValueError("Invalid parameter")
+

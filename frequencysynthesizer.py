@@ -129,6 +129,8 @@ class LMX2581(WishBoneDevice):
 
 	def __init__(self, interface, controller_name):
 		super(LMX2581, self).__init__(interface, controller_name) 
+		# A non-None address list
+		self.A_DICT_LIST = [self.DICTS.index(a) for a in self.DICTS if a != None]
 
 #	def init(self):
 #
@@ -396,11 +398,12 @@ class LMX2581(WishBoneDevice):
 
 	def getRegister(self,rid=None):
 		if rid==None:
-			regIdLst = [15,13,7,6,5,4,3,2,1,0]
-			return [self.getRegister(regId) for regId in regIdLst]
-		else:
+			return [self.getRegister(regId) for regId in self.A_DICT_LIST]
+		elif rid in self.A_DICT_LIST:
 			rval = self.read(rid)
 			return {name: self._get(rval,mask) for name, mask in self.DICTS[rid].items()}
+		else:
+			raise ValueError("Invalid parameter")
 
 	def getWord(self,name):
 		rid = self.getRegId(name)
@@ -413,9 +416,7 @@ class LMX2581(WishBoneDevice):
 
 	def getRegId(self,name):
 		rid = None
-		for d in self.DICTS:
-			if d == None:
-				continue
+		for d in [self.DICTS[a] for a in self.A_DICT_LIST]:
 			if name in d:
 				rid = self.DICTS.index(d)
 				break
