@@ -2064,7 +2064,7 @@ class SkarabFpga(CasperFpga):
 
         if not blind_reconfig:
             LOGGER.debug("VIRTEX FLASH RECONFIG: Verifying words that were written to Flash Memory")
-            if not self.verify_words(image_to_program):
+            if not self.verify_words(image_to_program, flash_address):
                 # Problem
                 errmsg = "Failed to Program Flash Memory Blocks"
                 LOGGER.error(errmsg)
