@@ -6,7 +6,7 @@ import threading
 import Queue
 import random
 import socket
-
+import struct
 
 from transport import Transport
 from utils import create_meta_dictionary
@@ -243,10 +243,23 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         Is the FPGA programmed and running?
         :return: True or False
         """
-        reply, _ = self.katcprequest(name='fpgastatus',
-                                     request_timeout=self._timeout,
-                                     require_ok=False)
+        reply, _ = self.katcprequest(
+            name='fpgastatus', request_timeout=self._timeout, require_ok=False)
         return reply.arguments[0] == 'ok'
+
+    def test_connection(self):
+        """
+        Write to and read from the scratchpad to test the connection to the FPGA
+        """
+        for val in [0xa5a5a5, 0x000000]:
+            data = struct.pack('>i' if val < 0 else '>I', val)
+            self.blindwrite('sys_scratchpad', data, 0)
+            val2 = self.read('sys_scratchpad', 4, 0)
+            val2 = struct.unpack('>L', val2[0:4])[0]
+            if val != val2:
+                raise RuntimeError('%s: cannot write scratchpad? %i != %i' %
+                                   (self.host, val, val2))
+        return True
 
     def read(self, device_name, size, offset=0):
         """

@@ -123,10 +123,13 @@ class SkarabTransport(Transport):
 
     def is_running(self):
         """
-        
-        :return: 
+        Is the FPGA programmed and running?
+        :return: True or False
         """
-        return self.is_connected()
+        [golden_img, multiboot, version] = self.get_firmware_version()
+        if golden_img == 0 and multiboot == 0:
+            return True
+        return False
 
     def loopbacktest(self, iface):
         """

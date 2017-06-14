@@ -216,13 +216,7 @@ class CasperFpga(object):
         """
         Write to and read from the scratchpad to test the connection to the FPGA
         """
-        for val in [0xa5a5a5, 0x000000]:
-            self.write_int('sys_scratchpad', val)
-            rval = self.read_int('sys_scratchpad')
-            if rval != val:
-                raise RuntimeError('%s: cannot write scratchpad? %i != %i' %
-                                   (self.host, rval, val))
-        return True
+        return self.transport.test_connection()
 
     # def __getattribute__(self, name):
     #     if name == 'registers':

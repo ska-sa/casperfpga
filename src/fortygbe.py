@@ -203,7 +203,7 @@ class FortyGbe(object):
         ip = IpAddress(ip_str)
         ip_high = ip.ip_int >> 16
         ip_low = ip.ip_int & 65535
-        mask = IpAddress('255.255.255.%i' % (255 - group_size))
+        mask = IpAddress('255.255.255.%i' % (256 - group_size))
         mask_high = mask.ip_int >> 16
         mask_low = mask.ip_int & 65535
         # ip = IpAddress('239.2.0.64')
@@ -227,8 +227,9 @@ class FortyGbe(object):
         resp_mask = IpAddress(
             resp.fabric_multicast_ip_address_mask_high << 16 |
             resp.fabric_multicast_ip_address_mask_low)
-        LOGGER.debug('%s: multicast configured: addr(%s) mask(%s)' % (
+        LOGGER.info('%s: multicast configured: addr(%s) mask(%s)' % (
             self.name, resp_ip.ip_str, resp_mask.ip_str))
+        self.set_port(7148)
 
     def rx_okay(self, wait_time=0.2, checks=10):
         """

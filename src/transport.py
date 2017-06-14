@@ -28,6 +28,12 @@ class Transport(object):
         """
         raise NotImplementedError
 
+    def test_connection(self):
+        """
+        Write to and read from the scratchpad to test the connection to the FPGA
+        """
+        return self.is_connected()
+
     def ping(self):
         """
         Use the 'watchdog' request to ping the FPGA host.
