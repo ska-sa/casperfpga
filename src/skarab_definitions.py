@@ -424,7 +424,7 @@ class Command(object):
             if isinstance(value, CommandHeader):
                 for sub_attribute in value._odict.items():
                     sub_attr, sub_value = sub_attribute
-                    # print 'CommandHeader:', sub_attr, repr(sub_value)
+                    # print('CommandHeader:', sub_attr, repr(sub_value))
                     payload += sub_value
             else:
                 if type(value) == str:

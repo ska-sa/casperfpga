@@ -12,8 +12,7 @@ Created on Fri Jan  3 10:40:53 2014
 import argparse
 
 from casperfpga import utils
-from casperfpga import katcp_fpga
-from casperfpga import dcp_fpga
+from casperfpga.casperfpga import CasperFpga
 try:
     import corr2
 except ImportError:
@@ -51,11 +50,6 @@ if args.log_level != '':
     except AttributeError:
         raise RuntimeError('No such log level: %s' % log_level)
 
-if args.comms == 'katcp':
-    HOSTCLASS = katcp_fpga.KatcpFpga
-else:
-    HOSTCLASS = dcp_fpga.DcpFpga
-
 # create the devices and connect to them
 if corr2 is not None:
     import os
@@ -66,28 +60,27 @@ else:
     hosts = args.hosts.strip().replace(' ', '').split(',')
 if len(hosts) == 0:
     raise RuntimeError('No good carrying on without hosts.')
-fpgas = utils.threaded_create_fpgas_from_hosts(HOSTCLASS, hosts)
+fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
 utils.threaded_fpga_function(fpgas, 10, 'test_connection')
 utils.threaded_fpga_function(fpgas, 15, 'get_system_information')
 for fpga in fpgas:
     numgbes = len(fpga.tengbes)
     if numgbes < 1:
         raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
-    print '%s: found %i 10gbe core%s.' % (fpga.host,
-                                          numgbes,
-                                          '' if numgbes == 1 else 's')
+    print('%s: found %i 10gbe core%s.' % (
+        fpga.host, numgbes, '' if numgbes == 1 else 's'))
 
 for fpga in fpgas:
     if args.core == 'all':
         cores = fpga.tengbes.names()
     else:
         cores = [args.core]
-    print 50*'#'
-    print '%s:' % fpga.host
-    print 50*'#'
+    print(50*'#')
+    print('%s:' % fpga.host)
+    print(50*'#')
     for core in cores:
-        fpga.tengbes[core].print_10gbe_core_details(arp=args.arp, cpu=args.cpu,
-                                                    refresh=True)
+        fpga.tengbes[core].print_10gbe_core_details(
+            arp=args.arp, cpu=args.cpu, refresh=True)
 
 # handle exits cleanly
 utils.threaded_fpga_function(fpgas, 10, 'disconnect')

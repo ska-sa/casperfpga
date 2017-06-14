@@ -10,7 +10,6 @@ import hashlib
 import skarab_definitions as sd
 
 from transport import Transport
-from fortygbe import FortyGbe
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
@@ -61,13 +60,13 @@ class SkarabTransport(Transport):
     # create dictionary of skarab_definitions module
     sd_dict = vars(sd)
 
-    def __init__(self, host):
+    def __init__(self, **kwargs):
         """
         Initialized SKARAB FPGA object
         :param host: IP Address of the targeted SKARAB Board
         :return: none
         """
-        Transport.__init__(self, host)
+        Transport.__init__(self, **kwargs)
 
         # sequence number for control packets
         self._seq_num = 0
@@ -110,12 +109,6 @@ class SkarabTransport(Transport):
         # self.gbes.append(FortyGbe(self, 0))
         # # self.gbes.append(FortyGbe(self, 0, 0x50000 - 0x4000))
 
-    def connect(self, timeout=None):
-        pass
-
-    def disconnect(self):
-        pass
-
     def is_connected(self, retries=3):
         """
         'ping' the board to see if it is connected and running.
@@ -131,14 +124,6 @@ class SkarabTransport(Transport):
         :return: 
         """
         return self.is_connected()
-
-    def set_igmp_version(self, version):
-        """
-        Compatibility function to match KatcpFpga interface.
-        :param version: 
-        :return: 
-        """
-        pass
 
     def loopbacktest(self, iface):
         """
@@ -505,7 +490,7 @@ class SkarabTransport(Transport):
                 self.sdram_program(first_packet_in_image,
                                    last_packet_in_image, image_chunk)
                 time.sleep(0.010)
-                # print 'tick %i' % sent_pkt_counter
+                # print('tick %i' % sent_pkt_counter)
                 sent_pkt_counter += 1
             except Exception as exc:
                 LOGGER.error('Uploading to SDRAM failed.')
@@ -1422,21 +1407,21 @@ class SkarabTransport(Transport):
     # - Response ReadFlashResp
 
     def read_flash_words(self, flash_address, num_words=256):
-        '''
+        """
         Used to read a block of up to 384 16-bit words from the NOR flash on the SKARAB motherboard.
         :param flash_address: 32-bit Address in the NOR flash to read
         :param num_words: Number of 16-bit words to be read - Default value of 256 words
         :return: Words read by the function call
-        '''
+        """
 
-        '''
+        """
         ReadFlashWordsReq consists of the following:
         - Command Type: skarab_definitions.READ_FLASH_WORDS = 0x0000F
         - Sequence Number: self.sequenceNumber
         - Upper 16 bits of NOR flash address
         - Lower 16 bits of NOR flash address
         - NumWords: Number of 16-bit words to be read
-        '''
+        """
 
         if num_words > 384:
             errmsg = "Failed to ReadFlashWords - Maximum of 384 16-bit words can be read from the NOR flash"
@@ -1466,13 +1451,13 @@ class SkarabTransport(Transport):
             raise InvalidResponse(errmsg)
 
     def verify_words(self, bitstream, flash_address=sd.DEFAULT_START_ADDRESS):
-        '''
+        """
         This method reads back the programmed words from the flash device and checks it
         against the data in the input .bin file uploaded to the Flash Memory.
         :param bitstream: Of the input .bin file that was programmed to Flash Memory
         :param flash_address: 32-bit Address in the NOR flash to START reading from
         :return: Boolean success/fail
-        '''
+        """
 
         # bitstream = open(filename, 'rb').read()
         bitstream_chunks = [bitstream[i:i+512] for i in range(0, len(bitstream), 512)]   # Now we have 512-byte chunks
@@ -1524,7 +1509,7 @@ class SkarabTransport(Transport):
 
     def program_flash_words(self, flash_address, total_num_words, num_words, do_buffered_prog, start_prog, finish_prog,
                             write_words):
-        '''
+        """
         This is the low-level function, as per the FUM, to write to the Virtex Flash.
 
         :param flash_address: 32-bit flash address to program to
@@ -1535,7 +1520,7 @@ class SkarabTransport(Transport):
         :param finish_prog: 0/1 - Last packet in flash programming, complete programming operation in flash
         :param write_words: Words to program, max = 256 Words
         :return: Boolean - Success/Fail - 1/0
-        '''
+        """
 
         # First thing to check:
         if num_words > 256 or len(write_words) > 512:
@@ -1544,7 +1529,7 @@ class SkarabTransport(Transport):
             raise ProgrammingError(errmsg)
         # else: Continue as per normal
 
-        '''
+        """
         ProgramFlashWordsReq consists of the following:        
         - Sequence Number: self.seq_num
         - Upper 16 bits of flash_address to start programming to
@@ -1555,7 +1540,7 @@ class SkarabTransport(Transport):
         - StartProgram: 0/1 - First packet in flash programming, start programming operation in flash
         - FinishProgram: 0/1 - Last packet in flash programming, complete programming operation in flash
         - WriteWords[256] (WordsToWrite): Words to program, max = 256 words
-        '''
+        """
 
         # Split 32-bit Flash Address into 16-bit high and low values
         flash_address_high, flash_address_low = self.data_split_and_pack(flash_address)
@@ -1565,7 +1550,7 @@ class SkarabTransport(Transport):
                                           total_num_words, num_words, do_buffered_prog,
                                           start_prog, finish_prog, write_words)
 
-        '''
+        """
         ProgramFlashWordsResp consists of the following:
         - Command Type
         - Sequence Number
@@ -1581,7 +1566,7 @@ class SkarabTransport(Transport):
 
         - Therefore Total Number of Words to be expected in the Response:
           - 1+1+1+1+1+1+1+1+1+1+(2-1) = 11 16-bit words (?)
-        '''
+        """
         response = self.send_packet(payload=request.create_payload(),
                                     response_type='ProgramFlashWordsResp',
                                     expect_response=True,
@@ -1604,7 +1589,7 @@ class SkarabTransport(Transport):
             raise InvalidResponse(errmsg)
 
     def program_words(self, bitstream, flash_address=sd.DEFAULT_START_ADDRESS):
-        '''
+        """
         Higher level function call to Program n-many words from an input .hex (eventually .bin) file
         This method scrolls through the words in the bitstream, and packs them into 256+256 words
         This method erases the required number of blocks in the flash
@@ -1612,7 +1597,7 @@ class SkarabTransport(Transport):
         :param bitstream: Of the input .bin file to write to Flash Memory
         :param flash_address: Address in Flash Memory from where to start programming
         :return: Boolean Success/Fail - 1/0
-        '''
+        """
 
         # bitstream = open(filename, 'rb').read()
         # As per upload_to_ram() except now we're programming in chunks of 512 words
@@ -1654,11 +1639,11 @@ class SkarabTransport(Transport):
     # - Request sEraseFlashBlockReq
     # - Response sEraseFlashBlockResp
     def erase_flash_block(self, flash_address=sd.DEFAULT_START_ADDRESS):
-        '''
+        """
         Used to erase a block in the NOR flash on the SKARAB motherboard
         :param flash_address: 32-bit address in the NOR flash to erase
         :return: erase_success - 0/1
-        '''
+        """
 
         address_high, address_low = self.data_split_and_pack(flash_address)
 
@@ -1688,14 +1673,14 @@ class SkarabTransport(Transport):
 
     # This is the "Parent function" that invokes erase_flash_block
     def erase_blocks(self, num_flash_blocks, flash_address=sd.DEFAULT_START_ADDRESS):
-        '''
+        """
         Higher level function call to Erase n-many Flash Blocks in preparation for program_flash_words
         This method erases the required number of blocks in the flash
         - Only the required number of flash blocks are erased
         :param num_flash_blocks: Number of Flash Memory Blocks to be erased, to make space for the new image
         :param flash_address: Start address from where to begin erasing Flash Memory
         :return:
-        '''
+        """
 
         default_value = True
         if flash_address != sd.DEFAULT_START_ADDRESS:
@@ -1739,12 +1724,12 @@ class SkarabTransport(Transport):
     @staticmethod
     # Only working with BPIx8 .bin files now
     def analyse_file(filename):
-        '''
+        """
         This method analyses the input .bin file to determine the number of words to program,
         and the number of blocks to erase
         :param filename: Input .bin to be written to the Virtex FPGA
         :return: Tuple - num_words (in file), num_memory_blocks (required to hold this file)
-        '''
+        """
 
         contents = open(filename, 'rb').read()      # File contents are in bytes
 
@@ -1765,13 +1750,13 @@ class SkarabTransport(Transport):
     # - ProgramWords()
     # - VerifyWords()
     def virtex_flash_reconfig(self, filename, flash_address=sd.DEFAULT_START_ADDRESS, blind_reconfig=False):
-        '''
+        """
         This is the entire function that makes the necessary calls to reconfigure the
         :param filename: The actual .bin file that is to be written to the Virtex FPGA
         :param flash_address: 32-bit Address in the NOR flash to start programming from
         :param blind_reconfig: Reconfigure the board and don't wait to Verify what has been written
         :return: Success/Fail - 0/1
-        '''
+        """
 
         # For completeness, make sure the input file is of a .bin disposition
         file_extension = os.path.splitext(filename)[1]
@@ -2595,18 +2580,6 @@ class SkarabTransport(Transport):
         unpacked_format = struct.unpack(data_format_unpack, bitstream)
         reordered_bitstream = struct.pack(data_format_pack, *unpacked_format)
         return reordered_bitstream
-
-    def get_system_information(self, filename=None, fpg_info=None):
-        """
-        Get information about the design running on the FPGA.
-        If filename is given, get it from there, otherwise query the host
-        via KATCP.
-        :param filename: fpg filename
-        :param fpg_info: a tuple containing device_info and coreinfo
-        dictionaries
-        :return: <nothing> the information is populated in the class
-        """
-        return filename, fpg_info
 
     def post_get_system_information(self):
         """

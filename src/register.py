@@ -47,7 +47,7 @@ class Register(Memory):
                 break
         if address == -1 or length_bytes == -1:
             LOGGER.error(memorymap_dict)
-            print memorymap_dict
+            print(memorymap_dict)
             raise RuntimeError('Could not find address or length for '
                                'Register %s' % device_name)
         return cls(parent, device_name, address=address,

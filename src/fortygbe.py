@@ -55,7 +55,7 @@ class FortyGbe(object):
         :param addr: 
         :return: 
         """
-        return self.parent.read_wishbone(addr)
+        return self.parent.transport.read_wishbone(addr)
 
     def _wbone_wr(self, addr, val):
         """
@@ -64,7 +64,7 @@ class FortyGbe(object):
         :param val: 
         :return: 
         """
-        return self.parent.write_wishbone(addr, val)
+        return self.parent.transport.write_wishbone(addr, val)
 
     def enable(self):
         """
@@ -213,8 +213,9 @@ class FortyGbe(object):
         # mask_high = mask.ip_int >> 16
         # mask_low = mask.ip_int & 65535
         request = ConfigureMulticastReq(
-            self.parent.seq_num, 1, ip_high, ip_low, mask_high, mask_low)
-        resp = self.parent.send_packet(
+            self.parent.transport.seq_num, 1, ip_high, ip_low,
+            mask_high, mask_low)
+        resp = self.parent.transport.send_packet(
             payload=request.create_payload(),
             response_type='ConfigureMulticastResp',
             expect_response=True,

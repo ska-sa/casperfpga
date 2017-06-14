@@ -1,5 +1,4 @@
-__author__ = 'paulp'
-
+from __future__ import print_function
 import threading
 import Queue
 import time
@@ -29,7 +28,8 @@ def create_meta_dictionary(metalist):
             meta_items[name][param] = value
     except ValueError as e:
         for ctr, contents in enumerate(metalist):
-            print ctr, contents
+            print(ctr, end='')
+            print(contents)
         raise e
     return meta_items
 
@@ -236,16 +236,20 @@ def program_fpgas(fpga_list, progfile, timeout=10):
         len(fpga_list), time.time() - stime))
 
 
-def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147,
-                                     timeout=10):
+def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
+                                     port=7147, timeout=10):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
-    :param fpga_class: the class to instantiate - KatcpFpga or DcpFpga
+    :param fpga_class: the class to insantiate, usually CasperFpga
     :param host_list: a comma-seperated list of hosts
     :param port: the port on which to do network comms
     :param timeout: how long to wait, in seconds
     :return:
     """
+    if fpga_class is None:
+        from casperfpga import CasperFpga
+        fpga_class = CasperFpga
+
     num_hosts = len(host_list)
     result_queue = Queue.Queue(maxsize=num_hosts)
     thread_list = []
@@ -273,8 +277,8 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147,
     if hosts_missing:
         for host in hosts_missing:
             LOGGER.error('Could not create host %s.' % host)
-        errstr = 'Given %d hosts, only made %d %s objects.' % (
-            num_hosts, len(fpgas), fpga_class.__name__)
+        errstr = 'Given %d hosts, only made %d CasperFpgas.' % (
+            num_hosts, len(fpgas))
         LOGGER.error(errstr)
         raise RuntimeError(errstr)
     return fpgas

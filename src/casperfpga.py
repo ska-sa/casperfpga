@@ -11,12 +11,10 @@ import tengbe
 import fortygbe
 import qdr
 from attribute_container import AttributeContainer
-from utils import parse_fpg
 import skarab_definitions as skarab_defs
-
 from transport_katcp import KatcpTransport
 from transport_skarab import SkarabTransport
-
+from utils import parse_fpg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -67,7 +65,7 @@ def choose_transport(host_ip):
     request = skarab_defs.ReadRegReq(
         0, skarab_defs.BOARD_REG, skarab_defs.C_RD_VERSION_ADDR)
     skarab_ctrl_sock.sendto(request.create_payload(), skarab_eth_ctrl_port)
-    data_ready = select.select([skarab_ctrl_sock], [], [], 0.1)
+    data_ready = select.select([skarab_ctrl_sock], [], [], 0.2)
     skarab_ctrl_sock.close()
     if len(data_ready[0]) > 0:
         logging.debug('%s seems to be a SKARAB' % host_ip)
@@ -76,25 +74,37 @@ def choose_transport(host_ip):
     return KatcpTransport
 
 
+def get_kwarg(field, kwargs, default=None):
+    try:
+        return kwargs[field]
+    except KeyError:
+        return default
+
+
 class CasperFpga(object):
     """
     A FPGA host board that has a CASPER design running on it. Or will soon have.
     """
-    def __init__(self, host, transport=None):
+    def __init__(self, *args, **kwargs):
         """
         :param host: the hostname of this CasperFpga
         :return:
         """
-        self.host = host
-        self.transport = None
+        if len(args) > 0:
+            try:
+                kwargs['host'] = args[0]
+                kwargs['port'] = args[1]
+            except IndexError:
+                pass
+        self.host = kwargs['host']
+        self.bitstream = get_kwarg('bitstream', kwargs)
 
+        transport = get_kwarg('transport', kwargs)
         if transport:
-            self.transport = transport(host)
+            self.transport = transport(**kwargs)
         else:
-            transport_class = choose_transport(host)
-            self.transport = transport_class(host)
-
-        # self.transport = choose_transport(host)
+            transport_class = choose_transport(kwargs['host'])
+            self.transport = transport_class(**kwargs)
 
         # this is just for code introspection
         self.devices = None
@@ -144,8 +154,13 @@ class CasperFpga(object):
         self.transport.deprogram()
         self._reset_device_info()
 
-    def set_igmp_version(self):
-        return self.transport.set_igmp_version()
+    def set_igmp_version(self, version):
+        """
+        
+        :param version: 
+        :return: 
+        """
+        return self.transport.set_igmp_version(version)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
                                   wait_complete=True):
@@ -162,6 +177,13 @@ class CasperFpga(object):
             filename, port, timeout, wait_complete)
         self.get_system_information(filename)
         return rv
+
+    def is_connected(self):
+        """
+        Is the transport connected to the host?
+        :return: 
+        """
+        return self.transport.is_connected()
 
     def is_running(self):
         """
@@ -493,8 +515,15 @@ class CasperFpga(object):
             dictionaries
         :return: <nothing> the information is populated in the class
         """
-        filename, fpg_info = self.transport.get_system_information(
-            filename, fpg_info)
+        # try and get the info from the running host first
+        if self.transport.is_running() and hasattr(
+                self.transport, 'get_system_information_from_transport'):
+            if (filename is not None) or (fpg_info is not None):
+                LOGGER.info('get_system_information: device running, '
+                            'so overriding arguments.')
+            filename, fpg_info = \
+                self.transport.get_system_information_from_transport()
+        # otherwise look at the arguments given
         if (filename is None) and (fpg_info is None):
             raise RuntimeError('Either filename or parsed fpg data '
                                'must be given.')

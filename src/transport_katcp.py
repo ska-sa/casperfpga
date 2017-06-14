@@ -9,7 +9,7 @@ import socket
 
 
 from transport import Transport
-from utils import parse_fpg, create_meta_dictionary
+from utils import create_meta_dictionary
 
 LOGGER = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     """
     A katcp transport client for a casperfpga object
     """
-    def __init__(self, host, port=7147, timeout=20.0, connect=True):
+    def __init__(self, **kwargs):
         """
 
         :param host:
@@ -77,16 +77,22 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param connect:
         :return:
         """
-        katcp.CallbackClient.__init__(self, host, port,
-                                      tb_limit=20, timeout=timeout,
-                                      logger=LOGGER, auto_reconnect=True)
-        Transport.__init__(self, host)
+        try:
+            port = kwargs['port']
+        except KeyError:
+            port = 7147
+        try:
+            timeout = kwargs['timeout']
+        except KeyError:
+            timeout = 10
+        katcp.CallbackClient.__init__(
+            self, kwargs['host'], port, tb_limit=20,
+            timeout=timeout, logger=LOGGER, auto_reconnect=True)
+        Transport.__init__(self, **kwargs)
         self.unhandled_inform_handler = None
         self._timeout = timeout
-        if connect:
-            self.connect()
-        LOGGER.info('%s: port(%s) created%s.' %
-                    (self.host, port, ' & connected' if connect else ''))
+        self.connect()
+        LOGGER.info('%s: port(%s) created and connected.' % (self.host, port))
 
     def connect(self, timeout=None):
         """
@@ -596,7 +602,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def _read_design_info_from_host(self, device=None):
         """
-        Katcp request for extra system information embedded in the boffile.
+        Katcp request for extra system information embedded in the bitstream.
         :param device: can specify a device name if you don't want everything
         :return: a dictionary of metadata
         """
@@ -665,31 +671,17 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                    'device %s' % byte_dev)
         return memorymap_dict
 
-    def get_system_information(self, filename=None, fpg_info=None):
+    def get_system_information_from_transport(self):
         """
-        Get information about the design running on the FPGA.
-        If filename is given, get it from there, otherwise query the
-        host via KATCP.
-        :param filename: fpg filename
-        :param fpg_info: a tuple with two dictionaries of FPG information
-        :return: <nothing> the information is populated in the class
-        """
-        if (not self.is_running()) and (filename is None):
-            raise RuntimeError('This can only be run on a running device '
-                               'when no file is given.')
-        if filename is not None:
-            device_dict, memorymap_dict = parse_fpg(filename)
-        else:
-            device_dict = self._read_design_info_from_host()
-            memorymap_dict = self._read_coreinfo_from_host()
-        return None, (device_dict, memorymap_dict)
-
-    def post_get_system_information(self):
-        """
-        Cleanup run after get_system_information
+        
         :return: 
         """
-        pass
+        if not self.is_running():
+            raise RuntimeError('This can only be run on a running device '
+                               'when no file is given.')
+        device_dict = self._read_design_info_from_host()
+        memorymap_dict = self._read_coreinfo_from_host()
+        return None, (device_dict, memorymap_dict)
 
     def unhandled_inform(self, msg):
         """

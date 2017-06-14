@@ -2,12 +2,12 @@ class Transport(object):
     """
     The actual network transport of data for a CasperFpga object.
     """
-    def __init__(self, host):
+    def __init__(self, **kwargs):
         """
         
         :param host: 
         """
-        self.host = host
+        self.host = kwargs['host']
         self.memory_devices = {}
         self.gbes = []
         self.prog_info = {'last_uploaded': '', 'last_programmed': '',
@@ -19,7 +19,7 @@ class Transport(object):
         :param timeout: 
         :return: 
         """
-        raise NotImplementedError
+        pass
 
     def is_running(self):
         """
@@ -40,7 +40,7 @@ class Transport(object):
         
         :return: 
         """
-        raise NotImplementedError
+        pass
 
     def read(self, device_name, size, offset=0):
         """
@@ -81,7 +81,7 @@ class Transport(object):
         :param version
         :return: 
         """
-        raise NotImplementedError
+        pass
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
                                   wait_complete=True):
@@ -111,21 +111,12 @@ class Transport(object):
         """
         raise NotImplementedError
 
-    def get_system_information(self, filename=None, fpg_info=None):
-        """
-        
-        :param filename: 
-        :param fpg_info: 
-        :return: processed_filename, processed_fpg_info
-        """
-        raise NotImplementedError
-
     def post_get_system_information(self):
         """
         Cleanup run after get_system_information
         :return: 
         """
-        raise NotImplementedError
+        pass
 
 
 # end

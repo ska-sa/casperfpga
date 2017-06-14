@@ -260,7 +260,7 @@ class TenGbe(Memory):
         if self.mac is None:
             # TODO get MAC from EEPROM serial number and assign here
             self.mac = '0'
-        reply, _ = self.parent.katcprequest(
+        reply, _ = self.parent.transport.katcprequest(
             name='tap-start', request_timeout=5,
             require_ok=True,
             request_args=(self.name, self.name, '0.0.0.0',
@@ -268,21 +268,21 @@ class TenGbe(Memory):
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting tap driver.' % self.name)
 
-        reply, _ = self.parent.katcprequest(
+        reply, _ = self.parent.transport.katcprequest(
             name='tap-arp-config', request_timeout=1,
             require_ok=True,
             request_args=(self.name, 'mode', '0'))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure disabling ARP.' % self.name)
 
-        reply, _ = self.parent.katcprequest(
+        reply, _ = self.parent.transport.katcprequest(
             name='tap-dhcp', request_timeout=30,
             require_ok=True,
             request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure starting DHCP client.' % self.name)
 
-        reply, _ = self.parent.katcprequest(
+        reply, _ = self.parent.transport.katcprequest(
             name='tap-arp-config', request_timeout=1,
             require_ok=True,
             request_args=(self.name, 'mode', '-1'))
@@ -306,7 +306,7 @@ class TenGbe(Memory):
             LOGGER.info('%s: tap already running.' % self.fullname)
             return
         LOGGER.info('%s: starting tap driver.' % self.fullname)
-        reply, _ = self.parent.katcprequest(
+        reply, _ = self.parent.transport.katcprequest(
             name='tap-start', request_timeout=-1, require_ok=True,
             request_args=(self.name, self.name, str(self.ip_address),
                           str(self.port), str(self.mac), ))
@@ -321,7 +321,7 @@ class TenGbe(Memory):
         if not self.tap_running():
             return
         LOGGER.info('%s: stopping tap driver.' % self.fullname)
-        reply, _ = self.parent.katcprequest(
+        reply, _ = self.parent.transport.katcprequest(
             name='tap-stop', request_timeout=-1,
             require_ok=True, request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
@@ -338,7 +338,7 @@ class TenGbe(Memory):
             uninforms.append(msg)
 
         self.parent.unhandled_inform_handler = handle_inform
-        _, informs = self.parent.katcprequest(
+        _, informs = self.parent.transport.katcprequest(
             name='tap-info', request_timeout=-1,
             require_ok=False, request_args=(self.name, ))
         self.parent.unhandled_inform_handler = None
@@ -372,7 +372,7 @@ class TenGbe(Memory):
         Have the tap driver reload its ARP table right now.
         :return:
         """
-        reply, _ = self.parent.katcprequest(
+        reply, _ = self.parent.transport.katcprequest(
             name="tap-arp-reload", request_timeout=-1,
             require_ok=True, request_args=(self.name, ))
         if reply.arguments[0] != 'ok':
@@ -394,9 +394,9 @@ class TenGbe(Memory):
 
         # mcast_group_string = ip_str + '+' + str(group_size)
         mcast_group_string = ip_str
-        reply, _ = self.parent.katcprequest('tap-multicast-add', -1, True,
-                                            request_args=(self.name, 'recv',
-                                                          mcast_group_string, ))
+        reply, _ = self.parent.transport.katcprequest(
+            'tap-multicast-add', -1, True, request_args=(self.name, 'recv',
+                                                         mcast_group_string, ))
         if reply.arguments[0] == 'ok':
             if mcast_group_string not in self.multicast_subscriptions:
                 self.multicast_subscriptions.append(mcast_group_string)
@@ -413,7 +413,7 @@ class TenGbe(Memory):
         mcast IP address.
         """
         try:
-            reply, _ = self.parent.katcprequest(
+            reply, _ = self.parent.transport.katcprequest(
                 'tap-multicast-remove', -1, True,
                 request_args=(self.name, IpAddress.str2ip(ip_str), ))
         except:
@@ -633,27 +633,27 @@ class TenGbe(Memory):
         if refresh or (self.core_details is None):
             self.get_10gbe_core_details(arp, cpu)
         details = self.core_details
-        print '------------------------'
-        print '%s configuration:' % self.fullname
-        print 'MAC: ', Mac.mac2str(int(details['mac']))
-        print 'Gateway: ', details['gateway_ip']
-        print 'IP: ', details['ip']
-        print 'Fabric port: ',
-        print '%5d' % details['fabric_port']
-        print 'Fabric interface is currently:', 'Enabled' if \
-            details['fabric_en'] else 'Disabled'
-        print 'XAUI Status: ', details['xaui_status']
+        print('------------------------')
+        print('%s configuration:' % self.fullname)
+        print('MAC: ', Mac.mac2str(int(details['mac'])))
+        print('Gateway: ', details['gateway_ip'])
+        print('IP: ', details['ip'])
+        print('Fabric port: ',)
+        print('%5d' % details['fabric_port'])
+        print('Fabric interface is currently: %s' %
+              'Enabled' if details['fabric_en'] else 'Disabled')
+        print('XAUI Status: ', details['xaui_status'])
         for ctr in range(0, 4):
-            print '\tlane sync %i:  %i' % (ctr, details['xaui_lane_sync'][ctr])
-        print '\tChannel bond: %i' % details['xaui_chan_bond']
-        print 'XAUI PHY config: '
-        print '\tRX_eq_mix: %2X' % details['xaui_phy']['rx_eq_mix']
-        print '\tRX_eq_pol: %2X' % details['xaui_phy']['rx_eq_pol']
-        print '\tTX_pre-emph: %2X' % details['xaui_phy']['tx_preemph']
-        print '\tTX_diff_ctrl: %2X' % details['xaui_phy']['tx_swing']
-        print 'Multicast:'
+            print('\tlane sync %i:  %i' % (ctr, details['xaui_lane_sync'][ctr]))
+        print('\tChannel bond: %i' % details['xaui_chan_bond'])
+        print('XAUI PHY config: ')
+        print('\tRX_eq_mix: %2X' % details['xaui_phy']['rx_eq_mix'])
+        print('\tRX_eq_pol: %2X' % details['xaui_phy']['rx_eq_pol'])
+        print('\tTX_pre-emph: %2X' % details['xaui_phy']['tx_preemph'])
+        print('\tTX_diff_ctrl: %2X' % details['xaui_phy']['tx_swing'])
+        print('Multicast:')
         for k in details['multicast']:
-            print '\t%s: %s' % (k, details['multicast'][k])
+            print('\t%s: %s' % (k, details['multicast'][k]))
         if arp:
             self.print_arp_details(refresh=refresh, only_hits=True)
         if cpu:
@@ -673,7 +673,7 @@ class TenGbe(Memory):
             refresh = True
         if refresh:
             self.get_10gbe_core_details(read_arp=True)
-        print 'ARP Table: '
+        print('ARP Table: ')
         for ip_address in range(256):
             all_fs = True
             if only_hits:
@@ -685,10 +685,10 @@ class TenGbe(Memory):
             if only_hits and all_fs:
                 printmac = False
             if printmac:
-                print 'IP: %s%3d: MAC:' % (details['ip_prefix'], ip_address),
+                print('IP: %s%3d: MAC:' % (details['ip_prefix'], ip_address),)
                 for mac in range(0, 6):
-                    print '%02X' % details['arp'][ip_address][mac],
-                print ''
+                    print('%02X' % details['arp'][ip_address][mac],)
+                print('')
 
     def print_cpu_details(self, refresh=False):
         """
@@ -703,24 +703,24 @@ class TenGbe(Memory):
             refresh = True
         if refresh:
             self.get_10gbe_core_details(read_cpu=True)
-        print 'CPU TX Interface (at offset 4096 bytes):'
-        print 'Byte offset: Contents (Hex)'
+        print('CPU TX Interface (at offset 4096 bytes):')
+        print('Byte offset: Contents (Hex)')
         for key, value in details['cpu_tx'].iteritems():
-            print '%04i:    ' % key,
+            print('%04i:    ' % key,)
             for val in value:
-                print '%02x' % val,
-            print ''
-        print '------------------------'
+                print('%02x' % val,)
+            print('')
+        print('------------------------')
 
-        print 'CPU RX Interface (at offset 8192bytes):'
-        print 'CPU packet RX buffer unacknowledged data: ' \
-              '%i' % details['cpu_rx_buf_unack_data']
-        print 'Byte offset: Contents (Hex)'
+        print('CPU RX Interface (at offset 8192bytes):')
+        print('CPU packet RX buffer unacknowledged data: %i' %
+              details['cpu_rx_buf_unack_data'])
+        print('Byte offset: Contents (Hex)')
         for key, value in details['cpu_rx'].iteritems():
-            print '%04i:    ' % key,
+            print('%04i:    ' % key,)
             for val in value:
-                print '%02x' % val,
-            print ''
-        print '------------------------'
+                print('%02x' % val,)
+            print('')
+        print('------------------------')
 
 # end

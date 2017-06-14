@@ -2,8 +2,7 @@
 
 import argparse
 
-from casperfpga import katcp_fpga
-from casperfpga import dcp_fpga
+from casperfpga.casperfpga import CasperFpga
 
 parser = argparse.ArgumentParser(
     description='Program an FPGA.',
@@ -17,11 +16,6 @@ parser.add_argument('--loglevel', dest='log_level', action='store', default='',
                          'options INFO, DEBUG, ERROR')
 args = parser.parse_args()
 
-if args.comms == 'katcp':
-    HOSTCLASS = katcp_fpga.KatcpFpga
-else:
-    HOSTCLASS = dcp_fpga.DcpFpga
-
 if args.log_level != '':
     import logging
     log_level = args.log_level.strip()
@@ -31,7 +25,7 @@ if args.log_level != '':
         raise RuntimeError('No such log level: %s' % log_level)
 
 # create the device and connect to it
-fpga = HOSTCLASS(args.hostname, 7147)
+fpga = CasperFpga(args.hostname, 7147)
 fpga.deprogram()
 fpga.disconnect()
 # end

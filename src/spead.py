@@ -124,12 +124,12 @@ class SpeadPacket(object):
                 # HACK - the padded headers are 0x00 - d'oh.
                 # But then we MUST replace 0x0000 afterwards.
                 if hdr_id != 0x00:
-                    print 'Current headers:', headers
-                    print 'but new header: {}'.format(hdr_id)
+                    print('Current headers:', headers)
+                    print('but new header: {}'.format(hdr_id))
                     raise SpeadPacket.SpeadPacketError(
                         'Header ID 0x%04x already in packet headers.' % hdr_id)
                 # else:
-                #     print 'UN OTRA MAS! 0x000'
+                #     print('UN OTRA MAS! 0x000')
             headers[hdr_id] = hdr_data
             if hdr_id == 0x0004:
                 hdr_pkt_len_bytes = hdr_data
@@ -207,7 +207,7 @@ class SpeadPacket(object):
         Print a representation of the packet.
         """
         for string in self.get_strings(headers_only, hex_nums):
-            print string
+            print(string)
 
 
 class SpeadProcessor(object):

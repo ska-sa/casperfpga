@@ -10,8 +10,8 @@ import signal
 
 import casperfpga.scroll as scroll
 from casperfpga import utils
-from casperfpga import katcp_fpga
-from casperfpga import dcp_fpga
+from casperfpga.casperfpga import CasperFpga
+
 try:
     import corr2
 except ImportError:
@@ -31,9 +31,6 @@ parser.add_argument(
     '-r', '--reset', dest='resetctrs', action='store_true', default=False,
     help='reset the GBE debug counters')
 parser.add_argument(
-    '--comms', dest='comms', action='store', default='katcp', type=str,
-    help='katcp (default) or dcp?')
-parser.add_argument(
     '--loglevel', dest='log_level', action='store', default='',
     help='log level to use, default None, options INFO, DEBUG, ERROR')
 args = parser.parse_args()
@@ -51,11 +48,6 @@ if args.log_level != '':
 #                     level=logging.DEBUG)
 # logging.info('****************************************************')
 
-if args.comms == 'katcp':
-    HOSTCLASS = katcp_fpga.KatcpFpga
-else:
-    HOSTCLASS = dcp_fpga.DcpFpga
-
 # create the devices and connect to them
 if corr2 is not None:
     import os
@@ -66,15 +58,15 @@ else:
     hosts = args.hosts.strip().replace(' ', '').split(',')
 if len(hosts) == 0:
     raise RuntimeError('No good carrying on without hosts.')
-fpgas = utils.threaded_create_fpgas_from_hosts(HOSTCLASS, hosts)
+fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
 utils.threaded_fpga_function(fpgas, 10, 'test_connection')
 utils.threaded_fpga_function(fpgas, 15, 'get_system_information')
 for fpga in fpgas:
     numgbes = len(fpga.gbes)
     if numgbes < 1:
         raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
-    print '%s: found %i 10gbe core%s.' % (
-        fpga.host, numgbes, '' if numgbes == 1 else 's')
+    print('%s: found %i 10gbe core%s.' % (
+        fpga.host, numgbes, '' if numgbes == 1 else 's'))
 
 if args.resetctrs:
     def reset_gbe_debug(fpga_):
@@ -85,7 +77,7 @@ if args.resetctrs:
             fpga_.registers.control.write(gbe_cnt_rst='pulse')
         else:
             utils.threaded_fpga_function(fpgas, 10, 'disconnect')
-            print control_fields
+            print(control_fields)
             raise RuntimeError('Could not find GBE debug reset field.')
     utils.threaded_fpga_operation(fpgas, 10, reset_gbe_debug)
 
@@ -100,7 +92,8 @@ def get_gbe_data(fpga):
         for regname in ctr_data:
             regdata = ctr_data[regname]
             try:
-                if ('timestamp' in regdata.keys()) and ('data' in regdata.keys()):
+                if ('timestamp' in regdata.keys()) and \
+                        ('data' in regdata.keys()):
                     ctr_data[regname] = regdata['data']['reg']
             except AttributeError:
                 pass
@@ -148,7 +141,8 @@ fpga_headers = ['tap_running', 'ip', 'gbe_rxctr', 'gbe_rxofctr',
 
 
 def exit_gracefully(sig, frame):
-    print sig, frame
+    print(sig)
+    print(frame)
     scroll.screen_teardown()
     utils.threaded_fpga_function(fpgas, 10, 'disconnect')
     sys.exit(0)
