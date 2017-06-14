@@ -25,6 +25,9 @@ class InvalidSkarabBitstream(ValueError):
     pass
 
 
+class UploadChecksumMismatch(ValueError):
+    pass
+
 class SkarabSdramError(RuntimeError):
     pass
 
@@ -383,26 +386,14 @@ class SkarabTransport(Transport):
         self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
         self.prog_info['last_uploaded'] = ''
 
-    def upload_to_ram(self, filename, verify=False, check_pkt_count=False):
+    def _upload_to_ram_prepare_image(self, filename):
         """
-        Opens a bitfile from which to program FPGA. Reads bitfile
-        in chunks of 4096 16-bit words.
-
-        Pads last packet to a 4096 word boundary.
-        Sends chunks of bitfile to fpga via sdram_program method
-        :param filename: file to upload
-        :param verify: flag to enable verification of uploaded bitstream (slow)
-        :param check_pkt_count: flag to enable checking of number of packets
-        programmed into the SDRAM. DOES NOT WORK WHEN PROGRAMMING VIA 40GbE
-        :return:
+        
+        :param filename: 
+        :return: 
         """
-        # flag to enable/disable padding of data send over udp pkt
-        padding = True
-
-        # get file extension
-        file_extension = os.path.splitext(filename)[1]
-
         # check file extension to see what we're dealing with
+        file_extension = os.path.splitext(filename)[1]
         if file_extension == '.fpg':
             LOGGER.info('.fpg detected. Extracting .bin.')
             image_to_program = self.extract_bitstream(filename)
@@ -421,7 +412,6 @@ class SkarabTransport(Transport):
         else:
             raise TypeError('Invalid file type. Only use .fpg, .bit, '
                             '.hex or .bin files')
-
         # check the generated bitstream
         (result, image_to_program) = self.check_bitstream(image_to_program)
         if not result:
@@ -429,47 +419,27 @@ class SkarabTransport(Transport):
             LOGGER.error(errmsg)
             raise InvalidSkarabBitstream(errmsg)
         LOGGER.info('Valid bitstream detected.')
+        return image_to_program
 
-        # at this point the bitstream is in memory
-
-        # prepare SDRAM for programming
-        self._prepare_sdram_ram_for_programming()
-
-        if file_extension == '.fpg':
-            (md5_header, md5_bitstream) = self.extract_md5_from_fpg(filename)
-            if md5_header is not None and md5_bitstream is not None:
-                # Calculate and compare MD5 sums here, before carrying on
-                # system_info is a dictionary
-                bitstream_md5sum = hashlib.md5(image_to_program).hexdigest()
-                if bitstream_md5sum != md5_bitstream:
-                    errmsg = "bitstream_md5sum != fpgfile_md5sum"
-                    LOGGER.error(errmsg)
-                    raise InvalidSkarabBitstream(errmsg)
-            else:
-                # .fpg file was created using an older version of mlib_devel
-                errmsg = 'An older version of mlib_devel generated ' + \
-                         filename + '. Please update to include the md5sum ' \
-                                    'on the bitstream in the .fpg header.'
-                LOGGER.error(errmsg)
-                raise InvalidSkarabBitstream(errmsg)
-
-        # split image into chunks of 4096 words
+    def _upload_to_ram_send_image(self, image_to_program):
+        """
+        
+        :param image_to_program: 
+        :return: 
+        """
+        # split image into chunks of 4096 words (one word is two bytes)
         image_size = len(image_to_program)
         image_chunks = [
-            image_to_program[ctr:ctr+8192] for ctr in range(0, image_size, 8192)
+            image_to_program[ctr:ctr + 8192] for ctr in
+            range(0, image_size, 8192)
         ]
-
-        # counter for num packets sent
         sent_pkt_counter = 0
 
         # check if the bin file requires padding
-        if image_size % 8192 == 0:
-            # no padding required
-            padding = False
+        padding = (image_size % 8192 != 0)
 
         # loop over chunks of 4096 words
         for chunkctr in range(image_size / 8192):
-
             if chunkctr == 0:
                 # flag first packet
                 first_packet_in_image = 1
@@ -512,59 +482,85 @@ class SkarabTransport(Transport):
                 LOGGER.error('Uploading to SDRAM Failed.')
                 raise exc
 
-        # Moving checksum COMPARISON to be bypassed
-        # - But still Calculating and printing the values
-
-        # calculate checksum
-        local_checksum = self.calculate_checksum_using_bitstream(
-            image_to_program)
-        # read spartan checksum
-        spartan_checksum = self.get_spartan_checksum()
-        LOGGER.info('Spartan bitstream checksum: %s' % spartan_checksum)
-        LOGGER.info('Calculated bitstream checksum: %s' % local_checksum)
-
-        use_checksum = False
-        if use_checksum:
-            if spartan_checksum != local_checksum:
-                # checksum mismatch, so we clear sdram
-                self.clear_sdram()
-                # and raise an exception
-                errmsg = 'Checksum mismatch: local(%s) spartan(%s). Will not ' \
-                         'attempt to boot from SDRAM. Try re-uploading ' \
-                         'bitstream.' % (local_checksum, spartan_checksum)
-                LOGGER.error(errmsg)
-                raise InvalidSkarabBitstream(errmsg)
-            LOGGER.info('Checksum match. Bitstream uploaded successfully.')
-
         # check if all bytes in bin file uploaded successfully before trigger
-        if not(sent_pkt_counter == (image_size / 8192)
-               or sent_pkt_counter == (image_size / 8192 + 1)):
+        if not (sent_pkt_counter == (image_size / 8192)
+                or sent_pkt_counter == (image_size / 8192 + 1)):
             errmsg = 'Error uploading FPGA image to SDRAM: ' \
-                     'sent_pkt_counter = %i' % sent_pkt_counter
+                     'sent_pkt_counter(%i)' % sent_pkt_counter
             LOGGER.error(errmsg)
             raise SkarabSdramError(errmsg)
 
-        # check if the number of packets sent equals the number of packets
-        # programmed into the SDRAM
-
         # check number of frames that have been programmed into the SDRAM
-        # TODO - fix the remote packet counter for 40gbe
         rx_pkt_counts = self.check_programming_packet_count()
-        LOGGER.info('PACKET COUNTER - Sent %i packets, %i received.' % (
+        LOGGER.debug('Sent %i packets, %i received.' % (
             sent_pkt_counter, rx_pkt_counts['Ethernet Frames']))
+        if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
+            self.clear_sdram()
+            errmsg = 'Error programming bitstream into SDRAM: sent(%i) ' \
+                     'received(%i)' % (sent_pkt_counter,
+                                       rx_pkt_counts['Ethernet Frames'])
+            LOGGER.error(errmsg)
+            raise ProgrammingError(errmsg)
+        LOGGER.info('Bitstream successfully programmed into SDRAM.')
 
-        # TODO - act on the checks
-        # if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
-        #     raise RuntimeError
+    def upload_to_ram(self, filename, verify=False):
+        """
+        Opens a bitfile from which to program FPGA. Reads bitfile
+        in chunks of 4096 16-bit words.
 
-        if check_pkt_count:
-            if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
-                # not all bitstream packets programmed into SDRAM
-                self.clear_sdram()
-                errmsg = 'Error programming bitstream into SDRAM.'
+        Pads last packet to a 4096 word boundary.
+        Sends chunks of bitfile to fpga via sdram_program method
+        :param filename: file to upload
+        :param verify: flag to enable verification of uploaded bitstream (slow)
+        :return:
+        """
+        # process the given file and get an image ready to send
+        image_to_program = self._upload_to_ram_prepare_image(filename)
+
+        # prepare SDRAM for programming
+        self._prepare_sdram_ram_for_programming()
+
+        # get the md5sum from the fpg file
+        if os.path.splitext(filename)[1] == '.fpg':
+            (md5_header, md5_bitstream) = self.extract_md5_from_fpg(filename)
+            if md5_header is not None and md5_bitstream is not None:
+                # Calculate and compare MD5 sums here, before carrying on
+                # system_info is a dictionary
+                bitstream_md5sum = hashlib.md5(image_to_program).hexdigest()
+                if bitstream_md5sum != md5_bitstream:
+                    errmsg = "bitstream_md5sum != fpgfile_md5sum"
+                    LOGGER.error(errmsg)
+                    raise InvalidSkarabBitstream(errmsg)
+            else:
+                # .fpg file was created using an older version of mlib_devel
+                errmsg = 'An older version of mlib_devel generated ' + \
+                         filename + '. Please update to include the md5sum ' \
+                                    'on the bitstream in the .fpg header.'
                 LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
-            LOGGER.info('Bitstream successfully programmed into SDRAM.')
+                raise InvalidSkarabBitstream(errmsg)
+
+        # send the image to the Skarab
+        try:
+            self._upload_to_ram_send_image(image_to_program)
+        except ProgrammingError:
+            # TODO - this should be an error?
+            pass
+
+        # check the checksums
+        local_checksum = self.calculate_checksum_using_bitstream(
+            image_to_program)
+        spartan_checksum = self.get_spartan_checksum()
+        LOGGER.debug('Spartan bitstream checksum: %s' % spartan_checksum)
+        LOGGER.debug('Calculated bitstream checksum: %s' % local_checksum)
+        if spartan_checksum != local_checksum:
+            self.clear_sdram()
+            errmsg = 'Checksum mismatch: local(%s) spartan(%s). Will not ' \
+                     'attempt to boot from SDRAM. Try re-uploading ' \
+                     'bitstream.' % (local_checksum, spartan_checksum)
+            LOGGER.error(errmsg)
+            # TODO - this should be an error?
+            # raise UploadChecksumMismatch(errmsg)
+        LOGGER.debug('Checksum match. Bitstream uploaded successfully.')
 
         # set finished writing to SDRAM
         try:
