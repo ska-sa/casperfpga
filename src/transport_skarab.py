@@ -553,6 +553,10 @@ class SkarabTransport(Transport):
         LOGGER.info('PACKET COUNTER - Sent %i packets, %i received.' % (
             sent_pkt_counter, rx_pkt_counts['Ethernet Frames']))
 
+        # TODO - act on the checks
+        # if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
+        #     raise RuntimeError
+
         if check_pkt_count:
             if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
                 # not all bitstream packets programmed into SDRAM
@@ -599,6 +603,30 @@ class SkarabTransport(Transport):
         raise ProgrammingError('Gave up programming after %i attempt%s' % (
             attempts, 's' if attempts > 1 else ''))
 
+    def _forty_gbe_get_port(self, port_addr=0x50000):
+        """
+
+        :return: 
+        """
+        en_port = self.read_wishbone(port_addr + 0x20)
+        return en_port & (2 ** 16 - 1)
+
+    def _forty_gbe_set_port(self, port, port_addr=0x50000):
+        """
+
+        :param port: 
+        :return: 
+        """
+        en_port = self.read_wishbone(port_addr + 0x20)
+        if en_port & (2 ** 16 - 1) == port:
+            return
+        en_port_new = ((en_port >> 16) << 16) + port
+        self.write_wishbone(port_addr + 0x20, en_port_new)
+        if self.read_wishbone(port_addr + 0x20) != en_port_new:
+            errmsg = 'Error setting 40gbe port to 0x%04x' % port
+            LOGGER.error(errmsg)
+            raise ValueError(errmsg)
+
     def _upload_to_ram_and_program(self, filename, port=-1, timeout=60,
                                    wait_complete=True):
         """
@@ -611,16 +639,23 @@ class SkarabTransport(Transport):
         and hex files)
         :return: True, if success
         """
-        # set the port back to fabric programming
-        need_sleep = False
-        for gbe in self.gbes:
-            if gbe.get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
-                LOGGER.info('Resetting %s to 0x%04x' % (
-                    gbe.name, sd.ETHERNET_FABRIC_PORT_ADDRESS))
-                gbe.set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
-                need_sleep = True
-        if need_sleep:
+        # TODO - can we undo this hack? i.e. dynamically find the address of
+        # the fortygbe
+        if self._forty_gbe_get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
+            LOGGER.info('Resetting FortyGbe to 0x%04x' % (
+                sd.ETHERNET_FABRIC_PORT_ADDRESS))
+            self._forty_gbe_set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
             time.sleep(1)
+        # # set the port back to fabric programming
+        # need_sleep = False
+        # for gbe in self.gbes:
+        #     if gbe.get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
+        #         LOGGER.info('Resetting %s to 0x%04x' % (
+        #             gbe.name, sd.ETHERNET_FABRIC_PORT_ADDRESS))
+        #         gbe.set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
+        #         need_sleep = True
+        # if need_sleep:
+        #     time.sleep(1)
 
         # put the interface into programming mode
         self.config_prog_mux(user_data=0)
