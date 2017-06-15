@@ -640,10 +640,22 @@ class SkarabTransport(Transport):
         """
         # TODO - can we undo this hack? i.e. dynamically find the address of
         # the fortygbe
+        need_sleep = False
+        forty_gbe_port = 0x50000
         if self._forty_gbe_get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
             LOGGER.info('Resetting FortyGbe to 0x%04x' % (
                 sd.ETHERNET_FABRIC_PORT_ADDRESS))
             self._forty_gbe_set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
+            need_sleep = True
+        one_gbe_addr = 0x50000 - 0x4000
+        if self._forty_gbe_get_port(one_gbe_addr) != \
+                sd.ETHERNET_FABRIC_PORT_ADDRESS:
+            LOGGER.info('Resetting OneGbe to 0x%04x' % (
+                sd.ETHERNET_FABRIC_PORT_ADDRESS))
+            self._forty_gbe_set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS,
+                                     one_gbe_addr)
+            need_sleep = True
+        if need_sleep:
             time.sleep(1)
         # # set the port back to fabric programming
         # need_sleep = False

@@ -73,6 +73,9 @@ class AttributeContainer(object):
     def names(self):
         return self._items
 
+    def keys(self):
+        return self._items
+
     def __len__(self):
         return len(self._items)
 
