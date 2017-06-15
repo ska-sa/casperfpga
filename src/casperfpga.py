@@ -59,19 +59,25 @@ def choose_transport(host_ip):
     :param host_ip: 
     :return: 
     """
-    skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    skarab_ctrl_sock.setblocking(0)
-    skarab_eth_ctrl_port = (host_ip, skarab_defs.ETHERNET_CONTROL_PORT_ADDRESS)
-    request = skarab_defs.ReadRegReq(
-        0, skarab_defs.BOARD_REG, skarab_defs.C_RD_VERSION_ADDR)
-    skarab_ctrl_sock.sendto(request.create_payload(), skarab_eth_ctrl_port)
-    data_ready = select.select([skarab_ctrl_sock], [], [], 0.2)
-    skarab_ctrl_sock.close()
-    if len(data_ready[0]) > 0:
-        logging.debug('%s seems to be a SKARAB' % host_ip)
-        return SkarabTransport
-    logging.debug('%s seems to be a ROACH' % host_ip)
-    return KatcpTransport
+    try:
+        skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        skarab_ctrl_sock.setblocking(0)
+        skarab_eth_ctrl_port = (host_ip, skarab_defs.ETHERNET_CONTROL_PORT_ADDRESS)
+        request = skarab_defs.ReadRegReq(
+            0, skarab_defs.BOARD_REG, skarab_defs.C_RD_VERSION_ADDR)
+        skarab_ctrl_sock.sendto(request.create_payload(), skarab_eth_ctrl_port)
+        data_ready = select.select([skarab_ctrl_sock], [], [], 0.2)
+        skarab_ctrl_sock.close()
+        if len(data_ready[0]) > 0:
+            logging.debug('%s seems to be a SKARAB' % host_ip)
+            return SkarabTransport
+        logging.debug('%s seems to be a ROACH' % host_ip)
+        return KatcpTransport
+    except socket.gaierror:
+        raise RuntimeError('Address/host %s makes no sense to '
+                           'the OS?' % host_ip)
+    except:
+        raise RuntimeError('Could not connect to %s' % host_ip)
 
 
 def get_kwarg(field, kwargs, default=None):
