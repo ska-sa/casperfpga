@@ -231,6 +231,17 @@ class FortyGbe(object):
             self.name, resp_ip.ip_str, resp_mask.ip_str))
         self.set_port(7148)
 
+    def tx_okay(self, wait_time=0.2, checks=10):
+        """
+        Is this gbe core transmitting okay?
+        i.e. _txctr incrementing and _txerrctr not incrementing
+        :param wait_time: seconds to wait between checks
+        :param checks: times to run check
+        :return: True/False
+        """
+        # TODO
+        return True
+
     def rx_okay(self, wait_time=0.2, checks=10):
         """
         Is this gbe core receiving okay?
@@ -240,22 +251,6 @@ class FortyGbe(object):
         :return: True/False
         """
         # TODO
-        raise NotImplementedError
-        if checks < 2:
-            raise RuntimeError('Cannot check less often than twice?')
-        fields = {
-            # name, required, True=same|False=different
-            self.name + '_rxctr': (True, False),
-            self.name + '_rxfullctr': (False, True),
-            self.name + '_rxofctr': (False, True),
-            self.name + '_rxerrctr': (True, True),
-            self.name + '_rxvldctr': (False, False),
-        }
-        result, message = check_changing_status(fields, self.read_rx_counters,
-                                                wait_time, checks)
-        if not result:
-            LOGGER.error('%s: %s' % (self.fullname, message))
-            return False
         return True
 
 # end

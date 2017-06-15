@@ -719,12 +719,12 @@ class SkarabTransport(Transport):
         if forty_gbe_link == 1:
             LOGGER.info(
                 'The 40GbE link is up so using 40GbE to program the SKARAB')
-            self.write_wishbone(0x18, user_data*2**1)
+            self.write_wishbone(0x18, user_data * 2 ** 1)
         # 40gbe link down so fall back to 1gbe
         else:
             LOGGER.info(
                 'The 40GbE link is down so using 1GbE to program the SKARAB')
-            self.write_wishbone(0x18, 4 + user_data*2**1)
+            self.write_wishbone(0x18, 4 + user_data * 2 ** 1)
 
     def clear_sdram(self):
         """

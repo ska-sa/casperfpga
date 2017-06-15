@@ -73,7 +73,7 @@ class Transport(object):
         Get a list of the memory bus items in this design.
         :return: a list of memory devices
         """
-        raise NotImplementedError
+        return self.memory_devices.keys()
 
     def deprogram(self):
         """
