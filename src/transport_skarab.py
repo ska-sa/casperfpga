@@ -638,6 +638,8 @@ class SkarabTransport(Transport):
         and hex files)
         :return: True, if success
         """
+        prog_start_time = time.time()
+
         # TODO - can we undo this hack? i.e. dynamically find the address of
         # the fortygbe
         need_sleep = False
@@ -688,25 +690,25 @@ class SkarabTransport(Transport):
                 [golden_image, multiboot, firmware_version] = \
                     self.get_firmware_version()
                 if golden_image == 0 and multiboot == 0:
+                    prog_time = time.time() - prog_start_time
                     LOGGER.info(
-                        'SKARAB back up, in %s seconds with firmware version '
-                        '%s' % (str(60-(timeout-time.time())),
-                                str(firmware_version)))
+                        'SKARAB back up, in %.3f seconds with firmware version '
+                        '%s' % (prog_time, firmware_version))
                     return True
                 elif golden_image == 1 and multiboot == 0:
                     LOGGER.error(
                         'SKARAB back up, but fell back to golden image with '
-                        'firmware version %s' % str(firmware_version))
+                        'firmware version %s' % firmware_version)
                     return False
                 elif golden_image == 0 and multiboot == 1:
                     LOGGER.error(
                         'SKARAB back up, but fell back to multiboot image with '
-                        'firmware version %s' % str(firmware_version))
+                        'firmware version %s' % firmware_version)
                     return False
                 else:
                     LOGGER.error(
                         'SKARAB back up, but unknown image with firmware '
-                        'version number %s' % str(firmware_version))
+                        'version number %s' % firmware_version)
                     return False
         LOGGER.error('SKARAB has not come back')
         return False
