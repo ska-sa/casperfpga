@@ -325,16 +325,16 @@ class CasperFpga(object):
         self.blindwrite(device_name, data, offset)
         new_data = self.read(device_name, len(data), offset)
         if new_data != data:
+            # TODO - this error message won't show you the problem if
+            # it's not in the first word
             unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
             unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
-            LOGGER.error('%s: verification of write to %s at offset %d failed. '
-                         'Wrote 0x%08x... but got back 0x%08x...' %
-                         (self.host, device_name, offset,
-                          unpacked_wrdata, unpacked_rddata))
-            raise ValueError('%s: verification of write to %s at offset %d '
-                             'failed. Wrote 0x%08x... but got back 0x%08x...' %
-                             (self.host, device_name, offset,
-                              unpacked_wrdata, unpacked_rddata))
+            err_str = '%s: verification of write to %s at offset %d failed. ' \
+                      'Wrote 0x%08x... but got back 0x%08x.' % (
+                self.host, device_name, offset,
+                unpacked_wrdata, unpacked_rddata)
+            LOGGER.error(err_str)
+            raise ValueError(err_str)
 
     def read_int(self, device_name, word_offset=0):
         """
