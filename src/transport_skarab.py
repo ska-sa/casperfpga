@@ -506,20 +506,10 @@ class SkarabTransport(Transport):
         self._complete_sdram_configuration()
         LOGGER.info('Booting from SDRAM.')
         # clear sdram programmed flag
-        self.__sdram_programmed = False
-        # if fpg file used, get design information
-        if os.path.splitext(self.prog_info['last_uploaded'])[1] == '.fpg':
-            super(SkarabTransport, self).get_system_information(
-                filename=self.prog_info['last_uploaded'])
-            self.__create_memory_map()
-        else:
-            # if not fpg file, then
-            # still update programming info
-            self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
-            self.prog_info['last_uploaded'] = ''
-            # but
-            self._CasperFpga__reset_device_info()
-            raise NotImplementedError
+        self._sdram_programmed = False
+        # still update programming info
+        self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
+        self.prog_info['last_uploaded'] = ''
 
     def _upload_to_ram_prepare_image(self, filename):
         """
