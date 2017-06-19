@@ -1,18 +1,19 @@
-"""
-Created on Feb 28, 2013
-
-@author: paulp
-"""
 import logging
 import struct
 import time
+import socket
+import select
 
 import register
 import sbram
 import snap
 import tengbe
+import fortygbe
 import qdr
 from attribute_container import AttributeContainer
+import skarab_definitions as skarab_defs
+from transport_katcp import KatcpTransport
+from transport_skarab import SkarabTransport
 from utils import parse_fpg
 
 LOGGER = logging.getLogger(__name__)
@@ -23,7 +24,8 @@ CASPER_MEMORY_DEVICES = {
     'xps:bram':         {'class': sbram.Sbram,       'container': 'sbrams'},
     'xps:qdr':          {'class': qdr.Qdr,           'container': 'qdrs'},
     'xps:sw_reg':       {'class': register.Register, 'container': 'registers'},
-    'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'tengbes'},
+    'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
+    'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
 }
 
@@ -51,17 +53,64 @@ CASPER_OTHER_DEVICES = {
 }
 
 
+def choose_transport(host_ip):
+    """
+    Test whether a given host is a katcp client or a skarab
+    :param host_ip: 
+    :return: 
+    """
+    try:
+        skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        skarab_ctrl_sock.setblocking(0)
+        skarab_eth_ctrl_port = (host_ip, skarab_defs.ETHERNET_CONTROL_PORT_ADDRESS)
+        request = skarab_defs.ReadRegReq(
+            0, skarab_defs.BOARD_REG, skarab_defs.C_RD_VERSION_ADDR)
+        skarab_ctrl_sock.sendto(request.create_payload(), skarab_eth_ctrl_port)
+        data_ready = select.select([skarab_ctrl_sock], [], [], 0.2)
+        skarab_ctrl_sock.close()
+        if len(data_ready[0]) > 0:
+            logging.debug('%s seems to be a SKARAB' % host_ip)
+            return SkarabTransport
+        logging.debug('%s seems to be a ROACH' % host_ip)
+        return KatcpTransport
+    except socket.gaierror:
+        raise RuntimeError('Address/host %s makes no sense to '
+                           'the OS?' % host_ip)
+    except:
+        raise RuntimeError('Could not connect to %s' % host_ip)
+
+
+def get_kwarg(field, kwargs, default=None):
+    try:
+        return kwargs[field]
+    except KeyError:
+        return default
+
+
 class CasperFpga(object):
     """
     A FPGA host board that has a CASPER design running on it. Or will soon have.
     """
-    def __init__(self, host):
+    def __init__(self, *args, **kwargs):
         """
-
         :param host: the hostname of this CasperFpga
         :return:
         """
-        self.host = host
+        if len(args) > 0:
+            try:
+                kwargs['host'] = args[0]
+                kwargs['port'] = args[1]
+            except IndexError:
+                pass
+        self.host = kwargs['host']
+        self.bitstream = get_kwarg('bitstream', kwargs)
+
+        transport = get_kwarg('transport', kwargs)
+        if transport:
+            self.transport = transport(**kwargs)
+        else:
+            transport_class = choose_transport(kwargs['host'])
+            self.transport = transport_class(**kwargs)
 
         # this is just for code introspection
         self.devices = None
@@ -70,27 +119,37 @@ class CasperFpga(object):
         self.sbrams = None
         self.qdrs = None
         self.registers = None
-        self.tengbes = None
+        self.gbes = None
         self.snapshots = None
         self.system_info = None
         self.rcs_info = None
         # /just for introspection
 
-        self.__reset_device_info()
+        self._reset_device_info()
         LOGGER.debug('%s: now a CasperFpga' % self.host)
 
+    def connect(self, timeout=None):
+        return self.transport.connect(timeout)
+
+    def disconnect(self):
+        return self.transport.disconnect()
+
     def read(self, device_name, size, offset=0):
-        raise NotImplementedError
+        return self.transport.read(device_name, size, offset)
 
     def blindwrite(self, device_name, data, offset=0):
-        raise NotImplementedError
+        return self.transport.blindwrite(device_name, data, offset)
 
     def listdev(self):
         """
         Get a list of the memory bus items in this design.
         :return: a list of memory devices
         """
-        raise NotImplementedError
+        try:
+            return self.transport.listdev()
+        except AttributeError:
+            return self.memory_devices.keys()
+        raise RuntimeError
 
     def deprogram(self):
         """
@@ -98,7 +157,16 @@ class CasperFpga(object):
         device information
         :return:
         """
-        self.__reset_device_info()
+        self.transport.deprogram()
+        self._reset_device_info()
+
+    def set_igmp_version(self, version):
+        """
+        
+        :param version: 
+        :return: 
+        """
+        return self.transport.set_igmp_version(version)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
                                   wait_complete=True):
@@ -111,9 +179,26 @@ class CasperFpga(object):
         after upload if False
         :return:
         """
-        raise NotImplementedError
+        rv = self.transport.upload_to_ram_and_program(
+            filename, port, timeout, wait_complete)
+        self.get_system_information(filename)
+        return rv
 
-    def __reset_device_info(self):
+    def is_connected(self):
+        """
+        Is the transport connected to the host?
+        :return: 
+        """
+        return self.transport.is_connected()
+
+    def is_running(self):
+        """
+        Is the FPGA programmed and running?
+        :return: 
+        """
+        return self.transport.is_running()
+
+    def _reset_device_info(self):
         """
         Reset information of devices this FPGA knows about.
         """
@@ -137,26 +222,29 @@ class CasperFpga(object):
         """
         Write to and read from the scratchpad to test the connection to the FPGA
         """
-        for val in [0xa5a5a5, 0x000000]:
-            self.write_int('sys_scratchpad', val)
-            rval = self.read_int('sys_scratchpad')
-            if rval != val:
-                raise RuntimeError('%s: cannot write scratchpad? %i != %i' %
-                                   (self.host, rval, val))
-        return True
+        return self.transport.test_connection()
 
-#    def __getattribute__(self, name):
-#        if name == 'registers':
-#            return {self.memory_devices[r].name: self.memory_devices[r] for r in self.memory_devices_memory['register']['items']}
-#        return object.__getattribute__(self, name)
+    # def __getattribute__(self, name):
+    #     if name == 'registers':
+    #         return {self.memory_devices[r].name: self.memory_devices[r]
+    #                 for r in self.memory_devices_memory['register']['items']}
+    #     return object.__getattribute__(self, name)
+
+    def dram_bulkread(self, device, size, offset):
+        """
+        
+        :return: 
+        """
+        raise NotImplementedError
 
     def read_dram(self, size, offset=0):
         """
         Reads data from a ROACH's DRAM. Reads are done up to 1MB at a time.
-        The 64MB indirect address register is automatically incremented as necessary.
+        The 64MB indirect address register is automatically incremented 
+        as necessary.
         It returns a string, as per the normal 'read' function.
         ROACH has a fixed device name for the DRAM (dram memory).
-        Uses bulkread internally.
+        Uses dram_bulkread internally.
         :param size: amount of data to read, in bytes
         :param offset: offset at which to read, in bytes
         :return: binary data string
@@ -172,12 +260,16 @@ class CasperFpga(object):
         while n_reads < size:
             dram_page = (offset + n_reads) / dram_indirect_page_size
             local_offset = (offset + n_reads) % dram_indirect_page_size
-            # local_reads = min(read_chunk_size, size-n_reads, dram_indirect_page_size-(offset%dram_indirect_page_size))
-            local_reads = min(size - n_reads, dram_indirect_page_size - (offset % dram_indirect_page_size))
+            # local_reads = min(read_chunk_size, size - n_reads,
+            #                   dram_indirect_page_size -
+            #                   (offset % dram_indirect_page_size))
+            local_reads = min(size - n_reads, dram_indirect_page_size -
+                              (offset % dram_indirect_page_size))
             if last_dram_page != dram_page:
                 self.write_int('dram_controller', dram_page)
                 last_dram_page = dram_page
-            local_data = (self.bulkread('dram_memory', local_reads, local_offset))
+            local_data = self.dram_bulkread('dram_memory',
+                                            local_reads, local_offset)
             data.append(local_data)
             LOGGER.debug('%s: reading %8i bytes from indirect '
                          'address %4i at local offset %8i... done.' %
@@ -188,9 +280,10 @@ class CasperFpga(object):
     def write_dram(self, data, offset=0):
         """
         Writes data to a ROACH's DRAM. Writes are done up to 512KiB at a time.
-        The 64MB indirect address register is automatically incremented as necessary.
-        ROACH has a fixed device name for the DRAM (dram memory) and so the user does not need to specify the write
-        register.
+        The 64MB indirect address register is automatically 
+        incremented as necessary.
+        ROACH has a fixed device name for the DRAM (dram memory) and so the 
+        user does not need to specify the write register.
         :param data: packed binary string data to write
         :param offset: the offset at which to write
         :return:
@@ -207,15 +300,18 @@ class CasperFpga(object):
         while n_writes < size:
             dram_page = (offset+n_writes)/dram_indirect_page_size
             local_offset = (offset+n_writes) % dram_indirect_page_size
-            local_writes = min(write_chunk_size, size-n_writes,
-                               dram_indirect_page_size-(offset % dram_indirect_page_size))
-            LOGGER.debug('%s: writing %8i bytes from indirect address %4i at local offset %8i...' %
-                         (self.host, local_writes, dram_page, local_offset))
+            local_writes = min(write_chunk_size, size - n_writes,
+                               dram_indirect_page_size -
+                               (offset % dram_indirect_page_size))
+            LOGGER.debug('%s: writing %8i bytes from indirect address %4i '
+                         'at local offset %8i...' % (
+                            self.host, local_writes, dram_page, local_offset))
             if last_dram_page != dram_page:
                 self.write_int('dram_controller', dram_page)
                 last_dram_page = dram_page
-
-            self.blindwrite('dram_memory', data[n_writes:n_writes+local_writes], local_offset)
+            self.blindwrite(
+                'dram_memory',
+                data[n_writes:n_writes + local_writes], local_offset)
             n_writes += local_writes
 
     def write(self, device_name, data, offset=0):
@@ -229,21 +325,22 @@ class CasperFpga(object):
         self.blindwrite(device_name, data, offset)
         new_data = self.read(device_name, len(data), offset)
         if new_data != data:
+            # TODO - this error message won't show you the problem if
+            # it's not in the first word
             unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
             unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
-            LOGGER.error('%s: verification of write to %s at offset %d failed. '
-                         'Wrote 0x%08x... but got back 0x%08x...' %
-                         (self.host, device_name, offset,
-                          unpacked_wrdata, unpacked_rddata))
-            raise ValueError('%s: verification of write to %s at offset %d '
-                             'failed. Wrote 0x%08x... but got back 0x%08x...' %
-                             (self.host, device_name, offset,
-                              unpacked_wrdata, unpacked_rddata))
+            err_str = '%s: verification of write to %s at offset %d failed. ' \
+                      'Wrote 0x%08x... but got back 0x%08x.' % (
+                self.host, device_name, offset,
+                unpacked_wrdata, unpacked_rddata)
+            LOGGER.error(err_str)
+            raise ValueError(err_str)
 
     def read_int(self, device_name, word_offset=0):
         """
         Read an integer from memory device.
-        i.e. calls self.read(device_name, size=4, offset=0) and uses struct to unpack it into an integer
+        i.e. calls self.read(device_name, size=4, offset=0) and uses 
+        struct to unpack it into an integer
         :param device_name: device from which to read
         :param word_offset: the 32-bit word offset at which to read
         :return: signed 32-bit integer
@@ -330,7 +427,7 @@ class CasperFpga(object):
     #         rv['app_rev'] = app & ((2 ** 28)-1)
     #     return rv
 
-    def __create_memory_devices(self, device_dict, memorymap_dict):
+    def _create_memory_devices(self, device_dict, memorymap_dict):
         """
         Create memory devices from dictionaries of design information.
         :param device_dict: raw dictionary of information from tagged
@@ -377,7 +474,7 @@ class CasperFpga(object):
             except AttributeError:  # the device may not have an update function
                 pass
 
-    def __create_other_devices(self, device_dict):
+    def _create_other_devices(self, device_dict):
         """
         Store non-memory device information in a dictionary
         :param device_dict: raw dictionary of information from tagged
@@ -418,6 +515,15 @@ class CasperFpga(object):
             dictionaries
         :return: <nothing> the information is populated in the class
         """
+        # try and get the info from the running host first
+        if self.transport.is_running() and hasattr(
+                self.transport, 'get_system_information_from_transport'):
+            if (filename is not None) or (fpg_info is not None):
+                LOGGER.info('get_system_information: device running, '
+                            'so overriding arguments.')
+            filename, fpg_info = \
+                self.transport.get_system_information_from_transport()
+        # otherwise look at the arguments given
         if (filename is None) and (fpg_info is None):
             raise RuntimeError('Either filename or parsed fpg data '
                                'must be given.')
@@ -427,11 +533,12 @@ class CasperFpga(object):
             device_dict = fpg_info[0]
             memorymap_dict = fpg_info[1]
         # add system registers
-        device_dict.update(self.__add_sys_registers())
-        # reset current devices, create new ones from the new design information
-        self.__reset_device_info()
-        self.__create_memory_devices(device_dict, memorymap_dict)
-        self.__create_other_devices(device_dict)
+        device_dict.update(self._add_sys_registers())
+        # reset current devices and create new ones from the new
+        # design information
+        self._reset_device_info()
+        self._create_memory_devices(device_dict, memorymap_dict)
+        self._create_other_devices(device_dict)
         # populate some system information
         try:
             self.system_info.update(device_dict['77777'])
@@ -446,6 +553,9 @@ class CasperFpga(object):
                 self.rcs_info['git'][name] = device_dict[device_name]
         if '77777_svn' in device_dict:
             self.rcs_info['svn'] = device_dict['77777_svn']
+        self.transport.memory_devices = self.memory_devices
+        self.transport.gbes = self.gbes
+        self.transport.post_get_system_information()
 
     def estimate_fpga_clock(self):
         """
@@ -466,7 +576,7 @@ class CasperFpga(object):
         :param checks: times to run check
         :return:
         """
-        for gbecore in self.tengbes:
+        for gbecore in self.gbes:
             if not gbecore.tx_okay(wait_time=wait_time, checks=checks):
                 return False
         return True
@@ -479,13 +589,13 @@ class CasperFpga(object):
         :param checks: times to run check
         :return:
         """
-        for gbecore in self.tengbes:
+        for gbecore in self.gbes:
             if not gbecore.rx_okay(wait_time=wait_time, checks=checks):
                 return False
         return True
 
     @staticmethod
-    def __add_sys_registers():
+    def _add_sys_registers():
         standard_reg = {'tag': 'xps:sw_reg', 'io_dir': 'To Processor',
                         'io_delay': '1', 'sample_period': '1', 'names': 'reg',
                         'bitwidths': '32', 'bin_pts': '0', 'arith_types': '0',
@@ -511,11 +621,13 @@ class CasperFpga(object):
         if old_version:
             rv = []
             for filename in files:
-                if git_info[filename]['git_info_found'] == ['1']:
-                    rv.append((filename, git_info[filename]['commit_hash'][0] +
-                               '_' + git_info[filename]['status'][0]))
-                else:
-                    rv.append((filename, '<unknown>'))
+                if 'git_info_found' in git_info[filename].keys():
+                    if git_info[filename]['git_info_found'] == ['1']:
+                        rv.append(
+                            (filename, git_info[filename]['commit_hash'][0] +
+                             '_' + git_info[filename]['status'][0]))
+                    continue
+                rv.append((filename, str(git_info[filename])))
             return rv
         else:
             return [(f, git_info[f]) for f in files if f != 'tag']

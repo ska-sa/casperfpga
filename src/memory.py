@@ -175,8 +175,8 @@ class Memory(bitfield.Bitfield):
             for bytectr in range(0, width_bytes):
                 byte = fbytes[startindex + width_bytes - (bytectr + 1)]
                 wordl |= byte << (bytectr * 8)
-                # print '\t%d: bytel: 0x%02X, wordl: 0x%X' % (
-                #     bytectr, byte, wordl)
+                # print('\t%d: bytel: 0x%02X, wordl: 0x%X' % (
+                #     bytectr, byte, wordl))
             memory_words.append(wordl)
         # now we have all the words as longs, so carry on
         processed = {}

@@ -7,18 +7,19 @@ View the contents of a TenGBE RX or TX snapblock.
 
 @author: paulp
 """
+from __future__ import print_function
 import sys
 import time
 import argparse
 
 from casperfpga import tengbe
-from casperfpga import katcp_fpga
-from casperfpga import dcp_fpga
+from casperfpga.casperfpga import CasperFpga
 from casperfpga import spead as casperspead
 from casperfpga import snap as caspersnap
 
-parser = argparse.ArgumentParser(description='Display the contents of an FPGA''s 10Gbe buffers.',
-                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser = argparse.ArgumentParser(
+    description='Display the contents of an FPGA''s 10Gbe buffers.',
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(dest='hostname', type=str, action='store',
                     help='the hostname of the digitiser')
 parser.add_argument('-l', '--listcores', dest='listcores', action='store_true',
@@ -44,16 +45,17 @@ parser.add_argument('--spead_flavour', dest='spead_flavour', action='store',
 parser.add_argument('--spead_packetlen', dest='spead_packetlen', action='store',
                     default=640, type=int,
                     help='SPEAD packet length (data portion only) to expect')
-parser.add_argument('--spead_numheaders', dest='spead_numheaders', action='store',
-                    default=8, type=int, help='number of SPEAD headers to expect')
-
+parser.add_argument('--spead_numheaders', dest='spead_numheaders',
+                    action='store', default=8, type=int,
+                    help='number of SPEAD headers to expect')
 parser.add_argument('--hex', dest='hex', action='store_true',
                     default=False,
                     help='show numbers in hex')
-parser.add_argument('--comms', dest='comms', action='store', default='katcp', type=str,
-                    help='katcp (default) or dcp?')
+parser.add_argument('--comms', dest='comms', action='store', default='katcp',
+                    type=str, help='katcp (default) or dcp?')
 parser.add_argument('--loglevel', dest='log_level', action='store', default='',
-                    help='log level to use, default None, options INFO, DEBUG, ERROR')
+                    help='log level to use, default None, options INFO, '
+                         'DEBUG, ERROR')
 args = parser.parse_args()
 
 if args.log_level != '':
@@ -64,13 +66,8 @@ if args.log_level != '':
     except AttributeError:
         raise RuntimeError('No such log level: %s' % log_level)
 
-if args.comms == 'katcp':
-    HOSTCLASS = katcp_fpga.KatcpFpga
-else:
-    HOSTCLASS = dcp_fpga.DcpFpga
-
 # create the device and connect to it
-fpga = HOSTCLASS(args.hostname, 7147)
+fpga = CasperFpga(args.hostname, 7147)
 time.sleep(0.2)
 if not fpga.is_connected():
     fpga.connect()
@@ -79,11 +76,11 @@ fpga.get_system_information()
 
 # list the cores we find
 if args.listcores:
-    cores = fpga.tengbes.names()
+    cores = fpga.gbes.names()
     numgbes = len(cores)
-    print 'Found %i ten gbe core%s:' % (numgbes, '' if numgbes == 1 else 's')
+    print('Found %i ten gbe core%s:' % (numgbes, '' if numgbes == 1 else 's'))
     for core in cores:
-        print '\t', core
+        print('\t%s' % core)
     fpga.disconnect()
     sys.exit(0)
 
@@ -94,14 +91,14 @@ if args.direction == 'tx':
     data_key = 'data'
     ip_key = 'ip'
     eof_key = 'eof'
-    coredata = fpga.tengbes[args.core].read_txsnap()
+    coredata = fpga.gbes[args.core].read_txsnap()
 else:
     key_order = ['led_up', 'led_rx', 'valid_in', 'eof_in', 'bad_frame',
                  'overrun', 'ip_in', 'data_in']
     data_key = 'data_in'
     ip_key = 'ip_in'
     eof_key = 'eof_in'
-    coredata = fpga.tengbes[args.core].read_rxsnap()
+    coredata = fpga.gbes[args.core].read_rxsnap()
 fpga.disconnect()
 
 if args.spead:
@@ -134,7 +131,7 @@ packet_counter = 0
 for ctr in range(0, len(coredata[data_key])):
     if coredata[eof_key][ctr-1]:
         packet_counter = 0
-    print '%5d,%3d' % (ctr, packet_counter),
+    print('%5d,%3d' % (ctr, packet_counter), end='')
     for key in key_order:
         if key == ip_key:
             if key == 'ip':
@@ -143,15 +140,16 @@ for ctr in range(0, len(coredata[data_key])):
                 display_key = 'src_ip'
             else:
                 raise RuntimeError('Unknown IP key?')
-            print '%s(%s)' % (display_key, str(tengbe.IpAddress(coredata[key][ctr]))), '\t',
+            ip_str = str(tengbe.IpAddress(coredata[key][ctr]))
+            print('%s(%s)\t' % (display_key, ip_str), end='')
         elif (key == data_key) and args.spead:
-            print '%s(%s)' % (key, coredata[data_key][ctr]), '\t',
+            print('%s(%s)\t' % (key, coredata[data_key][ctr]), end='')
         else:
             if args.hex:
-                print '%s(0x%X)' % (key, coredata[key][ctr]), '\t',
+                print('%s(0x%X)\t' % (key, coredata[key][ctr]), end='')
             else:
-                print '%s(%s)' % (key, coredata[key][ctr]), '\t',
-    print ''
+                print('%s(%s)\t' % (key, coredata[key][ctr]), end='')
+    print('')
     packet_counter += 1
 
 # end

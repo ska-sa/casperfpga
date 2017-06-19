@@ -1,3 +1,4 @@
+from __future__ import print_function
 import logging
 import time
 from memory import Memory
@@ -193,7 +194,7 @@ class Snap(Memory):
 
     def print_snap(self, limit_lines=-1, **kwargs):
         """
-        Read and print a snap block.
+        Read and print(a snap block.)
         :param limit_lines: limit the number of lines to print
         :param offset: trigger offset
         :param man_valid: force valid to be true
@@ -206,14 +207,14 @@ class Snap(Memory):
         snapdata = self.read(**kwargs)
         circular_capture = getkwarg('circular_capture', False, **kwargs)
         for ctr in range(0, len(snapdata['data'][snapdata['data'].keys()[0]])):
-            print '%5d' % ctr,
+            print('%5d' % ctr, end='')
             for key in snapdata['data'].keys():
-                print '%s(%d)' % (key, snapdata['data'][key][ctr]), '\t',
-            print ''
+                print('%s(%d)\t' % (key, snapdata['data'][key][ctr]), end='')
+            print('')
             if (limit_lines > 0) and (ctr == limit_lines):
                 break
         if circular_capture:
-            print 'Circular capture offset: ', snapdata['offset']
+            print('Circular capture offset: %i' % snapdata['offset'])
 
     def read(self, **kwargs):
         """
@@ -331,19 +332,19 @@ class Snap(Memory):
         """
         class PacketLengthError(Exception):
             pass
-        _current_packet = {}
-        _packets = []
-        for _ctr in range(0, len(data[eof_key])):
+        current_packet = {}
+        packets = []
+        for ctr in range(0, len(data[eof_key])):
             for key in data.keys():
-                if key not in _current_packet.keys():
-                    _current_packet[key] = []
-                _current_packet[key].append(data[key][_ctr])
-            if _current_packet[eof_key][-1]:
+                if key not in current_packet.keys():
+                    current_packet[key] = []
+                current_packet[key].append(data[key][ctr])
+            if current_packet[eof_key][-1]:
                 if packet_length != -1:
-                    if len(_current_packet[eof_key]) != packet_length:
+                    if len(current_packet[eof_key]) != packet_length:
                         raise PacketLengthError(
                             'Expected {}, got {}'.format(
-                                packet_length, len(_current_packet[eof_key])))
-                _packets.append(_current_packet)
-                _current_packet = {}
-        return _packets
+                                packet_length, len(current_packet[eof_key])))
+                packets.append(current_packet)
+                current_packet = {}
+        return packets

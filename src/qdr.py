@@ -116,9 +116,9 @@ class Qdr(Memory):
         self.p_bwrite = self.parent.blindwrite
         self.p_read = self.parent.read
 
-        # print 'QDR %s logger name(%s) id(%i) level(%i)' % (
+        # print('QDR %s logger name(%s) id(%i) level(%i)' % ()
         #     self.name, LOGGER.name, id(LOGGER), LOGGER.level)
-        # print 'qdr logger handlers:', LOGGER.handlers
+        # print('qdr logger handlers:', LOGGER.handlers)
 
         LOGGER.debug('New Qdr %s' % self)
         # TODO - Link QDR ctrl register to self.registers properly
@@ -323,11 +323,11 @@ class Qdr(Memory):
             logl3('\tstep input delays to {}'.format(step+1))
             self._qdr_delay_in_step(0xfffffffff, 1)
 
-        # print the failure patterns
+        # print(the failure patterns)
         logl2('Eye for QDR {:s} (0 is pass, 1 is fail):'.format(self.name))
         for step, fail_pattern in enumerate(per_step_fail):
             logl2('\tdelay_step {:2d}: {:032b}'.format(step, fail_pattern))
-        # print the per-bit eye diagrams
+        # print(the per-bit eye diagrams)
         logl3('Per-bit cal:')
         for bit, bit_eye in enumerate(per_bit_cal):
             logl3('\tbit_{:d}: {}'.format(bit, bit_eye))

@@ -100,6 +100,51 @@ class SpeadPacket(object):
         hdr_data = header64 & (pow(2, address_bits) - 1)
         return hdr_id, hdr_data
 
+    @staticmethod
+    def decode_headers(data, expected_version=None,
+                       expected_flavour=None, expected_hdrs=None):
+        """
+        Decode the SPEAD headers given some packet data.
+        :param data: a list of packet data
+        :param expected_version: an explicit version, if required
+        :param expected_flavour: an explicit flavour, if required
+        :param expected_hdrs: explicit number of hdrs, if required
+        :return: 
+        """
+        main_header = SpeadPacket.decode_spead_magic_word(
+            data[0], required_version=expected_version,
+            required_flavour=expected_flavour,
+            required_numheaders=expected_hdrs)
+        hdr_pkt_len_bytes = -1
+        headers = {}
+        for ctr in range(1, main_header['num_headers'] + 1):
+            hdr_id, hdr_data = SpeadPacket.decode_item_pointer(
+                data[ctr], main_header['id_bits'], main_header['address_bits'])
+            if hdr_id in headers.keys():
+                # HACK - the padded headers are 0x00 - d'oh.
+                # But then we MUST replace 0x0000 afterwards.
+                if hdr_id != 0x00:
+                    print('Current headers:', headers)
+                    print('but new header: {}'.format(hdr_id))
+                    raise SpeadPacket.SpeadPacketError(
+                        'Header ID 0x%04x already in packet headers.' % hdr_id)
+                # else:
+                #     print('UN OTRA MAS! 0x000')
+            headers[hdr_id] = hdr_data
+            if hdr_id == 0x0004:
+                hdr_pkt_len_bytes = hdr_data
+        headers[0x0000] = main_header
+        if expected_hdrs is not None:
+            if len(headers) != expected_hdrs + 1:
+                raise SpeadPacket.SpeadPacketError(
+                    'Packet does not the correct number of headers: %i != '
+                    '%i' % (len(headers), expected_hdrs + 1))
+        if hdr_pkt_len_bytes == -1:
+            raise SpeadPacket.SpeadPacketError(
+                'After processing headers there is no packet length '
+                'header! 0x0004 is missing.')
+        return headers, hdr_pkt_len_bytes
+
     def __init__(self, headers=None, data=None):
         """
         Create a new SpeadPacket object
@@ -114,33 +159,9 @@ class SpeadPacket(object):
         Create a SpeadPacket from a list of 64-bit data words
         Assumes the list of data starts at the SPEAD magic word.
         """
-
-        main_header = SpeadPacket.decode_spead_magic_word(
-            data[0], required_version=expected_version,
-            required_flavour=expected_flavour,
-            required_numheaders=expected_hdrs)
-        headers = {0x0000: main_header}
-        hdr_pkt_len_bytes = -1
-        for ctr in range(1, main_header['num_headers']+1):
-            hdr_id, hdr_data = SpeadPacket.decode_item_pointer(
-                data[ctr], main_header['id_bits'], main_header['address_bits'])
-            if hdr_id in headers.keys():
-                print headers
-                print 'but new header: {}'.format(hdr_id)
-                raise SpeadPacket.SpeadPacketError(
-                    'Header ID 0x%04x already in packet headers.' % hdr_id)
-            headers[hdr_id] = hdr_data
-            if hdr_id == 0x0004:
-                hdr_pkt_len_bytes = hdr_data
-        if expected_hdrs is not None:
-            if len(headers) != expected_hdrs + 1:
-                raise SpeadPacket.SpeadPacketError(
-                    'Packet does not the correct number of headers: %i != '
-                    '%i' % (len(headers), expected_hdrs + 1))
-        if hdr_pkt_len_bytes == -1:
-            raise SpeadPacket.SpeadPacketError(
-                'After processing headers there is no packet length '
-                'header! 0x0004 is missing.')
+        (headers, hdr_pkt_len_bytes) = SpeadPacket.decode_headers(
+            data, expected_version, expected_flavour, expected_hdrs)
+        main_header = headers[0x0000]
         pktdata = []
         pktlen = 0
         for ctr in range(main_header['num_headers']+1, len(data)):
@@ -148,12 +169,14 @@ class SpeadPacket(object):
             pktlen += 1
         if (expected_length is not None) and (pktlen != expected_length):
             raise SpeadPacket.SpeadPacketError(
-                'Packet is not the expected length, expected %i, got %i' % (
-                    expected_length, pktlen))
+                'Packet is not the expected length, expected(%i) '
+                'packet(%i)' % (expected_length, pktlen))
         if pktlen*8 != hdr_pkt_len_bytes:
             raise SpeadPacket.SpeadPacketError(
                 'Packet is not the same length as indicated in the SPEAD '
-                'header, expected %i, got %i' % (pktlen*8, hdr_pkt_len_bytes))
+                'header: hdr(%i) packet(%i)\nCheck the magic header, number '
+                'of headers and '
+                'headers 2 and 4.' % (hdr_pkt_len_bytes, pktlen*8))
         obj = cls(headers, pktdata)
         return obj
 
@@ -184,7 +207,7 @@ class SpeadPacket(object):
         Print a representation of the packet.
         """
         for string in self.get_strings(headers_only, hex_nums):
-            print string
+            print(string)
 
 
 class SpeadProcessor(object):
@@ -220,6 +243,11 @@ class SpeadProcessor(object):
             except TypeError:
                 pkt_data = pkt
                 pkt_ip = None
+            except KeyError:
+                if 'ip' not in pkt:
+                    pkt_ip = None
+                if 'data' not in pkt:
+                    raise RuntimeError('Could not find data key')
             spead_pkt = SpeadPacket.from_data(
                 pkt_data, self.version, self.flavour,
                 self.expected_num_headers, self.expected_packet_length)
