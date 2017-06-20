@@ -28,6 +28,7 @@ class InvalidSkarabBitstream(ValueError):
 class UploadChecksumMismatch(ValueError):
     pass
 
+
 class SkarabSdramError(RuntimeError):
     pass
 
@@ -249,7 +250,8 @@ class SkarabTransport(Transport):
         :return: binary data string
         """
         addr = self._get_device_address(device_name)
-        # LOGGER.info('addr(0x%06x) size(%i) offset(%i)' % (addr, size, offset))
+        # LOGGER.info('addr(0x%06x) size(%i) offset(%i)' % (addr, size,
+        # offset))
         bounded_offset = int(math.floor(offset / 4.0) * 4.0)
         offset_diff = offset - bounded_offset
         # LOGGER.info('bounded_offset(%i)' % bounded_offset)
@@ -272,6 +274,120 @@ class SkarabTransport(Transport):
         # LOGGER.info('returning data[%i:%i]' % (offset_diff, size))
         # return the number of bytes requested
         return data[offset_diff: size]
+
+    def _bulk_write_req(self, address, data, words_to_write):
+        """
+        Unchecked data write. Maximum of 1988 bytes per transaction
+        :param address: memory device to which to write
+        :param data: byte string to write
+        :param words_to_write: number of 32-bit words to write
+        :return: number of 32-bit writes done
+        """
+        if words_to_write > sd.MAX_WRITE_32WORDS:
+            raise RuntimeError('Cannot write more than %i words - '
+                               'asked to write %i' % (sd.MAX_WRITE_32WORDS,
+                                                      words_to_write))
+
+        start_addr_high, start_addr_low = self.data_split_and_pack(address)
+
+        LOGGER.debug('\nAddress High: {}\nAddress Low: {}'
+                     '\nWords To Write: {}'.format(repr(start_addr_high),
+                                                   repr(start_addr_low),
+                                                   words_to_write))
+
+        request = sd.BigWriteWishboneReq(self.seq_num, start_addr_high,
+                                         start_addr_low, data, words_to_write)
+
+        # send read request
+        response = self.send_packet(
+            payload=request.create_payload(),
+            response_type='BigWriteWishboneResp',
+            expect_response=True,
+            command_id=sd.BIG_WRITE_WISHBONE,
+            number_of_words=11,
+            pad_words=6)
+
+        if response is None:
+            errmsg = 'Bulk write failed. No response from SKARAB.'
+            raise WriteFailed(errmsg)
+        if response.number_of_writes_done != words_to_write:
+            errmsg = 'Bulk write failed. Not all words written.'
+            raise WriteFailed(errmsg)
+
+        LOGGER.debug('Number of writes dones: %d' %
+                     response.number_of_writes_done)
+
+        return response.number_of_writes_done
+
+    def _bulk_write(self, device_name, data, offset):
+        """
+        Data write. Supports > 4 bytes written per transaction.
+        :param device_name: memory device to which to write
+        :param data: byte string to write
+        :param offset: the offset, in bytes, at which to write
+        :return: <nothing>
+        """
+
+        # TODO: writing data not bounded to 32-bit words
+        # will have to read back the data and then apply a mask with the new
+        #  data
+        # i.e. have 0X01ABCDEF, want to write 0xFF to the 1st bytes
+        # need to read back 0x01ABCDEF, then mask the first byte ONLY
+        # and write back 0xFFABCDEF, for now, only support 32-bit boundary
+
+        address = self._get_device_address(device_name)
+        size = len(data)  # number of bytes in the write data
+
+        bounded_offset = int(math.floor(offset / 4.0) * 4.0)
+        offset_diff = offset - bounded_offset
+
+        address += bounded_offset
+        size += offset_diff
+
+        num_words_to_write = int(math.ceil(size / 4.0))
+        maxwritewords = 1.0 * sd.MAX_WRITE_32WORDS
+        num_writes = int(math.ceil(num_words_to_write / maxwritewords))
+        LOGGER.debug('words_to_write(%i) loops(%i)' % (num_words_to_write,
+                                                       num_writes))
+
+        write_data_left = num_words_to_write
+        data_start = 0
+        number_of_writes_done = 0
+        for wrctr in range(num_writes):
+            LOGGER.debug('In write loop %i' % wrctr)
+            # determine the number of 32-bit words to write
+            to_write = (sd.MAX_WRITE_32WORDS if write_data_left >
+                        sd.MAX_WRITE_32WORDS
+                        else write_data_left)
+
+            LOGGER.debug('words to write ..... %i' % to_write)
+
+            # get the data that is to be written in the next transaction
+            write_data = data[data_start: data_start + to_write*4]
+            LOGGER.debug('Write Data Size: %i' % (len(write_data)/4))
+
+            if to_write < sd.MAX_WRITE_32WORDS:
+                # if writing less than the max number of words we need to pad
+                # to the request packet size
+                padding = (sd.MAX_READ_32WORDS - to_write)
+                LOGGER.debug('we are padding . . . %i . . . 32-bit words . . '
+                             '.' % padding)
+                write_data += '\x00\x00\x00\x00' * padding
+
+            number_of_writes_done += self._bulk_write_req(address, write_data,
+                                                          to_write)
+
+            write_data_left -= to_write
+            # increment address and point to start of next 32-bit word
+            address += to_write * 4
+            data_start += to_write * 4
+
+        LOGGER.debug('Number of writes dones: %d' % number_of_writes_done)
+        if number_of_writes_done != num_words_to_write:
+            errmsg = 'Bulk write failed. Only %i . . . of %i . . . 32-bit ' \
+                     'words written' % (number_of_writes_done,
+                                        num_words_to_write)
+            raise WriteFailed(errmsg)
 
     def read_byte_level(self, device_name, size, offset=0):
         """
@@ -319,37 +435,43 @@ class SkarabTransport(Transport):
         # return the number of bytes requested
         return data[offset:offset + size]
 
-    def blindwrite(self, device_name, data, offset=0):
+    def blindwrite(self, device_name, data, offset=0, use_bulk=True):
         """
         Unchecked data write.
         :param device_name: the memory device to which to write
         :param data: the byte string to write
         :param offset: the offset, in bytes, at which to write
+        :param use_bulk: use the bulk write function
         :return: <nothing>
         """
-        addr = self._get_device_address(device_name)
-        # # map device name to address, if can't find, bail
-        # if device_name in self.memory_devices.keys():
-        #     addr = self.memory_devices[device_name].address
-        # else:
-        #     LOGGER.error('Unknown device name')
-        #     raise KeyError
+
         assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
-        # split the data into two 16-bit words
-        data_high = data[:2]
-        data_low = data[2:]
-        addr += offset
-        addr_high, addr_low = self.data_split_and_pack(addr)
-        # create payload packet structure for write request
-        request = sd.WriteWishboneReq(self.seq_num, addr_high,
-                                      addr_low, data_high, data_low)
-        self.send_packet(payload=request.create_payload(),
-                         response_type='WriteWishboneResp',
-                         expect_response=True,
-                         command_id=sd.WRITE_WISHBONE,
-                         number_of_words=11, pad_words=5)
+
+        if (len(data) > 4) and use_bulk:
+            # use a bulk write if more than 4 bytes are to be written
+            self._bulk_write(device_name, data, offset)
+        else:
+
+            # map device name to address, if can't find, bail
+            addr = self._get_device_address(device_name)
+
+            # split the data into two 16-bit words
+            data_high = data[:2]
+            data_low = data[2:]
+
+            addr += offset
+            addr_high, addr_low = self.data_split_and_pack(addr)
+
+            # create payload packet structure for write request
+            request = sd.WriteWishboneReq(self.seq_num, addr_high,
+                                          addr_low, data_high, data_low)
+            self.send_packet(payload=request.create_payload(),
+                             response_type='WriteWishboneResp',
+                             expect_response=True,
+                             command_id=sd.WRITE_WISHBONE,
+                             number_of_words=11, pad_words=5)
 
     def deprogram(self):
         """
@@ -385,7 +507,7 @@ class SkarabTransport(Transport):
         LOGGER.info('Booting from SDRAM.')
         # clear sdram programmed flag
         self._sdram_programmed = False
-        # update programming info
+        # still update programming info
         self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
         self.prog_info['last_uploaded'] = ''
 
@@ -1174,16 +1296,18 @@ class SkarabTransport(Transport):
         """
         request = sd.GetEmbeddedSoftwareVersionReq(self.seq_num)
         get_embedded_ver_resp = self.send_packet(
-            request.create_payload(),
-            'GetEmbeddedSoftwareVersionResp', True,
-            sd.GET_EMBEDDED_SOFTWARE_VERS, 11, 5)
+            payload=request.create_payload(),
+            response_type='GetEmbeddedSoftwareVersionResp',
+            expect_response=True,
+            command_id=sd.GET_EMBEDDED_SOFTWARE_VERS,
+            number_of_words=11,
+            pad_words=4)
         if get_embedded_ver_resp:
-            major = get_embedded_ver_resp.version_major & 0x3F
+            major = get_embedded_ver_resp.version_major
             minor = get_embedded_ver_resp.version_minor
-            golden_image = get_embedded_ver_resp.version_major >> 15
-            multiboot = get_embedded_ver_resp.version_major >> 14 & 0x1
-            return golden_image, multiboot, '{}.{}'.format(major, minor)
-        return False
+            patch = get_embedded_ver_resp.version_patch
+            return '{}.{}.{}'.format(major, minor, patch)
+        return None
 
     def write_wishbone(self, wb_address, data):
         """

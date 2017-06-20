@@ -984,12 +984,13 @@ class GetEmbeddedSoftwareVersionReq(Command):
 
 class GetEmbeddedSoftwareVersionResp(Command):
     def __init__(self, command_id, seq_num, version_major, version_minor,
-                 qsfp_bootloader_version_major, qsfp_bootloader_version_minor,
-                 padding):
+                 version_patch, qsfp_bootloader_version_major,
+                 qsfp_bootloader_version_minor, padding):
         super(GetEmbeddedSoftwareVersionResp, self).__init__()
         self.header = CommandHeader(command_id, seq_num, False)
         self.version_major = version_major
         self.version_minor = version_minor
+        self.version_patch = version_patch
         self.qsfp_bootloader_version_major = qsfp_bootloader_version_major
         self.qsfp_bootloader_version_minor = qsfp_bootloader_version_minor
         self.padding = padding
@@ -1128,6 +1129,7 @@ class ReadHMCI2CResp(Command):
 
 
 MAX_READ_32WORDS = 497
+MAX_WRITE_32WORDS = 497
 
 
 class BigReadWishboneReq(Command):
@@ -1150,6 +1152,28 @@ class BigReadWishboneResp(Command):
         self.read_data = read_data
         self.number_of_reads = number_of_reads
         # self.padding = padding
+
+
+class BigWriteWishboneReq(Command):
+    def __init__(self, seq_num, start_address_high, start_address_low,
+                 write_data, number_of_writes):
+        super(BigWriteWishboneReq, self).__init__()
+        self.header = CommandHeader(BIG_WRITE_WISHBONE, seq_num)
+        self.start_address_high = start_address_high
+        self.start_address_low = start_address_low
+        self.write_data = write_data
+        self.number_of_writes = number_of_writes
+
+
+class BigWriteWishboneResp(Command):
+    def __init__(self, command_id, seq_num, start_address_high,
+                 start_address_low, number_of_writes_done, padding):
+        super(BigWriteWishboneResp, self).__init__()
+        self.header = CommandHeader(command_id, seq_num, False)
+        self.start_address_high = start_address_high
+        self.start_address_low = start_address_low
+        self.number_of_writes_done = number_of_writes_done
+        self.padding = padding
 
 
 # Mezzanine Site Identifiers
