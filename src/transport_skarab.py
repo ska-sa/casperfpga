@@ -712,18 +712,6 @@ class SkarabTransport(Transport):
         self._sdram_programmed = True
         self.prog_info['last_uploaded'] = filename
 
-    def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
-                                  wait_complete=True, attempts=2):
-        attempt_ctr = 0
-        while attempt_ctr < attempts:
-            res = self._upload_to_ram_and_program(
-                filename, port, timeout, wait_complete)
-            attempt_ctr += 1
-            if res:
-                return True
-        raise ProgrammingError('Gave up programming after %i attempt%s' % (
-            attempts, 's' if attempts > 1 else ''))
-
     def _forty_gbe_get_port(self, port_addr=0x50000):
         """
 
@@ -748,7 +736,7 @@ class SkarabTransport(Transport):
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
 
-    def _upload_to_ram_and_program(self, filename, port=-1, timeout=60,
+    def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
                                    wait_complete=True):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
