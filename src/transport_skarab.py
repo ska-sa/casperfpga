@@ -628,7 +628,7 @@ class SkarabTransport(Transport):
             raise ProgrammingError(errmsg)
         LOGGER.info('Bitstream successfully programmed into SDRAM.')
 
-    def upload_to_ram(self, filename, verify=False):
+    def upload_to_ram(self, filename, verify=False, retries=3):
         """
         Opens a bitfile from which to program FPGA. Reads bitfile
         in chunks of 4096 16-bit words.
@@ -637,8 +637,15 @@ class SkarabTransport(Transport):
         Sends chunks of bitfile to fpga via sdram_program method
         :param filename: file to upload
         :param verify: flag to enable verification of uploaded bitstream (slow)
+        :param retries: how many times to attempt to reprogram the board,
+        minimum value = 1
         :return:
         """
+
+        if retries < 1:
+            errmsg = 'Minimum number of programming attempts must be 1!'
+            raise ValueError(errmsg)
+
         # process the given file and get an image ready to send
         image_to_program = self._upload_to_ram_prepare_image(filename)
 
@@ -665,35 +672,51 @@ class SkarabTransport(Transport):
                 raise InvalidSkarabBitstream(errmsg)
 
         # send the image to the Skarab
-        try:
-            self._upload_to_ram_send_image(image_to_program)
-        except ProgrammingError:
-            # TODO - this should be an error?
-            pass
+        while retries > 0:
+            try:
+                # try to upload the image to sdram
+                self._upload_to_ram_send_image(image_to_program)
 
-        # check the checksums
-        local_checksum = self.calculate_checksum_using_bitstream(
-            image_to_program)
-        spartan_checksum = self.get_spartan_checksum()
-        LOGGER.debug('Spartan bitstream checksum: %s' % spartan_checksum)
-        LOGGER.debug('Calculated bitstream checksum: %s' % local_checksum)
-        if spartan_checksum != local_checksum:
-            self.clear_sdram()
-            errmsg = 'Checksum mismatch: local(%s) spartan(%s). Will not ' \
-                     'attempt to boot from SDRAM. Try re-uploading ' \
-                     'bitstream.' % (local_checksum, spartan_checksum)
-            LOGGER.error(errmsg)
-            # TODO - this should be an error?
-            # raise UploadChecksumMismatch(errmsg)
-        LOGGER.debug('Checksum match. Bitstream uploaded successfully.')
+                # after uploading, check the checksums
+                local_checksum = self.calculate_checksum_using_bitstream(
+                    image_to_program)
+                spartan_checksum = self.get_spartan_checksum()
+                LOGGER.debug('Spartan bitstream checksum: %s' % spartan_checksum)
+                LOGGER.debug('Calculated bitstream checksum: %s' % local_checksum)
+                if spartan_checksum != local_checksum:
+                    self.clear_sdram()
+                    errmsg = 'Checksum mismatch: local(%s) spartan(%s). Will not ' \
+                             'attempt to boot from SDRAM. Try re-uploading ' \
+                             'bitstream.' % (local_checksum, spartan_checksum)
+                    raise UploadChecksumMismatch(errmsg)
+                LOGGER.debug('Checksum match. Bitstream uploaded successfully.')
 
-        # set finished writing to SDRAM
-        try:
-            self.sdram_reconfigure(finished_writing=True)
-        except SkarabSdramError:
-            errmsg = 'Error completing programming.'
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+                # if success, set retries to 0
+                retries = 0
+
+            except (ProgrammingError, UploadChecksumMismatch):
+                # if programming failure or checksum mismatch, attempt to
+                # reprogram
+                warnmsg = 'ERROR with SDRAM contents. Attempting to reprogram'
+                LOGGER.warning(warnmsg)
+                # decrement retry counter
+                retries -= 1
+                if retries == 0:
+                    errmsg = 'Exhausted all retry attempts. Programming ' \
+                             'unsuccessful'
+                    LOGGER.error(errmsg)
+                    raise ProgrammingError(errmsg)
+                self._prepare_sdram_ram_for_programming()
+                self._upload_to_ram_send_image(image_to_program)
+
+            else:
+                # set finished writing to SDRAM
+                try:
+                    self.sdram_reconfigure(finished_writing=True)
+                except SkarabSdramError:
+                    errmsg = 'Error completing programming.'
+                    LOGGER.error(errmsg)
+                    raise ProgrammingError(errmsg)
 
         if verify:
             # SDRAM Verification usually takes the order of n-minutes
