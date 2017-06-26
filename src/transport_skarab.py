@@ -786,6 +786,7 @@ class SkarabTransport(Transport):
         self.upload_to_ram(filename)
         self.boot_from_sdram()
 
+
         # wait for board to come back up
         # this can be reduced when the 40gbe switch issue is resolved
         timeout = timeout + time.time()
@@ -1911,7 +1912,7 @@ class SkarabTransport(Transport):
     # - VerifyWords()
     def virtex_flash_reconfig(self, filename, flash_address=sd.DEFAULT_START_ADDRESS, blind_reconfig=False):
         """
-        This is the entire function that makes the necessary calls to reconfigure the
+        This is the entire function that makes the necessary calls to reconfigure the Virtex7's Flash Memory
         :param filename: The actual .bin file that is to be written to the Virtex FPGA
         :param flash_address: 32-bit Address in the NOR flash to start programming from
         :param blind_reconfig: Reconfigure the board and don't wait to Verify what has been written
@@ -2025,6 +2026,38 @@ class SkarabTransport(Transport):
         else:
             LOGGER.error("Bad Response Received")
             raise InvalidResponse('Bad response received from SKARAB')
+
+    def program_spi_page(self, spi_address, num_bytes, write_bytes):
+        '''
+        Low-level function call to program a page to the SPI Flash in the Spartan 3AN FPGA on the SKARAB.
+        Up to a full page (264 bytes) can be programmed.
+        :param spi_address: 32-bit address to program bytes to
+        :param num_bytes: Number of bytes to program to Spartan flash
+        :param write_bytes: Data to program - max 264 bytes
+        :return: Boolean - Success/Fail - 1/0
+        '''
+
+        return NotImplementedError
+
+    def erase_spi_sector(self, spi_address):
+        '''
+        Used to erase a sector in the SPI Flash in the Spartan 3AN FPGA on the SKARAB.
+        :param spi_address: 32-bit address to erase in the Flash
+        :return: Boolean - Success/Fail - 1/0
+        '''
+
+        return NotImplementedError
+
+    def spartan_flash_reconfig(self, filename, spi_address, blind_reconfig=False):
+        '''
+        This is the entire function that makes the necessary function calls to reconfigure the Spartan's Flash
+        :param filename: The actual .ufp file that is to be written to the Spartan FPGA
+        :param spi_address: 32-bit address of SPI Sector to start programming to
+        :param blind_reconfig: Reconfigure the board and don't wait to verify what has been written
+        :return: Boolean - Success/Fail - 1/0
+        '''
+
+        return NotImplementedError
 
     # board level functions
 
