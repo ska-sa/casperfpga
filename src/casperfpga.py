@@ -181,7 +181,9 @@ class CasperFpga(object):
         """
         rv = self.transport.upload_to_ram_and_program(
             filename, port, timeout, wait_complete)
-        self.get_system_information(filename)
+        if filename[-3:] == 'fpg':
+            self.get_system_information(filename)
+
         return rv
 
     def is_connected(self):
