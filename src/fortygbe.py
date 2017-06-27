@@ -315,8 +315,7 @@ class FortyGbe(object):
             raise RuntimeError('Cannot check less often than twice?')
         fields = {
             # name, required, True=same|False=different
-            self.name + '_txctr': (False, False),
-            #self.name + '_txctr': (True, False),
+            self.name + '_txctr': (True, False),
             self.name + '_txfullctr': (False, True),
             self.name + '_txofctr': (False, True),
             self.name + '_txerrctr': (False, True),
@@ -342,8 +341,7 @@ class FortyGbe(object):
             raise RuntimeError('Cannot check less often than twice?')
         fields = {
             # name, required, True=same|False=different
-            self.name + '_rxctr': (False, False),
-            #self.name + '_rxctr': (True, False),
+            self.name + '_rxctr': (True, False),
             self.name + '_rxfullctr': (False, True),
             self.name + '_rxofctr': (False, True),
             self.name + '_rxerrctr': (False, True),
