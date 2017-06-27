@@ -1,13 +1,16 @@
 from wishbonedevice import WishBoneDevice
 import numpy as np
 import struct,math
+import logging
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 class HMCAD1511(WishBoneDevice):
+	""" Control HMCAD1511 via wb_adc16_controller """
 
 	# HMCAD1511 does not provide any way of register readback for
 	# either diagnosis or status checking. If you find something
 	# wrong with a HMCAD1511, reset it.
-	""" For wb_adc16_controller and HMCAD1511 """
 
 	M_ADC0_CS1 = 1 << 0
 	M_ADC0_CS2 = 1 << 1
@@ -21,28 +24,10 @@ class HMCAD1511(WishBoneDevice):
 	M_ADC_SCL = 1 << 9
 
 	# Wishbone address
-	A_WB_W_3WIRE = 0 << 2
-	A_WB_W_CTRL = 1 << 2
-	A_WB_W_DELAY_STROBE_L = 2 << 2
-	A_WB_W_DELAY_STROBE_H = 3 << 2
-
-	A_WB_R_MISC = 0 << 2
-	A_WB_R_CTRL = 1 << 2
-	A_WB_R_DELAY_STROBE_L = 2 << 2
-	A_WB_R_DELAY_STROBE_H = 3 << 2
-
-	WB_DICT = [None] * ((0b11 << 2) + 1)
-
-	WB_DICT[0b00 << 2] = {	'G_ZDOK_REV' : 0b11 << 28,
-				'ADC16_LOCKED' : 0b11 << 24,
-				'G_NUM_UNITS' : 0b1111 << 20,
-				'CONTROLLER_REV' : 0b11 << 18,
-				'G_ROACH2_REV' : 0b11 << 16,
-				'ADC16_ADC3WIRE_REG' : 0b1111111111111111 << 0,}
-
-	WB_DICT[0b01 << 2] = {'ADC16_CTRL_REG' : 0xffffffff << 0}
-	WB_DICT[0b10 << 2] = {'ADC16_DELAY_STROBE_REG_H' : 0xffffffff << 0}
-	WB_DICT[0b11 << 2] = {'ADC16_DELAY_STROBE_REG_L' : 0xffffffff << 0}
+	# Shift zero, looks natural, but very tricky. See the two references below:
+	# https://github.com/zakiali/PAPERCORR/blob/master/corr-0.4.2.2010-10-14/src/katcp_wrapper.py#L343
+	# https://github.com/jack-h/mlib_devel/blob/jasper_devel/jasper_library/hdl_sources/wb_adc16_controller/wb_adc16_controller.v#L240
+	A_WB_W_3WIRE = 0 << 0
 
 	STATE_3WIRE_START = 1
 	STATE_3WIRE_TRANS = 2
@@ -152,12 +137,13 @@ class HMCAD1511(WishBoneDevice):
 		if not isinstance(csn,int):
 			raise ValueError("Invalid parameter")
 		self.csn = csn & 0xff
-		self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
-		self.A_ADC_W_LIST = [self.DICT.index(a) for a in self.DICT if a != None]
 
-	# Put some initialization here so that instantiate a HMCAD1511 object
-	# wouldn't accidently reset/interrupt the running ADCs.
+	# Put some initialization here rather than in __init__ so that instantiate
+	# an HMCAD1511 object wouldn't reset/interrupt the running ADCs.
 	def init(self):
+		""" Reset and initialize ADCs
+		"""
+
 		self.reset()
 		self.powerDown()
 		# Set LVDS bit clock phase if other than default is used
@@ -167,8 +153,6 @@ class HMCAD1511(WishBoneDevice):
 
 	def _bitCtrl(self, state, sda=0):	
 		# state: 0 - idle, 1 - start, 2 - transmit, 3 - stop
-		# csn active low for HMCAD1511, but inverted in wb_adc16_controller
-		# HDL design
 		if state == self.STATE_3WIRE_START:
 			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.csn
 			self._write(cmd, self.A_WB_W_3WIRE)
@@ -181,8 +165,8 @@ class HMCAD1511(WishBoneDevice):
 			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | 0x00
 			self._write(cmd, self.A_WB_W_3WIRE)
 
-	# wishbone data[9:0] <==> SCL, SDA, csn[7:0]
 	def _wordCtrl(self, data, length=24):
+		# wishbone data[9:0] <==> SCL, SDA, csn[7:0]
 		self._bitCtrl(state=self.STATE_3WIRE_START)
 		for i in range(length):
 			bit = (data >> (length-i-1)) & 1
@@ -195,21 +179,12 @@ class HMCAD1511(WishBoneDevice):
 		addr_data = (addr << 16) | data
 		self._wordCtrl(addr_data)
 		
-        def read(self, addr):
-	# Can only read wb_adc16_controller registers
-	# HMCAD1511 is not readable
-                return self._read(addr=addr)
-		
 	def _set(self, d1, d2, mask=None):
 		# Update some bits of d1 with d2, while keep other bits unchanged
 		if mask:
 			d1 = d1 & ~mask
 			d2 = d2 * (mask & -mask)
 		return d1 | d2
-
-	def _get(self, data, mask):
-		data = data & mask
-		return data / (mask & -mask)
 
 	def _getMask(self, name):
 		rid = None
@@ -222,14 +197,18 @@ class HMCAD1511(WishBoneDevice):
 		if rid == None:
 			raise ValueError("Invalid parameter")
 
-	# LVDS test patterns
-	# E.g.	test('off')
-	# 	test('en_ramp')
-	# 	test('dual_custom_part', 0xabcd, 0xdcba)
-	# 	test('single_custom_part', 0xaaaa)
-	# 	test('pat_deskew')
-	# 	test('pat_sync')
 	def test(self, mode='off', _bits_custom1=None, _bits_custom2=None):
+		""" Test ADC LVDS
+		
+		Set LVDS test patterns
+		 E.g.	test('off')
+		 	test('en_ramp')					Ramp pattern 0-255
+		 	test('dual_custom_part', 0xabcd, 0xdcba)	Alternate between two custom patterns
+		 	test('single_custom_part', 0xaaaa)		Repeat a custom pattern
+		 	test('pat_deskew')				Deskew pattern (10101010)
+		 	test('pat_sync')				Sync pattern (11110000)
+		"""
+
 		if mode == 'en_ramp':
 			rid, mask = self._getMask('pat_deskew')
 			self.write(self._set(0x0, 0b00, mask), rid)
@@ -276,11 +255,15 @@ class HMCAD1511(WishBoneDevice):
 	# fine gain (x, not dB)
 	FGAIN = 2**-8, 2**-9, 2**-10, 2**-11, 2**-12, 2**-13
 
-	# Fine gain control (parameters in dB), input gain would be
-	# rounded towards 0 dB
-	# Fine gain range for HMCAD1511: -0.0670dB ~ 0.0665dB
-	# E.g.	fGain([-0.06, -0.04, -0.02, 0, 0, 0.02, 0.04, 0.06])
 	def fGain(self, gains):
+		""" Set the fine gain of the 8 ADC cores
+	
+		Fine gain control (parameters in dB), input gain rounded towards 0 dB
+		Fine gain range for HMCAD1511: -0.0670dB ~ 0.0665dB
+		E.g.
+			fGain([-0.06, -0.04, -0.02, 0, 0, 0.02, 0.04, 0.06])
+		"""
+
 		if not isinstance(gains, list):
 			raise ValueError("Invalid parameter")
 		if not all(isinstance(e, float) for e in gains):
@@ -328,13 +311,20 @@ class HMCAD1511(WishBoneDevice):
 			cfg = cfg + (1 << 6)
 		return cfg
 		
-	# Interleaving mode
-	# numChannel=1	--	8 ADCs per channel
-	# numChannel=2	--	4 ADCs per channel
-	# numChannel=4	--	2 ADCs per channel
-	# E.g.	interleavingMode(1)
-	#	interleavingMode(4, 4)
 	def interleavingMode(self, numChannel, clkDivide=1):
+		""" Set interleaving mode and clock divide factor
+		
+		Available Interleaving mode
+		numChannel=1	--	8 ADC cores per channel
+		numChannel=2	--	4 ADC cores per channel
+		numChannel=4	--	2 ADC cores per channel
+
+		Availale clock divide factors: 1, 2, 4, and 8
+		E.g.
+			interleavingMode(1)
+			interleavingMode(4, 4)
+		"""
+
 		modes = [1,2,4]
 		divs = [1,2,4,8]
 		if not numChannel in modes:
@@ -352,10 +342,14 @@ class HMCAD1511(WishBoneDevice):
 
 		self.powerUp()
 
-	# Input select
-	# E.g.	inputSelect([1,2,3,4])	(in four channel mode)
-	#	inputSelect([1,1,1,1])	(in one channel mode)
 	def inputSelect(self, inputs):
+		""" Input select
+
+		E.g.
+		 	inputSelect([1,2,3,4])	(in four channel mode)
+			inputSelect([1,1,1,1])	(in one channel mode)
+		"""
+
 		opts = [1, 2, 3, 4]
 		if not all(i in opts for i in inputs):
 			raise ValueError("Invalid parameter")
@@ -372,7 +366,6 @@ class HMCAD1511(WishBoneDevice):
 		val = self._set(val, 1<<inputs[3], mask)
 		self.write(val, rid)
 
-	# Reset
 	def reset(self):
 		rid, mask = self._getMask('rst')
 		val = self._set(0x0, 1, mask)
@@ -390,13 +383,3 @@ class HMCAD1511(WishBoneDevice):
 		rid, mask = self._getMask('pd')
 		val = self._set(0x0, 1, mask)
 		self.write(val, rid)
-
-	def getRegister(self, rid=None):
-		if rid==None:
-			return [self.getRegister(regId) for regId in self.A_WB_R_LIST]
-		elif rid in self.A_WB_R_LIST:
-			rval = self.read(rid)
-			return {name: self._get(rval,mask) for name, mask in self.WB_DICT[rid].items()}
-		else:
-			raise ValueError("Invalid parameter")
-

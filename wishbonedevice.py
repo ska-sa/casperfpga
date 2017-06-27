@@ -7,5 +7,10 @@ class WishBoneDevice(object):
 	def _write(self, data, addr=0):
 		self.itf.write_int(self.name, data,	offset = addr, blindwrite=True)
 
-	def _read(self, addr=0):
-		return self.itf.read_int(self.name,	offset = addr)
+	def _read(self, addr=0, size=4):
+		if size==4:
+			return self.itf.read_int(self.name,	offset = addr)
+		elif (size > 4) and (size % 4 == 0):
+			return self.itf.read(self.name, size, offset = addr)
+		else:
+			raise ValueError("Invalid parameter")
