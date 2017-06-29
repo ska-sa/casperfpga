@@ -621,11 +621,15 @@ class SkarabTransport(Transport):
             sent_pkt_counter, rx_pkt_counts['Ethernet Frames']))
         if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
             self.clear_sdram()
-            errmsg = 'Error programming bitstream into SDRAM: sent(%i) ' \
+            errmsg1 = 'Error programming bitstream into SDRAM: sent(%i) ' \
                      'received(%i)' % (sent_pkt_counter,
                                        rx_pkt_counts['Ethernet Frames'])
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+            LOGGER.error(errmsg1)
+            errmsg2 = 'Ensure that 1) You are programming via the correct port/connection; ' \
+                      'and \n2) all Network Switches and endpoints are configured to ' \
+                      'support MTU Size of 9000 (Jumbo Packet size).'
+            LOGGER.error(errmsg2)
+            raise ProgrammingError(errmsg1 + '.\n' + errmsg2)
         LOGGER.info('Bitstream successfully programmed into SDRAM.')
 
     def upload_to_ram(self, filename, verify=False, retries=3):
@@ -678,17 +682,27 @@ class SkarabTransport(Transport):
                 self._upload_to_ram_send_image(image_to_program)
 
                 # after uploading, check the checksums
+                spartan_checksum = self.get_spartan_checksum()
+                if spartan_checksum == 0:
+                    errmsg = 'Spartan Checksum returned 0, i.e. Packets were not received ' \
+                             'on the correct port. Ensure you are programming via the ' \
+                             'correct port/connection.'
+                    LOGGER.error(errmsg)
+                    raise ProgrammingError(errmsg)
+                # else: spartan_checksum has a value, Continue
+
+                LOGGER.debug('Spartan bitstream checksum: %s' % spartan_checksum)
                 local_checksum = self.calculate_checksum_using_bitstream(
                     image_to_program)
-                spartan_checksum = self.get_spartan_checksum()
-                LOGGER.debug('Spartan bitstream checksum: %s' % spartan_checksum)
                 LOGGER.debug('Calculated bitstream checksum: %s' % local_checksum)
                 if spartan_checksum != local_checksum:
                     self.clear_sdram()
-                    errmsg = 'Checksum mismatch: local(%s) spartan(%s). Will not ' \
-                             'attempt to boot from SDRAM. Try re-uploading ' \
-                             'bitstream.' % (local_checksum, spartan_checksum)
+                    errmsg = 'Checksum mismatch: spartan(%s) local(%s). Will not ' \
+                             'attempt to boot from SDRAM. Ensure all Network Switches ' \
+                             'and endpoints are configured to support MTU Size of 9000 ' \
+                             '(Jumbo Packet size).' % (local_checksum, spartan_checksum)
                     raise UploadChecksumMismatch(errmsg)
+                # else: All good, Continue
                 LOGGER.debug('Checksum match. Bitstream uploaded successfully.')
 
                 # if success, set retries to 0
