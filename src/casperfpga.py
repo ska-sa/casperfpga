@@ -13,6 +13,7 @@ import qdr
 from attribute_container import AttributeContainer
 import skarab_definitions as skarab_defs
 from transport_katcp import KatcpTransport
+from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
 from utils import parse_fpg
 
@@ -59,6 +60,7 @@ def choose_transport(host_ip):
     :param host_ip: 
     :return: 
     """
+    LOGGER.debug('Trying to figure out what kind of device %s is' % host_ip)
     try:
         skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         skarab_ctrl_sock.setblocking(0)
@@ -69,9 +71,15 @@ def choose_transport(host_ip):
         data_ready = select.select([skarab_ctrl_sock], [], [], 0.2)
         skarab_ctrl_sock.close()
         if len(data_ready[0]) > 0:
-            logging.debug('%s seems to be a SKARAB' % host_ip)
+            LOGGER.debug('%s seems to be a SKARAB' % host_ip)
             return SkarabTransport
-        logging.debug('%s seems to be a ROACH' % host_ip)
+        else:
+            LOGGER.debug('%s is not a SKARAB. Trying Tapcp' % host_ip)
+            board = TapcpTransport(host=host_ip, timeout=0.1)
+            if board.is_connected():
+                LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
+                return TapcpTransport
+        LOGGER.debug('%s seems to be a ROACH' % host_ip)
         return KatcpTransport
     except socket.gaierror:
         raise RuntimeError('Address/host %s makes no sense to '
