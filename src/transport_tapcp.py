@@ -35,7 +35,8 @@ class TapcpTransport(Transport):
 
     def progdev(self, addr=0):
         # address shifts down because we operate in 32-bit addressing mode
-        buf = StringIO(struct.pack('>L', addr >> 2))
+        # see xilinx docs. Todo, fix this microblaze side
+        buf = StringIO(struct.pack('>L', addr >> 8))
         try:
             self.t.upload('/progdev', buf, timeout=self.timeout)
         except:
