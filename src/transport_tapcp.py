@@ -11,6 +11,45 @@ __date__ = 'June 2017'
 
 LOGGER = logging.getLogger(__name__)
 
+def get_core_info_payload(payload_str):
+    x = struct.unpack('>LLB', payload_str)
+    rw      = x[0] & 0x3
+    addr    = x[0] & 0xfffffffa
+    size    = x[1]
+    typenum = x[2]
+    return {'rw' : rw, 'addr' : addr, 'size' : size, 'typenum' : typenum}
+
+
+def decode_csl_pl(csl):
+    OFFSET = 2 # ???
+    regs = {}
+    v = struct.unpack('%dB' % len(csl), csl)
+    s = struct.unpack('%ds' % len(csl), csl)[0]
+    # payload size is first byte
+    pl = v[OFFSET]
+    prev_str = ''
+    nrepchars = 0
+    c = OFFSET
+    line = 0
+    while (c < len(csl)):
+        if c != OFFSET:
+            nrepchars = v[c]
+        c += 1
+        nchars = v[c]
+        if (nchars == 0) and (nrepchars == 0):
+            break
+        c += 1
+        this_str = prev_str[:nrepchars] + s[c : c + nchars]
+        c += nchars
+        #this_pl = v[c : c + pl]
+        regs[this_str] = get_core_info_payload(csl[c : c + pl])
+        c += pl
+        prev_str = this_str[:]
+    return regs
+
+def decode_csl(csl):
+    return decode_csl_pl(csl).keys()
+
 
 class TapcpTransport(Transport):
     """
@@ -31,7 +70,12 @@ class TapcpTransport(Transport):
     def listdev(self):
         buf = StringIO()
         self.t.download('/listdev', buf, timeout=4)
-        return buf.getvalue()
+        return decode_csl(buf.getvalue())
+
+    def listdev_pl(self):
+        buf = StringIO()
+        self.t.download('/listdev', buf, timeout=4)
+        return decode_csl_pl(buf.getvalue())
 
     def progdev(self, addr=0):
         # address shifts down because we operate in 32-bit addressing mode
