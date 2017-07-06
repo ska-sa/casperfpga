@@ -48,7 +48,7 @@ def decode_csl_pl(csl):
     return regs
 
 def decode_csl(csl):
-    return decode_csl_pl(csl).keys()
+    return decode_csl_pl(csl).keys().sort()
 
 
 class TapcpTransport(Transport):
