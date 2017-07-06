@@ -203,8 +203,8 @@ class HMCAD1511(WishBoneDevice):
 		Set LVDS test patterns
 		 E.g.	test('off')
 		 	test('en_ramp')					Ramp pattern 0-255
-		 	test('dual_custom_part', 0xabcd, 0xdcba)	Alternate between two custom patterns
-		 	test('single_custom_part', 0xaaaa)		Repeat a custom pattern
+		 	test('dual_custom_pat', 0xabcd, 0xdcba)	Alternate between two custom patterns
+		 	test('single_custom_pat', 0xaaaa)		Repeat a custom pattern
 		 	test('pat_deskew')				Deskew pattern (10101010)
 		 	test('pat_sync')				Sync pattern (11110000)
 		"""
@@ -214,7 +214,7 @@ class HMCAD1511(WishBoneDevice):
 			self.write(self._set(0x0, 0b00, mask), rid)
 			rid, mask = self._getMask(mode)
 			self.write(self._set(0x0, 0b100, mask), rid)
-		elif mode == 'dual_custom_part':
+		elif mode == 'dual_custom_pat':
 			if not isinstance(_bits_custom1, int) or not isinstance(_bits_custom2, int):
 				raise ValueError("Invalid parameter")
 			rid, mask = self._getMask('pat_deskew')

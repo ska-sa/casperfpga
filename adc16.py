@@ -9,10 +9,15 @@ logging.getLogger(__name__).addHandler(logging.NullHandler())
 # Some codes and docstrings are copied from https://github.com/UCBerkeleySETI/snap_control
 class SNAPADC(object):
 
+	RESOLUTION  = 8
+
 	adc = None
 	lmx = None
 	clksw = None
 	ram = None
+
+	# Current delay tap settings for all IDELAYE2
+	curDelay = None
 
 	# Wishbone address and mask for read
 	WB_DICT = [None] * ((0b11 << 2) + 1)
@@ -42,7 +47,7 @@ class SNAPADC(object):
 	M_WB_W_ISERDES_BITSLIP_CHIP_SEL	= 0b11111111 << 8
 	M_WB_W_ISERDES_BITSLIP_LANE_SEL	= 0b111 << 5
 
-	def __init__(self, interface):
+	def __init__(self, interface, resolution=8,defaultDelayTap=0):
 		# interface => corr.katcp_wrapper.FpgaClient('10.1.0.23')
 
 		self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
@@ -50,10 +55,18 @@ class SNAPADC(object):
 		self.ramList = ['adc16_wb_ram0', 'adc16_wb_ram1', 'adc16_wb_ram2']
 		self.laneList = [0, 1, 2, 3, 4, 5, 6, 7]
 
-		self.adc = HMCAD1511(interface,'adc16_controller')
+		self.curDelay = dict(zip(self.adcList,[dict(zip(self.laneList,[defaultDelayTap]*len(self.laneList) ))]*len(self.adcList)))
+
 		self.lmx = LMX2581(interface,'lmx_ctrl')
 		self.clksw = HMC922(interface,'adc16_use_synth')
 		self.ram = [WishBoneDevice(interface,name) for name in self.ramList]
+
+		self.RESOLUTION = resolution
+		if self.RESOLUTION == 8:
+			self.adc = HMCAD1511(interface,'adc16_controller')
+		# Not supported yes
+		# else:	# 12, 14 or 16
+		# 	self.adc = HMCAD1520(interface,'adc16_controller')
 
 
 	def init(self, samplingRate=500, numChannel=4): 
@@ -88,7 +101,7 @@ class SNAPADC(object):
 		self.adc.init()
 		logging.info("Configuring ADC interleaving mode")
 
-		self.adc.interleavingMode(4,2)
+		self.setInterleavingMode(4,2)
 
 		logging.info("Entering ADC test mode")
 		self.adc.test('pat_sync')
@@ -114,13 +127,13 @@ class SNAPADC(object):
 		else:
 			raise ValueError("Invalid parameter")
 
-	def setInterleavingMode(self, numChannel):
+	def setInterleavingMode(self, numChannel, clockDivide=1):
 		if numChannel not in [1, 2, 4]:
 			raise ValueError("Invalid parameter")
 		val = self._set(0x0, int(math.log(numChannel,2)),	self.M_WB_W_DEMUX_MODE)
 		val = self._set(val, 0b1,				self.M_WB_W_DEMUX_WRITE)
 		self.adc._write(val, self.A_WB_W_CTRL)
-		self.adc.interleavingMode(numChannel, numChannel)
+		self.adc.interleavingMode(numChannel, clockDivide)
 
 	def reset(self):
 		""" Reset all adc16_interface logics inside FPGA """
@@ -139,12 +152,12 @@ class SNAPADC(object):
 
 	def calibrateAdcOffset(self):
 
-		print('Operation not supported.')
+		logging.warning('Operation not supported.')
 
 
 	def calibrationAdcGain(self):
 
-		print('Operation not supported.')
+		logging.warning('Operation not supported.')
 
 		
 	def getRegister(self, rid=None):
@@ -202,27 +215,48 @@ class SNAPADC(object):
 
 	# A lane in this method actually corresponds to a "branch" in HMCAD1511 datasheet.
 	# But I have to follow the naming convention of signals in casper repo.
-	def bitslip(self, chipSel, laneSel):
+	def bitslip(self, chipSel=None, laneSel=None):
 		""" Reorder the parallelize data for word-alignment purpose
 		
 		Reorder the parallelized data by asserting a itslip command to the bitslip 
 		submodule of a ISERDES primitive.  Each bitslip command left shift the 
-		parallelized data by one bit.  Bitslip one lane in each call of this method.
+		parallelized data by one bit.
 		"""
 
-		if chipSel not in self.adcList or laneSel not in self.laneList:
+		if chipSel == None:
+			chipSel = self.adcList
+		elif chipSel in self.adcList:
+			chipSel = [chipSel]
+
+		if not isinstance(chipSel,list):
+			raise ValueError("Invalid parameter")
+		elif isinstance(chipSel,list) and any(cs not in self.adcList for cs in chipSel):
 			raise ValueError("Invalid parameter")
 
-		val = self._set(0x0, 0b1 << chipSel, self.M_WB_W_ISERDES_BITSLIP_CHIP_SEL)
-		val = self._set(val, laneSel, self.M_WB_W_ISERDES_BITSLIP_LANE_SEL)
+		if laneSel == None:
+			laneSel = self.laneList
+		elif laneSel in self.laneList:
+			laneSel = [laneSel]
 
-		# The registers related to reset, request, bitslip, and other commands after 
-		# being set will not be automatically cleared.  Therefore we have to clear 
-		# them by ourselves.
+		if not isinstance(laneSel,list):
+			raise ValueError("Invalid parameter")
+		elif isinstance(laneSel,list) and any(cs not in self.laneList for cs in laneSel):
+			raise ValueError("Invalid parameter")
 
-		self.adc._write(0x0, self.A_WB_W_CTRL)	
-		self.adc._write(val, self.A_WB_W_CTRL)	
-		self.adc._write(0x0, self.A_WB_W_CTRL)	
+		logging.debug('Bitslip lane {0} of chip {1}'.format(str(laneSel),str(chipSel)))
+
+		for cs in chipSel:
+			for ls in laneSel:
+				val = self._set(0x0, 0b1 << cs, self.M_WB_W_ISERDES_BITSLIP_CHIP_SEL)
+				val = self._set(val, ls, self.M_WB_W_ISERDES_BITSLIP_LANE_SEL)
+		
+				# The registers related to reset, request, bitslip, and other
+				# commands after being set will not be automatically cleared.  
+				# Therefore we have to clear them by ourselves.
+		
+				self.adc._write(0x0, self.A_WB_W_CTRL)	
+				self.adc._write(val, self.A_WB_W_CTRL)	
+				self.adc._write(0x0, self.A_WB_W_CTRL)	
 
 
 	# The ADC16 controller word (the offset in write_int method) 2 and 3 are for delaying 
@@ -260,6 +294,10 @@ class SNAPADC(object):
 		if not isinstance(tap, int):
 			raise ValueError("Invalid parameter")
 
+		strl = ','.join([str(c) for c in laneSel])
+		strc = ','.join([str(c) for c in chipSel])
+		logging.debug('Set DelayTap of lane {0} of chip {1} to {2}'.format(str(laneSel),str(chipSel),tap))
+
 		matc = np.array([(cs*4) for cs in chipSel])
 
 		matla = np.array([int(l/2) for l in laneSel if l%2==0])
@@ -292,13 +330,21 @@ class SNAPADC(object):
 		self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_L)
 		self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_H)
 
+		for cs in chipSel:
+			for ls in laneSel:
+				self.curDelay[cs][ls] = tap
 
-	def testDelayTap(self, chipSel=None, taps=None, mode='std', testPattern=None):
+
+	def testDelayTap(self, chipSel=None, taps=True, mode='std', pattern1=None, pattern2=None):
 		""" Return a list of avg/std/err for a given tap or a list of taps
 
-		Return the lane-wise average/standard deviation/error of the data at the output
+		Return the lane-wise standard deviation/error of the data at the output
 		port of ISERDES under a given tap setting or a list of tap settings.  By default,
-		mode='std', taps=range(32)
+		mode='std', taps=range(32).  err mode with single test pattern check data against
+		the given pattern, while err mode with dual test patterns guess the counts of the 
+		mismatches. 'guess' because both patterns could comes up at first. This method
+		always returns the smaller counts.
+		Do not use std mode with dual patterns, otherwise the result would be meaningless.
 
 		E.g.
 			testDelayTap()		# Return lane-wise std of all ADCs, taps=range(32)
@@ -306,69 +352,134 @@ class SNAPADC(object):
 						# ADC with taps = range(32)
 			testDelayTap([0,1],2)	# Return lane-wise std of the first two ADCs 
 						# with tap = 2
-			testDelayTap(1, taps=[0,2,3], mode='avg')
-						# Return lane-wise averages of the 2nd ADC with
+			testDelayTap(1, taps=[0,2,3], mode='std')
+						# Return lane-wise stds of the 2nd ADC with
 						# three different tap settings
-			testDelayTap(2, taps=None, mode='err', testPattern=0b00001111)
+			testDelayTap(2, taps=None, mode='err', pattern1=0b10101010)
 						# Check the actual data against the given test
-						# pattern without changing current delay tap setting
-						# and return lane-wise error counts of the 3rd ADC,
+						# pattern without changing current delay tap
+						# setting and return lane-wise error counts of
+						# the 3rd ADC,
+			testDelayTap(2, taps=None, mode='err', pattern1=0b10101010,
+								pattern2=0b01010101)
+						# Check the actual data against the given alternate
+						# test pattern without changing current delay tap
+						# setting and return lane-wise error counts of
+						# the 3rd ADC,
 
-		The returned data looks like this when mode='err':
-		{0:						# ADC 0
-			{0:					# tap = 0
-				[22,33,32,34,25,61,35,56],	# errors of 8 lanes when tap=0
-			 3:
-				[11,22,33,44,55,66,77,88],
-
-			 ......
-
-			},
-		 1:						# ADC 1
-			{0:					# tap = 0
-				[22,33,32,34,25,61,35,56],	# errors of 8 lanes when tap=0
-			 3:
-				[11,22,33,44,55,66,77,88],
-
-			 ......
-
-			},
-
-		 ......
-		}
 		"""
 
-		MODE = ['avg', 'std', 'err']
+		# The deviation looks like this:
+		# {0: array([ 17.18963055,  17.18963055,  17.18963055,  17.18963055,
+		#          13.05692914,  13.05692914,  13.05692914,  13.05692914]),
+		#  1: array([ 14.08136755,  14.08136755,  14.08136755,  14.08136755,
+		#           7.39798788,   7.39798788,   7.39798788,   7.39798788]),
+		#  2: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  3: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  4: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  5: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  6: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  7: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  8: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  9: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  10: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  11: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  12: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  13: array([ 6.47320197,  7.39906033,  0.        ,  0.        ,  0.        ,
+		#          0.        ,  0.        ,  0.        ]),
+		#  14: array([ 16.14016176,  16.63835629,   4.66368953,   1.40867846,
+		#          75.989443  ,  69.36052029,   6.92820323,   1.40867846]),
+		#  15: array([ 49.30397384,  38.93917329,   7.96476616,   7.43487349,
+		#          49.32813242,  49.89897448,  24.89428699,  17.29472061]),
+		#  16: array([ 45.83336145,  44.495608  ,  25.20036771,  52.85748304,
+		#           5.63471383,   0.        ,  45.64965087,  40.04722554]),
+		#  17: array([  0.        ,   0.        ,  57.13889616,  24.2960146 ,
+		#           0.        ,   0.        ,  65.0524836 ,  30.79302499]),
+		#  18: array([  0.        ,   0.        ,   0.        ,   0.        ,
+		#           0.        ,   0.        ,  59.11012465,   0.        ]),
+		#  19: array([  0.        ,   0.        ,   0.        ,   0.        ,
+		#           0.        ,   0.        ,  24.79919354,   0.        ]),
+		#  20: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  21: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  22: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  23: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  24: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  25: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  26: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  27: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  28: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  29: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  30: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
+		#  31: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.])}
+	
+		MODE = ['std', 'err']
 
 		if chipSel==None:
 			chipSel = self.adcList
-		if not isinstance(chipSel, list):
+		elif chipSel in self.adcList:
 			chipSel = [chipSel]
-		if any(cs not in self.adcList for cs in chipSel):
+		if not isinstance(chipSel,list):
+			raise ValueError("Invalid parameter")
+		elif isinstance(chipSel,list) and any(cs not in self.adcList for cs in chipSel):
 			raise ValueError("Invalid parameter")
 
-		if taps == None:
+		if taps==True:
 			taps = range(32)
-		if not isinstance(taps, list):
+		elif taps in self.adcList:
 			taps = [taps]
-		if isinstance(taps, list) and any(tap not in range(32) for tap in taps):
+		if not isinstance(taps,list) and taps!=None:
+			raise ValueError("Invalid parameter")
+		elif isinstance(taps,list) and any(cs not in range(32) for cs in taps):
 			raise ValueError("Invalid parameter")
 
 		if mode not in MODE:
 			raise ValueError("Invalid parameter")
-		if mode=='err' and testPattern==None:
+
+		self.selectADC(chipSel)
+		if pattern1==None and pattern2==None:
+			self.adc.test('pat_sync')
+			# pattern1 = 0b11110000 when self.RESOLUTION is 8
+			pattern1 = ((2**(self.RESOLUTION/2))-1) << (self.RESOLUTION/2)
+		elif isinstance(pattern1,int) and pattern2==None:
+			self.adc.test('single_custom_pat',pattern1)
+		elif isinstance(pattern1,int) and isinstance(pattern2,int):
+			self.adc.test('dual_custom_pat',pattern1,pattern2)
+		else: 
 			raise ValueError("Invalid parameter")
+
+		def _check():
+			res = []
+			self.snapshot()
+			data = self.readRAM(chipSel)
+                        for cs in chipSel:
+                                d = np.array(data[cs]).reshape(-1, 8)
+                                if mode=='err' and pattern2==None:      # single pattern mode
+                                        r = np.sum(d!=pattern1, 0)
+                                elif mode=='err' and pattern2!=None:    # dual pattern mode
+
+					# Try two patterns with different order, and return the
+					# result
+					m1,m2 = np.zeros(d.shape),np.zeros(d.shape)
+					m1[0::2,:],m1[1::2,:]=pattern1,pattern2
+					m2[0::2,:],m2[1::2,:]=pattern2,pattern1
+					r=np.minimum(np.sum(d!=m1,0),np.sum(d!=m2,0))
+
+                                        # counts = [np.unique(d[:,i],return_counts=True)[1] for i in range(d.shape[1])]
+                                        # r = np.array([np.sum(np.sort(c)[::-1][2:]) for c in counts])
+                                elif mode=='std' and  pattern2==None:	# std mode
+                                        r = np.std(d,0)
+                                elif mode=='std' and  pattern2!=None:	# std mode
+					counts = [np.unique(d[:,i],return_counts=True)[1] for i in range(d.shape[1])]
+					r = [np.sum(np.sort(count)[::-1][2:]) for count in counts]
+
+                                res.append(r)
+			return res
 
 		results = []
 
-		if mode=='err':
-			self.snapshot()
-			data = self.readRAM(chipSel)
-			for cs in chipSel:
-				d = np.array(data[cs]).reshape(-1, 8)
-				result = np.sum(d!=testPattern, 0)
-				results.append(result)
-			results = np.array(results).reshape(len(chipSel),-1).tolist()
+		if taps == None:
+			results = _check()
+			results = np.array(results).reshape(len(chipSel),len(self.laneList)).tolist()
 			results = dict(zip(chipSel,results))
 			for cs in chipSel:
 				results[cs] = dict(zip(self.laneList,results[cs]))
@@ -376,84 +487,40 @@ class SNAPADC(object):
 			for tap in taps:
 				self.delay(tap, chipSel)
 				self.snapshot()
-				data = self.readRAM(chipSel)
-				for cs in chipSel:
-					d = np.array(data[cs]).reshape(-1, 8)
-					if mode=='avg':
-						result = np.average(d,0)
-					else:			# mode=='std'
-						result = np.std(d,0)
-					results.append(result)
+				results += _check()
 			results = np.array(results).reshape(-1,len(chipSel),len(self.laneList))
 			results = np.einsum('ijk->jik',results).tolist()
 			results = dict(zip(chipSel,results))
 			for cs in chipSel:
 				results[cs] = dict(zip(taps,[np.array(row) for row in results[cs]]))
 
-
 		if len(chipSel) == 1:
 			return results[chipSel[0]]
 		else:
 			return results
 
-	# The deviation parameter in the following method should look like this:
-	# {0: array([ 17.18963055,  17.18963055,  17.18963055,  17.18963055,
-	#          13.05692914,  13.05692914,  13.05692914,  13.05692914]),
-	#  1: array([ 14.08136755,  14.08136755,  14.08136755,  14.08136755,
-	#           7.39798788,   7.39798788,   7.39798788,   7.39798788]),
-	#  2: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  3: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  4: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  5: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  6: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  7: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  8: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  9: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  10: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  11: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  12: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  13: array([ 6.47320197,  7.39906033,  0.        ,  0.        ,  0.        ,
-	#          0.        ,  0.        ,  0.        ]),
-	#  14: array([ 16.14016176,  16.63835629,   4.66368953,   1.40867846,
-	#          75.989443  ,  69.36052029,   6.92820323,   1.40867846]),
-	#  15: array([ 49.30397384,  38.93917329,   7.96476616,   7.43487349,
-	#          49.32813242,  49.89897448,  24.89428699,  17.29472061]),
-	#  16: array([ 45.83336145,  44.495608  ,  25.20036771,  52.85748304,
-	#           5.63471383,   0.        ,  45.64965087,  40.04722554]),
-	#  17: array([  0.        ,   0.        ,  57.13889616,  24.2960146 ,
-	#           0.        ,   0.        ,  65.0524836 ,  30.79302499]),
-	#  18: array([  0.        ,   0.        ,   0.        ,   0.        ,
-	#           0.        ,   0.        ,  59.11012465,   0.        ]),
-	#  19: array([  0.        ,   0.        ,   0.        ,   0.        ,
-	#           0.        ,   0.        ,  24.79919354,   0.        ]),
-	#  20: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  21: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  22: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  23: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  24: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  25: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  26: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  27: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  28: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  29: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  30: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]),
-	#  31: array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.])}
 	def decideDelay(self, deviation):
 		""" Decide and return proper setting for delay tap
 
 		Find the tap setting that has the largest margin of error, i.e. the biggest distance
-		to borders (tap=0 and tap=31) and rows with non-zero deviations.  The parameter is
-		the ouput of testTap method
+		to borders (tap=0 and tap=31) and rows with non-zero deviations.  The parameter
+		deviation is a 32 by n numpy array, in which the 1st dimension index indicates the 
+		delay tap setting
 		"""
 
-		dev = np.array(deviation.values())
-		if dev.ndim==2:
-			dev = np.sum(dev,1)
+		if not isinstance(deviation,np.ndarray):
+			raise ValueError("Invalid parameter")
+		elif deviation.ndim==1:
+			deviation = deviation.reshape(-1,1)
+		elif deviation.ndim>2:
+			raise ValueError("Invalid parameter")
+
+		dev = np.sum(deviation,1)
 
 		if all(d != 0 for d in dev):
 			raise StandardError("Cannot find uniform delay")
 			
-		dist=[0]*dev.size
+		dist=np.zeros(dev.shape)
 		curDist = 0
 		for i in range(dev.size):
 			if dev[i] != 0:
@@ -470,71 +537,108 @@ class SNAPADC(object):
 			if dist[i] > curDist:
 				dist[i] = curDist
 
-		return list(deviation)[dist.index(max(dist))]
+		return np.argmax(dist)
 
 	# Line clock also known as bit clock in ADC datasheets
-	def alignLineClock(self, chipSel=None):
+	def alignLineClock(self, mode='lane_wise_single_pat'):
 		""" Align the rising edge of line clock with data eye
 
 		And return the tap settings being using
 		"""
 
-		if chipSel==None:
-			chipSel = self.adcList
-		if not isinstance(chipSel, list):
-			chipSel = [chipSel]
-		if isinstance(chipSel,list) and any(cs not in self.adcList for cs in chipSel):
-			raise ValueError("Invalid parameter")
+		MODE = ['lane_wise_single_pat','chip_wise_single_pat','dual_pat']
 
+		if mode not in MODE:
+			raise ValueError("Invalid parameter")
+			
 		taps = []
 
-		self.selectADC()				# Select an ADC
-		self.adc.test('pat_sync')			# Set test pattern as 0b11110000
-		stds = self.testDelayTap(chipSel)		# Sweep tap settings and get std
-		for adc in chipSel:
-#			t = self.decideDelay(stds[adc])
-#			self.delay(t,adc)
-#			print(t)
-			for lane in self.laneList:
-				keys = list(stds[adc])
-				vals = np.array(stds[adc].values())[:,lane]
-				std = dict(zip(keys,vals.tolist()))
-				t = self.decideDelay(std)	# Find a proper tap setting 
-				self.delay(t,adc,lane)		# Apply the tap setting
-				taps.append(t)
-		taps = np.array(taps).reshape(len(chipSel),-1).tolist()
-		taps = dict(zip(chipSel,taps))
-		for tap in taps:
-			taps[tap] = dict(zip(self.laneList,taps[tap]))
-		return taps
-			
-	def alignFrameClock(self):
+		if mode == 'lane_wise_single_pat':
+			# Decide lane-wise delay tap under single pattern test mode
+			stds = self.testDelayTap()	# Sweep tap settings and get std
+			for adc in self.adcList:
+				for lane in self.laneList:
+					vals = np.array(stds[adc].values())[:,lane]
+					t = self.decideDelay(vals)	# Find a proper tap setting 
+					self.delay(t,adc,lane)		# Apply the tap setting
+
+		elif mode == 'chip_wise_single_pat':
+			# This method would give all lanes of an ADC the same delay tap setting
+			# decide chip-wise delay tap under single pattern test mode
+			stds = self.testDelayTap()	# Sweep tap settings and get std
+			for adc in self.adcList:
+				vals = np.array(stds[adc].values())
+				t = self.decideDelay(vals)	# Find a proper tap setting 
+				self.delay(t,adc)		# Apply the tap setting
+
+		else:	# dual_pat
+
+			# Fine tune delay tap under dual pattern test mode
+			# p1 = 0b1010101010101010 & (2**self.RESOLUTION-1)
+			# p2 = 0b0101010101010101 & (2**self.RESOLUTION-1)
+
+			pats = [0b10101010,0b01010101,0b00000000,0b11111111]
+			mask = (1<<(self.RESOLUTION/2))-1
+			ofst = self.RESOLUTION/2
+			p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
+			p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
+
+			errs = self.testDelayTap(mode='std',pattern1=p1,pattern2=p2)
+
+			for adc in self.adcList:
+				for lane in self.laneList:
+					vals = np.array(errs[adc].values())[:,lane]
+					t = self.decideDelay(vals)	# Find a proper tap setting 
+					self.delay(t,adc,lane)		# Apply the tap setting
+
+		logging.info("DelayTap settings:\n" + str(self.curDelay))
+		return self.curDelay
+
+	def alignFrameClock(self, chipSel=None):
 		""" Align the frame clock with data frame
 		"""
 
-		self.selectADC()			# Select an ADC
-		self.adc.test('pat_sync')		# Set test pattern as 0b11110000
+		if chipSel==None:
+			chipSel = self.adcList
+		elif chipSel in self.adcList:
+			chipSel = [chipSel]
+		
+		if not isinstance(chipSel,list):
+			raise ValueError("Invalid parameter")
+		elif isinstance(chipSel,list) and any(cs not in self.adcList for cs in chipSel):
+			raise ValueError("Invalid parameter")
+		
+		pats = [0b10101010,0b01010101,0b00000000,0b11111111]
+		mask = (1<<(self.RESOLUTION/2))-1
+		ofst = self.RESOLUTION/2
+		p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
+		p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
 
-		flags = [[False]*len(self.laneList)]*len(self.adcList)
+		doneList = []
 
-		for u in range(8):
-			errs = self.testDelayTap(mode='err',testPattern=0b11110000)
-			for adc in self.adcList:
+		for u in range(self.RESOLUTION*2):
+			allDone = True
+			errs = self.testDelayTap(chipSel,taps=None,mode='err',pattern1=p1,pattern2=p2)
+			for adc in chipSel:
 				for lane in self.laneList:
 					if errs[adc][lane]!=0:
 						self.bitslip(adc,lane)
-					else:
-						if flags[adc][lane]:
-							continue
-						else:
-							flags[adc][lane] = True
-							logging.info("adc_unit {0} lane {1} frame clock aligned".format(adc,lane))
-				
-#		errs = self.testDelayTap(mode='err',testPattern=0b11110000)
-#		for adc in self.adcList:
-#			for lane in self.laneList:
-#				if errs[adc][lane]!=0:
-#					logging.info("adc_unit {0} lane {1} frame clock not aligned".format(adc,lane))
+						allDone = False
+					elif (adc,lane) not in doneList:
+						doneList.append((adc,lane))
+						logging.info("ADC{0} lane {1} frame clock aligned".format(adc,lane))
+			if allDone:
+				break;
+
+		errs = self.testDelayTap(taps=None,mode='err',pattern1=p1,pattern2=p2)
+		if any(np.all(errs[cs]!=0) for cs in chipSel):
+			for cs in chipSel:
+				if all(e==0 for e in list(errs[cs].values())):
+					continue
+				logging.warning("ADC{0} frame clock not aligned, mismatching counts are: \n{1}".format(cs,str(errs[cs])))
+
+		else:
+			logging.info("All lanes of all ADCs are aligned with frame clocks.")
 
 	# Please notice this method is not calibrating ADC chips at all, What it does is 
 	# aligning the output data of ISERDES with the frame clock inside FPGA by adjusting
