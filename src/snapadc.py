@@ -1,4 +1,4 @@
-from frequencysynthesizer import *
+from synth import *
 from adc import *
 from clockswitch import *
 from wishbonedevice import WishBoneDevice
