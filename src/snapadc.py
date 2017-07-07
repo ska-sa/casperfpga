@@ -3,6 +3,7 @@ from adc import *
 from clockswitch import *
 from wishbonedevice import WishBoneDevice
 import logging
+import os
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
@@ -78,21 +79,21 @@ class SNAPADC(object):
 		self.lmx.reset()
 		logging.info("Configuring frequency synthesizer")
 		#self.lmx.setFreq(samplingRate)
-
+		this_dir, this_filename = os.path.split(__file__)
 		if samplingRate == 1000:
-			self.lmx.loadCfgFromFile('LMX2581_1000.txt')
+			self.lmx.loadCfgFromFile(os.path.join(this_dir, 'LMX2581_1000.txt'))
 		elif samplingRate == 640:
-			self.lmx.loadCfgFromFile('LMX2581_640.txt')
+			self.lmx.loadCfgFromFile(os.path.join(this_dir, 'LMX2581_640.txt'))
 		elif samplingRate == 500:
-			self.lmx.loadCfgFromFile('LMX2581_500.txt')
+			self.lmx.loadCfgFromFile(os.path.join(this_dir, 'LMX2581_500.txt'))
 		elif samplingRate == 250:
-			self.lmx.loadCfgFromFile('LMX2581_250.txt')
+			self.lmx.loadCfgFromFile(os.path.join(this_dir, 'LMX2581_250.txt'))
 		elif samplingRate == 200:
-			self.lmx.loadCfgFromFile('LMX2581_200.txt')
+			self.lmx.loadCfgFromFile(os.path.join(this_dir, 'LMX2581_200.txt'))
 		elif samplingRate == 160:
-			self.lmx.loadCfgFromFile('LMX2581_160.txt')
+			self.lmx.loadCfgFromFile(os.path.join(this_dir, 'LMX2581_160.txt'))
 		else:
-			self.lmx.loadCfgFromFile('LMX2581_500.txt')
+			self.lmx.loadCfgFromFile(os.path.join(this_dir, 'LMX2581_500.txt'))
 
 		logging.info("Configuring clock source switch")
 		self.clksw.setSwitch('a')
