@@ -10,6 +10,7 @@ __author__ = 'jackh'
 __date__ = 'June 2017'
 
 LOGGER = logging.getLogger(__name__)
+tftpy.setLogLevel(logging.ERROR)
 
 def get_core_info_payload(payload_str):
     x = struct.unpack('>LLB', payload_str)
