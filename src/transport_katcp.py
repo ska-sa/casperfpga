@@ -89,6 +89,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             self, kwargs['host'], port, tb_limit=20,
             timeout=timeout, logger=LOGGER, auto_reconnect=True)
         Transport.__init__(self, **kwargs)
+        self.system_info = {}
         self.unhandled_inform_handler = None
         self._timeout = timeout
         self.connect()
@@ -313,8 +314,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             the formats supported by the device. e.g. fpg, bof, bin
         :return:
         """
-        raise DeprecationWarning('This does not seem to be used anymore.'
-                                 'Use upload_to_ram_and_program')
+        #raise DeprecationWarning('This does not seem to be used anymore.'
+        #                         'Use upload_to_ram_and_program')
         # TODO - The logic here is for broken TCPBORPHSERVER, needs fixing
         if 'program_filename' in self.system_info.keys():
             if filename is None:
