@@ -26,10 +26,12 @@ class FortyGbe(object):
         self.address = address
         self.length = length_bytes
         self.block_info = device_info
-        self.core_details = None
         self.snaps = {'tx': None, 'rx': None}
         self.registers = {'tx': [], 'rx': []}
         self.multicast_subscriptions = []
+        self.mac=None
+        self.ip_address=None
+        self.port=None
 
     def post_create_update(self, raw_device_info):
         """
@@ -60,6 +62,7 @@ class FortyGbe(object):
                     errmsg = '%s,%s: incorrect snap %s under fortygbe ' \
                              'block' % (self.parent.host,self.name, snapshot.name)
                     LOGGER.error(errmsg)
+        self.get_core_details()
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
@@ -140,21 +143,32 @@ class FortyGbe(object):
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
 
+    def get_mac(self):
+        """
+        Retrieve core's configured MAC address from HW.
+        :return: Mac object
+        """
+        details=self.get_core_details()
+        return self.mac
+
     def get_ip(self):
         """
-
-        :return: 
+        Retrieve core's IP address from HW.
+        :return: IpAddress object
         """
         ip = self._wbone_rd(self.address + 0x10)
-        return IpAddress(ip)
+        self.ip_address=IpAddress(ip)
+        return self.ip_address
 
     def get_port(self):
         """
+        Retrieve core's port from HW.
 
-        :return: 
+        :return:  int
         """
         en_port = self._wbone_rd(self.address + 0x20)
-        return en_port & (2 ** 16 - 1)
+        self.port=en_port & (2 ** 16 - 1)
+        return self.port
 
     def set_port(self, port):
         """
@@ -171,6 +185,10 @@ class FortyGbe(object):
             errmsg = 'Error setting 40gbe port to 0x%04x' % port
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
+        self.port=port
+
+    def get_10gbe_core_details(self,read_arp=False,read_cpu=False):
+        return self.get_core_details(read_arp=read_arp,read_cpu=read_cpu)
 
     def get_core_details(self,read_arp=False, read_cpu=False):
         """
@@ -239,6 +257,9 @@ class FortyGbe(object):
         if read_cpu:
             returnval.update(self.get_cpu_details(data))
             LOGGER.warn("Retrieving CPU packet buffers not yet implemented.") 
+        self.mac=returnval['mac']
+        self.ip_address=returnval['ip']
+        self.port=returnval['fabric_port']
         return returnval
 
     def get_arp_details(self, port_dump=None):
