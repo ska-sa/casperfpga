@@ -7,6 +7,7 @@ import time
 import os
 import zlib
 import hashlib
+
 import skarab_definitions as sd
 
 from transport import Transport
@@ -778,6 +779,7 @@ class SkarabTransport(Transport):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
+        *** WARNING: Do NOT attempt to upload a BSP/Flash image to the SDRAM. ***
         :param filename: fpga image to upload (currently supports bin, bit
         :param port
         :param timeout
@@ -1061,10 +1063,6 @@ class SkarabTransport(Transport):
             read_bytes = unpacked_data[2:93]
             unpacked_data[2:93] = [read_bytes]
 
-        if response_type == 'ReadSpiPageResp':
-            read_bytes = unpacked_data[5:269]
-            unpacked_data[5:269] = [read_bytes]
-
         if response_type == 'ReadHMCI2CResp':
             slave_address = unpacked_data[4:8]
             read_bytes = unpacked_data[8:12]
@@ -1079,6 +1077,18 @@ class SkarabTransport(Transport):
         if response_type == 'ReadFlashWordsResp':
             read_bytes = unpacked_data[5:389]
             unpacked_data[5:389] = [read_bytes]
+
+        if response_type == 'ProgramFlashWordsResp':
+            read_bytes = unpacked_data[5:269]
+            unpacked_data[5:269] = [read_bytes]
+
+        if response_type == 'ReadSpiPageResp':
+            read_bytes = unpacked_data[5:269]
+            unpacked_data[5:269] = [read_bytes]
+
+        if response_type == 'ProgramSpiPageResp':
+            read_bytes = unpacked_data[5:269]
+            unpacked_data[5:269] = [read_bytes]
 
         # return response from skarab
         return SkarabTransport.sd_dict[response_type](*unpacked_data)
@@ -1788,10 +1798,8 @@ class SkarabTransport(Transport):
 
     def program_words(self, bitstream, flash_address=sd.DEFAULT_START_ADDRESS):
         """
-        Higher level function call to Program n-many words from an input .hex (eventually .bin) file
-        This method scrolls through the words in the bitstream, and packs them into 256+256 words
-        This method erases the required number of blocks in the flash
-        - Only the required number of flash blocks are erased
+        Higher level function call to Program n-many words from an input .hex (eventually .bin) file.
+        This method scrolls through the words in the bitstream, and packs them into 256+256 words.
         :param bitstream: Of the input .bin file to write to Flash Memory
         :param flash_address: Address in Flash Memory from where to start programming
         :return: Boolean Success/Fail - 1/0
@@ -1921,7 +1929,7 @@ class SkarabTransport(Transport):
 
     @staticmethod
     # Only working with BPIx8 .bin files now
-    def analyse_file(filename):
+    def analyse_file_virtex_flash(filename):
         """
         This method analyses the input .bin file to determine the number of words to program,
         and the number of blocks to erase
@@ -1959,13 +1967,6 @@ class SkarabTransport(Transport):
         # For completeness, make sure the input file is of a .bin disposition
         file_extension = os.path.splitext(filename)[1]
 
-        # if file_extension != '.bin':
-        #     # Problem
-        #     errmsg = "Input file was not a .bin file"
-        #     LOGGER.error(errmsg)
-        #     raise InvalidSkarabBitstream(errmsg)
-        # else: Continue
-
         if file_extension == '.hex':
             LOGGER.info('.hex detected. Converting to .bin.')
             image_to_program = self.convert_hex_to_bin(filename)
@@ -1987,7 +1988,7 @@ class SkarabTransport(Transport):
         LOGGER.debug("VIRTEX FLASH RECONFIG: Analysing Words")
         # Can still analyse the filename, as the file size should still be the same
         # Regardless of swapping the endianness
-        num_words, num_memory_blocks = self.analyse_file(filename)
+        num_words, num_memory_blocks = self.analyse_file_virtex_flash(filename)
 
         if (num_words == 0) or (num_memory_blocks == 0):
             # Problem
@@ -2064,6 +2065,67 @@ class SkarabTransport(Transport):
             LOGGER.error("Bad Response Received")
             raise InvalidResponse('Bad response received from SKARAB')
 
+    def verify_bytes(self, bitstream):
+        '''
+        This is the high-level function that implements read_spi_page to verify the data from the
+        .ufp file that was written to the Spartan FPGA flash memory.
+        :param bitstream: of the input .ufp file that was used to reconfigure the Spartan 3AN FPGA
+        :return: Boolean - True/False - Success/Fail - 1/0
+        '''
+
+        # We need to read as many sectors as there are 264-byte pages in the bitstream
+        # - Easier to manipulate the bitstream here on the fly
+
+        pages = [bitstream[i:i + 528] for i in range(0, len(bitstream), 528)]
+
+        page_counter = 0
+        raw_data = []      # It's a list this time because read_spi_page returns an integer list
+        for page in pages:
+
+            if len(page) % 528 != 0:
+                # Needs to be padded to a 264-byte boundary
+                page += (528 - (len(page) % 528)) * 'f'
+            # else: Continue
+
+            for byte_counter in range(0, len(page), 2):
+                one_byte = int(page[byte_counter: byte_counter+2], 16)
+                raw_data.append(self.reverse_byte(one_byte))
+
+            # Define the sector address from where we will be reading data
+            page_address = (page_counter << 9)
+            debugmsg = 'Now reading from SPI Address 0x{:02X}'.format(page_address)
+            LOGGER.debug(debugmsg)
+
+            # Reading one full page at a time
+            # - Returns an list of integers
+            read_bytes = self.read_spi_page(page_address, 264)
+
+            for byte_counter in range(len(read_bytes)):
+                # Compare byte by byte
+                # debugmsg = 'Comparing Raw_Data: 0x{:02X} - Read_Data: 0x{:02X}'\
+                #            .format(raw_data[byte_counter], read_bytes[byte_counter])
+                # LOGGER.debug(debugmsg)
+
+                if raw_data[byte_counter] != read_bytes[byte_counter]:
+                    # Problem
+                    debugmsg = 'Comparing Raw_Data: 0x{:02X} - Read_Data: 0x{:02X}' \
+                        .format(raw_data[byte_counter], read_bytes[byte_counter])
+                    LOGGER.debug(debugmsg)
+
+                    errmsg = 'Byte mismatch at index: {}. ' \
+                             'Failed to reconfigure Spartan Flash successfully.'\
+                        .format(byte_counter)
+                    LOGGER.error(errmsg)
+                    raise ProgrammingError(errmsg)
+                # else: Continue
+
+            # Increment the page-count
+            page_counter += 1
+            # clear the raw_data buffer for the next page conversion
+            raw_data = []
+
+        return True
+
     def program_spi_page(self, spi_address, num_bytes, write_bytes):
         '''
         Low-level function call to program a page to the SPI Flash in the Spartan 3AN FPGA on the SKARAB.
@@ -2074,7 +2136,131 @@ class SkarabTransport(Transport):
         :return: Boolean - Success/Fail - 1/0
         '''
 
-        return NotImplementedError
+        # First thing to check:
+        if num_bytes > 264 or (len(write_bytes)/2) > 264:
+            errmsg = 'Maximum of 264 bytes can be programmed to an SPI Sector at once.\n' \
+                     'Num_bytes = {}, and len(write_bytes) = {}'.format(num_bytes, len(write_bytes))
+            LOGGER.error(errmsg)
+            raise ProgrammingError(errmsg)
+        # else: Continue as per normal
+
+        debugmsg = 'Data is ok continue programming to SPI Address 0x{:02X}'.format(spi_address)
+        LOGGER.debug(debugmsg)
+
+        """
+        ProgramSpiPageReq consists of the following:
+        - Sequence Number: self.seq_num
+        - Upper 16 bits of spi_address to start programming to
+        - Lower 16 bits of spi_address to start programming to
+        - NumBytes: Number of bytes in page to program
+        - WriteBytes[264] (BytesToWrite): Bytes to program, max = 264 bytes (1 page)
+        """
+        # Split 32-bit Flash Address into 16-bit high and low values
+        spi_address_high, spi_address_low = self.data_split_and_pack(spi_address)
+
+        # Create instance of ProgramFlashWordsRequest
+        request = sd.ProgramSpiPageReq(self.seq_num, spi_address_high, spi_address_low,
+                                       num_bytes=num_bytes, write_bytes=write_bytes)
+
+        """
+        ProgramSpiPageResp consists of the following:
+        - Command Type
+        - Sequence Number
+        - Upper 16 bits of Flash Address
+        - Lower 16 bits of Flash Address        
+        - Number of Bytes being written/that were written in the request (at the moment)
+        - VerifyBytes[264]: Verification bytes read from the same page after
+                            programming completes
+        - ProgramSpiPageSuccess: 0/1
+        - Padding: [2]
+        - Therefore Total Number of Words to be expected in the Response:
+          - 1+1+(1+1)+1+264+1+(2-1) = 271 16-bit words
+        """
+        response = self.send_packet(payload=request.create_payload(),
+                                    response_type='ProgramSpiPageResp',
+                                    expect_response=True,
+                                    command_id=sd.PROGRAM_SPI_PAGE,
+                                    number_of_words=271, pad_words=1)
+
+        if response is not None:
+            # We have some data back
+            if response.program_spi_page_success:
+                # Job done
+                # TODO: Implement 'Verify_on_the_fly' to verify written data
+                debugmsg = 'ProgramSpiPage returned successfully.\n' \
+                           'len(VerifyBytes) = {}'.format(len(response.verify_bytes))
+                LOGGER.debug(debugmsg)
+
+                return True
+                # return response.verify_bytes
+            else:
+                # ProgramSpiPageRequest was made, but unsuccessful
+                errmsg = "Failed to Program Page"
+                LOGGER.error(errmsg)
+                raise ProgrammingError(errmsg)
+        else:
+            errmsg = "Bad response received from SKARAB"
+            LOGGER.error(errmsg)
+            raise InvalidResponse(errmsg)
+
+    def program_pages(self, bitstream, num_pages):
+        '''
+        Higher level function call to Program n-many words from an input .ufp file.
+        This method breaks the bitstream up into chunks of up to 264 bytes.
+        - Removed 'num_sectors' parameter; doesn't seem to be needed
+        :param bitstream: Of the input .ufp file to write to SPI Sectors, without \r and \n
+        :param num_pages: Total Number of Pages to be written to the SPI Sectors
+        :return: Boolean - Success/Fail - 1/0
+        '''
+
+        # Need to break up the bitstream in (up to) 264-byte chunks
+        pages = [bitstream[i:i+528] for i in range(0, len(bitstream), 528)]
+
+        # Sanity check
+        if len(pages) != num_pages:
+            # Problem breaking up the bitstream into chunks
+            # - No real idea of how to handle this (?)
+            errmsg = 'Error in breaking down bitstream to program...\n' \
+                     'Pages_calculated = {}, Number of 264-byte pages = {}'\
+                        .format(num_pages, len(pages))
+            LOGGER.error(errmsg)
+            raise ProgrammingError(errmsg)
+        # else: Continue
+
+        page_counter = 0
+        raw_page_data = ''
+        for page in pages:
+            if len(page) % 528 != 0:
+                # Needs to be padded to a 264-byte boundary
+                page += (528 - (len(page) % 528)) * 'f'
+            # else: Continue
+
+            # Before program_spi_page, need to swap the bits in each byte
+            # so that the UFP file format matches the raw data format
+            for char_counter in range(0, len(page), 2):
+                one_byte = int(page[char_counter: char_counter+2], 16)
+                reversed_byte = self.reverse_byte(one_byte)
+                raw_page_data += struct.pack('!H', reversed_byte)
+
+            # Need to program_spi_page with a maximum of 264 bytes
+            # - First, define the address where the page will be written to
+            page_address = (page_counter << 9)
+
+            if not self.program_spi_page(spi_address=page_address,
+                                         num_bytes=len(raw_page_data)/2,
+                                         write_bytes=raw_page_data):
+                # Problem
+                errmsg = 'Failed to program page-{} to address: 0x{:02X}'\
+                            .format(page_counter, page_address)
+                LOGGER.error(errmsg)
+            # else: Continue
+
+            # Increment page_counter
+            page_counter += 1
+            # Clear raw_page_data buffer
+            raw_page_data = ''
+
+        return True
 
     def erase_spi_sector(self, spi_address):
         '''
@@ -2083,18 +2269,239 @@ class SkarabTransport(Transport):
         :return: Boolean - Success/Fail - 1/0
         '''
 
-        return NotImplementedError
+        address_high, address_low = self.data_split_and_pack(spi_address)
 
-    def spartan_flash_reconfig(self, filename, spi_address, blind_reconfig=False):
+        # Create instance of EraseSpiSectorRequest
+        request = sd.EraseSpiSectorReq(self.seq_num, address_high, address_low)
+
+        # Make the actual function call and (hopefully) return data
+        # - Number of Words to be expected in the response: 1+1+(1+1)+1+(7-1) = 11
+        response = self.send_packet(payload=request.create_payload(),
+                                    response_type='EraseSpiSectorResp',
+                                    expect_response=True,
+                                    command_id=sd.ERASE_SPI_SECTOR,
+                                    number_of_words=11, pad_words=6)
+
+        if response is not None:
+            if response.erase_success:
+                return True
+            else:
+                # Erase request was made, but unsuccessful
+                errmsg = "Failed to Erase Flash Block"
+                LOGGER.error(errmsg)
+                raise ProgrammingError(errmsg)
+        else:
+            errmsg = "Bad response received from SKARAB"
+            LOGGER.error(errmsg)
+            raise InvalidResponse(errmsg)
+
+    def erase_sectors(self, num_sectors):
+        '''
+        Erase required number of sectors for input .ufp file
+        :param num_sectors: Required number of sectors to be erased
+        :return: Boolean - Success/Fail - 1/0
+        '''
+
+        for sector_counter in range(0, num_sectors+1):
+            # Get associated 32-bit pre-defined Sector Address
+            sector_address = sd.SECTOR_ADDRESS[sector_counter]
+            debugmsg = 'Erasing SectorAddress: 0x{:02X}'.format(sector_address)
+            LOGGER.debug(debugmsg)
+
+            if not self.erase_spi_sector(sector_address):
+                # Problem erasing SPI Sector
+                errmsg = 'Problem Erasing SPI Sector Address: 0x{:02X}'\
+                    .format(sd.SECTOR_ADDRESS[sector_counter])
+                LOGGER.error(errmsg)
+                # No custom 'EraseError' to raise; raise error in main function call
+                return False
+
+            debugmsg = 'Successfully erased SPI Sector Address: 0x{:02X} - ({} of {})'\
+                .format(sd.SECTOR_ADDRESS[sector_counter], sector_counter, num_sectors)
+            LOGGER.debug(debugmsg)
+
+        return True
+
+    @staticmethod
+    def check_ufp_bitstream(filename):
+        '''
+        Utility to check bitstream of .ufp file used to program/configure Spartan Flash.
+        Also removes all escape characters, i.e. \r, \n
+        :param filename: of the input .ufp file
+        :return: tuple - (True/False, bitstream)
+        '''
+
+        contents = open(filename, 'rb').read()
+        if len(contents) < 1:
+            # Problem
+            errmsg = 'Problem opening input .ufp file: %s'.format(filename)
+            LOGGER.error(errmsg)
+            return False, None
+        # else: Continue
+
+        # Remove all CR and LF in .ufp file
+        escape_chars = ['\r', '\n']
+        for value in escape_chars:
+            contents = contents.replace(value, '')
+
+        return True, contents
+
+    @staticmethod
+    def analyse_ufp_bitstream(bitstream):
+        '''
+        This method analyses the input .ufp file to determine the number of pages to program,
+        and the number of sectors to erase
+        :param bitstream: Input .ufp file to be written to the SPARTAN 3AN FPGA
+        :return: Tuple - (num_pages, num_sectors)
+        '''
+
+        num_bytes = len(bitstream) / 2       # Number of Bytes in input .ufp file
+        num_pages = num_bytes / 264         # 1 Page = 264 bytes
+        if num_bytes % 264 != 0:
+            num_pages += 1
+
+        num_sectors = num_pages / 256       # 256 Pages/sector
+        if num_pages % 256 != 0:
+            num_sectors += 1
+
+        debugmsg = 'Returning num_pages: {} - num_sectors: {}'.format(num_pages, num_sectors)
+        LOGGER.debug(debugmsg)
+
+        return num_pages, num_sectors
+
+    @staticmethod
+    def reverse_byte(input_byte):
+        '''
+        Method created to replicate 'SwappedByte' method in SpartanFlashReconfigApp.cpp;
+        "This is done so that the .ufp bitstream matches raw data format" (?)
+        Mirrors 8-bit integer (byte) about its center-point
+        e.g. 0b01010110 -> 0b01101010
+        :param input_byte: to be byte-swapped/mirrored
+        :return: Reversed-byte
+        '''
+
+        mirrored_byte = 0x0
+
+        if (input_byte & 0x01) == 0x01:
+            mirrored_byte = mirrored_byte | 0x80
+        if (input_byte & 0x02) == 0x02:
+            mirrored_byte = mirrored_byte | 0x40
+        if (input_byte & 0x04) == 0x04:
+            mirrored_byte = mirrored_byte | 0x20
+        if (input_byte & 0x08) == 0x08:
+            mirrored_byte = mirrored_byte | 0x10
+        if (input_byte & 0x10) == 0x10:
+            mirrored_byte = mirrored_byte | 0x08
+        if (input_byte & 0x20) == 0x20:
+            mirrored_byte = mirrored_byte | 0x04
+        if (input_byte & 0x40) == 0x40:
+            mirrored_byte = mirrored_byte | 0x02
+        if (input_byte & 0x80) == 0x80:
+            mirrored_byte = mirrored_byte | 0x01
+
+        return mirrored_byte
+
+    @staticmethod
+    def verify_bytes_now(written_bytes, returned_bytes):
+        '''
+        Used to 'Verify on the fly' the data programmed to SPARTAN Flash
+        via program_spi_page.
+        :param written_bytes:
+        :param returned_bytes:
+        :return:
+        '''
+
+        if len(written_bytes) != len(returned_bytes):
+            # Problem
+            errmsg = 'Num Written Bytes ({}) != Num Returned Bytes ({})'\
+                .format(len(written_bytes), len(returned_bytes))
+            LOGGER.error(errmsg)
+            raise ProgrammingError(errmsg)
+        # else: Continue
+
+        for byte_counter in range(len(written_bytes)):
+            if written_bytes[byte_counter] != returned_bytes[byte_counter]:
+                # Problem - Data mismatch
+                errmsg = 'Data mismatch at index {}'.format(byte_counter)
+                LOGGER.error(errmsg)
+                raise ProgrammingError(errmsg)
+            # else: Continue
+
+        # All data matched
+        return True
+
+    def spartan_flash_reconfig(self, filename, blind_reconfig=False):
         '''
         This is the entire function that makes the necessary function calls to reconfigure the Spartan's Flash
         :param filename: The actual .ufp file that is to be written to the Spartan FPGA
-        :param spi_address: 32-bit address of SPI Sector to start programming to
         :param blind_reconfig: Reconfigure the board and don't wait to verify what has been written
         :return: Boolean - Success/Fail - 1/0
         '''
 
-        return NotImplementedError
+        # TODO: Figure out how we can use get_spartan_firmware_version in checking versions
+
+        # For completeness, make sure the input file is of a .bin disposition
+        if os.path.splitext(filename)[1] != '.ufp':
+            # File extension was not .ufp
+            errmsg = 'Please use .ufp file to reconfigure Spartan FPGA'
+            LOGGER.error(errmsg)
+            raise InvalidSkarabBitstream(errmsg)
+
+        # Currently there is no real method of confirming the integrity of the data
+        # in the input .ufp file
+        LOGGER.debug('Checking input .ufp bitstream...')
+        (result, image_to_program) = self.check_ufp_bitstream(filename)
+        if not result:
+            errmsg = "Incompatible .ufp file detected."
+            LOGGER.error(errmsg)
+            raise InvalidSkarabBitstream(errmsg)
+
+        LOGGER.debug('SPARTAN FLASH RECONFIG: Analysing Words')
+        num_pages, num_sectors = self.analyse_ufp_bitstream(image_to_program)
+
+        if (num_pages == 0) or (num_sectors == 0):
+            # Problem
+            errmsg = 'Failed to Analyse File successfully'
+            LOGGER.error(errmsg)
+            raise InvalidSkarabBitstream(errmsg)
+        # else: Continue
+
+        LOGGER.debug('SPARTAN FLASH RECONFIG: Erasing SPI Sectors')
+        if not self.erase_sectors(num_sectors):
+            # Problem
+            errmsg = 'Failed to Erase SPI Sectors'
+            LOGGER.error(errmsg)
+            raise ProgrammingError(errmsg)
+        # else: Continue
+
+        LOGGER.debug('SPARTAN FLASH RECONFIG: Programming Words to SPI Sectors')
+        # For Debug purposes
+        # (result, returned_data) = self.program_pages(image_to_program, num_pages)
+        if not self.program_pages(image_to_program, num_pages):
+            # Problem
+            errmsg = 'Failed to Program SPI Sectors'
+            LOGGER.error(errmsg)
+            raise ProgrammingError(errmsg)
+        # else: Continue
+
+        if not blind_reconfig:
+
+            LOGGER.debug('VIRTEX FLASH RECONFIG: Verifying words that were written '
+                         'to Flash Memory')
+
+            if not self.verify_bytes(image_to_program):
+                # Problem
+                errmsg = "Failed to Verify data programmed SPI Sectors"
+                LOGGER.error(errmsg)
+                raise ProgrammingError(errmsg)
+                # else: Continue
+
+        # Print new SpartanFirmwareVersion
+        new_firmware_version = self.get_spartan_firmware_version()
+        debugmsg = 'New Spartan Firmware Version: v{}'.format(new_firmware_version)
+        LOGGER.debug(debugmsg)
+
+        return True
 
     # board level functions
 

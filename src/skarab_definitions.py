@@ -128,6 +128,13 @@ BIG_WRITE_WISHBONE = 0x0049
 DEFAULT_START_ADDRESS = 0x3000000
 DEFAULT_BLOCK_SIZE = 131072.0
 
+# FOR SPARTAN FLASH RECONFIG
+CURRENT_SPARTAN_FW_VER = '1.5'
+SECTOR_ADDRESS = [0x0, 0x1000, 0x20000, 0x40000, 0x60000, 0x80000,
+                  0xA0000, 0xC0000, 0xE0000, 0x100000, 0x120000,
+                  0x140000, 0x160000, 0x180000, 0x1A0000, 0x1C0000,
+                  0x1E0000]
+
 # I2C BUS DEFINES
 MB_I2C_BUS_ID = 0x0
 MEZZANINE_0_I2C_BUS_ID = 0x1
@@ -800,17 +807,19 @@ class ProgramSpiPageResp(Command):
         self.padding = padding
 
 
-class EraseSpiSectorReq(object):
+class EraseSpiSectorReq(Command):
     def __init__(self, seq_num, sector_address_high, sector_address_low):
+        super(EraseSpiSectorReq, self).__init__()
         self.header = CommandHeader(ERASE_SPI_SECTOR, seq_num)
         self.sector_address_high = sector_address_high
         self.sector_address_low = sector_address_low
 
 
-class EraseSpiSectorResp(object):
+class EraseSpiSectorResp(Command):
     def __init__(self, command_id, seq_num, sector_address_high, 
                  sector_address_low, erase_success, padding):
-        self.header = CommandHeader(command_id, seq_num)
+        super(EraseSpiSectorResp, self).__init__()
+        self.header = CommandHeader(command_id, seq_num, False)
         self.sector_address_high = sector_address_high
         self.sector_address_low = sector_address_low
         self.erase_success = erase_success
