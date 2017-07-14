@@ -54,7 +54,7 @@ class Mac(object):
             raise ValueError('Cannot make a MAC with no value.')
         elif mac_str is not None:
             self.mac_int = self.str2mac(mac_str)
-            self.mac_str = mac_str
+            self.mac_str = self.mac2str(self.mac_int)
         elif mac_int is not None:
             self.mac_str = self.mac2str(mac_int)
             self.mac_int = mac_int
