@@ -1078,10 +1078,6 @@ class SkarabTransport(Transport):
             read_bytes = unpacked_data[5:389]
             unpacked_data[5:389] = [read_bytes]
 
-        if response_type == 'ProgramFlashWordsResp':
-            read_bytes = unpacked_data[5:269]
-            unpacked_data[5:269] = [read_bytes]
-
         if response_type == 'ReadSpiPageResp':
             read_bytes = unpacked_data[5:269]
             unpacked_data[5:269] = [read_bytes]
