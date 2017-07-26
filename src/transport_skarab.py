@@ -808,20 +808,6 @@ class SkarabTransport(Transport):
             need_sleep = True
         if need_sleep:
             time.sleep(1)
-        # # set the port back to fabric programming
-        # need_sleep = False
-        # for gbe in self.gbes:
-        #     if gbe.get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
-        #         LOGGER.info('Resetting %s to 0x%04x' % (
-        #             gbe.name, sd.ETHERNET_FABRIC_PORT_ADDRESS))
-        #         gbe.set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
-        #         need_sleep = True
-        # if need_sleep:
-        #     time.sleep(1)
-
-        # put the interface into programming mode
-        self.config_prog_mux(user_data=0)
-
         self.upload_to_ram(filename)
         self.boot_from_sdram()
 
@@ -835,8 +821,6 @@ class SkarabTransport(Transport):
             # to come back. It also prevents errors being logged when there
             # is no response.
             if self.is_connected(retries=20):
-                # configure the mux back to user_date mode
-                self.config_prog_mux(user_data=1)
                 [golden_image, multiboot, firmware_version] = \
                     self.get_firmware_version()
                 if golden_image == 0 and multiboot == 0:
@@ -862,33 +846,6 @@ class SkarabTransport(Transport):
                     return False
         LOGGER.error('SKARAB has not come back')
         return False
-
-    def config_prog_mux(self, user_data=1):
-        """
-        Sets the bits in the register that controls which interface is used
-        to program the SDRAM. It also sets the mux for the data and programming
-        interface.
-        :param user_data: bool, 0 = config_mode, 1 = simulink data
-        :return:
-        """
-        # the bit that tells us if the 40gbe link is up
-        reg = format(
-            int(self.read_wishbone(sd.C_RD_ETH_IF_LINK_UP_ADDR)), '#032b'
-        )
-        forty_gbe_link = int(reg[30])
-        # the bit that tells us if the 1gbe link is up
-        # reg = format(int(self.read_wishbone(0x4)), '#032b')
-        # one_gbe_link = int(reg[27])
-        # 40gbe link up
-        if forty_gbe_link == 1:
-            LOGGER.info(
-                'The 40GbE link is up so using 40GbE to program the SKARAB')
-            self.write_wishbone(0x18, user_data * 2 ** 1)
-        # 40gbe link down so fall back to 1gbe
-        else:
-            LOGGER.info(
-                'The 40GbE link is down so using 1GbE to program the SKARAB')
-            self.write_wishbone(0x18, 4 + user_data * 2 ** 1)
 
     def clear_sdram(self):
         """
