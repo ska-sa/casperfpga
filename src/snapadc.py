@@ -78,6 +78,40 @@ class SNAPADC(object):
 
 
 	def init(self, samplingRate=250, numChannel=4, resolution=None):
+		""" Get SNAP ADCs into working condition
+
+		Supported frequency range: 60MHz ~ 1000MHz. Set resolution to
+		None to let init() automatically decide the best resolution.
+		
+		A run of init()	takes approximatly 20 seconds, involving the
+		following actions:
+
+		1. configuring frequency synthesizer LMX2581
+		2. configuring clock source switch HMC922
+		3. configuring ADCs HMCAD1511 (support HMCAD1520 in future)
+		4. configuring IDELAYE2 and ISERDESE2 inside of FPGA
+		5. Testing under dual pattern and ramp mode
+
+		E.g.
+			init(1000,1)	1 channel mode,	1Gsps, 8bit, since 1Gsps
+					is only available in 8bit mode
+			init(320,2)	2 channel mode,	320Msps, 8bit for HMCAD1511,
+					or 12bit for HMCAD1520
+			init(160,4,8)	4 channel mode, 160Msps, 8bit resolution
+
+		"""
+
+		if resolution==None:
+			if isinstance(self.adc, HMCAD1511):
+				self.RESOLUTION=8
+			elif samplingRate/(4/numChannel)>160:
+				self.RESOLUTION=8
+			else:
+				self.RESOLUTION=12
+		elif resolution not in [8,12,14,None]:
+			raise ValueError("Invalid parameter")
+		elif resolution>8 and samplingRate/(4/numChannel)>160:
+			raise ValueError("Invalid parameter")
 
 		logging.info("Reseting adc_unit")
 		self.reset()
@@ -89,7 +123,6 @@ class SNAPADC(object):
 
 		logging.info("Configuring frequency synthesizer")
 		self.lmx.setFreq(samplingRate)
-
 		if not self.lmx.getDiagnoses('LD_PINSTATE'):
 			return self.ERROR_LMX
 
@@ -98,14 +131,6 @@ class SNAPADC(object):
 
 		logging.info("Initialising ADCs")
 		self.adc.init()
-
-		if resolution==None:
-			if isinstance(self.adc, HMCAD1511):
-				self.RESOLUTION=8
-			else:	# isinstance(self.adc, HMCAD1520):
-				self.RESOLUTION=12
-		elif resolution not in [8,12,14,None]:
-			raise ValueError("Invalid parameter")
 
 		if numChannel==1 and samplingRate<240:
 			lowClkFreq = True
@@ -188,7 +213,7 @@ class SNAPADC(object):
 
 	def snapshot(self):
 		""" Save 1024 consecutive samples of each ADC into its corresponding bram """
-		# No way to take snapshot a single ADC because the HDL code is designed so.
+		# No way to snapshot a single ADC because the HDL code is designed so.
 		val = self._set(0x0, 0x1,	self.M_WB_W_SNAP_REQ)
 		self.adc._write(0x0, self.A_WB_W_CTRL)
 		self.adc._write(val, self.A_WB_W_CTRL)
@@ -238,6 +263,12 @@ class SNAPADC(object):
 
 	def interleave(self,data,mode):
 		""" Reorder the data according to the interleaving mode
+
+		E.g.
+			data = numpy.arange(1024).reshape(-1,8)
+			interleave(data, 1)	# return a one-column numpy array
+			interleave(data, 2)	# return a two-column numpy array
+			interleave(data, 4)	# return a four-column numpy array
 		"""
 		return self.adc.interleave(data, mode)
 
@@ -248,7 +279,6 @@ class SNAPADC(object):
 			readRAM()		# read all RAMs, return a list of arrays
 			readRAM(1)		# read the 2nd RAMs, return a 128X8 array
 			readRAM([0,1])		# read 2 RAMs, return two arrays
-			readRAM(2,2)		# read the 3rd RAM, return a 512X2 array
 		"""
 		if ram==None:						# read all RAMs
 			return self.readRAM(self.adcList)
@@ -276,6 +306,13 @@ class SNAPADC(object):
 		Reorder the parallelized data by asserting a itslip command to the bitslip 
 		submodule of a ISERDES primitive.  Each bitslip command left shift the 
 		parallelized data by one bit.
+
+		E.g.
+			bitslip()		# left shift all lanes of all ADCs
+			bitslip(0)		# shift all lanes of the 1st ADC
+			bitslip(0,3)		# shift the 4th lane of the 1st ADC
+			bitslip([0,1],[3,4])	# shift the 4th and 5th lanes of the 1st
+						# and the 2nd ADCs
 		"""
 
 		if chipSel == None:
