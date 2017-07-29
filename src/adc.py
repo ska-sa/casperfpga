@@ -90,8 +90,8 @@ class HMCAD1511(WishBoneDevice):
 			'msb_first' : 0b1 << 3, }
 	DICT[0x50] = {	'adc_curr' : 0b111 << 0,
 			'ext_vcm_bc' : 0b11 << 4, }
-	DICT[0x52] = {	'lvds_pd_mode' : 0b1 << 3, }
-	DICT[0x53] = {	'low_clk_freq' : 0b1 << 0,
+	DICT[0x52] = {	'lvds_pd_mode' : 0b1 << 0, }
+	DICT[0x53] = {	'low_clk_freq' : 0b1 << 3,
 			'lvds_advance' : 0b1 << 4,
 			'lvds_delay' : 0b1 << 5, }
 	DICT[0x55] = {	'fs_cntrl' : 0b111111 << 0, }
@@ -140,16 +140,16 @@ class HMCAD1511(WishBoneDevice):
 
 	# Put some initialization here rather than in __init__ so that instantiate
 	# an HMCAD1511 object wouldn't reset/interrupt the running ADCs.
-	def init(self):
+	def init(self,numChannel=4,clkDivide=1,lowClkFreq=False):
 		""" Reset and initialize ADCs
 		"""
 
 		self.reset()
 		self.powerDown()
 		# Set LVDS bit clock phase if other than default is used
+		self.setOperatingMode(numChannel,clkDivide,lowClkFreq)
 		self.powerUp()
-		self.interleavingMode(numChannel=4,clkDivide=4)
-		self.inputSelect([1,2,3,4])
+		self.selectInput([1,2,3,4])
 
 	def _bitCtrl(self, state, sda=0):	
 		# state: 0 - idle, 1 - start, 2 - transmit, 3 - stop
@@ -311,7 +311,7 @@ class HMCAD1511(WishBoneDevice):
 			cfg = cfg + (1 << 6)
 		return cfg
 		
-	def interleavingMode(self, numChannel, clkDivide=1):
+	def setOperatingMode(self, numChannel, clkDivide=1, lowClkFreq=False):
 		""" Set interleaving mode and clock divide factor
 		
 		Available Interleaving mode
@@ -319,17 +319,21 @@ class HMCAD1511(WishBoneDevice):
 		numChannel=2	--	4 ADC cores per channel
 		numChannel=4	--	2 ADC cores per channel
 
+		Activate lowClkFreq when
+			Single channel  Fs < 240 MHz
+			Dual channel    Fs < 120 MHz
+			Quad channel    Fs < 60 MHz
+
 		Availale clock divide factors: 1, 2, 4, and 8
+
 		E.g.
-			interleavingMode(1)
-			interleavingMode(4, 4)
+			setOperatingMode(1)
+			setOperatingMode(4, 4)
 		"""
 
-		modes = [1,2,4]
-		divs = [1,2,4,8]
-		if not numChannel in modes:
+		if not numChannel in [1,2,4]:
 			raise ValueError("Invalid parameter")
-		if not clkDivide in divs:
+		if not clkDivide in [1,2,4,8]:
 			raise ValueError("Invalid parameter")
 
 		self.powerDown()
@@ -340,14 +344,36 @@ class HMCAD1511(WishBoneDevice):
 		val = self._set(val, int(math.log(clkDivide,2)), mask)
 		self.write(val, rid)
 
+		rid, mask = self._getMask('low_clk_freq')
+		val = self._set(0x0, lowClkFreq, mask)
+		self.write(val, rid)
+
 		self.powerUp()
 
-	def inputSelect(self, inputs):
+	def interleave(self, data, numChannel):
+		""" Reshape and return ADC data
+		"""
+		if numChannel not in [1,2,4]:
+			raise ValueError("Invalid parameter")
+		if not isinstance(data,np.ndarray):
+			raise ValueError("Invalid parameter")
+		if data.ndim != 2 or data.shape[1]!=8:
+			raise ValueError("Invalid parameter")
+		
+		data = data.reshape(-1,numChannel,8/numChannel)
+		data = np.einsum("ijk->jik", data)
+		data = data.reshape(numChannel,-1)
+		data = np.einsum("ij->ji", data)
+		
+		return data
+
+
+	def selectInput(self, inputs):
 		""" Input select
 
 		E.g.
-		 	inputSelect([1,2,3,4])	(in four channel mode)
-			inputSelect([1,1,1,1])	(in one channel mode)
+		 	selectInput([1,2,3,4])	(in four channel mode)
+			selectInput([1,1,1,1])	(in one channel mode)
 		"""
 
 		opts = [1, 2, 3, 4]
@@ -383,3 +409,93 @@ class HMCAD1511(WishBoneDevice):
 		rid, mask = self._getMask('pd')
 		val = self._set(0x0, 1, mask)
 		self.write(val, rid)
+
+class HMCAD1520(HMCAD1511):
+	""" Control HMCAD1520 via wb_adc16_controller
+	"""
+
+	def __init__(self, interface, controller_name, csn=0xff):
+		super(HMCAD1520, self).__init__(interface, controller_name, csn)
+
+		self.DICT[0x26] = {	'bits_custom1' : 0xffff << 0, }
+		self.DICT[0x27] = {	'bits_custom2' : 0xffff << 0, }
+		self.DICT[0x31] = {	'channel_num' : 0b111 << 0,
+					'precision_mode' : 0b1 << 3,
+					'clk_divide' : 0b11 << 8, }
+		self.DICT[0x53] = {	'low_clk_freq' : 0b1 << 3,
+					'lvds_output_mode' : 0b111 << 0,
+					'lvds_advance' : 0b1 << 4,
+					'lvds_delay' : 0b1 << 5, }
+
+	def init(self,numChannel=4,clkDivide=1,lowClkFreq=False,resolution=12):
+		""" Reset and initialize ADCs
+		"""
+
+		self.reset()
+		self.powerDown()
+		# Set LVDS bit clock phase if other than default is used
+		self.setOperatingMode(numChannel, clkDivide, lowClkFreq, resolution)
+		self.powerUp()
+		self.selectInput([1,2,3,4])
+
+	def setOperatingMode(self, numChannel, clkDivide=1, lowClkFreq=False, resolution=12):
+		""" Set operating mode and clock divide factor
+
+		Available operating mode
+		numChannel=1
+		numChannel=2
+		numChannel=4
+
+		Available resolutions:
+		resolution=8
+		resolution=12
+		resolution=14
+
+		Availale clock divide factors: 1, 2, 4, and 8
+
+		Activate lowClkFreq when
+			High speed, single channel      Fs < 240 MHz
+			High speed, dual channel	Fs < 120 MHz
+			High speed, quad channel	Fs < 60 MHz
+			Precision mode			Fs < 30 MHz
+
+		E.g.
+			setOperatingMode(1, 4, False, 8)	# 1 channel, 8-bit resolution, 8-bit width
+			setOperatingMode(1, 4, False, 12)       # 1 channel, 12-bit resolution, 12-bit width
+			setOperatingMode(4, 1, False, 14)       # 4 channels, 14-bit resolution, 16-bit width. (Currently not supported)
+		"""
+
+		if numChannel not in [1,2,4]:
+			raise ValueError("Invalid parameter")
+		if clkDivide not in [1,2,4,8]:
+			raise ValueError("Invalid parameter")
+		if lowClkFreq not in [True,False]:
+			raise ValueError("Invalid parameter")
+		if resolution not in [8,12,14]:
+			raise ValueError("Invalid parameter")
+
+		self.powerDown()
+
+		rid, mask = self._getMask('channel_num')
+		val = self._set(0x0, numChannel, mask)
+		rid, mask = self._getMask('precision_mode')
+		val = self._set(val, resolution==14, mask)
+		rid, mask = self._getMask('clk_divide')
+		val = self._set(val, int(math.log(clkDivide,2)), mask)
+		self.write(val, rid)
+
+		if resolution==8:
+			width=0b000     # width = 8
+		elif resolution==12:
+			width=0b001     # width = 12
+		elif resolution==14:
+			width=0b011     # width = 16
+
+		rid, mask = self._getMask('lvds_out_mode')
+		val = self._set(0x0, width, mask)
+		rid, mask = self._getMask('low_clk_freq')
+		val = self._set(val, lowClkFreq, mask)
+		self.write(val, rid)
+
+		self.powerUp()
+
