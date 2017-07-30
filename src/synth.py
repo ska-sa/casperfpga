@@ -1,6 +1,10 @@
 from wishbonedevice import WishBoneDevice
 import fractions as _frac
 import math
+import logging
+import time
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 class LMX2581(WishBoneDevice):
 	""" LMX2581 Frequency Synthesizer """
@@ -121,230 +125,180 @@ class LMX2581(WishBoneDevice):
 	CMD09 = 0b00000011110001111100000000111001 # Not disclosed to user
 	CMD08 = 0b00100000011111011101101111111000 # Not disclosed to user
 	
-	FOSC = 10
 
 	# Using recommanded parameter settings in the following datasheet
 	# http://www.ti.com/lit/ds/symlink/lmx2581.pdf
 	# Also borrow some lines from https://github.com/domagalski/snap-synth
 
-	def __init__(self, interface, controller_name):
+	def __init__(self, interface, controller_name, fosc=10):
 		super(LMX2581, self).__init__(interface, controller_name) 
 		# A non-None address list
 		self.A_DICT_LIST = [self.DICTS.index(a) for a in self.DICTS if a != None]
+		self.FOSC = fosc 		# 10 MHz from GPS module
+		self.freq_pd = self.FOSC / 1
 
-#	def init(self):
-#
-#		# Here is the booting sequence of LMX2581 according to 8.5.2
-#		# After reset, pretty much registers load their default/optimal values
-#		# No further intervention is needed.
-#
-#		self.reset()
-#
-#		# Program some registers
-#
-#		# Register R15: ... to be complete
-#
-#		# Register R13: Page 30: 8.6.1.2
-#		freq_pd = self.FOSC / 1
-#		if freq_pd > 130:
-#			DLD_TOL = 0
-#		elif freq_pd > 80 and freq_pd < 130:
-#			DLD_TOL = 1
-#		elif freq_pd > 60 and freq_pd <= 80:
-#			DLD_TOL = 2
-#		elif freq_pd > 45 and freq_pd <= 60:
-#			DLD_TOL = 3
-#		elif freq_pd > 30 and freq_pd <= 45:
-#			DLD_TOL = 4
-#		else:
-#			DLD_TOL = 5
-#		r13 = self._set(0x4100,4,self.M13_DLD_ERR_CNT)
-#		r13 = self._set(r13, 32, self.M13_DLD_PASS_CNT)
-#		r13 = self._set(r13, DLD_TOL, self.M13_DLD_TOL)
-#		self.write(r13, self.A13)
-#
-#		# Register R07: Page 31: 8.6.1.4
-#		r07 = self._set(0, 0, self.M07_FL_SELECT)
-#		r07 = self._set(r07, 2, self.M07_FL_PINMODE)
-#		r07 = self._set(r07, 0, self.M07_FL_INV)
-#		r07 = self._set(r07, 4, self.M07_MUXOUT_SELECT)
-#		r07 = self._set(r07, 0, self.M07_MUX_INV)
-#		r07 = self._set(r07, 1, self.M07_MUXOUT_PINMODE)
-#		r07 = self._set(r07, 2, self.M07_LD_SELECT)
-#		r07 = self._set(r07, 0, self.M07_LD_INV)
-#		r07 = self._set(r07, 0, self.M07_LD_PINMODE)
-#		self.write(r07, self.A07)
-#
-#		# Register R06: Page 33: 8.6.1.5
-#		# Point RDADDR to R06, because its good for diagnostics
-#		r06 = self._set(0x400, 6, self.M06_RDADDR)
-#		self.write(r06, self.A06)
-#
-#		# Register R05: Page 34: 8.6.1.6
-#		r05 = self._set(0, 0, self.M05_OUT_LDEN)
-#		r05 = self._set(r05, 0, self.M05_OSC_FREQ)
-#		r05 = self._set(r05, 0, self.M05_BUFEN_DIS)
-#		r05 = self._set(r05, 0, self.M05_VCO_SEL_MODE)
-#		r05 = self._set(r05, 0, self.M05_OUTB_MUX)
-#		r05 = self._set(r05, 0, self.M05_OUTA_MUX)
-#		r05 = self._set(r05, 0, self.M05_0_DLY)
-#		r05 = self._set(r05, 0, self.M05_MODE)
-#		r05 = self._set(r05, 0, self.M05_PWDN_MODE)
-#		r05 = self._set(r05, 0, self.M05_RESET)
-#		self.write(r05, self.A05)
-#
-#		# Register R04: Page 36: 8.6.1.7
-#		r04 = self._set(0, 0, self.M04_PFD_DLY)
-#		r04 = self._set(r04, 0, self.M04_PFD_DLY)
-#		r04 = self._set(r04, 0, self.M04_FL_FRCE)
-#		r04 = self._set(r04, 0, self.M04_FL_TOC)
-#		r04 = self._set(r04, 0, self.M04_FL_CPG)
-#		r04 = self._set(r04, 0, self.M04_CPG_BLEED)
-#		self.write(r04, self.A04)
-#
-#		# Register R03: Page 38: 8.6.1.8
-#		r03 = self._set(0x20000000, 0, self.M03_VCO_DIV)
-#		r03 = self._set(r03, 15, self.M03_OUTB_PWR)
-#		r03 = self._set(r03, 15, self.M03_OUTA_PWR)
-#		r03 = self._set(r03, 0, self.M03_OUTB_PD)
-#		r03 = self._set(r03, 0, self.M03_OUTA_PD)
-#		self.write(r03, self.A03)
-#
-#		# Register R02: Page 39: 8.6.1.9
-#		r02 = self._set(0x04000000, 0, self.M02_OSC_2X)
-#		r02 = self._set(r02, 1, self.M02_CPP)
-#		r02 = self._set(r02, 0, self.M02_PLL_DEN)
-#		self.write(r02, self.A02)
-#
-#		# Register R01: Page 40: 8.6.1.10
-#		r01 = self._set(0, 0, self.M01_CPG)
-#		r01 = self._set(r01, 0, self.M01_VCO_SEL)
-#		r01 = self._set(r01, 0, self.M01_PLL_NUM)
-#		r01 = self._set(r01, 0, self.M01_FRAC_ORDER)
-#		r01 = self._set(r01, 1, self.M01_PLL_R)
-#		self.write(r01, self.A01)
-#
-#		# Register R00: Page 41: 8.6.1.11
-#		r00 = self._set(0, 0, self.M00_ID)
-#		r00 = self._set(r00, 0, self.M00_FRAC_DITHER)
-#		r00 = self._set(r00, 0, self.M00_NO_FCAL)
-#		r00 = self._set(r00, 7, self.M00_PLL_N)
-#		r00 = self._set(r00, 0, self.M00_PLL_NUM)
-#		self.write(r00, self.A00)
-#
-	def powerUp(self):
+	def init(self):
+
+		# Generated via TI http://www.ti.com/tool/clockdesigntool
+		# and via TI http://www.ti.com/tool/codeloader
+		r05=0x40870015
+		r15=0x021FE80F
+		r13=0x4082C10D
+		r10=0x210050CA
+		r09=0x03C7C039
+		r08=0x207DDBF8
+		r07=0x00082317
+		r06=0x000004C6
+		r05=0x0010A805
+		r04=0x00000004
+		r03=0x2004F3C3
+		r02=0x0C000642
+		r01=0xD0000011
+		r00=0x60C80000
+
+		self.reset()
+		self.write(r15)
+		self.write(r13)
+		self.write(r10)
+		self.write(r09)
+		self.write(r08)
+		self.write(r07)
+		self.write(r06)
+		self.write(r05)
+		self.write(r04)
+		self.write(r03)
+		self.write(r02)
+		self.write(r01)
+		self.write(r00)
+
+		time.sleep(0.02)
+
+		self.write(r00)
+
+	def powerOn(self):
 		self.setWord(0, "PWDN_MODE")
 
-	def powerDown(self):
+	def powerOff(self):
 		self.setWord(1, "PWDN_MODE")
 
 	def outputPower(self,p=15):
 		self.setWord(p, "OUTA_PWR")
 		self.setWord(p, "OUTB_PWR")
-#
-#	def get_osc_values(self, synth_mhz, ref_signal):
-#		"""
-#		This function gets oscillator values
-#		"""
-#		# Equation for the output frequency.
-#		# f_out = f_osc * OSC_2X / PLL_R * (PLL_N + PLL_NUM/PLL_DEN) / VCO_DIV
-#		# XXX Right now, I'm not going to use OSC_2X or PLL_R, so this becomes
-#		# f_out = f_osc * (PLL_N + PLL_NUM/PLL_DEN) / VCO_DIV
-#		
-#		# Get a good VCO_DIV. The minimum VCO frequency is 1800.
-#		vco_min = 1800; vco_max = 3800
-#		if synth_mhz > vco_min and synth_mhz < vco_max:
-#			# Bypass VCO_DIV by properly setting OUTA_MUX and OUTB_MUX
-#			VCO_DIV = None
-#		else:
-#			vco_guess = int(vco_min / synth_mhz) + 1
-#			VCO_DIV = vco_guess + vco_guess%2
-#		
-#		# Get PLLN, PLL_NUM, and PLL_DEN
-#		pll = (1 if VCO_DIV is None else VCO_DIV) * synth_mhz / ref_signal
-#		PLL_N = int(pll)
-#		frac = pll - PLL_N
-#		if frac < 1.0/(1<<22): # smallest fraction on the synth
-#			PLL_NUM = 0
-#			PLL_DEN = 1
-#		else:
-#			fraction = _frac.Fraction(frac).limit_denominator(1<<22)
-#			PLL_NUM = fraction.numerator
-#			PLL_DEN = fraction.denominator
-#
-#		return (PLL_N, PLL_NUM, PLL_DEN, VCO_DIV)
-#
-#	def setFreq(self, synth_mhz):
-#
-#		PLL_N, PLL_NUM, PLL_DEN, VCO_DIV = self.get_osc_values(synth_mhz,self.FOSC)
-#
-#		# Select the VCO frequency
-#		# VCO1: 1800 to 2270 NHz
-#		# VCO2: 2135 to 2720 MHz
-#		# VCO3: 2610 to 3220 MHz
-#		# VCO4: 3075 to 3800 MHz
-#		freq_vco = freq_pd * (PLL_N + float(PLL_NUM)/PLL_DEN)
-#		if freq_vco >= 1800 and freq_vco <= 2270:
-#			VCO_SEL = 0
-#		elif freq_vco >= 2135 and freq_vco <= 2720:
-#			VCO_SEL = 1
-#		elif freq_vco >= 2610 and freq_vco <= 3220:
-#			VCO_SEL = 2
-#		elif freq_vco >= 3075 and freq_vco <= 3800:
-#			VCO_SEL = 3
-#		else:
-#			raise ValueError('VCO frequency is out of range.')
-#		self.write(VCO_SEL, self.A01, self.M01_VCO_SEL)
-#
-#		# Dithering is set in R0, but it is needed for R1 stuff.
-#		if PLL_NUM and PLL_DEN > 200 and not PLL_DEN % 2 and not PLL_DEN % 3:
-#			FRAC_DITHER = 2
-#		else:
-#			FRAC_DITHER = 3
-#		self.write(FRAC_DITHER, self.A00, self.M00_FRAC_DITHER)
-#			
-#		# Get the Fractional modulator order
-#		if not PLL_NUM:
-#			FRAC_ORDER = 0
-#		elif PLL_DEN < 20:
-#			FRAC_ORDER = 1
-#		elif PLL_DEN % 3 and FRAC_DITHER == 3:
-#			FRAC_ORDER = 3
-#		else:
-#			FRAC_ORDER = 2
-#		self.write(FRAC_ORDER, self.A01, self.M01_FRAC_ORDER)
-#
-#		# Here is the booting sequence after changing frequency according to 8.5.3
-#
-#		# 1. (optional) If the OUTx_MUX State is changing, program Register R5
-#		# 2. (optional) If the VCO_DIV state is changing, program Register R3.
-#		# See VCO_DIV[4:0] - VCO Divider Value if programming a to a value of 4.
-#		if VCD_DIV == None:
-#			self.write(0, self.A05, self.M05_OUTA_MUX)
-#			self.write(0, self.A05, self.M05_OUTB_MUX)
-#		else:
-#			self.write(1, self.A05, self.M05_OUTA_MUX)
-#			self.write(1, self.A05, self.M05_OUTB_MUX)
-#			VCO_DIV = VCO_DIV / 2 - 1
-#			self.write(VCO_DIV, self.A03, self.M03_VCO_DIV)
-#
-#		# 3. (optional) If the MSB of the fractional numerator or charge pump gain
-#		# is changing, program register R1
-#
-#		PLL_NUM_H = (PLL_NUM & 0b1111111111000000000000) >> 12
-#		PLL_NUM_L =  PLL_NUM & 0b0000000000111111111111
-#
-#		self.write(PLL_DEN, self.A02, self.M02_PLL_DEN)
-#		self.write(PLL_NUM_H, self.A01, self.M01_PLL_NUM)
-#		self.write(PLL_NUM_L, self.A00, self.M00_PLL_NUM)
-#		self.write(PLL_N, self.A00, self.M00_PLL_N)
-#
-#		# Sleep 20ms
-#		time.sleep(0.02)
-#
-#		# 4. (Required) Program register R0
-#		# Activate frequency calibration
-#		self.write(0, self.A00, self.M00_NO_FCAL)
+
+	def get_osc_values(self, synth_mhz, ref_signal):
+		""" This function gets oscillator values
+		"""
+		# Equation for the output frequency.
+		# f_out = f_osc * OSC_2X / PLL_R * (PLL_N + PLL_NUM/PLL_DEN) / VCO_DIV
+		# XXX Right now, I'm not going to use OSC_2X or PLL_R, so this becomes
+		# f_out = f_osc * (PLL_N + PLL_NUM/PLL_DEN) / VCO_DIV
+		
+		# Get a good VCO_DIV. The minimum VCO frequency is 1800.
+		# Though the min frequency is 1800, but mostly LMX2581 doesn't get
+		# locked at this frequency. Change 1800 to 1900
+		vco_min = 1900; vco_max = 3800
+		if synth_mhz > vco_min and synth_mhz < vco_max:
+			# Bypass VCO_DIV by properly setting OUTA_MUX and OUTB_MUX
+			VCO_DIV = None
+		else:
+			vco_guess = int(vco_min / synth_mhz) + 1
+			VCO_DIV = vco_guess + vco_guess%2
+		
+		# Get PLLN, PLL_NUM, and PLL_DEN
+		pll = float(1 if VCO_DIV is None else VCO_DIV) * synth_mhz / ref_signal
+		PLL_N = int(pll)
+		frac = pll - PLL_N
+		if frac < 1.0/(1<<22): # smallest fraction on the synth
+			PLL_NUM = 0
+			PLL_DEN = 100
+		else:
+			fraction = _frac.Fraction(frac).limit_denominator(1<<22)
+			PLL_NUM = fraction.numerator
+			PLL_DEN = fraction.denominator
+
+		return (PLL_N, PLL_NUM, PLL_DEN, VCO_DIV)
+
+	def setFreq(self, synth_mhz):
+
+		self.setWord(1, 'NO_FCAL')
+
+		PLL_N, PLL_NUM, PLL_DEN, VCO_DIV = self.get_osc_values(synth_mhz,self.FOSC)
+
+		# Select the VCO frequency
+		# VCO1: 1800 to 2270 NHz
+		# VCO2: 2135 to 2720 MHz
+		# VCO3: 2610 to 3220 MHz
+		# VCO4: 3075 to 3800 MHz
+		freq_vco = self.freq_pd * (PLL_N + float(PLL_NUM)/PLL_DEN)
+		if freq_vco >= 1800 and freq_vco <= 2270:
+			VCO_SEL = 0
+		elif freq_vco >= 2135 and freq_vco <= 2720:
+			VCO_SEL = 1
+		elif freq_vco >= 2610 and freq_vco <= 3220:
+			VCO_SEL = 2
+		elif freq_vco >= 3075 and freq_vco <= 3800:
+			VCO_SEL = 3
+		else:
+			raise ValueError('VCO frequency is out of range.')
+		self.setWord(VCO_SEL, 'VCO_SEL')
+
+		# Dithering is set in R0, but it is needed for R1 stuff.
+		if PLL_NUM and PLL_DEN > 200 and not PLL_DEN % 2 and not PLL_DEN % 3:
+			FRAC_DITHER = 2
+		else:
+			FRAC_DITHER = 3
+		self.setWord(FRAC_DITHER, 'FRAC_DITHER')
+			
+		# Get the Fractional modulator order
+		if not PLL_NUM:
+			FRAC_ORDER = 0
+		elif PLL_DEN < 20:
+			FRAC_ORDER = 1
+		elif PLL_DEN % 3 and FRAC_DITHER == 3:
+			FRAC_ORDER = 3
+		else:
+			FRAC_ORDER = 2
+		self.setWord(FRAC_ORDER, 'FRAC_ORDER')
+
+		# Here is the booting sequence after changing frequency according to 8.5.3
+
+		# 1. (optional) If the OUTx_MUX State is changing, program Register R5
+		# 2. (optional) If the VCO_DIV state is changing, program Register R3.
+		# See VCO_DIV[4:0] - VCO Divider Value if programming a to a value of 4.
+		if VCO_DIV == None:
+			self.setWord(0, 'OUTA_MUX')
+			self.setWord(0, 'OUTB_MUX')
+		else:
+			self.setWord(1, 'OUTA_MUX')
+			self.setWord(1, 'OUTB_MUX')
+			VCO_DIV = VCO_DIV / 2 - 1
+			self.setWord(VCO_DIV, 'VCO_DIV')
+
+		# 3. (optional) If the MSB of the fractional numerator or charge pump gain
+		# is changing, program register R1
+
+		PLL_NUM_H = (PLL_NUM & 0b1111111111000000000000) >> 12
+		PLL_NUM_L =  PLL_NUM & 0b0000000000111111111111
+
+		self.setWord(PLL_DEN,   'PLL_DEN')
+		self.setWord(PLL_NUM_H, 'PLL_NUM_H')
+		self.setWord(PLL_NUM_L, 'PLL_NUM_L')
+		self.setWord(PLL_N,     'PLL_N')
+
+		# 4. (Required) Program register R0
+		# Activate frequency calibration
+		self.setWord(0, 'NO_FCAL')
+
+		# Sleep 20ms
+		time.sleep(0.02)
+
+		self.setWord(0, 'NO_FCAL')
+
+		if self.getDiagnoses('LD_PINSTATE'):
+			return True
+		else:
+			logging.error('LMX2581 not locked')
+			return False
 		
 
 	def write(self, data, addr=None, mask=None):
@@ -431,3 +385,8 @@ class LMX2581(WishBoneDevice):
 		for reg in regs:
 			self.write(reg)
 				
+		if self.getDiagnoses('LD_PINSTATE'):
+			return True
+		else:
+			logging.error('LMX2581 not locked')
+			return False
