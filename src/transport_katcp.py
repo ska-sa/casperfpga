@@ -6,11 +6,10 @@ import threading
 import Queue
 import random
 import socket
+import struct
 
-
-import async_requester
-from casperfpga import CasperFpga
-from utils import parse_fpg, create_meta_dictionary
+from transport import Transport
+from utils import create_meta_dictionary
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +39,7 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     :param targethost: the host to which it must be sent
     :param port: the port the host should open
     :param result_queue: the result of the upload, nothing '' indicates success
+    :param timeout:
     :return:
     """
     upload_socket = socket.socket()
@@ -64,25 +64,35 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
                     (targethost, time.time()))
 
 
-class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
-                katcp.CallbackClient):
+class KatcpTransport(Transport, katcp.CallbackClient):
+    """
+    A katcp transport client for a casperfpga object
+    """
+    def __init__(self, **kwargs):
+        """
 
-    def __init__(self, host, port=7147, timeout=20.0, connect=True):
-        async_requester.AsyncRequester.__init__(self, host,
-                                                self.callback_request,
-                                                max_requests=100)
-        katcp.CallbackClient.__init__(self, host, port,
-                                      tb_limit=20, timeout=timeout,
-                                      logger=LOGGER, auto_reconnect=True)
-        CasperFpga.__init__(self, host)
-        self.system_info = {'last_programmed': '',
-                            'system_name': None, 'program_filename': ''}
+        :param host:
+        :param port:
+        :param timeout:
+        :param connect:
+        :return:
+        """
+        try:
+            port = kwargs['port']
+        except KeyError:
+            port = 7147
+        try:
+            timeout = kwargs['timeout']
+        except KeyError:
+            timeout = 10
+        katcp.CallbackClient.__init__(
+            self, kwargs['host'], port, tb_limit=20,
+            timeout=timeout, logger=LOGGER, auto_reconnect=True)
+        Transport.__init__(self, **kwargs)
         self.unhandled_inform_handler = None
         self._timeout = timeout
-        if connect:
-            self.connect()
-        LOGGER.info('%s: port(%s) created%s.' %
-                    (self.host, port, ' & connected' if connect else ''))
+        self.connect()
+        LOGGER.info('%s: port(%s) created and connected.' % (self.host, port))
 
     def connect(self, timeout=None):
         """
@@ -138,7 +148,6 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         Disconnect from the device server.
         :return:
         """
-        super(KatcpFpga, self).stop()
         self.join(timeout=self._timeout)
         LOGGER.info('%s: disconnected' % self.host)
 
@@ -183,7 +192,6 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         :return: a list of memory devices
         """
         if getsize:
-
             _, informs = self.katcprequest(name='listdev',
                                            request_timeout=self._timeout,
                                            request_args=('size',))
@@ -235,13 +243,23 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         Is the FPGA programmed and running?
         :return: True or False
         """
-        reply, _ = self.katcprequest(name='fpgastatus',
-                                     request_timeout=self._timeout,
-                                     require_ok=False)
-        if reply.arguments[0] == 'ok':
-            return True
-        else:
-            return False
+        reply, _ = self.katcprequest(
+            name='fpgastatus', request_timeout=self._timeout, require_ok=False)
+        return reply.arguments[0] == 'ok'
+
+    def test_connection(self):
+        """
+        Write to and read from the scratchpad to test the connection to the FPGA
+        """
+        for val in [0xa5a5a5, 0x000000]:
+            data = struct.pack('>i' if val < 0 else '>I', val)
+            self.blindwrite('sys_scratchpad', data, 0)
+            val2 = self.read('sys_scratchpad', 4, 0)
+            val2 = struct.unpack('>L', val2[0:4])[0]
+            if val != val2:
+                raise RuntimeError('%s: cannot write scratchpad? %i != %i' %
+                                   (self.host, val, val2))
+        return True
 
     def read(self, device_name, size, offset=0):
         """
@@ -251,11 +269,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         :param offset: start at this offset
         :return: binary data string
         """
-        reply, _ = self.katcprequest(name='read',
-                                     request_timeout=self._timeout,
-                                     require_ok=True,
-                                     request_args=(device_name, str(offset),
-                                                   str(size)))
+        reply, _ = self.katcprequest(
+            name='read', request_timeout=self._timeout, require_ok=True,
+            request_args=(device_name, str(offset), str(size)))
         return reply.arguments[1]
 
     def blindwrite(self, device_name, data, offset=0):
@@ -278,28 +294,28 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
         Uses much faster bulkread katcp command which returns data in pages
-        using informs rather than one read reply, which has significant buffering
-        overhead on the ROACH.
+        using informs rather than one read reply, which has significant 
+        buffering overhead on the ROACH.
         :param device_name: name of the memory device from which to read
         :param size: how many bytes to read
         :param offset: the offset at which to read
         :return: binary data string
         """
-        _, informs = self.katcprequest(name='bulkread',
-                                       request_timeout=self._timeout,
-                                       require_ok=True,
-                                       request_args=(device_name, str(offset),
-                                                     str(size)))
+        _, informs = self.katcprequest(
+            name='bulkread', request_timeout=self._timeout, require_ok=True,
+            request_args=(device_name, str(offset), str(size)))
         return ''.join([i.arguments[0] for i in informs])
 
     def program(self, filename=None):
         """
         Program the FPGA with the specified binary file.
-        :param filename: name of file to program, can vary depending on the formats
-                         supported by the device. e.g. fpg, bof, bin
+        :param filename: name of file to program, can vary depending on 
+            the formats supported by the device. e.g. fpg, bof, bin
         :return:
         """
-        # TODO - The logic here is for broken TCPBORPHSERVER - needs to be fixed.
+        raise DeprecationWarning('This does not seem to be used anymore.'
+                                 'Use upload_to_ram_and_program')
+        # TODO - The logic here is for broken TCPBORPHSERVER, needs fixing
         if 'program_filename' in self.system_info.keys():
             if filename is None:
                 filename = self.system_info['program_filename']
@@ -314,9 +330,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                          'Exiting.' % self.host)
             raise RuntimeError('Cannot program with no filename given. '
                                'Exiting.')
-
         unhandled_informs = []
-
         # set the unhandled informs callback
         self.unhandled_inform_handler = \
             lambda msg: unhandled_informs.append(msg)
@@ -368,7 +382,6 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
             # tap devices
             time.sleep(0.05)
             reply, _ = self.katcprequest(name='progdev', require_ok=True)
-            super(KatcpFpga, self).deprogram()
             LOGGER.info('%s: deprogrammed okay' % self.host)
         except KatcpRequestError as exc:
             LOGGER.exception('{}: could not deprogram FPGA, katcp request '
@@ -377,17 +390,22 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                                'FPGA - {}'.format(self.host, exc))
 
     def _unsubscribe_all_taps(self):
+        """
+        Remove all multicast subscriptions before deprogramming the ROACH
+        :return: 
+        """
         reply, informs = self.katcprequest(name='tap-info', require_ok=True)
         taps = [inform.arguments[0] for inform in informs]
         for tap in taps:
             reply, _ = self.katcprequest(name='tap-multicast-remove',
-                                        request_args=(tap,))
+                                         request_args=(tap,))
             if not reply.reply_ok():
                 LOGGER.warn('{}: could not unsubscribe tap {} from multicast '
                             'groups on FPGA'.format(self.host, tap))
 
     def set_igmp_version(self, version):
-        """Sets version of IGMP multicast protocol to use
+        """
+        Sets version of IGMP multicast protocol to use
         :param version: IGMP protocol version, 0 for kernel default, 1, 2 or 3
 
         Note: won't work if config keep file is present since the
@@ -408,19 +426,17 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         after upload if False
         :return:
         """
-        LOGGER.info('%s: uploading %s, programming when done' %
-                    (self.host, filename))
-
+        LOGGER.info('%s: uploading %s, programming when done' % (
+            self.host, filename))
         # does the file that is to be uploaded exist on the local filesystem?
         os.path.getsize(filename)
 
         # function to make the request to the KATCP server
         def makerequest(result_queue):
             try:
-                result = self.katcprequest(name='progremote',
-                                           request_timeout=timeout,
-                                           require_ok=True,
-                                           request_args=(port, ))
+                result = self.katcprequest(
+                    name='progremote', request_timeout=timeout,
+                    require_ok=True, request_args=(port, ))
                 if result[0].arguments[0] == katcp.Message.OK:
                     result_queue.put('')
                 else:
@@ -433,7 +449,6 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
 
         if port == -1:
             port = random.randint(2000, 2500)
-
         # start the request thread and join
         request_queue = Queue.Queue()
         request_thread = threading.Thread(target=makerequest,
@@ -446,7 +461,6 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         if request_result != '':
             raise RuntimeError('progremote request(%s) on host %s failed' %
                                (request_result, self.host))
-
         # start the upload thread and join
         upload_queue = Queue.Queue()
         unhandled_informs_queue = Queue.Queue()
@@ -458,7 +472,7 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         if not wait_complete:
             self.unhandled_inform_handler = None
             self._timeout = old_timeout
-            return
+            return True
         upload_thread.join()  # wait for the file upload to complete
         upload_result = upload_queue.get()
         if upload_result != '':
@@ -477,9 +491,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         LOGGER.info('%s: programming done.' % self.host)
         self.unhandled_inform_handler = None
         self._timeout = old_timeout
-        self.system_info['last_programmed'] = filename
-        self.get_system_information()
-        return
+        self.prog_info['last_programmed'] = filename
+        return True
 
     def upload_to_flash(self, binary_file, port=-1, force_upload=False,
                         timeout=30, wait_complete=True):
@@ -558,10 +571,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         else:
             bofs = [filename]
         for bof in bofs:
-            result = self.katcprequest(name='delbof',
-                                       request_timeout=self._timeout,
-                                       require_ok=True,
-                                       request_args=(bof, ))
+            result = self.katcprequest(
+                name='delbof', request_timeout=self._timeout,
+                require_ok=True, request_args=(bof, ))
             if result[0].arguments[0] != katcp.Message.OK:
                 raise RuntimeError('Failed to delete bof file %s' % bof)
 
@@ -570,13 +582,13 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
         Have the tap driver reload its ARP table right now.
         :return:
         """
-        reply, _ = self.katcprequest(name='tap-arp-reload', request_timeout=-1,
-                                     require_ok=True)
+        reply, _ = self.katcprequest(
+            name='tap-arp-reload', request_timeout=-1, require_ok=True)
         if reply.arguments[0] != 'ok':
             raise RuntimeError('%s: failure requesting ARP reload.' % self.host)
 
     def __str__(self):
-        return 'KatcpFpga(%s):%i - %s' % \
+        return 'KatcpTransport(%s):%i - %s' % \
                (self.host, self._bindaddr[1],
                 'connected' if self.is_connected() else 'disconnected')
 
@@ -603,20 +615,18 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
 
     def _read_design_info_from_host(self, device=None):
         """
-        Katcp request for extra system information embedded in the boffile.
+        Katcp request for extra system information embedded in the bitstream.
         :param device: can specify a device name if you don't want everything
         :return: a dictionary of metadata
         """
         LOGGER.debug('%s: reading designinfo' % self.host)
         if device is None:
-            reply, informs = self.katcprequest(name='meta',
-                                               request_timeout=10.0,
-                                               require_ok=True)
+            reply, informs = self.katcprequest(
+                name='meta', request_timeout=10.0, require_ok=True)
         else:
-            reply, informs = self.katcprequest(name='meta',
-                                               request_timeout=10.0,
-                                               require_ok=True,
-                                               request_args=(device, ))
+            reply, informs = self.katcprequest(
+                name='meta', request_timeout=10.0, require_ok=True,
+                request_args=(device, ))
         if reply.arguments[0] != 'ok':
             raise RuntimeError('Could not read meta information '
                                'from %s' % self.host)
@@ -664,8 +674,9 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                 if addrdev == byte_dev:
                     byte_size = int(byte_size.split(':')[0])
                     address = int(address.split(':')[0], 16)
-                    memorymap_dict[byte_dev] = {'address': address,
-                                                'bytes': byte_size}
+                    memorymap_dict[byte_dev] = {
+                        'address': address, 'bytes': byte_size
+                    }
                     matched = True
                     continue
             if not matched:
@@ -673,36 +684,33 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                                    'device %s' % byte_dev)
         return memorymap_dict
 
-    def get_system_information(self, filename=None, fpg_info=None):
+    def get_system_information_from_transport(self):
         """
-        Get information about the design running on the FPGA.
-        If filename is given, get it from there, otherwise query the
-        host via KATCP.
-        :param filename: fpg filename
-        :param fpg_info: a tuple with two dictionaries of FPG information
-        :return: <nothing> the information is populated in the class
+        
+        :return: 
         """
-        if (not self.is_running()) and (filename is None):
+        if not self.is_running():
             raise RuntimeError('This can only be run on a running device '
                                'when no file is given.')
-        if filename is not None:
-            device_dict, memorymap_dict = parse_fpg(filename)
-        else:
-            device_dict = self._read_design_info_from_host()
-            memorymap_dict = self._read_coreinfo_from_host()
-        super(KatcpFpga, self).get_system_information(
-            fpg_info=(device_dict, memorymap_dict))
+        device_dict = self._read_design_info_from_host()
+        memorymap_dict = self._read_coreinfo_from_host()
+        return None, (device_dict, memorymap_dict)
 
     def unhandled_inform(self, msg):
         """
         Overloaded from CallbackClient
-        What do we do with unhandled KATCP inform messages that this device receives?
+        What do we do with unhandled KATCP inform messages that 
+        this device receives?
         Pass it onto the registered function, if it's not None
         """
         if self.unhandled_inform_handler is not None:
             self.unhandled_inform_handler(msg)
 
     def check_phy_counter(self):
+        """
+        
+        :return: 
+        """
         request_args = ((0, 0), (0, 1), (1, 0), (1, 1))
         for arg in request_args:
             result0 = self.katcprequest('phywatch', request_args=arg)
@@ -713,6 +721,8 @@ class KatcpFpga(CasperFpga, async_requester.AsyncRequester,
                 LOGGER.info('%s: check_phy_counter - TRUE.' % self.host)
                 return True
             else:
-                LOGGER.error('%s: check_phy_counter failed on PHY %s - FALSE.' % (self.host, arg))
+                LOGGER.error('%s: check_phy_counter failed on PHY %s - '
+                             'FALSE.' % (self.host, arg))
                 return False
+
 # end

@@ -265,7 +265,7 @@ class Scroll(object):
         # LOGGER.debug('draw_screen:')
         # LOGGER.debug('\t%i ScreenLine items to process' % len(self._sbuffer))
         #
-        # # debug, print the lines to be drawn
+        # # debug, print(the lines to be drawn)
         # for sctr, sline in enumerate(self._sbuffer):
         #     LOGGER.debug('\t%i - %s' % (sctr, sline))
         #

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import logging
 import time
 from memory import Memory
@@ -5,6 +6,20 @@ import bitfield
 from register import Register
 
 LOGGER = logging.getLogger(__name__)
+
+
+def getkwarg(key, default, **kwargs):
+    """
+    Use a default value if a key does not exist in a kwargs dictionary
+    :param key: key to fetch
+    :param default: the default to use if it's not found
+    :param kwargs: the kwargs
+    :return:
+    """
+    try:
+        return kwargs[key]
+    except KeyError:
+        return default
 
 
 class Snap(Memory):
@@ -24,7 +39,8 @@ class Snap(Memory):
         self.control_registers = {
             'control': {'register': None, 'name': self.name + '_ctrl'},
             'status': {'register': None, 'name': self.name + '_status'},
-            'trig_offset': {'register': None, 'name': self.name + '_trig_offset'},
+            'trig_offset': {'register': None,
+                            'name': self.name + '_trig_offset'},
             'extra_value': {'register': None, 'name': self.name + '_val'},
             'tr_en_cnt': {'register': None, 'name': self.name + '_tr_en_cnt'}}
         LOGGER.debug('New Snap %s' % self)
@@ -34,6 +50,7 @@ class Snap(Memory):
         """
         Process device info and the memory map to get all necessary
         info and return a Snap instance.
+        :param parent: the Casperfpga on which this snap is found
         :param device_name: the unique device name
         :param device_info: information about this device
         :param memorymap_dict: a dictionary containing the device memory map
@@ -58,7 +75,7 @@ class Snap(Memory):
 
     def post_create_update(self, raw_system_info):
         """Update the device with information not available at creation.
-        @param raw_device_info: dictionary of device information
+        @param raw_system_info: dictionary of device information
         """
         # is this snap block inside a bitsnap block?
         for dev_name, dev_info in raw_system_info.items():
@@ -175,40 +192,43 @@ class Snap(Memory):
                            (man_valid << 2) +
                            (circular_capture << 3)))
 
-    def print_snap(self, limit_lines=-1, man_valid=False, man_trig=False,
-                   circular_capture=False):
+    def print_snap(self, limit_lines=-1, **kwargs):
         """
-        Read and print a snap block.
+        Read and print(a snap block.)
         :param limit_lines: limit the number of lines to print
-        :param man_valid: read the snap block with a man valid
-        :param man_trig: read the snap block with a man trigger
-        :param circular_capture: enable circular capture on the read command
+        :param offset: trigger offset
+        :param man_valid: force valid to be true
+        :param man_trig: force a trigger now
+        :param circular_capture: enable circular capture
+        :param timeout: time out after this many seconds
+        :param read_nowait: do not wait for the snap to finish reading
         :return:
         """
-        snapdata = self.read(man_valid=man_valid, man_trig=man_trig,
-                             circular_capture=circular_capture)
+        snapdata = self.read(**kwargs)
+        circular_capture = getkwarg('circular_capture', False, **kwargs)
         for ctr in range(0, len(snapdata['data'][snapdata['data'].keys()[0]])):
-            print '%5d' % ctr,
+            print('%5d' % ctr, end='')
             for key in snapdata['data'].keys():
-                print '%s(%d)' % (key, snapdata['data'][key][ctr]), '\t',
-            print ''
+                print('%s(%d)\t' % (key, snapdata['data'][key][ctr]), end='')
+            print('')
             if (limit_lines > 0) and (ctr == limit_lines):
                 break
         if circular_capture:
-            print 'Circular capture offset: ', snapdata['offset']
+            print('Circular capture offset: %i' % snapdata['offset'])
 
     def read(self, **kwargs):
         """
         Override Memory.read to handle the extra value register.
         :param offset: trigger offset
-        :param man_valid
-        :param man_trig
-        :param circular_capture
-        :param timeout
+        :param man_valid: force valid to be true
+        :param man_trig: force a trigger now
+        :param circular_capture: enable circular capture
+        :param timeout: time out after this many seconds
+        :param read_nowait: do not wait for the snap to finish reading
         """
         for kkey in kwargs.keys():
             if kkey not in ['circular_capture', 'man_trig', 'man_valid',
-                            'offset', 'timeout', 'arm']:
+                            'offset', 'timeout', 'arm', 'read_nowait']:
                 raise RuntimeError('Invalid option for snap read: %s' % kkey)
         rawdata, rawtime = self.read_raw(**kwargs)
         # processed = self._process_data_no_construct(rawdata['data'])
@@ -221,49 +241,53 @@ class Snap(Memory):
                 'extra_value': rawdata['extra_value']}
 
     def read_raw(self, **kwargs):
-        """Read snap data from the memory device.
         """
-        def getkwarg(key, default):
-            try:
-                return kwargs[key]
-            except KeyError:
-                return default
-        man_trig = getkwarg('man_trig', False)
-        man_valid = getkwarg('man_valid', False)
-        timeout = getkwarg('timeout', -1)
-        offset = getkwarg('offset', -1)
-        circular_capture = getkwarg('circular_capture', False)
-        arm = getkwarg('arm', True)
+        Read snap data from the memory device.
+        """
+        man_trig = getkwarg('man_trig', False, **kwargs)
+        man_valid = getkwarg('man_valid', False, **kwargs)
+        timeout = getkwarg('timeout', -1, **kwargs)
+        offset = getkwarg('offset', -1, **kwargs)
+        read_nowait = getkwarg('read_nowait', False, **kwargs)
+        circular_capture = getkwarg('circular_capture', False, **kwargs)
+        arm = getkwarg('arm', True, **kwargs)
         if arm:
             self.arm(man_trig=man_trig, man_valid=man_valid, offset=offset,
                      circular_capture=circular_capture)
         # wait
-        done = False
+        done = read_nowait
         start_time = time.time()
-        # TODO - what would a sensible option be to check addr? the default
-        # of zero is probably not right
+        # TODO - what would a sensible option be to check addr? the default of zero is probably not right
         addr = 0
         while (not done) and \
                 ((time.time() - start_time) < timeout or (timeout < 0)):
             addr = self.control_registers['status']['register'].read_uint()
             done = not bool(addr & 0x80000000)
+        if read_nowait:
+            addr = self.length_bytes
         bram_dmp = {'extra_value': None, 'data': [],
                     'length': addr & 0x7fffffff, 'offset': 0}
         status_val = self.control_registers['status']['register'].read_uint()
         now_status = bool(status_val & 0x80000000)
         now_addr = status_val & 0x7fffffff
-        if (bram_dmp['length'] != now_addr) or (bram_dmp['length'] == 0) or \
-                now_status:
+        if (not read_nowait) and \
+                ((bram_dmp['length'] != now_addr) or
+                    (bram_dmp['length'] == 0) or now_status):
             # if address is still changing, then the snap block didn't
             # finish capturing. we return empty.
-            error_info = 'timeout %2.2f seconds. Addr at stop time: %i. Now: Still running :%s, addr: %i.'\
-                         % (timeout, bram_dmp['length'], 'yes' if now_status else 'no', now_addr)
+            error_info = 'timeout %2.2f seconds. Addr at stop time: %i. ' \
+                         'Now: Still running :%s, addr: %i.' % (
+                            timeout, bram_dmp['length'],
+                            'yes' if now_status else 'no', now_addr)
             if bram_dmp['length'] != now_addr:
-                raise RuntimeError("Snap %s error: Address still changing after %s" % (self.name, error_info))
+                raise RuntimeError('Snap %s error: Address still changing '
+                                   'after %s' % (self.name, error_info))
             elif bram_dmp['length'] == 0:
-                raise RuntimeError("Snap %s error: Returned 0 bytes after %s" % (self.name, error_info))
+                raise RuntimeError('Snap %s error: Returned 0 bytes after '
+                                   '%s' % (self.name, error_info))
             else:
-                raise RuntimeError("Snap %s error: %s" % (self.name, error_info))
+                raise RuntimeError('Snap %s error: %s' % (
+                    self.name, error_info))
         if circular_capture:
             val = self.control_registers['tr_en_cnt']['register'].read_uint()
             bram_dmp['offset'] = val - bram_dmp['length']
@@ -273,17 +297,20 @@ class Snap(Memory):
             bram_dmp['data'] = []
             datatime = -1
         else:
-            bram_dmp['data'] = self.parent.read(self.name + '_bram', bram_dmp['length'])
+            bram_dmp['data'] = self.parent.read(self.name + '_bram',
+                                                bram_dmp['length'])
             datatime = time.time()
         bram_dmp['offset'] += offset
         if bram_dmp['offset'] < 0:
             bram_dmp['offset'] = 0
         if bram_dmp['length'] != self.length_bytes:
             raise RuntimeError('%s.read_uint() - expected %i bytes, got %i' % (
-                self.name, self.length_bytes, bram_dmp['length'] / (self.width_bits / 8)))
+                self.name, self.length_bytes,
+                bram_dmp['length'] / (self.width_bits / 8)))
         # read the extra value
-        if self.control_registers['extra_value']['register'] is not None:
-            bram_dmp['extra_value'] = self.control_registers['extra_value']['register'].read()
+        ev_reg = self.control_registers['extra_value']['register']
+        if ev_reg is not None:
+            bram_dmp['extra_value'] = ev_reg.read()
         # done
         return bram_dmp, datatime
 
@@ -305,19 +332,19 @@ class Snap(Memory):
         """
         class PacketLengthError(Exception):
             pass
-        _current_packet = {}
-        _packets = []
-        for _ctr in range(0, len(data[eof_key])):
+        current_packet = {}
+        packets = []
+        for ctr in range(0, len(data[eof_key])):
             for key in data.keys():
-                if key not in _current_packet.keys():
-                    _current_packet[key] = []
-                _current_packet[key].append(data[key][_ctr])
-            if _current_packet[eof_key][-1]:
+                if key not in current_packet.keys():
+                    current_packet[key] = []
+                current_packet[key].append(data[key][ctr])
+            if current_packet[eof_key][-1]:
                 if packet_length != -1:
-                    if len(_current_packet[eof_key]) != packet_length:
+                    if len(current_packet[eof_key]) != packet_length:
                         raise PacketLengthError(
                             'Expected {}, got {}'.format(
-                                packet_length, len(_current_packet[eof_key])))
-                _packets.append(_current_packet)
-                _current_packet = {}
-        return _packets
+                                packet_length, len(current_packet[eof_key])))
+                packets.append(current_packet)
+                current_packet = {}
+        return packets

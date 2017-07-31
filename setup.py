@@ -14,6 +14,7 @@ setup(
     install_requires=[
         'katcp',
         'numpy',
+        'odict',
     ],
     provides=['casperfpga'],
     packages=['casperfpga'],  # , 'casperfpga.test'],

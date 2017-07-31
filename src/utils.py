@@ -1,5 +1,4 @@
-__author__ = 'paulp'
-
+from __future__ import print_function
 import threading
 import Queue
 import time
@@ -29,7 +28,8 @@ def create_meta_dictionary(metalist):
             meta_items[name][param] = value
     except ValueError as e:
         for ctr, contents in enumerate(metalist):
-            print ctr, contents
+            print(ctr, end='')
+            print(contents)
         raise e
     return meta_items
 
@@ -64,7 +64,7 @@ def parse_fpg(filename):
                 LOGGER.warn('An old version of mlib_devel generated %s. Please '
                             'update. Meta fields are seperated by spaces, '
                             'should be tabs.' % filename)
-            line = line.replace(' ', '\t')
+                line = line.replace(' ', '\t')
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
@@ -80,9 +80,17 @@ def parse_fpg(filename):
             name = name.replace('/', '_')
             metalist.append((name, tag, param, value))
         elif line.startswith('?register'):
-            register = line.replace('\_', ' ').replace('?register ', '')
-            register = register.replace('\n', '').lstrip().rstrip()
-            name, address, size_bytes = register.split(' ')
+            if line.startswith('?register '):
+                register = line.replace('\_', ' ').replace('?register ', '')
+                register = register.replace('\n', '').lstrip().rstrip()
+                name, address, size_bytes = register.split(' ')
+            elif line.startswith('?register\t'):
+                register = line.replace('\_', ' ').replace('?register\t', '')
+                register = register.replace('\n', '').lstrip().rstrip()
+                name, address, size_bytes = register.split('\t')
+            else:
+                raise ValueError('Cannot find ?register entries in '
+                                 'correct format.')
             address = int(address, 16)
             size_bytes = int(size_bytes, 16)
             if name in memorydict.keys():
@@ -203,7 +211,8 @@ def program_fpgas(fpga_list, progfile, timeout=10):
     """
     Program more than one FPGA at the same time.
     :param fpga_list: a list of objects for the FPGAs to be programmed
-    :param progfile: string, the filename of the file to use to program the FPGAs
+    :param progfile: string, the file used to program the FPGAs
+    :param timeout: how long to wait for a response, in seconds
     :return: <nothing>
     """
     stime = time.time()
@@ -221,20 +230,26 @@ def program_fpgas(fpga_list, progfile, timeout=10):
 
     def _prog_fpga(_fpga):
         _fpga.upload_to_ram_and_program(new_dict[_fpga.host])
-    threaded_fpga_operation(fpga_list=new_list, timeout=timeout, target_function=(_prog_fpga,))
-    LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (len(fpga_list), time.time() - stime))
+    threaded_fpga_operation(fpga_list=new_list, timeout=timeout,
+                            target_function=(_prog_fpga,))
+    LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (
+        len(fpga_list), time.time() - stime))
 
 
-def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147,
-                                     timeout=10):
+def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
+                                     port=7147, timeout=10):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
-    :param fpga_class: the class to instantiate - KatcpFpga or DcpFpga
+    :param fpga_class: the class to insantiate, usually CasperFpga
     :param host_list: a comma-seperated list of hosts
     :param port: the port on which to do network comms
     :param timeout: how long to wait, in seconds
     :return:
     """
+    if fpga_class is None:
+        from casperfpga import CasperFpga
+        fpga_class = CasperFpga
+
     num_hosts = len(host_list)
     result_queue = Queue.Queue(maxsize=num_hosts)
     thread_list = []
@@ -262,14 +277,19 @@ def threaded_create_fpgas_from_hosts(fpga_class, host_list, port=7147,
     if hosts_missing:
         for host in hosts_missing:
             LOGGER.error('Could not create host %s.' % host)
-        errstr = 'Given %d hosts, only made %d %s objects.' % (
-            num_hosts, len(fpgas), fpga_class.__name__)
+        errstr = 'Given %d hosts, only made %d CasperFpgas.' % (
+            num_hosts, len(fpgas))
         LOGGER.error(errstr)
         raise RuntimeError(errstr)
     return fpgas
 
 
 def _check_target_func(target_function):
+    """
+
+    :param target_function:
+    :return:
+    """
     if isinstance(target_function, basestring):
         return target_function, (), {}
     try:
@@ -289,8 +309,8 @@ def _check_target_func(target_function):
 
 def threaded_fpga_function(fpga_list, timeout, target_function):
     """
-    Thread the running of any KatcpClientFpga function on a list of KatcpClientFpga objects.
-    Much faster.
+    Thread the running of any KatcpClientFpga function on a list of
+    KatcpClientFpga objects. Much faster.
     :param fpga_list: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
     :param target_function: a tuple with three parts:
@@ -333,6 +353,7 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
     def jobfunc(resultq, fpga):
         rv = target_function[0](fpga, *target_function[1], **target_function[2])
         resultq.put_nowait((fpga.host, rv))
+
     num_fpgas = len(fpga_list)
     result_queue = Queue.Queue(maxsize=num_fpgas)
     thread_list = []
@@ -364,13 +385,18 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
 
 def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
     """
-    Make a non-blocking KatCP request to a list of KatcpClientFpgas, using the Asynchronous client.
+    Make a non-blocking KatCP request to a list of KatcpClientFpgas, using
+    the Asynchronous client.
     :param fpga_list: list of KatcpClientFpga objects
     :param timeout: the request timeout
     :param request: the request string
     :param request_args: the arguments to the request, as a list
-    :return: a dictionary, keyed by hostname, of result dictionaries containing reply and informs
+    :return: a dictionary, keyed by hostname, of result dictionaries containing
+    reply and informs
     """
+
+    raise DeprecationWarning
+
     num_fpgas = len(fpga_list)
     reply_queue = Queue.Queue(maxsize=num_fpgas)
     requests = {}
@@ -389,7 +415,8 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         req = fpga_.nb_request(request, None, reply_cb, *request_args)
         requests[req['host']] = [req['request'], req['id']]
         lock.release()
-        LOGGER.debug('Request \'%s\' id(%s) to host(%s)' % (req['request'], req['id'], req['host']))
+        LOGGER.debug('Request \'%s\' id(%s) to host(%s)' % (
+            req['request'], req['id'], req['host']))
 
     # wait for replies from the requests
     timedout = False
@@ -415,8 +442,9 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
             request_id = replies[fpga_.host]
         except KeyError:
             LOGGER.error(replies)
-            raise KeyError('Didn\'t get a reply for FPGA \'%s\' so the '
-                           'request \'%s\' probably didn\'t complete.' % (fpga_.host, request))
+            raise KeyError(
+                'Didn\'t get a reply for FPGA \'%s\' so the request \'%s\' '
+                'probably didn\'t complete.' % (fpga_.host, request))
         reply, informs = fpga_.nb_get_request_result(request_id)
         frv = {'request': requests[fpga_.host][0],
                'reply': reply.arguments[0],
