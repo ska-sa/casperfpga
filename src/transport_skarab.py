@@ -2450,8 +2450,10 @@ class SkarabTransport(Transport):
                 # else: Continue
 
         # Print new SpartanFirmwareVersion
-        new_firmware_version = self.get_spartan_firmware_version()
-        debugmsg = 'New Spartan Firmware Version: v{}'.format(new_firmware_version)
+        # new_firmware_version = self.get_spartan_firmware_version()
+        # --> Can't do that anymore! Spartan Firmware Version only updates after full power cycle!
+        debugmsg = 'Please do a full power cycle of the SKARAB in order to complete ' \
+                   'SpartanFlashReconfig Process    '
         LOGGER.debug(debugmsg)
 
         return True
