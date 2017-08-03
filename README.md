@@ -33,18 +33,30 @@ DEBUG:root:casperfpga.casperfpga:roach020203: now a CasperFpga
 ```
 
 ## 1. Installation ##
-First, you will need to clone the casperfpga repository. The **master** branch is home to the latest, most stable build of casperfpga.
+There are a number of prerequisites required for the casperfpga package.
 
-It is most common to have SKARABs/ROACHs connected to a server, allowing multiple users to gain access remotely.
+```shell
+$ sudo apt-get install python-pip
+$ sudo pip install ply tornado futures futures unittest2 mock ProxyTypes numpy
+$ # mock might give some warnings, they are not critical and can be ignored.
+```
+
+Then clone the casperfpga repository. The **master** branch is home to the latest, most stable build of casperfpga.
 
 ```shell
 $ git clone https://github.com/ska-sa/casperfpga.git
 $ cd casperfpga
 $ sudo python setup.py install
 [sudo] password for user:
-
 ```
-Given the user has admin privileges on the server, executing the steps above will install casperfpga for all users on this server.
+
+To check that casperfpga has been installed correctly open an ipython session and import casperfpga.
+```shell
+$ ipython
+```
+```python
+In [1]: import casperfpga
+```
 
 ## 2. Usage ##
 [This tutorial](https://casper.berkeley.edu/wiki/Introduction_to_Simulink_SKARAB) serves as a guide to the entire process of:
@@ -62,9 +74,4 @@ fpga.upload_to_ram_and_program('your_file.fpg')
 
 ## 3. Contributing ##
 
-Nothing figured out just yet!
-
-## Release notes-ish ##
-
-* [2015-05-19 Tue] Requires rootfs 8dff433-2015-05-18 (or newer?) for the
-  updated ?tap-multicast-remove request
+Fork this repo, add your changes and issue a pull request.
