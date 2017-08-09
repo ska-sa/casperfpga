@@ -19,6 +19,8 @@ setup(
     provides=['casperfpga'],
     packages=['casperfpga'],  # , 'casperfpga.test'],
     package_dir={'casperfpga': 'src'},
+    package_data={'' : ['LMX2581*.txt']},
+    include_package_data=True,
     scripts=glob.glob('scripts/*'),
     setup_requires=['katversion'],
     use_katversion=True
