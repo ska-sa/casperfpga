@@ -476,14 +476,6 @@ class HMCAD1520(HMCAD1511):
 
 		self.powerDown()
 
-		rid, mask = self._getMask('channel_num')
-		val = self._set(0x0, numChannel, mask)
-		rid, mask = self._getMask('precision_mode')
-		val = self._set(val, resolution==14, mask)
-		rid, mask = self._getMask('clk_divide')
-		val = self._set(val, int(math.log(clkDivide,2)), mask)
-		self.write(val, rid)
-
 		if resolution==8:
 			width=0b000     # width = 8
 		elif resolution==12:
@@ -491,10 +483,18 @@ class HMCAD1520(HMCAD1511):
 		elif resolution==14:
 			width=0b011     # width = 16
 
-		rid, mask = self._getMask('lvds_out_mode')
+		rid, mask = self._getMask('lvds_output_mode')
 		val = self._set(0x0, width, mask)
 		rid, mask = self._getMask('low_clk_freq')
 		val = self._set(val, lowClkFreq, mask)
+		self.write(val, rid)
+
+		rid, mask = self._getMask('channel_num')
+		val = self._set(0x0, numChannel, mask)
+		rid, mask = self._getMask('precision_mode')
+		val = self._set(val, resolution==14, mask)
+		rid, mask = self._getMask('clk_divide')
+		val = self._set(val, int(math.log(clkDivide,2)), mask)
 		self.write(val, rid)
 
 		self.powerUp()
