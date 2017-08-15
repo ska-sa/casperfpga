@@ -723,4 +723,14 @@ class TenGbe(Memory):
             print('')
         print('------------------------')
 
+
+    def set_arp_table(self, macs):
+        """Set the ARP table with a list of MAC addresses. The list, `macs`,
+        is passed such that the zeroth element is the MAC address of the
+        device with IP XXX.XXX.XXX.0, and element N is the MAC address of the
+        device with IP XXX.XXX.XXX.N"""
+        macs = list(macs)
+        macs_pack = struct.pack('>%dQ' % (len(macs)), *macs)
+        self.parent.write(self.name, macs_pack, offset=0x3000)
+
 # end
