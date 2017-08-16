@@ -54,7 +54,7 @@ class SNAPADC(object):
 	ERROR_FRAME = 4
 	ERROR_RAMP = 5
 
-	def __init__(self, interface, ADC='HMCAD1511', defaultDelayTap=0):
+	def __init__(self, interface, ADC='HMCAD1511', defaultDelayTap=0, ref=10):
 		# interface => corr.katcp_wrapper.FpgaClient('10.1.0.23')
 
 		self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
@@ -64,7 +64,7 @@ class SNAPADC(object):
 
 		self.curDelay = [[defaultDelayTap]*len(self.laneList)]*len(self.adcList)
 
-		self.lmx = LMX2581(interface,'lmx_ctrl')
+		self.lmx = LMX2581(interface,'lmx_ctrl', fosc=ref)
 		self.clksw = HMC922(interface,'adc16_use_synth')
 		self.ram = [WishBoneDevice(interface,name) for name in self.ramList]
 
