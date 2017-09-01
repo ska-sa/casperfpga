@@ -74,6 +74,8 @@ class SkarabTransport(Transport):
         Transport.__init__(self, **kwargs)
 
         # sequence number for control packets
+        # TODO: suggest randomising this, to reduce chance of cross-board 
+        # interaction in the event of a network issue.
         self._seq_num = 0
 
         # initialize UDP socket for ethernet control packets
@@ -821,6 +823,9 @@ class SkarabTransport(Transport):
             # to come back. It also prevents errors being logged when there
             # is no response.
             if self.is_connected(retries=20):
+                ## configure the mux back to user_date mode
+                #self.config_prog_mux(user_data=1)
+                #time.sleep(1)
                 [golden_image, multiboot, firmware_version] = \
                     self.get_firmware_version()
                 if golden_image == 0 and multiboot == 0:
@@ -1080,6 +1085,7 @@ class SkarabTransport(Transport):
         """
         # TODO - refactor the requests/responses into one
         # TODO - if the packet payloads are being formed here, we don't need to pass the sequence number to every Command. Rather the command that makes the payload should take the sequence number.
+        # TODO - Retries should use a different sequence number. Can't do it here, since sequence number is added when payload is generated. Needs refactoring.
 
         # default to the control socket and port
         skarab_socket = skarab_socket or self.skarab_ctrl_sock
@@ -1091,48 +1097,64 @@ class SkarabTransport(Transport):
                 # send the payload packet
                 skarab_socket.sendto(payload, port)
                 if not expect_response:
-                    LOGGER.debug('No response expected, returning')
+                    LOGGER.debug('No response expected for seq %i, returning'%self.seq_num)
                     self.seq_num += 1
                     return None
-                LOGGER.debug('Waiting for response.')
-                # wait for response until timeout
-                data_ready = select.select([skarab_socket], [], [], timeout)
-                # if we got a response, process it
-                if data_ready[0]:
-                    data = skarab_socket.recvfrom(4096)
-                    response_payload, address = data
-                    LOGGER.debug('Response = %s' % repr(response_payload))
-                    LOGGER.debug('Response length = %d' % len(response_payload))
 
-                    # check the opcode of the response i.e. first two bytes
-                    if response_payload[:2] == '\xff\xff':
-                        # SKARAB received an unsupported opcode
-                        errmsg = 'SKARAB received unsupported opcode'
-                        raise SkarabSendPacketError(errmsg)
+                valid_response=False
+                while not valid_response:
+                    LOGGER.debug('%s Waiting for response to sequence id %i.'%(self.host,self.seq_num))
+                    # wait for response until timeout
+                    data_ready = select.select([skarab_socket], [], [], timeout)
+                    # if we got a response, process it
+                    if data_ready[0]:
+                        data = skarab_socket.recvfrom(4096)
+                        #LOGGER.debug('%s Response packet received'% self.host)
+                        response_payload, address = data
+                        LOGGER.debug('%s Response from %s = %s' % (self.host,str(address),repr(response_payload)))
 
-                    response_payload = self.unpack_payload(
-                        response_payload, response_type,
-                        number_of_words, pad_words)
-                    if response_payload.header.command_type != (command_id+1):
-                        errmsg = 'Incorrect command ID in response. ' \
-                                 'Expected({}) got({})'.format(
-                                    command_id+1,
-                                    response_payload.header.command_type)
-                        LOGGER.error(errmsg)
-                        raise SkarabSendPacketError(errmsg)
-                    if response_payload.header.seq_num != self.seq_num:
-                        errmsg = 'Incorrect sequence number in response. ' \
-                                 'Expected ({}), got({})'.format(
-                                    self.seq_num,
-                                    response_payload.header.seq_num)
-                        LOGGER.error(errmsg)
-                        raise SkarabSendPacketError(errmsg)
-                    LOGGER.debug('Response packet received')
-                    self.seq_num += 1
-                    return response_payload
-                else:
-                    # no data received, retransmit
-                    LOGGER.debug('No packet received: will retransmit')
+                        # check the opcode of the response i.e. first two bytes
+                        if response_payload[:2] == '\xff\xff':
+                            # SKARAB received an unsupported opcode
+                            errmsg = 'SKARAB received unsupported opcode'
+                            LOGGER.error(errmsg)
+                            #raise SkarabSendPacketError(errmsg)
+
+                        response_payload = self.unpack_payload(
+                            response_payload, response_type,
+                            number_of_words, pad_words)
+                        LOGGER.debug('%s Response from %s, with seq %i' % 
+                            (self.host,str(address),response_payload.header.seq_num))
+                        if response_payload.header.command_type != (command_id+1):
+                            errmsg = '%s Incorrect command ID in response. ' \
+                                     'Expected(%i) got(%i). Discarding.'%(
+                                        self.host,
+                                        command_id+1,
+                                        response_payload.header.command_type)
+                            LOGGER.error(errmsg)
+                            valid_response=False
+                            #raise SkarabSendPacketError(errmsg)
+                        elif response_payload.header.seq_num != self.seq_num:
+                            errmsg = '%s Incorrect sequence number in response. ' \
+                                     'Expected(%i), got(%i). Discarding.'%(
+                                        self.host,
+                                        self.seq_num,
+                                        response_payload.header.seq_num)
+                            LOGGER.error(errmsg)
+                            valid_response=False
+                            #raise SkarabSendPacketError(errmsg)
+                        else:
+                            valid_response=True
+                            self.seq_num += 1
+                            return response_payload
+
+                    else:
+                        # no data received, retransmit
+                        LOGGER.debug('%s Timeout; no packet received for seq %i. Will retransmit as seq %i.'%(self.host,self.seq_num,self.seq_num))
+                        valid_response=True
+                        #self.seq_num += 1
+
+
             except KeyboardInterrupt:
                 LOGGER.warning('Keyboard interrupt, clearing buffer.')
                 time.sleep(3)  # wait to receive incoming responses
@@ -1141,7 +1163,8 @@ class SkarabTransport(Transport):
                     LOGGER.info('Cleared recv buffer.')
                 raise KeyboardInterrupt
             retransmit_count += 1
-        errmsg = '%s: socket timeout. Response packet not received.' % self.host
+        errmsg = '%s: Retransmit count exceeded. Giving up.' % self.host
+        self.seq_num += 1
         LOGGER.error(errmsg)
         raise SkarabSendPacketError(errmsg)
 
