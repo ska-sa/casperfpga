@@ -107,6 +107,12 @@ class SNAPADC(object):
 
 		"""
 
+		if resolution not in [8,12,14,None]:
+			raise ValueError("Invalid parameter")
+
+		if resolution>8 and samplingRate/(4/numChannel)>160:
+			raise ValueError("Invalid parameter")
+
 		if resolution==None:
 			if type(self.adc) is HMCAD1511:
 				self.RESOLUTION=8
@@ -114,10 +120,8 @@ class SNAPADC(object):
 				self.RESOLUTION=8
 			else:
 				self.RESOLUTION=12
-		elif resolution not in [8,12,14,None]:
-			raise ValueError("Invalid parameter")
-		elif resolution>8 and samplingRate/(4/numChannel)>160:
-			raise ValueError("Invalid parameter")
+		else:
+			self.RESOLUTION=resolution
 
 		logging.info("Reseting adc_unit")
 		self.reset()
@@ -295,9 +299,11 @@ class SNAPADC(object):
 		elif ram in self.adcList:				# read one RAM		
 			if self.RESOLUTION>8:		# ADC_DATA_WIDTH == 16
 				fmt = '!1024h'
+				length = 2048
 			else:				# ADC_DATA_WIDTH == 8
 				fmt = '!1024b'
-			vals = self.ram[ram]._read(addr=0, size=1024)
+				length = 1024
+			vals = self.ram[ram]._read(addr=0, size=length)
 			vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
 
 			return vals
@@ -632,14 +638,39 @@ class SNAPADC(object):
 	def _signed(self, data, res=8):
 		""" Convert unsigned number to signed number
 
-		adc16_interface converts ADC outputs into signed numbers by flipping MSB.
-		Therefore we have to prepare signed-number test patterns as well.
+		The bit width of output is an integral multiple of 8 bit.
+
+		E.g.
+			_signed(0xc0,res=8)	convert 8-bit unsigned to 8-bit signed
+			_signed(0xc10,res=12)	convert 12-bit unsigned to 16-bit signed
 		"""
-		width = 16 if res>8 else 8
-		msb = (data & (1 << res-1) == 0) << width - 1
-		data = data & (0xffff - (1 << res-1)) | msb
-		data = data-(1<<width) if msb else data
-		return data
+
+		if res<=8:
+			width = 8
+		elif res<=16:
+			width = 16
+		elif res<=32:
+			width = 32
+		else:
+			raise ValueError("Invalid parameter")
+
+		data = data & (1 << res) - 1
+		msb = data & (1 << res-1)
+		if msb:
+			return data ^ msb
+		else:
+			offset = (1<<width)-(1<<res-1)
+			data = data + offset
+			if width == 8:
+				data = struct.pack('!B',data)
+				data = struct.unpack('!b',data)
+			elif width == 16:
+				data = struct.pack('!H',data)
+				data = struct.unpack('!h',data)
+			else:	# width == 32
+				data = struct.pack('!I',data)
+				data = struct.unpack('!i',data)
+			return data[0]
 		
 
 	def decideDelay(self, data):
