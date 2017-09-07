@@ -62,7 +62,8 @@ def choose_transport(host_ip):
     try:
         skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         skarab_ctrl_sock.setblocking(0)
-        skarab_eth_ctrl_port = (host_ip, skarab_defs.ETHERNET_CONTROL_PORT_ADDRESS)
+        skarab_eth_ctrl_port = (host_ip,
+                                skarab_defs.ETHERNET_CONTROL_PORT_ADDRESS)
         request = skarab_defs.ReadRegReq(
             0, skarab_defs.BOARD_REG, skarab_defs.C_RD_VERSION_ADDR)
         skarab_ctrl_sock.sendto(request.create_payload(), skarab_eth_ctrl_port)
