@@ -12,6 +12,12 @@ __date__ = 'June 2017'
 LOGGER = logging.getLogger(__name__)
 tftpy.setLogLevel(logging.ERROR)
 
+def set_log_level(level):
+    tftpy.setLogLevel(level)
+
+def get_log_level():
+    return tftpy.log.level
+
 def get_core_info_payload(payload_str):
     x = struct.unpack('>LLB', payload_str)
     rw      = x[0] & 0x3
