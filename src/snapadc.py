@@ -54,7 +54,7 @@ class SNAPADC(object):
 	ERROR_FRAME = 4
 	ERROR_RAMP = 5
 
-	def __init__(self, interface, ADC='HMCAD1511', defaultDelayTap=0):
+	def __init__(self, interface, ADC='HMCAD1511', defaultDelayTap=0, ref=10):
 		# interface => corr.katcp_wrapper.FpgaClient('10.1.0.23')
 
 		self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
@@ -64,7 +64,7 @@ class SNAPADC(object):
 
 		self.curDelay = [[defaultDelayTap]*len(self.laneList)]*len(self.adcList)
 
-		self.lmx = LMX2581(interface,'lmx_ctrl')
+		self.lmx = LMX2581(interface,'lmx_ctrl', fosc=ref)
 		self.clksw = HMC922(interface,'adc16_use_synth')
 		self.ram = [WishBoneDevice(interface,name) for name in self.ramList]
 
@@ -76,13 +76,19 @@ class SNAPADC(object):
 		else:	# 'HMCAD1520'
 			self.adc = HMCAD1520(interface,'adc16_controller')
 
+		# test pattern for clock aligning
+		pats = [0b10101010,0b01010101,0b00000000,0b11111111]
+		mask = (1<<(self.RESOLUTION/2))-1
+		ofst = self.RESOLUTION/2
+		self.p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
+		self.p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
 
 	def init(self, samplingRate=250, numChannel=4, resolution=None):
 		""" Get SNAP ADCs into working condition
 
 		Supported frequency range: 60MHz ~ 1000MHz. Set resolution to
 		None to let init() automatically decide the best resolution.
-		
+
 		A run of init()	takes approximatly 20 seconds, involving the
 		following actions:
 
@@ -102,7 +108,7 @@ class SNAPADC(object):
 		"""
 
 		if resolution==None:
-			if isinstance(self.adc, HMCAD1511):
+			if type(self.adc) is HMCAD1511:
 				self.RESOLUTION=8
 			elif samplingRate/(4/numChannel)>160:
 				self.RESOLUTION=8
@@ -144,9 +150,9 @@ class SNAPADC(object):
 			lowClkFreq = False
 
 		logging.info("Configuring ADC operating mode")
-		if isinstance(self.adc, HMCAD1511):
+		if type(self.adc) is HMCAD1511:
 			self.adc.setOperatingMode(numChannel,1,lowClkFreq)
-		elif isinstance(self.adc, HMCAD1520):
+		elif type(self.adc) is HMCAD1520:
 			self.adc.setOperatingMode(numChannel,1,lowClkFreq,resolution)
 
 		self.setDemux()
@@ -388,7 +394,8 @@ class SNAPADC(object):
 
 		strl = ','.join([str(c) for c in laneSel])
 		strc = ','.join([str(c) for c in chipSel])
-		logging.debug('Set DelayTap of lane {0} of chip {1} to {2}'.format(str(laneSel),str(chipSel),tap))
+		logging.debug('Set DelayTap of lane {0} of chip {1} to {2}'
+				.format(str(laneSel),str(chipSel),tap))
 
 		matc = np.array([(cs*4) for cs in chipSel])
 
@@ -428,14 +435,17 @@ class SNAPADC(object):
 
 
 	def testPatterns(self, chipSel=None, taps=None, mode='std', pattern1=None, pattern2=None):
-		""" Return a list of avg/std/err for a given tap or a list of taps
+		""" Return a list of std/err for a given tap or a list of taps
 
-		Return the lane-wise standard deviation/error of the data at the output
-		port of ISERDES under a given tap setting or a list of tap settings.  By default,
-		mode='std', taps=range(32).  err mode with single test pattern check data against
-		the given pattern, while err mode with dual test patterns guess the counts of the 
-		mismatches. 'guess' because both patterns could comes up at first. This method
+		Return the lane-wise standard deviation/error of the data under a given
+		tap setting or a list of tap settings.  By default, mode='std', taps=range(32).
+		'err' mode with single test pattern check data against the given pattern, while
+		'err' mode with dual test patterns guess the counts of the mismatches.
+		'guess' because both patterns could come up at first. This method
 		always returns the smaller counts.
+		'ramp' mode guess the total number of incorrect data. This is implemented based
+		on the assumption that in most cases, $cur = $pre + 1. When using 'ramp' mode,
+		taps=None
 
 		E.g.
 			testPatterns(taps=True)	# Return lane-wise std of all ADCs, taps=range(32)
@@ -456,6 +466,8 @@ class SNAPADC(object):
 						# test pattern without changing current delay tap
 						# setting and return lane-wise error counts of
 						# the 3rd ADC,
+			testPatterns(mode='ramp')
+						# Check all ADCs under ramp mode
 
 		"""
 
@@ -535,15 +547,34 @@ class SNAPADC(object):
 			# synchronization mode
 			self.adc.test('pat_sync')
 			# pattern1 = 0b11110000 when self.RESOLUTION is 8
+			# pattern1 = 0b111111000000 when self.RESOLUTION is 12
 			pattern1 = ((2**(self.RESOLUTION/2))-1) << (self.RESOLUTION/2)
 			pattern1 = self._signed(pattern1,self.RESOLUTION)
 		elif isinstance(pattern1,int) and pattern2==None:
 			# single pattern mode
-			self.adc.test('single_custom_pat',pattern1)
+
+			if type(self.adc) is HMCAD1520:
+				# test patterns of HMCAD1520 need special cares
+				ofst = 16 - self.RESOLUTION
+				reg_p1 = pattern1 << ofst
+			else:
+				reg_p1 = pattern1
+
+			self.adc.test('single_custom_pat',reg_p1)
 			pattern1 = self._signed(pattern1,self.RESOLUTION)
 		elif isinstance(pattern1,int) and isinstance(pattern2,int):
 			# dual pattern mode
-			self.adc.test('dual_custom_pat',pattern1,pattern2)
+
+			if type(self.adc) is HMCAD1520:
+				# test patterns of HMCAD1520 need special cares
+				ofst = 16 - self.RESOLUTION
+				reg_p1 = pattern1 << ofst
+				reg_p2 = pattern2 << ofst
+			else:
+				reg_p1 = pattern1
+				reg_p2 = pattern2
+
+			self.adc.test('dual_custom_pat',reg_p1,reg_p2)
 			pattern1 = self._signed(pattern1,self.RESOLUTION)
 			pattern2 = self._signed(pattern2,self.RESOLUTION)
 		else: 
@@ -600,6 +631,9 @@ class SNAPADC(object):
 
 	def _signed(self, data, res=8):
 		""" Convert unsigned number to signed number
+
+		adc16_interface converts ADC outputs into signed numbers by flipping MSB.
+		Therefore we have to prepare signed-number test patterns as well.
 		"""
 		width = 16 if res>8 else 8
 		msb = (data & (1 << res-1) == 0) << width - 1
@@ -688,16 +722,9 @@ class SNAPADC(object):
 
 		elif mode == 'dual_pat':	# dual_pat
 			# Fine tune delay tap under dual pattern test mode
-			# p1 = 0b1010101010101010 & (2**self.RESOLUTION-1)
-			# p2 = 0b0101010101010101 & (2**self.RESOLUTION-1)
 
-			pats = [0b10101010,0b01010101,0b00000000,0b11111111]
-			mask = (1<<(self.RESOLUTION/2))-1
-			ofst = self.RESOLUTION/2
-			p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
-			p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
-
-			errs = self.testPatterns(taps=True,mode='std',pattern1=p1,pattern2=p2)
+			errs = self.testPatterns(taps=True,mode='std',pattern1=self.p1,
+						pattern2=self.p2)
 
 			for adc in self.adcList:
 				for lane in self.laneList:
@@ -709,12 +736,7 @@ class SNAPADC(object):
 						self.delay(t,adc,lane)	# Apply the tap setting
 
 		# Check if line clock aligned
-		pats = [0b10101010,0b01010101,0b00000000,0b11111111]
-		mask = (1<<(self.RESOLUTION/2))-1
-		ofst = self.RESOLUTION/2
-		p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
-		p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
-		errs = self.testPatterns(mode='std',pattern1=p1,pattern2=p2)
+		errs = self.testPatterns(mode='std',pattern1=self.p1,pattern2=self.p2)
 		if np.all(np.array([adc.values() for adc in errs.values()])==0):
 			logging.info('Line clock of all ADCs aligned.')
 			return True
@@ -726,15 +748,9 @@ class SNAPADC(object):
 		""" Align the frame clock with data frame
 		"""
 
-		pats = [0b10101010,0b01010101,0b00000000,0b11111111]
-		mask = (1<<(self.RESOLUTION/2))-1
-		ofst = self.RESOLUTION/2
-		p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
-		p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
-
 		for u in range(self.RESOLUTION*2):
 			allDone = True
-			errs = self.testPatterns(mode='err',pattern1=p1,pattern2=p2)
+			errs = self.testPatterns(mode='err',pattern1=self.p1,pattern2=self.p2)
 			for adc in self.adcList:
 				for lane in self.laneList:
 					if errs[adc][lane]!=0:
@@ -744,7 +760,7 @@ class SNAPADC(object):
 				break;
 
 		# Check if frame clock aligned
-		errs = self.testPatterns(mode='err',pattern1=p1,pattern2=p2)
+		errs = self.testPatterns(mode='err',pattern1=self.p1,pattern2=self.p2)
 		if all(all(val==0 for val in adc.values()) for adc in errs.values()):
 			logging.info('Frame clock of all ADCs aligned.')
 			return True
