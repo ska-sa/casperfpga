@@ -563,7 +563,7 @@ class CasperFpga(object):
             LOGGER.warn('%s: no sys info key in design info!' % self.host)
         # and RCS information if included
         for device_name in device_dict:
-            if device_name.startswith('77777_git_'):
+            if device_name.startswith('77777_git'):
                 name = device_name[device_name.find('_', 10) + 1:]
                 if 'git' not in self.rcs_info:
                     self.rcs_info['git'] = {}
