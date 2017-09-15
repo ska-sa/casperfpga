@@ -13,7 +13,7 @@ import qdr
 from attribute_container import AttributeContainer
 import skarab_definitions as skarab_defs
 from transport_katcp import KatcpTransport
-from transport_tapcp import TapcpTransport
+from transport_tapcp import TapcpTransport, set_log_level, get_log_level
 from transport_skarab import SkarabTransport
 from utils import parse_fpg
 
@@ -77,7 +77,13 @@ def choose_transport(host_ip):
         else:
             LOGGER.debug('%s is not a SKARAB. Trying Tapcp' % host_ip)
             board = TapcpTransport(host=host_ip, timeout=0.1)
+            # Temporarily turn off logging so if tftp doesn't respond
+            # there's no error. Remember the existing log level so that
+            # it can be re-set afterwards if tftp connects ok.
+            log_level = get_log_level()
+            set_log_level(logging.CRITICAL)
             if board.is_connected():
+                set_log_level(log_level)
                 LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
                 return TapcpTransport
         LOGGER.debug('%s seems to be a ROACH' % host_ip)
@@ -557,7 +563,7 @@ class CasperFpga(object):
             LOGGER.warn('%s: no sys info key in design info!' % self.host)
         # and RCS information if included
         for device_name in device_dict:
-            if device_name.startswith('77777_git_'):
+            if device_name.startswith('77777_git'):
                 name = device_name[device_name.find('_', 10) + 1:]
                 if 'git' not in self.rcs_info:
                     self.rcs_info['git'] = {}

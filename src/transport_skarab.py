@@ -653,6 +653,27 @@ class SkarabTransport(Transport):
             errmsg = 'Minimum number of programming attempts must be 1!'
             raise ValueError(errmsg)
 
+        # Moved here from upload_to_ram_and_program()
+        # TODO - can we undo this hack? i.e. dynamically find the address of
+        # the fortygbe
+        need_sleep = False
+        forty_gbe_port = 0x50000
+        if self._forty_gbe_get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
+            LOGGER.info('Resetting FortyGbe to 0x%04x' % (
+                sd.ETHERNET_FABRIC_PORT_ADDRESS))
+            self._forty_gbe_set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
+            need_sleep = True
+        one_gbe_addr = 0x50000 - 0x4000
+        if self._forty_gbe_get_port(one_gbe_addr) != \
+                sd.ETHERNET_FABRIC_PORT_ADDRESS:
+            LOGGER.info('Resetting OneGbe to 0x%04x' % (
+                sd.ETHERNET_FABRIC_PORT_ADDRESS))
+            self._forty_gbe_set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS,
+                                     one_gbe_addr)
+            need_sleep = True
+        if need_sleep:
+            time.sleep(1)
+
         # process the given file and get an image ready to send
         image_to_program = self._upload_to_ram_prepare_image(filename)
 
@@ -791,25 +812,7 @@ class SkarabTransport(Transport):
         """
         prog_start_time = time.time()
 
-        # TODO - can we undo this hack? i.e. dynamically find the address of
-        # the fortygbe
-        need_sleep = False
-        forty_gbe_port = 0x50000
-        if self._forty_gbe_get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
-            LOGGER.info('Resetting FortyGbe to 0x%04x' % (
-                sd.ETHERNET_FABRIC_PORT_ADDRESS))
-            self._forty_gbe_set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
-            need_sleep = True
-        one_gbe_addr = 0x50000 - 0x4000
-        if self._forty_gbe_get_port(one_gbe_addr) != \
-                sd.ETHERNET_FABRIC_PORT_ADDRESS:
-            LOGGER.info('Resetting OneGbe to 0x%04x' % (
-                sd.ETHERNET_FABRIC_PORT_ADDRESS))
-            self._forty_gbe_set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS,
-                                     one_gbe_addr)
-            need_sleep = True
-        if need_sleep:
-            time.sleep(1)
+        # Moved setting Port Address(es) into upload_to_ram()
         self.upload_to_ram(filename)
         self.boot_from_sdram()
 
