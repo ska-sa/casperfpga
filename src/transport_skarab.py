@@ -625,8 +625,10 @@ class SkarabTransport(Transport):
         if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
             self.clear_sdram()
             errmsg1 = 'Error programming bitstream into SDRAM: sent(%i) ' \
-                     'received(%i)' % (sent_pkt_counter,
-                                       rx_pkt_counts['Ethernet Frames'])
+                      'received(%i). Issue the fpga.transport.reset_fpga() ' \
+                      'command and try again.' % (sent_pkt_counter,
+                                                  rx_pkt_counts['Ethernet '
+                                                                'Frames'])
             LOGGER.error(errmsg1)
             errmsg2 = 'Ensure that 1) You are programming via the correct port/connection; ' \
                       'and \n2) all Network Switches and endpoints are configured to ' \
@@ -635,7 +637,7 @@ class SkarabTransport(Transport):
             raise ProgrammingError(errmsg1 + '.\n' + errmsg2)
         LOGGER.info('Bitstream successfully programmed into SDRAM.')
 
-    def upload_to_ram(self, filename, verify=False, retries=3):
+    def _upload_to_ram_deprecated(self, filename, verify=False, retries=3):
         """
         Opens a bitfile from which to program FPGA. Reads bitfile
         in chunks of 4096 16-bit words.
@@ -773,6 +775,233 @@ class SkarabTransport(Transport):
         self._sdram_programmed = True
         self.prog_info['last_uploaded'] = filename
 
+    def upload_to_ram(self, filename):
+        """
+        Upload a bitstream to the SKARAB over the wishone --> SDRAM interface
+        :param filename: fpga image to upload
+        :return: True if success
+        """
+
+        # process the given file and get an image ready to send
+        image_to_program = self._upload_to_ram_prepare_image(filename)
+
+        if os.path.splitext(filename)[1] == '.fpg':
+            self.check_md5sum(filename=filename,
+                              image_to_program=image_to_program)
+
+        image_size = len(image_to_program)
+
+        image_chunks = [image_to_program[ctr:ctr + sd.MAX_IMAGE_CHUNK_SIZE]
+                        for ctr in range(0, image_size,
+                                         sd.MAX_IMAGE_CHUNK_SIZE
+                                         )]
+
+        # pad the last chunk to max chunk size, if required
+        padding = (image_size % sd.MAX_IMAGE_CHUNK_SIZE != 0)
+        if padding:
+            image_chunks[-1] += '\xff' * (sd.MAX_IMAGE_CHUNK_SIZE - len(
+                image_chunks[-1]))
+
+        # get the total number of chunks to be sent
+        num_total_chunks = len(image_chunks)
+
+        LOGGER.debug("Number of Chunks: {}".format(num_total_chunks))
+
+        # send chunk zero - initialization chunk
+        init_success = self._send_image_chunk(chunk_id=0,
+                                              num_total_chunks=num_total_chunks,
+                                              chunk_data=image_chunks[0])
+
+        if not init_success:
+            errmsg = "Failed to transmit SDRAM programming initialization " \
+                     "packet."
+            raise ProgrammingError(errmsg)
+
+        # send other chunks
+        for chunk_number in range(0, num_total_chunks):
+
+            LOGGER.debug("Sending chunk {}\n".format(chunk_number))
+
+            chunk_transmit_success = self._send_image_chunk(
+                chunk_id=chunk_number + 1,
+                num_total_chunks=num_total_chunks,
+                chunk_data=image_chunks[chunk_number])
+
+            if not chunk_transmit_success:
+                LOGGER.error("Tranmission of chunk %d failed. Programming "
+                             "failed. Clearing SDRAM" % chunk_number)
+                self.clear_sdram()
+                break
+
+            # chunk transmitted successfully, send next one
+            # first check if we sent the last chunk
+            if chunk_number + 1 == num_total_chunks:
+                # all chunks sent ok!
+                LOGGER.debug("All images chunks transmitted successfully!")
+
+                if self.check_checksum(
+                        spartan_checksum=self.get_spartan_checksum(),
+                        local_checksum=self.calculate_checksum_using_file(
+                            file_name=filename,
+                            packet_size=sd.MAX_IMAGE_CHUNK_SIZE)):
+
+                    self.prog_info['last_uploaded'] = filename
+                    self._sdram_programmed = True
+                    return True
+                else:
+                    errmsg = "Checksum mismatch. Clearing SDRAM."
+                    self.clear_sdram()
+                    raise ProgrammingError(errmsg)
+
+            else:
+                # not all chunk sent yet
+                continue
+
+    def check_md5sum(self, filename, image_to_program):
+        """
+        wrapper function for md5 checksum check
+        :param filename: name of the fpg file to check
+        :param image_to_program: bitstream extracted from fpg file
+        :return: nothing if successful, else raise error
+        """
+
+        (md5_header, md5_bitstream) = self.extract_md5_from_fpg(filename)
+        if md5_header is not None and md5_bitstream is not None:
+            # Calculate and compare MD5 sums here, before carrying on
+            # system_info is a dictionary
+            bitstream_md5sum = hashlib.md5(image_to_program).hexdigest()
+            if bitstream_md5sum != md5_bitstream:
+                errmsg = "bitstream_md5sum != fpgfile_md5sum"
+                LOGGER.error(errmsg)
+                raise InvalidSkarabBitstream(errmsg)
+        else:
+            # .fpg file was created using an older version of mlib_devel
+            errmsg = 'An older version of mlib_devel generated ' + \
+                     filename + '. Please update to include the md5sum ' \
+                                'on the bitstream in the .fpg header.'
+            LOGGER.error(errmsg)
+            raise InvalidSkarabBitstream(errmsg)
+
+    @staticmethod
+    def check_checksum(spartan_checksum, local_checksum):
+        """
+        Compares checksums.
+        :param spartan_checksum: Checksum calculated by the SPARTAN
+        :param local_checksum:  Checksum calculated locally
+        :return: True if match, False if mismatch
+        """
+
+        LOGGER.debug("Spartan Checksum: %s" % spartan_checksum)
+        LOGGER.debug("Local Checksum: %s" % local_checksum)
+
+        if spartan_checksum == local_checksum:
+            msg = "Checksum match! Bitstream uploaded successfully!. SKARAB " \
+                  "ready to boot from new image"
+            LOGGER.debug(msg)
+            return True
+        else:
+            errmsg = "Checksum mismatch! Bitstream upload " \
+                     "unsuccessful."
+            LOGGER.debug(errmsg)
+            return False
+
+
+    def _send_image_chunk(self, chunk_id, num_total_chunks, chunk_data,
+                          retransmits=3):
+        """
+        Send a chunk of an image to program to SDRAM over wishbone interface
+        :param chunk_id: id of the chunk
+        :param num_total_chunks: total number of chunks to be sent
+        :param chunk_data: actual data of the chunk
+        :return: True if chunk sent successfully
+        """
+
+        # create request object
+        req = sd.SdramProgramWishboneReq(seq_num=self.seq_num,
+                                         chunk_id=chunk_id,
+                                         num_total_chunks=num_total_chunks,
+                                         image_data=chunk_data)
+
+        for retry in range(retransmits):
+
+            # send request, and receive response
+            resp = self.send_packet(payload=req.create_payload(),
+                                response_type='SdramProgramWishboneResp',
+                                expect_response=True,
+                                command_id=sd.SDRAM_PROGRAM_WISHBONE,
+                                number_of_words=11, pad_words=7)
+
+            # check response
+            if (resp.chunk_id == chunk_id) and (resp.ack == 0):
+                return True
+            else:
+                # retransmit (try again)
+                self.seq_num += 1
+                continue
+
+        # at this point, the transmission of the chunk failed
+        LOGGER.warning('Tranmission of chunk failed.')
+        return False
+
+    def upload_to_ram_and_program(self, filename, port=-1,
+                                  timeout=60,
+                                  wait_complete=True):
+        """
+        Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
+        from the new image.
+        *** WARNING: Do NOT attempt to upload a BSP/Flash image to the SDRAM. ***
+        :param filename: fpga image to upload (currently supports bin, bit
+        :param port
+        :param timeout
+        :param wait_complete
+        and hex files)
+        :return: True, if success
+        """
+        prog_start_time = time.time()
+
+        # Moved setting Port Address(es) into upload_to_ram()
+        self.upload_to_ram(filename)
+        self.boot_from_sdram()
+
+        # wait for board to come back up
+        # this can be reduced when the 40gbe switch issue is resolved
+        timeout = timeout + time.time()
+        while timeout > time.time():
+            # TODO - look at this logic. Should not have a timeout and the retries in the is_connected - duplication
+            # setting the retries to 20 allows about 60s for the 40gbe switch
+            # to come back. It also prevents errors being logged when there
+            # is no response.
+            if self.is_connected(retries=20):
+                ## configure the mux back to user_date mode
+                # self.config_prog_mux(user_data=1)
+                # time.sleep(1)
+                [golden_image, multiboot, firmware_version] = \
+                    self.get_firmware_version()
+                if golden_image == 0 and multiboot == 0:
+                    prog_time = time.time() - prog_start_time
+                    LOGGER.info(
+                        'SKARAB back up, in %.3f seconds with firmware version '
+                        '%s' % (prog_time, firmware_version))
+                    return True
+                elif golden_image == 1 and multiboot == 0:
+                    LOGGER.error(
+                        'SKARAB back up, but fell back to golden image with '
+                        'firmware version %s' % firmware_version)
+                    return False
+                elif golden_image == 0 and multiboot == 1:
+                    LOGGER.error(
+                        'SKARAB back up, but fell back to multiboot image with '
+                        'firmware version %s' % firmware_version)
+                    return False
+                else:
+                    LOGGER.error(
+                        'SKARAB back up, but unknown image with firmware '
+                        'version number %s' % firmware_version)
+                    return False
+        LOGGER.error('SKARAB has not come back')
+        return False
+
+
     def _forty_gbe_get_port(self, port_addr=0x50000):
         """
 
@@ -797,8 +1026,9 @@ class SkarabTransport(Transport):
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
 
-    def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
-                                   wait_complete=True):
+    def _upload_to_ram_and_program_deprecated(self, filename, port=-1,
+                                              timeout=60,
+                                              wait_complete=True):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -813,7 +1043,7 @@ class SkarabTransport(Transport):
         prog_start_time = time.time()
 
         # Moved setting Port Address(es) into upload_to_ram()
-        self.upload_to_ram(filename)
+        self._upload_to_ram_deprecated(filename)
         self.boot_from_sdram()
 
 
@@ -3326,10 +3556,11 @@ class SkarabTransport(Transport):
             return
 
     # AP
-    def calculate_checksum_using_file(self, file_name):
+    def calculate_checksum_using_file(self, file_name, packet_size=8192):
         """
         Basically summing up all the words in the input file_name, and returning a 'Checksum'
         :param file_name: The actual filename, and not instance of the open file
+        :param packet_size: max size of image packets that we pad to
         :return: Tally of words in the bitstream of the input file
         """
 
@@ -3359,9 +3590,9 @@ class SkarabTransport(Transport):
             one_word = struct.unpack('!H', two_bytes)[0]
             flash_write_checksum += one_word
 
-        if (size % 8192) != 0:
+        if (size % packet_size) != 0:
             # padding required
-            num_padding_bytes = 8192 - (size % 8192)
+            num_padding_bytes = packet_size - (size % packet_size)
             for i in range(num_padding_bytes / 2):
                 flash_write_checksum += 0xffff
 
@@ -3371,11 +3602,12 @@ class SkarabTransport(Transport):
         return flash_write_checksum
 
     @staticmethod
-    def calculate_checksum_using_bitstream(bitstream):
+    def calculate_checksum_using_bitstream(bitstream, packet_size=8192):
         """
         Summing up all the words in the input bitstream, and returning a
         'Checksum' - Assuming that the bitstream HAS NOT been padded yet
         :param bitstream: The actual bitstream of the file in question
+        :param packet_size: max size of image packets that we pad to
         :return: checksum
         """
 
@@ -3389,9 +3621,9 @@ class SkarabTransport(Transport):
             one_word = struct.unpack('!H', two_bytes)[0]
             flash_write_checksum += one_word
 
-        if (size % 8192) != 0:
+        if (size % packet_size) != 0:
             # padding required
-            num_padding_bytes = 8192 - (size % 8192)
+            num_padding_bytes = packet_size - (size % packet_size)
             for i in range(num_padding_bytes / 2):
                 flash_write_checksum += 0xffff
 
