@@ -625,8 +625,10 @@ class SkarabTransport(Transport):
         if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
             self.clear_sdram()
             errmsg1 = 'Error programming bitstream into SDRAM: sent(%i) ' \
-                     'received(%i)' % (sent_pkt_counter,
-                                       rx_pkt_counts['Ethernet Frames'])
+                      'received(%i). Issue the fpga.transport.reset_fpga() ' \
+                      'command and try again.' % (sent_pkt_counter,
+                                                  rx_pkt_counts['Ethernet '
+                                                                'Frames'])
             LOGGER.error(errmsg1)
             errmsg2 = 'Ensure that 1) You are programming via the correct port/connection; ' \
                       'and \n2) all Network Switches and endpoints are configured to ' \
@@ -635,7 +637,7 @@ class SkarabTransport(Transport):
             raise ProgrammingError(errmsg1 + '.\n' + errmsg2)
         LOGGER.info('Bitstream successfully programmed into SDRAM.')
 
-    def upload_to_ram(self, filename, verify=False, retries=3):
+    def _upload_to_ram_deprecated(self, filename, verify=False, retries=3):
         """
         Opens a bitfile from which to program FPGA. Reads bitfile
         in chunks of 4096 16-bit words.
@@ -773,7 +775,7 @@ class SkarabTransport(Transport):
         self._sdram_programmed = True
         self.prog_info['last_uploaded'] = filename
 
-    def upload_to_ram_wishbone(self, filename):
+    def upload_to_ram(self, filename):
         """
         Upload a bitstream to the SKARAB over the wishone --> SDRAM interface
         :param filename: fpga image to upload
@@ -904,7 +906,6 @@ class SkarabTransport(Transport):
             return False
 
 
-
     def _send_image_chunk(self, chunk_id, num_total_chunks, chunk_data,
                           retransmits=3):
         """
@@ -922,7 +923,8 @@ class SkarabTransport(Transport):
                                          image_data=chunk_data)
 
         for retry in range(retransmits):
-        # send request, and receive response
+
+            # send request, and receive response
             resp = self.send_packet(payload=req.create_payload(),
                                 response_type='SdramProgramWishboneResp',
                                 expect_response=True,
@@ -941,9 +943,9 @@ class SkarabTransport(Transport):
         LOGGER.warning('Tranmission of chunk failed.')
         return False
 
-    def upload_to_ram_and_program_via_wishbone(self, filename, port=-1,
-                                               timeout=60,
-                                               wait_complete=True):
+    def upload_to_ram_and_program(self, filename, port=-1,
+                                  timeout=60,
+                                  wait_complete=True):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -958,7 +960,7 @@ class SkarabTransport(Transport):
         prog_start_time = time.time()
 
         # Moved setting Port Address(es) into upload_to_ram()
-        self.upload_to_ram_wishbone(filename)
+        self.upload_to_ram(filename)
         self.boot_from_sdram()
 
         # wait for board to come back up
@@ -1024,8 +1026,9 @@ class SkarabTransport(Transport):
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
 
-    def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
-                                   wait_complete=True):
+    def _upload_to_ram_and_program_deprecated(self, filename, port=-1,
+                                              timeout=60,
+                                              wait_complete=True):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -1040,7 +1043,7 @@ class SkarabTransport(Transport):
         prog_start_time = time.time()
 
         # Moved setting Port Address(es) into upload_to_ram()
-        self.upload_to_ram(filename)
+        self._upload_to_ram_deprecated(filename)
         self.boot_from_sdram()
 
 
