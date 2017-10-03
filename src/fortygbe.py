@@ -306,7 +306,7 @@ class FortyGbe(object):
         # mask_high = mask.ip_int >> 16
         # mask_low = mask.ip_int & 65535
         request = ConfigureMulticastReq(
-            self.parent.transport.seq_num, 1, ip_high, ip_low,
+            self.parent.transport._seq_num, 1, ip_high, ip_low,
             mask_high, mask_low)
         resp = self.parent.transport.send_packet(
             payload=request.create_payload(),
