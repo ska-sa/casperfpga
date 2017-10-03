@@ -91,7 +91,7 @@ class SkarabTransport(Transport):
         self.skarab_fpga_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # self.skarab_fpga_sock.setsockopt(socket.SOL_SOCKET,
         #                                  socket.SO_SNDBUF, 1)
-        self.skarab_ctrl_sock.setblocking(0)
+        self.skarab_fpga_sock.setblocking(0)
 
         # create tuple for fabric packet address
         self.skarab_fpga_port = (self.host, sd.ETHERNET_FABRIC_PORT_ADDRESS)
@@ -116,13 +116,13 @@ class SkarabTransport(Transport):
         # self.gbes.append(FortyGbe(self, 0))
         # # self.gbes.append(FortyGbe(self, 0, 0x50000 - 0x4000))
 
-    def is_connected(self, retries=3):
+    def is_connected(self):
         """
         'ping' the board to see if it is connected and running.
         Tries to read a register
         :return: True or False
         """
-        data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=retries)
+        data = self.read_board_reg(sd.C_RD_VERSION_ADDR)
         return True if data else False
 
     def is_running(self):
@@ -142,13 +142,12 @@ class SkarabTransport(Transport):
         :return:
         """
         request = sd.DebugLoopbackTestReq(self.seq_num, iface, 0x77)
-        resp = self.send_packet(
-            payload=request.create_payload(),
-            response_type='DebugLoopbackTestResp',
-            expect_response=True,
-            command_id=sd.DEBUG_LOOPBACK_TEST,
-            number_of_words=11, pad_words=5,
-            timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=1)
+
+        response = self.send_packet_refactor(request_object=request,
+                                             response_type='DebugLoopbackTestResp',
+                                             expect_response=True,
+                                             number_of_words=11,
+                                             pad_words=5)
         raise RuntimeError('Not yet tested')
 
     def _get_device_address(self, device_name):
@@ -199,13 +198,15 @@ class SkarabTransport(Transport):
             addr_high, addr_low = self.data_split_and_pack(addr_start)
             # create payload packet structure for read request
             request = sd.ReadWishboneReq(self.seq_num, addr_high, addr_low)
-            resp = self.send_packet(
-                payload=request.create_payload(),
-                response_type='ReadWishboneResp', expect_response=True,
-                command_id=sd.READ_WISHBONE, number_of_words=11, pad_words=5)
+            response = self.send_packet_refactor(request_object=request,
+                                                 response_type='ReadWishboneResp',
+                                                 expect_response=True,
+                                                 number_of_words=11,
+                                                 pad_words=5)
+
             # merge high and low binary data for the current read
-            new_read = struct.pack('!H', resp.read_data_high) + \
-                struct.pack('!H', resp.read_data_low)
+            new_read = struct.pack('!H', response.read_data_high) + \
+                struct.pack('!H', response.read_data_low)
             # append current read to read data
             data += new_read
             # increment addr_start by four
@@ -232,11 +233,12 @@ class SkarabTransport(Transport):
         request = sd.BigReadWishboneReq(
             self.seq_num, start_addr_high, start_addr_low, words_to_read)
         # send read request
-        response = self.send_packet(
-            payload=request.create_payload(),
-            response_type='BigReadWishboneResp', expect_response=True,
-            command_id=sd.BIG_READ_WISHBONE, number_of_words=999,
-            pad_words=0)
+        response = self.send_packet_refactor(request_object=request,
+                                         response_type='BigReadWishboneResp',
+                                         expect_response=True,
+                                         number_of_words=999,
+                                         pad_words=0)
+
         if response is None:
             errmsg = 'Bulk read failed.'
             raise ReadFailed(errmsg)
@@ -302,13 +304,11 @@ class SkarabTransport(Transport):
                                          start_addr_low, data, words_to_write)
 
         # send read request
-        response = self.send_packet(
-            payload=request.create_payload(),
-            response_type='BigWriteWishboneResp',
-            expect_response=True,
-            command_id=sd.BIG_WRITE_WISHBONE,
-            number_of_words=11,
-            pad_words=6)
+        response = self.send_packet_refactor(request_object=request,
+                                         response_type='BigWriteWishboneResp',
+                                         expect_response=True,
+                                         number_of_words=11,
+                                         pad_words=6)
 
         if response is None:
             errmsg = 'Bulk write failed. No response from SKARAB.'
@@ -419,11 +419,12 @@ class SkarabTransport(Transport):
 
             # create payload packet structure for read request
             request = sd.ReadWishboneReq(self.seq_num, addr_high, addr_low)
-            resp = self.send_packet(payload=request.create_payload(),
-                                    response_type='ReadWishboneResp',
-                                    expect_response=True,
-                                    command_id=sd.READ_WISHBONE,
-                                    number_of_words=11, pad_words=5)
+
+            resp = self.send_packet_refactor(request_object=request,
+                                             response_type='ReadWishboneResp',
+                                             expect_response=True,
+                                             number_of_words=11,
+                                             pad_words=5)
 
             # merge high and low binary data for the current read
             new_read = struct.pack('!H', resp.read_data_high) + \
@@ -470,11 +471,12 @@ class SkarabTransport(Transport):
             # create payload packet structure for write request
             request = sd.WriteWishboneReq(self.seq_num, addr_high,
                                           addr_low, data_high, data_low)
-            self.send_packet(payload=request.create_payload(),
-                             response_type='WriteWishboneResp',
-                             expect_response=True,
-                             command_id=sd.WRITE_WISHBONE,
-                             number_of_words=11, pad_words=5)
+
+            _ = self.send_packet_refactor(request_object=request,
+                                          response_type='WriteWishboneResp',
+                                          expect_response=True,
+                                          number_of_words=11,
+                                          pad_words=5)
 
     def deprogram(self):
         """
@@ -822,7 +824,7 @@ class SkarabTransport(Transport):
             # setting the retries to 20 allows about 60s for the 40gbe switch
             # to come back. It also prevents errors being logged when there
             # is no response.
-            if self.is_connected(retries=20):
+            if self.is_connected():
                 ## configure the mux back to user_date mode
                 #self.config_prog_mux(user_data=1)
                 #time.sleep(1)
@@ -1103,7 +1105,8 @@ class SkarabTransport(Transport):
 
                 valid_response=False
                 while not valid_response:
-                    LOGGER.debug('%s Waiting for response to sequence id %i.'%(self.host,self.seq_num))
+                    LOGGER.debug('%s Waiting for response to sequence num '
+                                 '%i.'%(self.host,self.seq_num))
                     # wait for response until timeout
                     data_ready = select.select([skarab_socket], [], [], timeout)
                     # if we got a response, process it
@@ -1168,6 +1171,139 @@ class SkarabTransport(Transport):
         LOGGER.error(errmsg)
         raise SkarabSendPacketError(errmsg)
 
+    def send_packet_refactor(self, request_object, response_type,
+                             expect_response, number_of_words,
+                             pad_words,
+                             timeout=sd.CONTROL_RESPONSE_TIMEOUT,
+                             retries=3,
+                             skarab_socket=None, port=None):
+        """
+        Send payload via UDP packet to SKARAB
+        Sends request packets then waits for response packet if expected
+        Retransmits request packet if response not received
+
+        :param skarab_socket: socket object to be used
+        :param port: port to connect to
+        :param request_object: object containing the data to send to SKARAB
+        :param response_type: type of response expected
+        :param expect_response: is a response expected?
+        :param number_of_words: total number of 16-bit words expected in response
+        :param pad_words: number of padding words (16-bit) expected in response
+        :param timeout: how long to wait for a response before bailing
+        :param retries: how many times to retransmit a request
+        :return: response expected: returns response object or 'None' if no
+        response received.
+        """
+        # TODO - refactor the requests/responses into one
+        # TODO - if the packet payloads are being formed here, we don't need to pass the sequence number to every Command. Rather the command that makes the payload should take the sequence number.
+        # TODO - Retries should use a different sequence number. Can't do it here, since sequence number is added when payload is generated. Needs refactoring.
+
+        # default to the control socket and port
+        skarab_socket = skarab_socket or self.skarab_ctrl_sock
+        port = port or self.skarab_eth_ctrl_port
+
+        retransmit_count = 0
+        while retransmit_count < retries:
+            LOGGER.debug('Retransmit attempts: {}'.format(retransmit_count))
+            try:
+
+                if retransmit_count != 0:
+                    # retransmission, increment seq number
+                    self.seq_num += 1
+                    request_object.header.seq_num = struct.pack('!H',
+                                                                self.seq_num)
+
+                # create the payload
+                request_payload = request_object.create_payload()
+                # send the payload packet
+                skarab_socket.sendto(request_payload, port)
+
+                if not expect_response:
+                    LOGGER.debug('No response expected for seq %i, '
+                                 'returning' % self.seq_num)
+                    self.seq_num += 1
+                    return None
+
+                wait_for_data = True
+                while wait_for_data:
+                    LOGGER.debug('%s Waiting for response to sequence id %i.'
+                                 %(self.host,self.seq_num))
+                    # wait for response until timeout
+                    data_ready = select.select([skarab_socket], [], [],
+                                               timeout)
+                    # if we have a response, process it
+                    if data_ready[0]:
+                        data = skarab_socket.recvfrom(4096)
+                        response_payload, address = data
+                        LOGGER.debug('%s Response from %s = %s' %
+                                     (self.host,str(address),
+                                      repr(response_payload)))
+
+                        # check the opcode of the response i.e. first two bytes
+                        if response_payload[:2] == '\xff\xff':
+                            # SKARAB received an unsupported opcode
+                            errmsg = 'SKARAB received unsupported opcode. ' \
+                                     'Discarding response.'
+                            LOGGER.error(errmsg)
+                            continue
+
+                        response_object = self.unpack_payload(
+                            response_payload, response_type,
+                            number_of_words, pad_words)
+                        LOGGER.debug('%s Response from %s, with seq num %i' %
+                            (self.host,str(address),response_object.header.seq_num))
+
+                        expected_response_id = struct.unpack('!H',
+                            request_object.header.command_type)[0] + 1
+
+                        if response_object.header.command_type != (
+                                expected_response_id):
+                            errmsg = '%s Incorrect command ID in response. ' \
+                                     'Expected(%i) got(%i). Discarding ' \
+                                     'response.' % (
+                                         self.host,
+                                         expected_response_id,
+                                         response_object.header.command_type)
+                            LOGGER.error(errmsg)
+                            continue
+
+                        elif response_object.header.seq_num != self.seq_num:
+                            errmsg = '%s Incorrect sequence number in response. ' \
+                                     'Expected(%i), got(%i). Discarding ' \
+                                     'response.'%(
+                                         self.host,
+                                         self.seq_num,
+                                         response_payload.header.seq_num)
+                            LOGGER.error(errmsg)
+                            continue
+                        else:
+                            # got a the correct response, increment seq num
+                            # return response object
+                            self.seq_num += 1
+                            return response_object
+
+                    else:
+                        # expected response not received, retransmit
+                        LOGGER.debug('%s Timeout; no packet received for '
+                                     'seq %i. Will retransmit as seq %i.'
+                                     %(self.host,self.seq_num,self.seq_num+1))
+                        wait_for_data = False
+
+            except KeyboardInterrupt:
+                LOGGER.warning('Keyboard interrupt, clearing buffer.')
+                time.sleep(3)  # wait to receive incoming responses
+                # clear the receive buffer
+                if self.clear_recv_buffer(skarab_socket):
+                    LOGGER.info('Cleared recv buffer.')
+                raise KeyboardInterrupt
+
+            retransmit_count += 1
+
+        errmsg = '%s: Retransmit count exceeded. Giving up.' % self.host
+        self.seq_num += 1
+        LOGGER.error(errmsg)
+        raise SkarabSendPacketError(errmsg)
+
     def clear_recv_buffer(self, skarab_socket):
         """
         Clears the recv buffer to discard unhandled responses from the SKARAB
@@ -1191,6 +1327,7 @@ class SkarabTransport(Transport):
         """
         # trigger a reboot of the FPGA
         self.sdram_reconfigure(do_reboot=True)
+        #TODO: randomize sequence number here
         # reset sequence numbers
         self._seq_num = 0
         # reset the sdram programmed flag
@@ -1246,11 +1383,14 @@ class SkarabTransport(Transport):
 
         # send payload via UDP pkt and return response object (if no response
         # expected should return ok)
-        response = self.send_packet(request.create_payload(), 'WriteRegResp',
-                                    expect_response, sd.WRITE_REG, 11, 5)
-        return response
+        write_reg_response = self.send_packet_refactor(request_object=request,
+                                                       response_type='WriteRegResp',
+                                                       expect_response=True,
+                                                       number_of_words=11,
+                                                       pad_words=5)
+        return write_reg_response
 
-    def read_board_reg(self, reg_address, retries=3):
+    def read_board_reg(self, reg_address):
         """
         Read from a specified board register
         :param reg_address: address of register to read
@@ -1258,22 +1398,22 @@ class SkarabTransport(Transport):
         :return: data read from register
         """
         request = sd.ReadRegReq(self.seq_num, sd.BOARD_REG, reg_address)
-
-        read_reg_resp = self.send_packet(
-            request.create_payload(), 'ReadRegResp', True, sd.READ_REG,
-            11, 5, retries=retries)
+        read_reg_resp = self.send_packet_refactor(request_object=request,
+                                                       response_type='ReadRegResp',
+                                                       expect_response=True,
+                                                       number_of_words=11,
+                                                       pad_words=5)
         if read_reg_resp is None:
             raise ValueError('Got None reading board register '
                              '0x%010x' % reg_address)
         return self.data_unpack_and_merge(read_reg_resp.reg_data_high,
                                           read_reg_resp.reg_data_low)
 
-    def write_dsp_reg(self, reg_address, data, expect_response=True):
+    def write_dsp_reg(self, reg_address, data):
         """
         Write to a dsp register
         :param reg_address: address of register to write to
         :param data: data to write
-        :param expect_response: does this write command require a response?
         :return: response object - object created from the response payload
         """
         # create payload packet structure with data
@@ -1283,9 +1423,12 @@ class SkarabTransport(Transport):
 
         # send payload via UDP pkt and return response object
         # (if no response expected should return ok)
-        return self.send_packet(
-            request.create_payload(),
-            'WriteRegResp', expect_response, sd.WRITE_REG, 11, 5)
+        write_reg_response = self.send_packet_refactor(request_object=request,
+                                                       response_type='WriteRegResp',
+                                                       expect_response=True,
+                                                       number_of_words=11,
+                                                       pad_words=5)
+        return write_reg_response
 
     def read_dsp_reg(self, reg_address):
         """
@@ -1294,8 +1437,13 @@ class SkarabTransport(Transport):
         :return: data read from register
         """
         request = sd.ReadRegReq(self.seq_num, sd.DSP_REG, reg_address)
-        read_reg_resp = self.send_packet(
-            request.create_payload(), 'ReadRegResp', True, sd.READ_REG, 11, 5)
+
+        read_reg_resp = self.send_packet_refactor(request_object=request,
+                                                  response_type='ReadRegResp',
+                                                  expect_response=True,
+                                                  number_of_words=11,
+                                                  pad_words=5)
+
         if read_reg_resp:
             return self.data_unpack_and_merge(
                 read_reg_resp.reg_data_high, read_reg_resp.reg_data_low)
@@ -1307,13 +1455,13 @@ class SkarabTransport(Transport):
         :return: embedded software version
         """
         request = sd.GetEmbeddedSoftwareVersionReq(self.seq_num)
-        get_embedded_ver_resp = self.send_packet(
-            payload=request.create_payload(),
-            response_type='GetEmbeddedSoftwareVersionResp',
-            expect_response=True,
-            command_id=sd.GET_EMBEDDED_SOFTWARE_VERS,
-            number_of_words=11,
-            pad_words=4)
+
+        get_embedded_ver_resp = self.send_packet_refactor(request_object=request,
+                                                          response_type='GetEmbeddedSoftwareVersionResp',
+                                                          expect_response=True,
+                                                          number_of_words=11,
+                                                          pad_words=4)
+
         if get_embedded_ver_resp:
             major = get_embedded_ver_resp.version_major
             minor = get_embedded_ver_resp.version_minor
@@ -1340,8 +1488,13 @@ class SkarabTransport(Transport):
         address_and_data = address_split
         address_and_data.extend(data_split)
         request = sd.WriteWishboneReq(self.seq_num, *address_and_data)
-        return self.send_packet(request.create_payload(), 'WriteWishboneResp',
-                                True, sd.WRITE_WISHBONE, 11, 5)
+
+        write_wishbone_resp = self.send_packet_refactor(request_object=request,
+                                                       response_type='WriteWishboneResp',
+                                                       expect_response=True,
+                                                       number_of_words=11,
+                                                       pad_words=5)
+        return write_wishbone_resp
 
     def read_wishbone(self, wb_address):
         """
@@ -1351,9 +1504,12 @@ class SkarabTransport(Transport):
         """
         request = sd.ReadWishboneReq(
             self.seq_num, *self.data_split_and_pack(wb_address))
-        read_wishbone_resp = self.send_packet(
-            request.create_payload(), 'ReadWishboneResp', True,
-            sd.READ_WISHBONE, 11, 5)
+
+        read_wishbone_resp = self.send_packet_refactor(request_object=request,
+                                                       response_type='ReadWishboneResp',
+                                                       expect_response=True,
+                                                       number_of_words=11,
+                                                       pad_words=5)
 
         if read_wishbone_resp is not None:
             return self.data_unpack_and_merge(read_wishbone_resp.read_data_high,
@@ -1396,11 +1552,16 @@ class SkarabTransport(Transport):
             packed_bytes += (32 - num_bytes) * '\x00\x00'
 
         # create payload packet structure
+
         request = sd.WriteI2CReq(self.seq_num, interface, slave_address,
                                  num_bytes, packed_bytes)
-        write_i2c_resp = self.send_packet(request.create_payload(),
-                                          'WriteI2CResp', True, sd.WRITE_I2C,
-                                          39, 1)
+
+        write_i2c_resp = self.send_packet_refactor(request_object=request,
+                                                        response_type='WriteI2CResp',
+                                                        expect_response=True,
+                                                        number_of_words=39,
+                                                        pad_words=1)
+
         # check if the write was successful
         if write_i2c_resp is not None:
             if write_i2c_resp.write_success:
@@ -1435,8 +1596,12 @@ class SkarabTransport(Transport):
         # create payload packet structure
         request = sd.ReadI2CReq(self.seq_num, interface,
                                 slave_address, num_bytes)
-        read_i2c_resp = self.send_packet(
-            request.create_payload(), 'ReadI2CResp', True, sd.READ_I2C, 39, 1)
+
+        read_i2c_resp = self.send_packet_refactor(request_object=request,
+                                                  response_type='ReadI2CResp',
+                                                  expect_response=True,
+                                                  number_of_words=39,
+                                                  pad_words=1)
 
         if read_i2c_resp is not None:
             if read_i2c_resp.read_success:
@@ -1464,9 +1629,6 @@ class SkarabTransport(Transport):
         :return: array of read bytes if successful, else none
         """
 
-        response_type = 'PMBusReadI2CBytesResp'
-        expect_response = True
-
         if num_bytes > 32:
             LOGGER.error('Maximum of 32 bytes can be read in a '
                          'single transaction')
@@ -1476,14 +1638,16 @@ class SkarabTransport(Transport):
         read_bytes = struct.pack('!32H', *(32 * [0]))
 
         # create payload packet structure
-        pmbus_read_i2c_req = sd.PMBusReadI2CBytesReq(
+        request = sd.PMBusReadI2CBytesReq(
             self.seq_num, bus, slave_address, command_code,
             read_bytes, num_bytes)
 
         # send payload and return response object
-        pmbus_read_i2c_resp = self.send_packet(
-            pmbus_read_i2c_req.create_payload(),
-            response_type, expect_response, sd.PMBUS_READ_I2C, 39, 0)
+        pmbus_read_i2c_resp = self.send_packet_refactor(request_object=request,
+                                                        response_type='PMBusReadI2CBytesResp',
+                                                        expect_response=True,
+                                                        number_of_words=39,
+                                                        pad_words=0)
 
         if pmbus_read_i2c_resp:
             if pmbus_read_i2c_resp.read_success:
@@ -1513,11 +1677,16 @@ class SkarabTransport(Transport):
         :param write_words: chunk of 4096 words from FPGA Image
         :return: None
         """
-        sdram_program_req = sd.SdramProgramReq(
+        request = sd.SdramProgramReq(
             self.seq_num, first_packet, last_packet, write_words)
-        self.send_packet(
-            sdram_program_req.create_payload(), 0, False, sd.SDRAM_PROGRAM, 0,
-            0, skarab_socket=self.skarab_fpga_sock, port=self.skarab_fpga_port,)
+
+        _ = self.send_packet_refactor(request_object=request,
+                                      response_type=None,
+                                      expect_response=False,
+                                      number_of_words=0,
+                                      pad_words=0,
+                                      skarab_socket=self.skarab_fpga_sock,
+                                      port=self.skarab_fpga_port)
 
     def sdram_reconfigure(self,
                           output_mode=sd.SDRAM_PROGRAM_MODE,
@@ -1560,13 +1729,17 @@ class SkarabTransport(Transport):
         :return: data read, if there was any
         """
         # create request object
-        req = sd.SdramReconfigureReq(
+        request = sd.SdramReconfigureReq(
             self.seq_num, output_mode, clear_sdram, finished_writing,
             about_to_boot, do_reboot, reset_sdram_read_addr, clear_eth_stats,
             enable_debug, do_sdram_async_read, do_continuity_test,
             continuity_test_out_low, continuity_test_out_high)
-        resp = self.send_packet(req.create_payload(), 'SdramReconfigureResp',
-                                True, sd.SDRAM_RECONFIGURE, 19, 0)
+
+        resp = self.send_packet_refactor(request_object=request,
+                                         response_type='SdramReconfigureResp',
+                                         expect_response=True,
+                                         number_of_words=19,
+                                         pad_words=0)
         if resp is None:
             args = locals()
             args.pop('req')
@@ -1620,11 +1793,11 @@ class SkarabTransport(Transport):
 
         # Make actual function call and (hopefully) return data
         # - Number of Words to be expected in the Response: 1+1+(1+1)+1+384+(3-1) = 391
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ReadFlashWordsResp',
-                                    expect_response=True,
-                                    command_id=sd.READ_FLASH_WORDS,
-                                    number_of_words=391, pad_words=2)
+        response = self.send_packet_refactor(request_object=request,
+                                             response_type='ReadFlashWordsResp',
+                                             expect_response=True,
+                                             number_of_words=391,
+                                             pad_words=2)
 
         if response is not None:
             # Then send back ReadWords[:NumWords]
@@ -1751,11 +1924,11 @@ class SkarabTransport(Transport):
         - Therefore Total Number of Words to be expected in the Response:
           - 1+1+1+1+1+1+1+1+1+1+(2-1) = 11 16-bit words (?)
         """
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ProgramFlashWordsResp',
-                                    expect_response=True,
-                                    command_id=sd.PROGRAM_FLASH_WORDS,
-                                    number_of_words=11, pad_words=1)
+        response = self.send_packet_refactor(request_object=request,
+                                             response_type='ProgramFlashWordsResp',
+                                             expect_response=True,
+                                             number_of_words=11,
+                                             pad_words=1)
 
         if response is not None:
             # We have some data back
@@ -1834,12 +2007,11 @@ class SkarabTransport(Transport):
 
         # Make the actual function call and (hopefully) return data
         # - Number of Words to be expected in the Response: 1+1+(1+1)+1+(7-1) = 11
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='EraseFlashBlockResp',
-                                    expect_response=True,
-                                    command_id=sd.ERASE_FLASH_BLOCK,
-                                    number_of_words=11, pad_words=6)
-
+        response = self.send_packet_refactor(request_object=request,
+                                             response_type='EraseFlashBlockResp',
+                                             expect_response=True,
+                                             number_of_words=11,
+                                             pad_words=6)
         if response is not None:
             if response.erase_success:
                 return True
@@ -2023,11 +2195,11 @@ class SkarabTransport(Transport):
         request = sd.ReadSpiPageReq(self.seq_num, spi_address_high,
                                     spi_address_low, num_bytes)
 
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ReadSpiPageResp',
-                                    expect_response=True,
-                                    command_id=sd.READ_SPI_PAGE,
-                                    number_of_words=271, pad_words=1)
+        response = self.send_packet_refactor(request_object=request,
+                                                        response_type='ReadSpiPageResp',
+                                                        expect_response=True,
+                                                        number_of_words=271,
+                                                        pad_words=1)
 
         if response is not None:
             if response.read_spi_page_success:
@@ -2150,13 +2322,13 @@ class SkarabTransport(Transport):
         - ProgramSpiPageSuccess: 0/1
         - Padding: [2]
         - Therefore Total Number of Words to be expected in the Response:
-          - 1+1+(1+1)+1+264+1+(2-1) = 271 16-bit words
+        - 1+1+(1+1)+1+264+1+(2-1) = 271 16-bit words
         """
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ProgramSpiPageResp',
-                                    expect_response=True,
-                                    command_id=sd.PROGRAM_SPI_PAGE,
-                                    number_of_words=271, pad_words=1)
+        response = self.send_packet_refactor(request_object=request,
+                                             response_type='ProgramSpiPageResp',
+                                             expect_response=True,
+                                             number_of_words=271,
+                                             pad_words=1)
 
         if response is not None:
             # We have some data back
@@ -2252,11 +2424,12 @@ class SkarabTransport(Transport):
 
         # Make the actual function call and (hopefully) return data
         # - Number of Words to be expected in the response: 1+1+(1+1)+1+(7-1) = 11
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='EraseSpiSectorResp',
-                                    expect_response=True,
-                                    command_id=sd.ERASE_SPI_SECTOR,
-                                    number_of_words=11, pad_words=6)
+
+        response = self.send_packet_refactor(request_object=request,
+                                             response_type='EraseSpiSectorResp',
+                                             expect_response=True,
+                                             number_of_words=11,
+                                             pad_words=6)
 
         if response is not None:
             if response.erase_success:
@@ -2355,6 +2528,7 @@ class SkarabTransport(Transport):
         :param input_byte: to be byte-swapped/mirrored
         :return: Reversed-byte
         '''
+        #TODO: clean this function up, better way to do this
 
         mirrored_byte = 0x0
 
@@ -2503,13 +2677,14 @@ class SkarabTransport(Transport):
             do_continuity_test=False,
             continuity_test_output_high=0x0,
             continuity_test_output_low=0x0)
-        sdram_reconfigure_resp = self.send_packet(
-            payload=sdram_reconfigure_req.create_payload(),
+
+        sdram_reconfigure_resp = self.send_packet_refactor(
+            request_object=sdram_reconfigure_req,
             response_type='SdramReconfigureResp',
             expect_response=True,
-            command_id=sd.SDRAM_RECONFIGURE,
             number_of_words=19,
             pad_words=0)
+
         packet_count = {
             'Ethernet Frames': sdram_reconfigure_resp.num_ethernet_frames,
             'Bad Ethernet Frames':
@@ -2656,11 +2831,13 @@ class SkarabTransport(Transport):
         request = sd.ReadHMCI2CReq(self.seq_num, interface, slave_address,
                                    read_address)
         # send payload and return response object
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ReadHMCI2CResp',
-                                    expect_response=True,
-                                    command_id=sd.READ_HMC_I2C,
-                                    number_of_words=15, pad_words=2)
+
+        response = self.send_packet_refactor(request_object=request,
+                                             response_type='ReadHMCI2CResp',
+                                             expect_response=True,
+                                             number_of_words=15,
+                                             pad_words=2)
+
         if response is None:
             errmsg = 'Invalid response to HMC I2C read request.'
             raise InvalidResponse(errmsg)
@@ -2913,9 +3090,13 @@ class SkarabTransport(Transport):
                                              check_current(key, current))
 
         request = sd.GetSensorDataReq(self.seq_num)
-        get_sensor_data_resp = self.send_packet(
-            request.create_payload(), 'GetSensorDataResp', True,
-            sd.GET_SENSOR_DATA, 95, 2)
+
+        get_sensor_data_resp = self.send_packet_refactor(
+            request_object=request,
+            response_type='GetSensorDataResp',
+            expect_response=True,
+            number_of_words=95,
+            pad_words=2)
 
         if get_sensor_data_resp is not None:
             # raw sensor data received from SKARAB
@@ -2945,6 +3126,13 @@ class SkarabTransport(Transport):
         request = sd.SetFanSpeedReq(self.seq_num, fan_page, pwm_setting)
         payload = request.create_payload()
         LOGGER.debug('Payload = %s', repr(payload))
+
+        set_fan_speed_resp = self.send_packet_refactor(request_object=request,
+                                                        response_type='SetFanSpeedResp',
+                                                        expect_response=True,
+                                                        number_of_words=11,
+                                                        pad_words=7)
+
         set_fan_speed_resp = self.send_packet(
             payload, 'SetFanSpeedResp', True, sd.SET_FAN_SPEED, 11, 7)
         if set_fan_speed_resp is not None:
