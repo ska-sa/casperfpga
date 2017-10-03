@@ -123,6 +123,7 @@ GET_SENSOR_DATA = 0x0043
 SET_FAN_SPEED = 0x0045
 BIG_READ_WISHBONE = 0x0047
 BIG_WRITE_WISHBONE = 0x0049
+SDRAM_PROGRAM_WISHBONE = 0x0051
 
 # FOR VIRTEX FLASH RECONFIG
 DEFAULT_START_ADDRESS = 0x3000000
@@ -1182,6 +1183,25 @@ class BigWriteWishboneResp(Command):
         self.start_address_high = start_address_high
         self.start_address_low = start_address_low
         self.number_of_writes_done = number_of_writes_done
+        self.padding = padding
+
+MAX_IMAGE_CHUNK_SIZE = 1988
+
+class SdramProgramWishboneReq(Command):
+    def __init__(self, seq_num, chunk_id, num_total_chunks, image_data):
+        super(SdramProgramWishboneReq, self).__init__()
+        self.header = CommandHeader(SDRAM_PROGRAM_WISHBONE, seq_num)
+        self.chunk_id = chunk_id
+        self.num_total_chunks = num_total_chunks
+        self.image_data = image_data
+
+
+class SdramProgramWishboneResp(Command):
+    def __init__(self, command_id, seq_num, chunk_id, ack, padding):
+        super(SdramProgramWishboneResp, self).__init__()
+        self.header = CommandHeader(command_id, seq_num, False)
+        self.chunk_id = chunk_id
+        self.ack = ack
         self.padding = padding
 
 

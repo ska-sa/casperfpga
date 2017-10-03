@@ -93,6 +93,15 @@ class Mac(object):
     def __repr__(self):
         return 'Mac(%s)' % self.__str__()
 
+    def __eq__(self, other):
+        if isinstance(other, Mac):
+            return int(self) == int(other)
+        elif isinstance(other, basestring):
+            return int(self) == self.str2mac(other)
+        elif isinstance(other, int):
+            return int(self) == other
+        raise TypeError('Don\'t know what to do with other: %s' % other)
+
 
 class IpAddress(object):
     """
@@ -170,3 +179,20 @@ class IpAddress(object):
     def __repr__(self):
         return 'IpAddress(%s)' % self.__str__()
 
+    def __gt__(self, other):
+        return int(self) > int(other)
+
+    def __lt__(self, other):
+        return int(self) < int(other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __eq__(self, other):
+        if isinstance(other, IpAddress):
+            return int(self) == int(other)
+        elif isinstance(other, basestring):
+            return int(self) == self.str2ip(other)
+        elif isinstance(other, int):
+            return int(self) == other
+        raise TypeError('Don\'t know what to do with other: %s' % other)
