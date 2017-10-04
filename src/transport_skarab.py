@@ -1504,7 +1504,7 @@ class SkarabTransport(Transport):
                                               pad_words=5)
         return write_reg_response
 
-    def read_board_reg(self, reg_address, retries):
+    def read_board_reg(self, reg_address, retries=5):
         """
         Read from a specified board register
         :param reg_address: address of register to read
