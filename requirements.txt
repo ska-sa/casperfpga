@@ -36,7 +36,6 @@ port-for==0.3.1
 prompt-toolkit==1.0.15
 ProxyTypes==0.9
 ptyprocess==0.5.2
-pycairo==1.10.0
 Pygments==2.2.0
 pyparsing==2.2.0
 python-dateutil==2.6.1
