@@ -3,7 +3,6 @@ argh==0.26.2
 Babel==2.5.1
 backports-abc==0.5
 backports.shutil-get-terminal-size==1.0.0
-casperfpga==0.0.1
 certifi==2017.7.27.1
 chardet==3.0.4
 cycler==0.10.0
