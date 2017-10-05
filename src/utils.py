@@ -216,22 +216,17 @@ def program_fpgas(fpga_list, progfile, timeout=10):
     :return: <nothing>
     """
     stime = time.time()
-    new_dict = {}
-    new_list = []
-    for fpga in fpga_list:
-        try:
-            len(fpga)
-        except TypeError:
-            _tuple = (fpga, progfile)
-        else:
-            _tuple = (fpga[0], fpga[1])
-        new_dict[_tuple[0].host] = _tuple[1]
-        new_list.append(_tuple[0])
-
-    def _prog_fpga(_fpga):
-        _fpga.upload_to_ram_and_program(new_dict[_fpga.host])
-    threaded_fpga_operation(fpga_list=new_list, timeout=timeout,
-                            target_function=(_prog_fpga,))
+    if progfile is None:
+        for fpga in fpga_list:
+            try:
+                tuplen = len(fpga)
+                fpga[0].bitstream = fpga[1]
+            except TypeError:
+                pass
+    else:
+        for fpga in fpga_list:
+            fpga.bitstream = progfile
+    threaded_fpga_function(fpga_list, 60, 'upload_to_ram_and_program')
     LOGGER.info('Programming %d FPGAs took %.3f seconds.' % (
         len(fpga_list), time.time() - stime))
 

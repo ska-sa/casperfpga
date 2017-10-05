@@ -417,7 +417,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                      require_ok=True)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
-                                  wait_complete=True):
+                                  wait_complete=True,
+                                  skip_verification=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: the file to upload
@@ -425,6 +426,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return
         after upload if False
+        :param skip_verification: do not verify the uploaded file before reboot
         :return:
         """
         LOGGER.info('%s: uploading %s, programming when done' % (
