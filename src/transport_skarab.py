@@ -776,27 +776,23 @@ class SkarabTransport(Transport):
         self._sdram_programmed = True
         self.prog_info['last_uploaded'] = filename
 
-    def upload_to_ram(self, filename):
+    def upload_to_ram(self, filename, **kwargs):
         """
         Upload a bitstream to the SKARAB over the wishone --> SDRAM interface
         :param filename: fpga image to upload
         :return: True if success
         """
-
         # process the given file and get an image ready to send
         image_to_program = self._upload_to_ram_prepare_image(filename)
 
         if os.path.splitext(filename)[1] == '.fpg':
             self.check_md5sum(filename=filename,
                               image_to_program=image_to_program)
-
         image_size = len(image_to_program)
-
         image_chunks = [image_to_program[ctr:ctr + sd.MAX_IMAGE_CHUNK_SIZE]
                         for ctr in range(0, image_size,
                                          sd.MAX_IMAGE_CHUNK_SIZE
                                          )]
-
         # pad the last chunk to max chunk size, if required
         padding = (image_size % sd.MAX_IMAGE_CHUNK_SIZE != 0)
         if padding:
@@ -839,13 +835,19 @@ class SkarabTransport(Transport):
             if chunk_number + 1 == num_total_chunks:
                 # all chunks sent ok!
                 LOGGER.debug("All images chunks transmitted successfully!")
-
-                if self.check_checksum(
-                        spartan_checksum=self.get_spartan_checksum(),
-                        local_checksum=self.calculate_checksum_using_file(
-                            file_name=filename,
-                            packet_size=sd.MAX_IMAGE_CHUNK_SIZE)):
-
+                verify = True
+                if 'skip_verification' in kwargs:
+                    if kwargs['skip_verification']:
+                        verify = False
+                checksum_match = True
+                if verify:
+                    spartan_checksum = self.get_spartan_checksum()
+                    local_checksum = self.calculate_checksum_using_file(
+                        file_name=filename, packet_size=sd.MAX_IMAGE_CHUNK_SIZE)
+                    checksum_match = self.check_checksum(
+                        spartan_checksum=spartan_checksum,
+                        local_checksum=local_checksum)
+                if checksum_match:
                     self.prog_info['last_uploaded'] = filename
                     self._sdram_programmed = True
                     return True
@@ -853,7 +855,6 @@ class SkarabTransport(Transport):
                     errmsg = "Checksum mismatch. Clearing SDRAM."
                     self.clear_sdram()
                     raise ProgrammingError(errmsg)
-
             else:
                 # not all chunk sent yet
                 continue
@@ -865,7 +866,6 @@ class SkarabTransport(Transport):
         :param image_to_program: bitstream extracted from fpg file
         :return: nothing if successful, else raise error
         """
-
         (md5_header, md5_bitstream) = self.extract_md5_from_fpg(filename)
         if md5_header is not None and md5_bitstream is not None:
             # Calculate and compare MD5 sums here, before carrying on
@@ -944,25 +944,25 @@ class SkarabTransport(Transport):
         return False
 
     def upload_to_ram_and_program(self, filename, port=-1,
-                                  timeout=60,
-                                  wait_complete=True):
+                                  timeout=60, wait_complete=True,
+                                  skip_verification=False):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
-        *** WARNING: Do NOT attempt to upload a BSP/Flash image to the SDRAM. ***
+        *** WARNING: Do NOT attempt to upload a BSP/Flash image to the SDRAM.
         :param filename: fpga image to upload (currently supports bin, bit
-        :param port
-        :param timeout
-        :param wait_complete
         and hex files)
+        :param port: the port to use on the rx end, -1 means a random port
+        :param timeout: how long to wait, seconds
+        :param wait_complete: wait for the transaction to complete, return
+        after upload if False
+        :param skip_verification: do not verify the uploaded file before reboot
         :return: True, if success
         """
         prog_start_time = time.time()
 
-        # Moved setting Port Address(es) into upload_to_ram()
-        self.upload_to_ram(filename)
+        self.upload_to_ram(filename, skip_verification=skip_verification)
         self.boot_from_sdram()
-
         # wait for board to come back up
         # this can be reduced when the 40gbe switch issue is resolved
         timeout = timeout + time.time()
@@ -972,7 +972,7 @@ class SkarabTransport(Transport):
             # to come back. It also prevents errors being logged when there
             # is no response.
             if self.is_connected(retries=20):
-                ## configure the mux back to user_date mode
+                # # configure the mux back to user_date mode
                 # self.config_prog_mux(user_data=1)
                 # time.sleep(1)
                 [golden_image, multiboot, firmware_version] = \
@@ -1000,7 +1000,6 @@ class SkarabTransport(Transport):
                     return False
         LOGGER.error('SKARAB has not come back')
         return False
-
 
     def _forty_gbe_get_port(self, port_addr=0x50000):
         """
