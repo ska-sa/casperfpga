@@ -425,8 +425,9 @@ class Command(object):
         """
         payload = ''
         ordered_attributes = [
-            attr for attr in self._odict.items() if attr[0] != 'payload'
-        ]
+            attr for attr in self._odict.items() if attr[0] != 'payload' and
+            attr[0][0] != '_']
+
         for attribute in ordered_attributes:
             attr, value = attribute
             if isinstance(value, CommandHeader):
@@ -440,6 +441,18 @@ class Command(object):
                 else:
                     payload += str(self.pack_two_bytes(value))
         return payload
+
+    # debug/test functions
+    def attr_getter(self):
+        return self._odict.items()
+
+    def attr_getter_filterd(self):
+        ordered_attributes = [
+            attr for attr in self._odict.items() if attr[0] != 'payload' and
+            attr[0][0] != '_']
+        return ordered_attributes
+
+    # end debug/test functions
 
     @staticmethod
     def pack_two_bytes(data):
@@ -473,6 +486,10 @@ class WriteRegReq(Command):
     def __init__(self, seq_num, board_reg, reg_addr, reg_data_high,
                  reg_data_low):
         super(WriteRegReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'WriteRegResp'
+        self._num_words = 11
+        self._pad_words = 5
         self.header = CommandHeader(WRITE_REG, seq_num)
         self.board_reg = board_reg
         self.reg_address = reg_addr
@@ -495,6 +512,10 @@ class WriteRegResp(Command):
 class ReadRegReq(Command):
     def __init__(self, seq_num, board_reg, reg_addr):
         super(ReadRegReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'ReadRegResp'
+        self._num_words = 11
+        self._pad_words = 5
         self.header = CommandHeader(READ_REG, seq_num)
         self.board_reg = board_reg
         self.reg_address = reg_addr
@@ -516,6 +537,10 @@ class WriteWishboneReq(Command):
     def __init__(self, seq_num, address_high, address_low,
                  write_data_high, write_data_low):
         super(WriteWishboneReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'WriteWishboneResp'
+        self._num_words = 11
+        self._pad_words = 5
         self.header = CommandHeader(WRITE_WISHBONE, seq_num)
         self.address_high = address_high
         self.address_low = address_low
@@ -538,6 +563,10 @@ class WriteWishboneResp(Command):
 class ReadWishboneReq(Command):
     def __init__(self, seq_num, address_high, address_low):
         super(ReadWishboneReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'ReadWishboneResp'
+        self._num_words = 11
+        self._pad_words = 5
         self.header = CommandHeader(READ_WISHBONE, seq_num)
         self.address_high = address_high
         self.address_low = address_low
@@ -559,6 +588,10 @@ class WriteI2CReq(Command):
     def __init__(self, seq_num, i2c_interface_id, slave_address,
                  num_bytes, write_bytes):
         super(WriteI2CReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'WriteI2CResp'
+        self._num_words = 39
+        self._pad_words = 1
         self.header = CommandHeader(WRITE_I2C, seq_num)
         self.id = i2c_interface_id
         self.slave_address = slave_address
@@ -583,6 +616,10 @@ class ReadI2CReq(Command):
     def __init__(self, seq_num, i2c_interface_id, slave_address,
                  num_bytes):
         super(ReadI2CReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'ReadI2CResp'
+        self._num_words = 39
+        self._pad_words = 1
         self.header = CommandHeader(READ_I2C, seq_num)
         self.id = i2c_interface_id
         self.slave_address = slave_address
@@ -611,6 +648,10 @@ class SdramReconfigureReq(Command):
                  continuity_test_output_low,
                  continuity_test_output_high):
         super(SdramReconfigureReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'SdramReconfigureResp'
+        self._num_words = 19
+        self._pad_words = 0
         self.header = CommandHeader(SDRAM_RECONFIGURE, seq_num)
         self.output_mode = output_mode
         self.clear_sdram = clear_sdram
@@ -660,6 +701,10 @@ class SdramReconfigureResp(Command):
 class GetSensorDataReq(Command):
     def __init__(self, seq_num):
         super(GetSensorDataReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'GetSensorDataResp'
+        self._num_words = 95
+        self._pad_words = 2
         self.header = CommandHeader(GET_SENSOR_DATA, seq_num)
 
 
@@ -674,6 +719,10 @@ class GetSensorDataResp(Command):
 class SetFanSpeedReq(Command):
     def __init__(self, seq_num, fan_page, pwm_setting):
         super(SetFanSpeedReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'SetFanSpeedResp'
+        self._num_words = 11
+        self._pad_words = 7
         self.header = CommandHeader(SET_FAN_SPEED, seq_num)
         self.fan_page = fan_page
         self.pwm_setting = pwm_setting * 100
@@ -692,6 +741,10 @@ class SetFanSpeedResp(Command):
 class ReadFlashWordsReq(Command):
     def __init__(self, seq_num, address_high, address_low, num_words):
         super(ReadFlashWordsReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'ReadFlashWordsResp'
+        self._num_words = 391
+        self._pad_words = 2
         self.header = CommandHeader(READ_FLASH_WORDS, seq_num)
         self.address_high = address_high
         self.address_low = address_low
@@ -715,6 +768,10 @@ class ProgramFlashWordsReq(Command):
                  total_num_words, packet_num_words, do_buffered_programming,
                  start_program, finish_program, write_words):
         super(ProgramFlashWordsReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'ProgramFlashWordsResp'
+        self._num_words = 11
+        self._pad_words = 1
         self.header = CommandHeader(PROGRAM_FLASH_WORDS, seq_num)
         self.address_high = address_high
         self.address_low = address_low
@@ -746,6 +803,10 @@ class ProgramFlashWordsResp(Command):
 class EraseFlashBlockReq(Command):
     def __init__(self, seq_num, block_address_high, block_address_low):
         super(EraseFlashBlockReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'EraseFlashBlockResp'
+        self._num_words = 11
+        self._pad_words = 6
         self.header = CommandHeader(ERASE_FLASH_BLOCK, seq_num)
         self.block_address_high = block_address_high
         self.block_address_low = block_address_low
@@ -765,6 +826,10 @@ class EraseFlashBlockResp(Command):
 class ReadSpiPageReq(Command):
     def __init__(self, seq_num, address_high, address_low, num_bytes):
         super(ReadSpiPageReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'ReadSpiPageResp'
+        self._num_words = 271
+        self._pad_words = 1
         self.header = CommandHeader(READ_SPI_PAGE, seq_num)
         self.address_high = address_high
         self.address_low = address_low
@@ -788,6 +853,10 @@ class ProgramSpiPageReq(Command):
     def __init__(self, seq_num, address_high, address_low, num_bytes,
                  write_bytes):
         super(ProgramSpiPageReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'ProgramSpiPageResp'
+        self._num_words = 271
+        self._pad_words = 1
         self.header = CommandHeader(PROGRAM_SPI_PAGE, seq_num)
         self.address_high = address_high
         self.address_low = address_low
@@ -811,6 +880,10 @@ class ProgramSpiPageResp(Command):
 class EraseSpiSectorReq(Command):
     def __init__(self, seq_num, sector_address_high, sector_address_low):
         super(EraseSpiSectorReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'EraseSpiSectorResp'
+        self._num_words = 11
+        self._pad_words = 6
         self.header = CommandHeader(ERASE_SPI_SECTOR, seq_num)
         self.sector_address_high = sector_address_high
         self.sector_address_low = sector_address_low
@@ -830,6 +903,10 @@ class EraseSpiSectorResp(Command):
 class OneWireReadROMReq(Command):
     def __init__(self, seq_num, one_wire_port):
         super(OneWireReadROMReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'OneWireReadROMResp'
+        self._num_words = 11
+        self._pad_words = 2
         self.header = CommandHeader(ONE_WIRE_READ_ROM_CMD, seq_num)
         self.one_wire_port(one_wire_port)
 
@@ -850,6 +927,10 @@ class OneWireDS2433WriteMemReq(Command):
                  write_bytes, num_bytes, target_address_1, target_address_2,
                  one_wire_port):
         super(OneWireDS2433WriteMemReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'OneWireDS2433WriteMemResp'
+        self._num_words = 11
+        self._pad_words = 2
         self.header = CommandHeader(ONE_WIRE_DS2433_WRITE_MEM, seq_num)
         self.device_rom = device_rom
         self.skip_rom_address = skip_rom_address
@@ -879,6 +960,10 @@ class OneWireDS2433WriteMemResp(object):
 class OneWireDS2433ReadMemReq(object):
     def __init__(self, seq_num, device_rom, skip_rom_address, num_bytes,
                  target_address_1, target_address_2, one_wire_port):
+        self._expect_response = True
+        self._response_type = 'OneWireDS2433ReadMemResp'
+        self._num_words = 11
+        self._pad_words = 2
         self.header = CommandHeader(ONE_WIRE_DS2433_READ_MEM, seq_num)
         self.device_rom = device_rom
         self.skip_rom_address = skip_rom_address
@@ -914,6 +999,10 @@ class DebugConfigureEthernetReq(Command):
                  fabric_multicast_ip_address_mask_low,
                  enable_fabric_interface):
         super(DebugConfigureEthernetReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'DebugConfigureEthernetResp'
+        self._num_words = 11
+        self._pad_words = 2
         self.header = CommandHeader(DEBUG_CONFIGURE_ETHERNET, seq_num)
         self.id = interface_id
         self.fabric_mac_high = fabric_mac_high
@@ -966,6 +1055,10 @@ class DebugConfigureEthernetResp(Command):
 class DebugAddARPCacheEntryReq(object):
     def __init__(self, seq_num, interface_id, ip_address_lower_8_bits,
                  mac_high, mac_mid, mac_low):
+        self._expect_response = True
+        self._response_type = 'DebugAddARPCacheEntryResp'
+        self._num_words = 11
+        self._pad_words = 2
         self.header = CommandHeader(DEBUG_ADD_ARP_CACHE_ENTRY, seq_num)
         self.id = interface_id
         self.ip_address_lower_8_bits = ip_address_lower_8_bits
@@ -989,6 +1082,10 @@ class DebugAddARPCacheEntryResp(object):
 class GetEmbeddedSoftwareVersionReq(Command):
     def __init__(self, seq_num):
         super(GetEmbeddedSoftwareVersionReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'GetEmbeddedSoftwareVersionResp'
+        self._num_words = 11
+        self._pad_words = 4
         self.header = CommandHeader(GET_EMBEDDED_SOFTWARE_VERS, seq_num)
 
 
@@ -1010,6 +1107,10 @@ class PMBusReadI2CBytesReq(Command):
     def __init__(self, seq_num, i2c_interface_id, slave_address,
                  command_code, read_bytes, num_bytes):
         super(PMBusReadI2CBytesReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'PMBusReadI2CBytesResp'
+        self._num_words = 39
+        self._pad_words = 0
         self.header = CommandHeader(PMBUS_READ_I2C, seq_num)
         self.id = i2c_interface_id
         self.slave_address = slave_address
@@ -1034,6 +1135,10 @@ class PMBusReadI2CBytesResp(Command):
 class SdramProgramReq(Command):
     def __init__(self, seq_num, first_packet, last_packet, write_words):
         super(SdramProgramReq, self).__init__()
+        self._expect_response = False
+        self._response_type = None
+        self._num_words = 0
+        self._pad_words = 0
         self.header = CommandHeader(SDRAM_PROGRAM, seq_num)
         self.first_packet = first_packet
         self.last_packet = last_packet
@@ -1047,6 +1152,10 @@ class ConfigureMulticastReq(Command):
                  fabric_multicast_ip_address_mask_high,
                  fabric_multicast_ip_address_mask_low):
         super(ConfigureMulticastReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'ConfigureMulticastResp'
+        self._num_words = 11
+        self._pad_words = 2
         self.header = CommandHeader(MULTICAST_REQUEST, seq_num)
         self.id = interface_id
         self.fabric_multicast_ip_address_high =  \
@@ -1082,6 +1191,10 @@ class ConfigureMulticastResp(Command):
 class DebugLoopbackTestReq(Command):
     def __init__(self, seq_num, interface_id, test_data):
         super(DebugLoopbackTestReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'DebugLoopbackTestResp'
+        self._num_words = 11
+        self._pad_words = 5
         self.header = CommandHeader(DEBUG_LOOPBACK_TEST, seq_num)
         self.id = interface_id
         self.test_data = test_data
@@ -1101,6 +1214,10 @@ class DebugLoopbackTestResp(Command):
 class QSFPResetAndProgramReq(Command):
     def __init__(self, seq_num, reset, program):
         super(QSFPResetAndProgramReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'QSFPResetAndProgramResp'
+        self._num_words = 11
+        self._pad_words = 2
         self.header = CommandHeader(QSFP_RESET_AND_PROG, seq_num)
         self.reset = reset
         self.program = program
@@ -1119,6 +1236,10 @@ class ReadHMCI2CReq(Command):
     def __init__(self, seq_num, interface_id, slave_address,
                  read_address):
         super(ReadHMCI2CReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'ReadHMCI2CResp'
+        self._num_words = 15
+        self._pad_words = 2
         self.header = CommandHeader(READ_HMC_I2C, seq_num)
         self.id = interface_id
         self.slave_address = slave_address
@@ -1146,6 +1267,10 @@ class BigReadWishboneReq(Command):
     def __init__(self, seq_num, start_address_high, start_address_low,
                  number_of_reads):
         super(BigReadWishboneReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'BigReadWishboneResp'
+        self._num_words = 999
+        self._pad_words = 0
         self.header = CommandHeader(BIG_READ_WISHBONE, seq_num)
         self.start_address_high = start_address_high
         self.start_address_low = start_address_low
@@ -1168,6 +1293,10 @@ class BigWriteWishboneReq(Command):
     def __init__(self, seq_num, start_address_high, start_address_low,
                  write_data, number_of_writes):
         super(BigWriteWishboneReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'BigWriteWishboneResp'
+        self._num_words = 11
+        self._pad_words = 6
         self.header = CommandHeader(BIG_WRITE_WISHBONE, seq_num)
         self.start_address_high = start_address_high
         self.start_address_low = start_address_low
@@ -1187,9 +1316,14 @@ class BigWriteWishboneResp(Command):
 
 MAX_IMAGE_CHUNK_SIZE = 1988
 
+
 class SdramProgramWishboneReq(Command):
     def __init__(self, seq_num, chunk_id, num_total_chunks, image_data):
         super(SdramProgramWishboneReq, self).__init__()
+        self._expect_response = True
+        self._response_type = 'SdramProgramWishboneResp'
+        self._num_words = 11
+        self._pad_words = 7
         self.header = CommandHeader(SDRAM_PROGRAM_WISHBONE, seq_num)
         self.chunk_id = chunk_id
         self.num_total_chunks = num_total_chunks
@@ -1264,3 +1398,4 @@ class Current(object):
     P1V0MGTAVCCCurrent = 9
     P1V2MGTAVTTCurrent = 10
     P3V3ConfigCurrent = 11
+# end
