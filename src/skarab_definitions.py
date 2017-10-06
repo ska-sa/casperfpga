@@ -415,11 +415,11 @@ FT4232H_INCLUDE_MONITORS_IN_JTAG_CHAIN = 0x80
 
 # command packet structure
 class Command(object):
-    def __init__(self, command_id):
+    def __init__(self, command_id, seq_num=None):
 
         self.packet = odict({
             'command_type': command_id,
-            'seq_num': None,
+            'seq_num': seq_num,
             })
 
     def create_payload(self):
@@ -469,21 +469,21 @@ class Command(object):
         return unpacker.unpack(data)
 
     #def __getattr__(self, value):
-    #    return self.__dict__['_odict'][value]
+    #    return self.packet['__dict__['_odict'][value]
 
     #def __setattr__(self, key, value):
-    #    self.__dict__['_odict'][key] = value
+    #    self.packet['__dict__['_odict'][key]'] = value
 
 
 class CommandHeader(Command):
     def __init__(self, command_id, seq_num, pack=True):
         super(CommandHeader, self).__init__()
         if pack:
-            self.command_type = self.pack_two_bytes(command_id)
-            self.seq_num = self.pack_two_bytes(seq_num)
+            self.packet['command_type'] = self.pack_two_bytes(command_id)
+            self.packet['seq_num'] = self.pack_two_bytes(seq_num)
         else:
-            self.command_type = command_id
-            self.seq_num = seq_num
+            self.packet['command_type'] = command_id
+            self.packet['seq_num'] = seq_num
 
 
 class WriteRegReq(Command):
@@ -503,8 +503,7 @@ class WriteRegReq(Command):
 class WriteRegResp(Command):
     def __init__(self, command_id, seq_num, board_reg, reg_addr, reg_data_high,
                  reg_data_low, padding):
-        super(WriteRegResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(WriteRegResp, self).__init__(command_id, seq_num)
         self.packet['board_reg'] = board_reg
         self.packet['reg_address'] = reg_addr
         self.packet['reg_data_high'] = reg_data_high
@@ -526,8 +525,7 @@ class ReadRegReq(Command):
 class ReadRegResp(Command):
     def __init__(self, command_id, seq_num, board_reg, reg_addr, reg_data_high,
                  reg_data_low, padding):
-        super(ReadRegResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(ReadRegResp, self).__init__(command_id, seq_num)
         self.packet['board_reg'] = board_reg
         self.packet['reg_address'] = reg_addr
         self.packet['reg_data_high'] = reg_data_high
@@ -552,8 +550,7 @@ class WriteWishboneReq(Command):
 class WriteWishboneResp(Command):
     def __init__(self, command_id, seq_num, address_high, address_low,
                  write_data_high, write_data_low, padding):
-        super(WriteWishboneResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(WriteWishboneResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
         self.packet['write_data_high'] = write_data_high
@@ -575,8 +572,7 @@ class ReadWishboneReq(Command):
 class ReadWishboneResp(Command):
     def __init__(self, command_id, seq_num, address_high, address_low,
                  read_data_high, read_data_low, padding):
-        super(ReadWishboneResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(ReadWishboneResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
         self.packet['read_data_high'] = read_data_high
@@ -592,7 +588,7 @@ class WriteI2CReq(Command):
         self.response_type = WriteI2CResp
         self.num_words = 39
         self.pad_words = 1
-        self.id = i2c_interface_id
+        self.packet['id'] = i2c_interface_id
         self.packet['slave_address'] = slave_address
         self.packet['num_bytes'] = num_bytes
         self.packet['write_bytes'] = write_bytes
@@ -601,8 +597,7 @@ class WriteI2CReq(Command):
 class WriteI2CResp(Command):
     def __init__(self, command_id, seq_num, i2c_interface_id, slave_address,
                  num_bytes, write_bytes, write_success, padding):
-        super(WriteI2CResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(WriteI2CResp, self).__init__(command_id, seq_num)
         self.packet['id'] = i2c_interface_id
         self.packet['slave_address'] = slave_address
         self.packet['num_bytes'] = num_bytes
@@ -627,8 +622,7 @@ class ReadI2CReq(Command):
 class ReadI2CResp(Command):
     def __init__(self, command_id, seq_num, i2c_interface_id, slave_address,
                  num_bytes, read_bytes, read_success, padding):
-        super(ReadI2CResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(ReadI2CResp, self).__init__(command_id, seq_num)
         self.packet['id'] = i2c_interface_id
         self.packet['slave_address'] = slave_address
         self.packet['num_bytes'] = num_bytes
@@ -674,8 +668,7 @@ class SdramReconfigureResp(Command):
                  num_ethernet_overload_frames, sdram_async_read_data_high,
                  sdram_async_read_data_low, do_continuity_test,
                  continuity_test_output_low, continuity_test_output_high):
-        super(SdramReconfigureResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(SdramReconfigureResp, self).__init__(command_id, seq_num)
         self.packet['output_mode'] = output_mode
         self.packet['clear_sdram'] = clear_sdram
         self.packet['finished_writing'] = finished_writing
@@ -706,8 +699,7 @@ class GetSensorDataReq(Command):
 
 class GetSensorDataResp(Command):
     def __init__(self, command_id, seq_num, sensor_data, padding):
-        super(GetSensorDataResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(GetSensorDataResp, self).__init__(command_id, seq_num)
         self.packet['sensor_data'] = sensor_data
         self.packet['padding'] = padding
 
@@ -726,8 +718,7 @@ class SetFanSpeedReq(Command):
 class SetFanSpeedResp(Command):
     def __init__(self, command_id, seq_num, fan_speed_pwm, fan_speed_rpm, 
                  padding):
-        super(SetFanSpeedResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(SetFanSpeedResp, self).__init__(command_id, seq_num)
         self.packet['fan_speed_pwm'] = fan_speed_pwm
         self.packet['fan_speed_rpm'] = fan_speed_rpm
         self.packet['padding'] = padding
@@ -748,8 +739,7 @@ class ReadFlashWordsReq(Command):
 class ReadFlashWordsResp(Command):
     def __init__(self, command_id, seq_num, address_high, address_low, 
                  num_words, read_words, padding):
-        super(ReadFlashWordsResp, self).__init__(command_id)
-        self.packet['seq_num'] = seq_num
+        super(ReadFlashWordsResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
         self.packet['num_words'] = num_words
@@ -763,7 +753,7 @@ class ProgramFlashWordsReq(Command):
                  start_program, finish_program, write_words):
         super(ProgramFlashWordsReq, self).__init__(PROGRAM_FLASH_WORDS)
         self.expect_response = True
-        self.response_type = 'ProgramFlashWordsResp'
+        self.response_type = ProgramFlashWordsResp
         self.num_words = 11
         self.pad_words = 1
         self.packet['address_high'] = address_high
@@ -780,138 +770,127 @@ class ProgramFlashWordsResp(Command):
     def __init__(self, command_id, seq_num, address_high, address_low,
                  total_num_words, packet_num_words, do_buffered_programming,
                  start_program, finish_program, program_success, padding):
-        super(ProgramFlashWordsResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
+        super(ProgramFlashWordsResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
-        self.total_num_words = total_num_words
-        self.packet_num_words = packet_num_words
-        self.do_buffered_programming = do_buffered_programming
-        self.start_program = start_program
-        self.finish_program = finish_program
-        self.program_success = program_success
+        self.packet['total_num_words'] = total_num_words
+        self.packet['packet_num_words'] = packet_num_words
+        self.packet['do_buffered_programming'] = do_buffered_programming
+        self.packet['start_program'] = start_program
+        self.packet['finish_program'] = finish_program
+        self.packet['program_success'] = program_success
         self.packet['padding'] = padding
 
 
 class EraseFlashBlockReq(Command):
     def __init__(self, seq_num, block_address_high, block_address_low):
-        super(EraseFlashBlockReq, self).__init__()
+        super(EraseFlashBlockReq, self).__init__(ERASE_FLASH_BLOCK)
         self.expect_response = True
-        self.response_type = 'EraseFlashBlockResp'
+        self.response_type = EraseFlashBlockResp
         self.num_words = 11
         self.pad_words = 6
-        self.header = CommandHeader(ERASE_FLASH_BLOCK, seq_num)
-        self.block_address_high = block_address_high
-        self.block_address_low = block_address_low
+        self.packet['block_address_high'] = block_address_high
+        self.packet['block_address_low'] = block_address_low
 
 
 class EraseFlashBlockResp(Command):
     def __init__(self, command_id, seq_num, block_address_high, 
                  block_address_low, erase_success, padding):
-        super(EraseFlashBlockResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
-        self.block_address_high = block_address_high
-        self.block_address_low = block_address_low
-        self.erase_success = erase_success
+        super(EraseFlashBlockResp, self).__init__(command_id, seq_num)
+        self.packet['block_address_high'] = block_address_high
+        self.packet['block_address_low'] = block_address_low
+        self.packet['erase_success'] = erase_success
         self.packet['padding'] = padding
 
 
 class ReadSpiPageReq(Command):
     def __init__(self, seq_num, address_high, address_low, num_bytes):
-        super(ReadSpiPageReq, self).__init__()
+        super(ReadSpiPageReq, self).__init__(READ_SPI_PAGE)
         self.expect_response = True
-        self.response_type = 'ReadSpiPageResp'
+        self.response_type = ReadSpiPageResp
         self.num_words = 271
         self.pad_words = 1
-        self.header = CommandHeader(READ_SPI_PAGE, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
-        self.num_bytes = num_bytes
+        self.packet['num_bytes'] = num_bytes
 
 
 class ReadSpiPageResp(Command):
     def __init__(self, command_id, seq_num, address_high, address_low,
                  num_bytes, read_bytes, read_spi_page_success, padding):
-        super(ReadSpiPageResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
+        super(ReadSpiPageResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
-        self.num_bytes = num_bytes
-        self.read_bytes = read_bytes
-        self.read_spi_page_success = read_spi_page_success
+        self.packet['num_bytes'] = num_bytes
+        self.packet['read_bytes'] = read_bytes
+        self.packet['read_spi_page_success'] = read_spi_page_success
         self.packet['padding'] = padding
 
 
 class ProgramSpiPageReq(Command):
     def __init__(self, seq_num, address_high, address_low, num_bytes,
                  write_bytes):
-        super(ProgramSpiPageReq, self).__init__()
+        super(ProgramSpiPageReq, self).__init__(PROGRAM_SPI_PAGE)
         self.expect_response = True
-        self.response_type = 'ProgramSpiPageResp'
+        self.response_type = ProgramSpiPageResp
         self.num_words = 271
         self.pad_words = 1
-        self.header = CommandHeader(PROGRAM_SPI_PAGE, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
-        self.num_bytes = num_bytes
-        self.write_bytes = write_bytes
+        self.packet['num_bytes'] = num_bytes
+        self.packet['write_bytes'] = write_bytes
 
 
 class ProgramSpiPageResp(Command):
     def __init__(self, command_id, seq_num, address_high, address_low,
                  num_bytes, verify_bytes, program_spi_page_success, padding):
-        super(ProgramSpiPageResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
+        super(ProgramSpiPageResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
-        self.num_bytes = num_bytes
-        self.verify_bytes = verify_bytes
-        self.program_spi_page_success = program_spi_page_success
+        self.packet['num_bytes'] = num_bytes
+        self.packet['verify_bytes'] = verify_bytes
+        self.packet['program_spi_page_success'] = program_spi_page_success
         self.packet['padding'] = padding
 
 
 class EraseSpiSectorReq(Command):
     def __init__(self, seq_num, sector_address_high, sector_address_low):
-        super(EraseSpiSectorReq, self).__init__()
+        super(EraseSpiSectorReq, self).__init__(ERASE_SPI_SECTOR)
         self.expect_response = True
-        self.response_type = 'EraseSpiSectorResp'
+        self.response_type = EraseSpiSectorResp
         self.num_words = 11
         self.pad_words = 6
-        self.header = CommandHeader(ERASE_SPI_SECTOR, seq_num)
-        self.sector_address_high = sector_address_high
-        self.sector_address_low = sector_address_low
+        self.packet['sector_address_high'] = sector_address_high
+        self.packet['sector_address_low'] = sector_address_low
 
 
 class EraseSpiSectorResp(Command):
     def __init__(self, command_id, seq_num, sector_address_high, 
                  sector_address_low, erase_success, padding):
-        super(EraseSpiSectorResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
-        self.sector_address_high = sector_address_high
-        self.sector_address_low = sector_address_low
-        self.erase_success = erase_success
+        super(EraseSpiSectorResp, self).__init__(command_id, seq_num)
+        self.packet['sector_address_high'] = sector_address_high
+        self.packet['sector_address_low'] = sector_address_low
+        self.packet['erase_success'] = erase_success
         self.packet['padding'] = padding
 
 
 class OneWireReadROMReq(Command):
     def __init__(self, seq_num, one_wire_port):
-        super(OneWireReadROMReq, self).__init__()
+        super(OneWireReadROMReq, self).__init__(ONE_WIRE_READ_ROM_CMD)
         self.expect_response = True
-        self.response_type = 'OneWireReadROMResp'
+        self.response_type = OneWireReadROMResp
         self.num_words = 11
         self.pad_words = 2
-        self.header = CommandHeader(ONE_WIRE_READ_ROM_CMD, seq_num)
-        self.one_wire_port(one_wire_port)
+        self.packet['one_wire_port'] = one_wire_port
 
 
 class OneWireReadROMResp(Command):
     def __init__(self, command_id, seq_num, one_wire_port, rom, read_success,
                  padding):
-        super(OneWireReadROMResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num)
-        self.one_wire_port(one_wire_port)
-        self.rom = rom
-        self.read_success = read_success
+        super(OneWireReadROMResp, self).__init__(command_id, seq_num)
+        self.packet['one_wire_port'] = one_wire_port
+        self.packet['rom'] = rom
+        self.packet['read_success'] = read_success
         self.packet['padding'] = padding
 
 
@@ -919,66 +898,65 @@ class OneWireDS2433WriteMemReq(Command):
     def __init__(self, seq_num, device_rom, skip_rom_address,
                  write_bytes, num_bytes, target_address_1, target_address_2,
                  one_wire_port):
-        super(OneWireDS2433WriteMemReq, self).__init__()
+        super(OneWireDS2433WriteMemReq, self).__init__(ONE_WIRE_DS2433_WRITE_MEM)
         self.expect_response = True
-        self.response_type = 'OneWireDS2433WriteMemResp'
+        self.response_type = OneWireDS2433WriteMemResp
         self.num_words = 11
         self.pad_words = 2
-        self.header = CommandHeader(ONE_WIRE_DS2433_WRITE_MEM, seq_num)
-        self.device_rom = device_rom
-        self.skip_rom_address = skip_rom_address
-        self.write_bytes = write_bytes
-        self.num_bytes = num_bytes
-        self.ta1 = target_address_1
-        self.ta2 = target_address_2
-        self.one_wire_port = one_wire_port
+        self.packet['device_rom'] = device_rom
+        self.packet['skip_rom_address'] = skip_rom_address
+        self.packet['write_bytes'] = write_bytes
+        self.packet['num_bytes'] = num_bytes
+        self.packet['ta1'] = target_address_1
+        self.packet['ta2'] = target_address_2
+        self.packet['one_wire_port'] = one_wire_port
 
 
-class OneWireDS2433WriteMemResp(object):
+class OneWireDS2433WriteMemResp(Command):
     def __init__(self, command_id, seq_num, device_rom, skip_rom_address,
                  write_bytes, num_bytes, target_address_1, target_address_2,
                  one_wire_port, write_success, padding):
-        self.header = CommandHeader(command_id, seq_num)
-        self.device_rom = device_rom
-        self.skip_rom_address = skip_rom_address
-        self.write_bytes = write_bytes
-        self.num_bytes = num_bytes
-        self.ta1 = target_address_1
-        self.ta2 = target_address_2
-        self.one_wire_port = one_wire_port
-        self.write_success = write_success
+        super(OneWireDS2433WriteMemResp, self).__init__(command_id, seq_num)
+        self.packet['device_rom'] = device_rom
+        self.packet['skip_rom_address'] = skip_rom_address
+        self.packet['write_bytes'] = write_bytes
+        self.packet['num_bytes'] = num_bytes
+        self.packet['ta1'] = target_address_1
+        self.packet['ta2'] = target_address_2
+        self.packet['one_wire_port'] = one_wire_port
+        self.packet['write_success'] = write_success
         self.packet['padding'] = padding
 
 
-class OneWireDS2433ReadMemReq(object):
+class OneWireDS2433ReadMemReq(Command):
     def __init__(self, seq_num, device_rom, skip_rom_address, num_bytes,
                  target_address_1, target_address_2, one_wire_port):
+        super(OneWireDS2433ReadMemReq, self).__init__(ONE_WIRE_DS2433_READ_MEM)
         self.expect_response = True
-        self.response_type = 'OneWireDS2433ReadMemResp'
+        self.response_type = OneWireDS2433ReadMemResp
         self.num_words = 11
         self.pad_words = 2
-        self.header = CommandHeader(ONE_WIRE_DS2433_READ_MEM, seq_num)
-        self.device_rom = device_rom
-        self.skip_rom_address = skip_rom_address
-        self.num_bytes = num_bytes
-        self.ta1 = target_address_1
-        self.ta2 = target_address_2
-        self.one_wire_port = one_wire_port
+        self.packet['device_rom'] = device_rom
+        self.packet['skip_rom_address'] = skip_rom_address
+        self.packet['num_bytes'] = num_bytes
+        self.packet['ta1'] = target_address_1
+        self.packet['ta2'] = target_address_2
+        self.packet['one_wire_port'] = one_wire_port
 
 
-class OneWireDS2433ReadMemResp(object):
+class OneWireDS2433ReadMemResp(Command):
     def __init__(self, command_id, seq_num, device_rom, skip_rom_address,
                  read_bytes, num_bytes, target_address_1, target_address_2, 
                  one_wire_port, read_success, padding):
-        self.header = CommandHeader(command_id, seq_num)
-        self.device_rom = device_rom
-        self.skip_rom_address = skip_rom_address
-        self.read_bytes = read_bytes
-        self.num_bytes = num_bytes
-        self.ta1 = target_address_1
-        self.ta2 = target_address_2
-        self.one_wire_port = one_wire_port
-        self.read_success = read_success
+        super(OneWireDS2433ReadMemResp, self).__init__(command_id, seq_num)
+        self.packet['device_rom'] = device_rom
+        self.packet['skip_rom_address'] = skip_rom_address
+        self.packet['read_bytes'] = read_bytes
+        self.packet['num_bytes'] = num_bytes
+        self.packet['ta1'] = target_address_1
+        self.packet['ta2'] = target_address_2
+        self.packet['one_wire_port'] = one_wire_port
+        self.packet['read_success'] = read_success
         self.packet['padding'] = padding
 
 
@@ -991,28 +969,27 @@ class DebugConfigureEthernetReq(Command):
                  fabric_multicast_ip_address_mask_high,
                  fabric_multicast_ip_address_mask_low,
                  enable_fabric_interface):
-        super(DebugConfigureEthernetReq, self).__init__()
+        super(DebugConfigureEthernetReq, self).__init__(DEBUG_CONFIGURE_ETHERNET)
         self.expect_response = True
-        self.response_type = 'DebugConfigureEthernetResp'
+        self.response_type = DebugConfigureEthernetResp
         self.num_words = 11
         self.pad_words = 2
-        self.header = CommandHeader(DEBUG_CONFIGURE_ETHERNET, seq_num)
-        self.id = interface_id
-        self.fabric_mac_high = fabric_mac_high
-        self.fabric_mac_mid = fabric_mac_mid
-        self.fabric_mac_low = fabric_mac_low
-        self.fabric_port_address = fabric_port_address
-        self.gateway_arp_cache_address = gateway_arp_cache_address
-        self.fabric_ip_address_high = fabric_ip_address_high
-        self.fabric_ip_address_low = fabric_ip_address_low
-        self.fabric_multicast_ip_address_high =  \
+        self.packet['id'] = interface_id
+        self.packet['fabric_mac_high'] = fabric_mac_high
+        self.packet['fabric_mac_mid'] = fabric_mac_mid
+        self.packet['fabric_mac_low'] = fabric_mac_low
+        self.packet['fabric_port_address'] = fabric_port_address
+        self.packet['gateway_arp_cache_address'] = gateway_arp_cache_address
+        self.packet['fabric_ip_address_high'] = fabric_ip_address_high
+        self.packet['fabric_ip_address_low'] = fabric_ip_address_low
+        self.packet['fabric_multicast_ip_address_high'] =  \
             fabric_multicast_ip_address_high
-        self.fabric_multicast_ip_address_low = fabric_multicast_ip_address_low
-        self.fabric_multicast_ip_address_mask_high = \
+        self.packet['fabric_multicast_ip_address_low'] = fabric_multicast_ip_address_low
+        self.packet['fabric_multicast_ip_address_mask_high'] = \
             fabric_multicast_ip_address_mask_high
-        self.fabric_multicast_ip_address_mask_low = \
+        self.packet['fabric_multicast_ip_address_mask_low'] = \
             fabric_multicast_ip_address_mask_low
-        self.enable_fabric_interface = enable_fabric_interface
+        self.packet['enable_fabric_interface'] = enable_fabric_interface
 
 
 class DebugConfigureEthernetResp(Command):
@@ -1024,118 +1001,112 @@ class DebugConfigureEthernetResp(Command):
                  fabric_multicast_ip_address_mask_high,
                  fabric_multicast_ip_address_mask_low, enable_fabric_interface,
                  padding):
-        super(DebugConfigureEthernetResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num)
-        self.id = interface_id
-        self.fabric_mac_high = fabric_mac_high
-        self.fabric_mac_mid = fabric_mac_mid
-        self.fabric_mac_low = fabric_mac_low
-        self.fabric_port_address = fabric_port_address
-        self.gateway_arp_cache_address = gateway_arp_cache_address
-        self.fabric_ip_address_high = fabric_ip_address_high
-        self.fabric_ip_address_low = fabric_ip_address_low
-        self.fabric_multicast_ip_address_high =  \
+        super(DebugConfigureEthernetResp, self).__init__(command_id, seq_num)
+        self.packet['id'] = interface_id
+        self.packet['fabric_mac_high'] = fabric_mac_high
+        self.packet['fabric_mac_mid'] = fabric_mac_mid
+        self.packet['fabric_mac_low'] = fabric_mac_low
+        self.packet['fabric_port_address'] = fabric_port_address
+        self.packet['gateway_arp_cache_address'] = gateway_arp_cache_address
+        self.packet['fabric_ip_address_high'] = fabric_ip_address_high
+        self.packet['fabric_ip_address_low'] = fabric_ip_address_low
+        self.packet['fabric_multicast_ip_address_high'] =  \
             fabric_multicast_ip_address_high
-        self.fabric_multicast_ip_address_low = fabric_multicast_ip_address_low
-        self.fabric_multicast_ip_address_mask_high = \
+        self.packet['fabric_multicast_ip_address_low'] = fabric_multicast_ip_address_low
+        self.packet['fabric_multicast_ip_address_mask_high'] = \
             fabric_multicast_ip_address_mask_high
-        self.fabric_multicast_ip_address_mask_low = \
+        self.packet['fabric_multicast_ip_address_mask_low'] = \
             fabric_multicast_ip_address_mask_low
-        self.enable_fabric_interface = enable_fabric_interface
+        self.packet['enable_fabric_interface'] = enable_fabric_interface
         self.packet['padding'] = padding
 
 
-class DebugAddARPCacheEntryReq(object):
+class DebugAddARPCacheEntryReq(Command):
     def __init__(self, seq_num, interface_id, ip_address_lower_8_bits,
                  mac_high, mac_mid, mac_low):
+        super(DebugAddARPCacheEntryReq, self).__init__(DEBUG_ADD_ARP_CACHE_ENTRY)
         self.expect_response = True
-        self.response_type = 'DebugAddARPCacheEntryResp'
+        self.response_type = DebugAddARPCacheEntryResp
         self.num_words = 11
         self.pad_words = 2
-        self.header = CommandHeader(DEBUG_ADD_ARP_CACHE_ENTRY, seq_num)
-        self.id = interface_id
-        self.ip_address_lower_8_bits = ip_address_lower_8_bits
-        self.mac_high = mac_high
-        self.mac_mid = mac_mid
-        self.mac_low = mac_low
+        self.packet['id'] = interface_id
+        self.packet['ip_address_lower_8_bits'] = ip_address_lower_8_bits
+        self.packet['mac_high'] = mac_high
+        self.packet['mac_mid'] = mac_mid
+        self.packet['mac_low'] = mac_low
 
 
-class DebugAddARPCacheEntryResp(object):
+class DebugAddARPCacheEntryResp(Command):
     def __init__(self, command_id, seq_num, interface_id, 
                  ip_address_lower_8_bits, mac_high, mac_mid, mac_low, padding):
-        self.header = CommandHeader(command_id, seq_num)
-        self.id = interface_id
-        self.ip_address_lower_8_bits = ip_address_lower_8_bits
-        self.mac_high = mac_high
-        self.mac_mid = mac_mid
-        self.mac_low = mac_low
+        super(DebugAddARPCacheEntryResp, self).__init__(command_id, seq_num)
+        self.packet['id'] = interface_id
+        self.packet['ip_address_lower_8_bits'] = ip_address_lower_8_bits
+        self.packet['mac_high'] = mac_high
+        self.packet['mac_mid'] = mac_mid
+        self.packet['mac_low'] = mac_low
         self.packet['padding'] = padding
 
 
 class GetEmbeddedSoftwareVersionReq(Command):
     def __init__(self, seq_num):
-        super(GetEmbeddedSoftwareVersionReq, self).__init__()
+        super(GetEmbeddedSoftwareVersionReq, self).__init__(GET_EMBEDDED_SOFTWARE_VERS)
         self.expect_response = True
-        self.response_type = 'GetEmbeddedSoftwareVersionResp'
+        self.response_type = GetEmbeddedSoftwareVersionResp
         self.num_words = 11
         self.pad_words = 4
-        self.header = CommandHeader(GET_EMBEDDED_SOFTWARE_VERS, seq_num)
 
 
 class GetEmbeddedSoftwareVersionResp(Command):
     def __init__(self, command_id, seq_num, version_major, version_minor,
                  version_patch, qsfp_bootloader_version_major,
                  qsfp_bootloader_version_minor, padding):
-        super(GetEmbeddedSoftwareVersionResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
-        self.version_major = version_major
-        self.version_minor = version_minor
-        self.version_patch = version_patch
-        self.qsfp_bootloader_version_major = qsfp_bootloader_version_major
-        self.qsfp_bootloader_version_minor = qsfp_bootloader_version_minor
+        super(GetEmbeddedSoftwareVersionResp, self).__init__(command_id, seq_num)
+        self.packet['version_major'] = version_major
+        self.packet['version_minor'] = version_minor
+        self.packet['version_patch'] = version_patch
+        self.packet['qsfp_bootloader_version_major'] = qsfp_bootloader_version_major
+        self.packet['qsfp_bootloader_version_minor'] = qsfp_bootloader_version_minor
         self.packet['padding'] = padding
 
 
 class PMBusReadI2CBytesReq(Command):
     def __init__(self, seq_num, i2c_interface_id, slave_address,
                  command_code, read_bytes, num_bytes):
-        super(PMBusReadI2CBytesReq, self).__init__()
+        super(PMBusReadI2CBytesReq, self).__init__(PMBUS_READ_I2C)
         self.expect_response = True
-        self.response_type = 'PMBusReadI2CBytesResp'
+        self.response_type = PMBusReadI2CBytesResp
         self.num_words = 39
         self.pad_words = 0
-        self.header = CommandHeader(PMBUS_READ_I2C, seq_num)
-        self.id = i2c_interface_id
-        self.slave_address = slave_address
-        self.command_code = command_code
-        self.read_bytes = read_bytes
-        self.num_bytes = num_bytes
+        self.packet['id'] = i2c_interface_id
+        self.packet['slave_address'] = slave_address
+        self.packet['command_code'] = command_code
+        self.packet['read_bytes'] = read_bytes
+        self.packet['num_bytes'] = num_bytes
 
 
 class PMBusReadI2CBytesResp(Command):
     def __init__(self, command_id, seq_num, i2c_interface_id, slave_address,
                  command_code, read_bytes, num_bytes, read_success):
-        super(PMBusReadI2CBytesResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
-        self.id = i2c_interface_id
-        self.slave_address = slave_address
-        self.command_code = command_code
-        self.read_bytes = read_bytes
-        self.num_bytes = num_bytes
-        self.read_success = read_success
+        super(PMBusReadI2CBytesResp, self).__init__(command_id, seq_num)
+        self.packet['id'] = i2c_interface_id
+        self.packet['slave_address'] = slave_address
+        self.packet['command_code'] = command_code
+        self.packet['read_bytes'] = read_bytes
+        self.packet['num_bytes'] = num_bytes
+        self.packet['read_success'] = read_success
 
 
 class SdramProgramReq(Command):
     def __init__(self, seq_num, first_packet, last_packet, write_words):
-        super(SdramProgramReq, self).__init__()
+        super(SdramProgramReq, self).__init__(SDRAM_PROGRAM)
         self.expect_response = False
         self.response_type = None
         self.num_words = 0
         self.pad_words = 0
-        self.header = CommandHeader(SDRAM_PROGRAM, seq_num)
-        self.first_packet = first_packet
-        self.last_packet = last_packet
-        self.write_words = write_words
+        self.packet['first_packet'] = first_packet
+        self.packet['last_packet'] = last_packet
+        self.packet['write_words'] = write_words
 
 
 class ConfigureMulticastReq(Command):
@@ -1144,20 +1115,19 @@ class ConfigureMulticastReq(Command):
                  fabric_multicast_ip_address_low,
                  fabric_multicast_ip_address_mask_high,
                  fabric_multicast_ip_address_mask_low):
-        super(ConfigureMulticastReq, self).__init__()
+        super(ConfigureMulticastReq, self).__init__(MULTICAST_REQUEST)
         self.expect_response = True
-        self.response_type = 'ConfigureMulticastResp'
+        self.response_type = ConfigureMulticastResp
         self.num_words = 11
         self.pad_words = 2
-        self.header = CommandHeader(MULTICAST_REQUEST, seq_num)
-        self.id = interface_id
-        self.fabric_multicast_ip_address_high =  \
+        self.packet['id'] = interface_id
+        self.packet['fabric_multicast_ip_address_high'] =  \
             fabric_multicast_ip_address_high
-        self.fabric_multicast_ip_address_low = \
+        self.packet['fabric_multicast_ip_address_low'] = \
             fabric_multicast_ip_address_low
-        self.fabric_multicast_ip_address_mask_high = \
+        self.packet['fabric_multicast_ip_address_mask_high'] = \
             fabric_multicast_ip_address_mask_high
-        self.fabric_multicast_ip_address_mask_low = \
+        self.packet['fabric_multicast_ip_address_mask_low'] = \
             fabric_multicast_ip_address_mask_low
 
 
@@ -1167,88 +1137,81 @@ class ConfigureMulticastResp(Command):
                  fabric_multicast_ip_address_low,
                  fabric_multicast_ip_address_mask_high,
                  fabric_multicast_ip_address_mask_low, padding):
-        super(ConfigureMulticastResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
-        self.id = interface_id
-        self.fabric_multicast_ip_address_high = \
+        super(ConfigureMulticastResp, self).__init__(command_id, seq_num)
+        self.packet['id'] = interface_id
+        self.packet['fabric_multicast_ip_address_high'] = \
             fabric_multicast_ip_address_high
-        self.fabric_multicast_ip_address_low = \
+        self.packet['fabric_multicast_ip_address_low'] = \
             fabric_multicast_ip_address_low
-        self.fabric_multicast_ip_address_mask_high = \
+        self.packet['fabric_multicast_ip_address_mask_high'] = \
             fabric_multicast_ip_address_mask_high
-        self.fabric_multicast_ip_address_mask_low = \
+        self.packet['fabric_multicast_ip_address_mask_low'] = \
             fabric_multicast_ip_address_mask_low
         self.packet['padding'] = padding
 
 
 class DebugLoopbackTestReq(Command):
     def __init__(self, seq_num, interface_id, test_data):
-        super(DebugLoopbackTestReq, self).__init__()
+        super(DebugLoopbackTestReq, self).__init__(DEBUG_LOOPBACK_TEST)
         self.expect_response = True
-        self.response_type = 'DebugLoopbackTestResp'
+        self.response_type = DebugLoopbackTestResp
         self.num_words = 11
         self.pad_words = 5
-        self.header = CommandHeader(DEBUG_LOOPBACK_TEST, seq_num)
-        self.id = interface_id
-        self.test_data = test_data
+        self.packet['id'] = interface_id
+        self.packet['test_data'] = test_data
 
 
 class DebugLoopbackTestResp(Command):
     def __init__(self, command_id, seq_num, interface_id, test_data, valid,
                  padding):
-        super(DebugLoopbackTestResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num)
-        self.id = interface_id
-        self.test_data = test_data
-        self.valid = valid
+        super(DebugLoopbackTestResp, self).__init__(command_id, seq_num)
+        self.packet['id'] = interface_id
+        self.packet['test_data'] = test_data
+        self.packet['valid'] = valid
         self.packet['padding'] = padding
 
 
 class QSFPResetAndProgramReq(Command):
     def __init__(self, seq_num, reset, program):
-        super(QSFPResetAndProgramReq, self).__init__()
+        super(QSFPResetAndProgramReq, self).__init__(QSFP_RESET_AND_PROG)
         self.expect_response = True
-        self.response_type = 'QSFPResetAndProgramResp'
+        self.response_type = QSFPResetAndProgramResp
         self.num_words = 11
         self.pad_words = 2
-        self.header = CommandHeader(QSFP_RESET_AND_PROG, seq_num)
-        self.reset = reset
-        self.program = program
+        self.packet['reset'] = reset
+        self.packet['program'] = program
 
 
 class QSFPResetAndProgramResp(Command):
     def __init__(self, command_id, seq_num, reset, program, padding):
-        super(QSFPResetAndProgramResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num)
-        self.reset = reset
-        self.program = program
+        super(QSFPResetAndProgramResp, self).__init__(command_id, seq_num)
+        self.packet['reset'] = reset
+        self.packet['program'] = program
         self.packet['padding'] = padding
 
 
 class ReadHMCI2CReq(Command):
-    def __init__(self, seq_num, interface_id, slave_address,
+    def __init__(self, interface_id, slave_address,
                  read_address):
-        super(ReadHMCI2CReq, self).__init__()
+        super(ReadHMCI2CReq, self).__init__(READ_HMC_I2C)
         self.expect_response = True
-        self.response_type = 'ReadHMCI2CResp'
+        self.response_type = ReadHMCI2CResp
         self.num_words = 15
         self.pad_words = 2
-        self.header = CommandHeader(READ_HMC_I2C, seq_num)
-        self.id = interface_id
-        self.slave_address = slave_address
-        self.read_address = read_address
+        self.packet['id'] = interface_id
+        self.packet['slave_address'] = slave_address
+        self.packet['read_address'] = read_address
 
 
 class ReadHMCI2CResp(Command):
     def __init__(self, command_id, seq_num, interface_id, slave_address,
                  read_address, read_bytes, read_success, padding):
-        super(ReadHMCI2CResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
-        self.id = interface_id
-        self.slave_address = slave_address
-        self.read_address = read_address
-        self.read_bytes = read_bytes
-        self.read_success = read_success
+        super(ReadHMCI2CResp, self).__init__(command_id, seq_num)
+        self.packet['id'] = interface_id
+        self.packet['slave_address'] = slave_address
+        self.packet['read_address'] = read_address
+        self.packet['read_bytes'] = read_bytes
+        self.packet['read_success'] = read_success
         self.packet['padding'] = padding
 
 
@@ -1257,78 +1220,72 @@ MAX_WRITE_32WORDS = 497
 
 
 class BigReadWishboneReq(Command):
-    def __init__(self, seq_num, start_address_high, start_address_low,
+    def __init__(self, start_address_high, start_address_low,
                  number_of_reads):
-        super(BigReadWishboneReq, self).__init__()
+        super(BigReadWishboneReq, self).__init__(BIG_READ_WISHBONE)
         self.expect_response = True
-        self.response_type = 'BigReadWishboneResp'
+        self.response_type = BigReadWishboneResp
         self.num_words = 999
         self.pad_words = 0
-        self.header = CommandHeader(BIG_READ_WISHBONE, seq_num)
-        self.start_address_high = start_address_high
-        self.start_address_low = start_address_low
-        self.number_of_reads = number_of_reads
+        self.packet['start_address_high'] = start_address_high
+        self.packet['start_address_low'] = start_address_low
+        self.packet['number_of_reads'] = number_of_reads
 
 
 class BigReadWishboneResp(Command):
     def __init__(self, command_id, seq_num, start_address_high,
                  start_address_low, number_of_reads, read_data):
-        super(BigReadWishboneResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
-        self.start_address_high = start_address_high
-        self.start_address_low = start_address_low
-        self.read_data = read_data
-        self.number_of_reads = number_of_reads
-        # self.packet['padding'] = padding
+        super(BigReadWishboneResp, self).__init__(command_id, seq_num)
+        self.packet['start_address_high'] = start_address_high
+        self.packet['start_address_low'] = start_address_low
+        self.packet['read_data'] = read_data
+        self.packet['number_of_reads'] = number_of_reads
+        self.packet['padding'] = padding
 
 
 class BigWriteWishboneReq(Command):
-    def __init__(self, seq_num, start_address_high, start_address_low,
+    def __init__(self, start_address_high, start_address_low,
                  write_data, number_of_writes):
-        super(BigWriteWishboneReq, self).__init__()
+        super(BigWriteWishboneReq, self).__init__(BIG_WRITE_WISHBONE)
         self.expect_response = True
-        self.response_type = 'BigWriteWishboneResp'
+        self.response_type = BigWriteWishboneResp
         self.num_words = 11
         self.pad_words = 6
-        self.header = CommandHeader(BIG_WRITE_WISHBONE, seq_num)
-        self.start_address_high = start_address_high
-        self.start_address_low = start_address_low
-        self.write_data = write_data
-        self.number_of_writes = number_of_writes
+        self.packet['start_address_high'] = start_address_high
+        self.packet['start_address_low'] = start_address_low
+        self.packet['write_data'] = write_data
+        self.packet['number_of_writes'] = number_of_writes
 
 
 class BigWriteWishboneResp(Command):
     def __init__(self, command_id, seq_num, start_address_high,
                  start_address_low, number_of_writes_done, padding):
-        super(BigWriteWishboneResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
-        self.start_address_high = start_address_high
-        self.start_address_low = start_address_low
-        self.number_of_writes_done = number_of_writes_done
+        super(BigWriteWishboneResp, self).__init__(command_id, seq_num)
+        self.packet['start_address_high'] = start_address_high
+        self.packet['start_address_low'] = start_address_low
+        self.packet['number_of_writes_done'] = number_of_writes_done
         self.packet['padding'] = padding
 
 MAX_IMAGE_CHUNK_SIZE = 1988
 
 
 class SdramProgramWishboneReq(Command):
-    def __init__(self, seq_num, chunk_id, num_total_chunks, image_data):
-        super(SdramProgramWishboneReq, self).__init__()
+    def __init__(self, chunk_id, num_total_chunks, image_data):
+        super(SdramProgramWishboneReq, self).__init__(SDRAM_PROGRAM_WISHBONE)
         self.expect_response = True
-        self.response_type = 'SdramProgramWishboneResp'
+        self.response_type = SdramProgramWishboneResp
         self.num_words = 11
         self.pad_words = 7
-        self.header = CommandHeader(SDRAM_PROGRAM_WISHBONE, seq_num)
-        self.chunk_id = chunk_id
-        self.num_total_chunks = num_total_chunks
-        self.image_data = image_data
+        self.packet['chunk_id'] = chunk_id
+        self.packet['num_total_chunks'] = num_total_chunks
+        self.packet['image_data'] = image_data
 
 
 class SdramProgramWishboneResp(Command):
     def __init__(self, command_id, seq_num, chunk_id, ack, padding):
-        super(SdramProgramWishboneResp, self).__init__()
-        self.header = CommandHeader(command_id, seq_num, False)
-        self.chunk_id = chunk_id
-        self.ack = ack
+        super(SdramProgramWishboneResp, self).__init__(command_id, seq_num)
+        self.packet['chunk_id'] = chunk_id
+        self.packet['ack'] = ack
         self.packet['padding'] = padding
 
 
