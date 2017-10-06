@@ -115,7 +115,7 @@ class SkarabTransport(Transport):
         # self.gbes.append(FortyGbe(self, 0))
         # # self.gbes.append(FortyGbe(self, 0, 0x50000 - 0x4000))
 
-    def is_connected(self, retries=10):
+    def is_connected(self, retries=3):
         """
         'ping' the board to see if it is connected and running.
         Tries to read a register
@@ -1403,7 +1403,7 @@ class SkarabTransport(Transport):
 
     def reboot_fpga(self):
         """
-        Reboots the FPGA, booting from the NOR FLASH.
+        Reboots the FPGA, booting from either the NOR FLASH or SDRAM
         :return: Nothing
         """
         # trigger a reboot of the FPGA
@@ -1460,6 +1460,9 @@ class SkarabTransport(Transport):
 
         request = sd.WriteRegReq(self._seq_num, sd.BOARD_REG,
                                  reg_address, *self.data_split_and_pack(data))
+
+        # handle special writes that don't return a response
+        request._expect_response = expect_response
 
         # send payload via UDP pkt and return response object (if no response
         # expected should return ok)
