@@ -183,8 +183,9 @@ class CasperFpga(object):
         """
         return self.transport.set_igmp_version(version)
 
-    def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
-                                  wait_complete=True):
+    def upload_to_ram_and_program(self, filename=None, port=-1, timeout=10,
+                                  wait_complete=True,
+                                  skip_verification=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: the file to upload
@@ -192,13 +193,18 @@ class CasperFpga(object):
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return
         after upload if False
+        :param skip_verification: do not verify the uploaded file before reboot
         :return:
         """
+        filename = filename or self.bitstream
+        if filename is None:
+            raise RuntimeError('Cannot program %s with no '
+                               'bitstream.' % self.host)
         rv = self.transport.upload_to_ram_and_program(
-            filename, port, timeout, wait_complete)
+            filename, port, timeout, wait_complete, skip_verification)
+        self.bitstream = filename
         if filename[-3:] == 'fpg':
             self.get_system_information(filename)
-
         return rv
 
     def is_connected(self):
