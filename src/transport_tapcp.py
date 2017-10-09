@@ -12,11 +12,14 @@ __date__ = 'June 2017'
 LOGGER = logging.getLogger(__name__)
 tftpy.setLogLevel(logging.ERROR)
 
+
 def set_log_level(level):
     tftpy.setLogLevel(level)
 
+
 def get_log_level():
     return tftpy.log.level
+
 
 def get_core_info_payload(payload_str):
     x = struct.unpack('>LLB', payload_str)
@@ -54,6 +57,7 @@ def decode_csl_pl(csl):
         prev_str = this_str[:]
     return regs
 
+
 def decode_csl(csl):
     x = decode_csl_pl(csl).keys()
     x.sort()
@@ -75,6 +79,25 @@ class TapcpTransport(Transport):
         self.t = tftpy.TftpClient(kwargs['host'], 69)
         self._logger = LOGGER
         self.timeout = kwargs.get('timeout', 3)
+
+    @staticmethod
+    def test_host_type(host_ip):
+        """
+        Is this host_ip assigned to a Tapcp board?
+        :param host_ip:
+        :return:
+        """
+        board = TapcpTransport(host=host_ip, timeout=0.1)
+        # Temporarily turn off logging so if tftp doesn't respond
+        # there's no error. Remember the existing log level so that
+        # it can be re-set afterwards if tftp connects ok.
+        log_level = get_log_level()
+        set_log_level(logging.CRITICAL)
+        if board.is_connected():
+            set_log_level(log_level)
+            LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
+            return True
+        return False
 
     def listdev(self):
         buf = StringIO()

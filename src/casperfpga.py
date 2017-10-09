@@ -13,7 +13,7 @@ import qdr
 from attribute_container import AttributeContainer
 import skarab_definitions as skarab_defs
 from transport_katcp import KatcpTransport
-from transport_tapcp import TapcpTransport, set_log_level, get_log_level
+from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
 from utils import parse_fpg
 
@@ -62,32 +62,13 @@ def choose_transport(host_ip):
     """
     LOGGER.debug('Trying to figure out what kind of device %s is' % host_ip)
     try:
-        skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        skarab_ctrl_sock.setblocking(0)
-        skarab_eth_ctrl_port = (host_ip,
-                                skarab_defs.ETHERNET_CONTROL_PORT_ADDRESS)
-        request = skarab_defs.ReadRegReq(
-            0, skarab_defs.BOARD_REG, skarab_defs.C_RD_VERSION_ADDR)
-        skarab_ctrl_sock.sendto(request.create_payload(), skarab_eth_ctrl_port)
-        data_ready = select.select([skarab_ctrl_sock], [], [], 0.2)
-        skarab_ctrl_sock.close()
-        if len(data_ready[0]) > 0:
-            LOGGER.debug('%s seems to be a SKARAB' % host_ip)
+        if SkarabTransport.test_host_type(host_ip):
             return SkarabTransport
+        elif TapcpTransport.test_host_type(host_ip):
+            return TapcpTransport
         else:
-            LOGGER.debug('%s is not a SKARAB. Trying Tapcp' % host_ip)
-            board = TapcpTransport(host=host_ip, timeout=0.1)
-            # Temporarily turn off logging so if tftp doesn't respond
-            # there's no error. Remember the existing log level so that
-            # it can be re-set afterwards if tftp connects ok.
-            log_level = get_log_level()
-            set_log_level(logging.CRITICAL)
-            if board.is_connected():
-                set_log_level(log_level)
-                LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
-                return TapcpTransport
-        LOGGER.debug('%s seems to be a ROACH' % host_ip)
-        return KatcpTransport
+            LOGGER.debug('%s seems to be a ROACH' % host_ip)
+            return KatcpTransport
     except socket.gaierror:
         raise RuntimeError('Address/host %s makes no sense to '
                            'the OS?' % host_ip)
