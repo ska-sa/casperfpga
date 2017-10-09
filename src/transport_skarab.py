@@ -714,9 +714,9 @@ class SkarabTransport(Transport):
                 # after uploading, check the checksums
                 spartan_checksum = self.get_spartan_checksum()
                 if spartan_checksum == 0:
-                    errmsg = 'Spartan Checksum returned 0, i.e. Packets were not received ' \
-                             'on the correct port. Ensure you are programming via the ' \
-                             'correct port/connection.'
+                    errmsg = 'Spartan Checksum returned 0, i.e. Packets were ' \
+                             'not received on the correct port. Ensure you ' \
+                             'are programming via the correct port/connection.'
                     LOGGER.error(errmsg)
                     raise SkarabProgrammingError(errmsg)
                 # else: spartan_checksum has a value, Continue
@@ -727,22 +727,22 @@ class SkarabTransport(Transport):
                 LOGGER.debug('Calculated bitstream checksum: %s' % local_checksum)
                 if spartan_checksum != local_checksum:
                     self.clear_sdram()
-                    errmsg = 'Checksum mismatch: spartan(%s) local(%s). Will not ' \
-                             'attempt to boot from SDRAM. Ensure all Network Switches ' \
-                             'and endpoints are configured to support MTU Size of 9000 ' \
-                             '(Jumbo Packet size).' % (local_checksum, spartan_checksum)
-                    raise UploadChecksumMismatch(errmsg)
+                    raise SkarabUploadChecksumMismatch(
+                        'Checksum mismatch: spartan(%s) local(%s). Will not '
+                        'attempt to boot from SDRAM. Ensure all Network '
+                        'Switches and endpoints are configured to support MTU '
+                        'Size of 9000 (Jumbo Packet size).' % (
+                            local_checksum, spartan_checksum))
                 # else: All good, Continue
                 LOGGER.debug('Checksum match. Bitstream uploaded successfully.')
-
                 # if success, set retries to 0
                 retries = 0
 
-            except (SkarabProgrammingError, UploadChecksumMismatch):
+            except (SkarabProgrammingError, SkarabUploadChecksumMismatch):
                 # if programming failure or checksum mismatch, attempt to
                 # reprogram
-                warnmsg = 'ERROR with SDRAM contents. Attempting to reprogram'
-                LOGGER.warning(warnmsg)
+                LOGGER.warning('ERROR with SDRAM contents. Attempting to '
+                               'reprogram')
                 # decrement retry counter
                 retries -= 1
                 if retries == 0:
@@ -1463,9 +1463,8 @@ class SkarabTransport(Transport):
         (attributes = payload components)
         """
         # create payload packet structure with data
-
-        request = sd.WriteRegReq(
-            sd.BOARD_REG, reg_address, *self.data_split_and_pack(data))
+        data_packed = self.data_split_and_pack(data)
+        request = sd.WriteRegReq(sd.BOARD_REG, reg_address, *data_packed)
 
         # handle special writes that don't return a response
         request._expect_response = expect_response
@@ -1499,9 +1498,8 @@ class SkarabTransport(Transport):
         :return: response object - object created from the response payload
         """
         # create payload packet structure with data
-
-        request = sd.WriteRegReq(sd.DSP_REG,
-                                 reg_address, *self.data_split_and_pack(data))
+        data_packed = self.data_split_and_pack(data)
+        request = sd.WriteRegReq(sd.DSP_REG, reg_address, *data_packed)
 
         # send payload via UDP pkt and return response object
         # (if no response expected should return ok)
@@ -1615,16 +1613,12 @@ class SkarabTransport(Transport):
             packed_bytes += (32 - num_bytes) * '\x00\x00'
 
         # create payload packet structure
-
         request = sd.WriteI2CReq(interface, slave_address,
                                  num_bytes, packed_bytes)
-
         write_i2c_resp = self.send_packet(request)
-
         # check if the write was successful
         if write_i2c_resp is not None:
             if write_i2c_resp.write_success:
-                # if successful
                 return True
             else:
                 LOGGER.error('I2C write failed!')
@@ -1682,19 +1676,15 @@ class SkarabTransport(Transport):
         :param num_bytes: Number of bytes to read
         :return: array of read bytes if successful, else none
         """
-
         if num_bytes > 32:
             LOGGER.error('Maximum of 32 bytes can be read in a '
                          'single transaction')
             return
-
         # dummy read data
         read_bytes = struct.pack('!32H', *(32 * [0]))
-
         # create payload packet structure
         request = sd.PMBusReadI2CBytesReq(bus, slave_address, command_code,
                                           read_bytes, num_bytes)
-
         # send payload and return response object
         pmbus_read_i2c_resp = self.send_packet(request)
 
@@ -1727,10 +1717,8 @@ class SkarabTransport(Transport):
         :return: None
         """
         request = sd.SdramProgramReq(first_packet, last_packet, write_words)
-
-        _ = self.send_packet(request,
-                             skarab_socket=self.skarab_fpga_sock,
-                             port=self.skarab_fpga_port)
+        dc = self.send_packet(request, skarab_socket=self.skarab_fpga_sock,
+                              port=self.skarab_fpga_port)
 
     def sdram_reconfigure(self,
                           output_mode=sd.SDRAM_PROGRAM_MODE,
@@ -1778,9 +1766,8 @@ class SkarabTransport(Transport):
             about_to_boot, do_reboot, reset_sdram_read_addr, clear_eth_stats,
             enable_debug, do_sdram_async_read, do_continuity_test,
             continuity_test_out_low, continuity_test_out_high)
-
         response = self.send_packet(request)
-        resppkt = response.packet
+        resp_pkt = response.packet
 
         if response is None:
             args = locals()
@@ -1791,8 +1778,8 @@ class SkarabTransport(Transport):
                                    'no response. %s' % args)
         if do_sdram_async_read:
             # process data read here
-            low = struct.pack('!H', resppkt['sdram_async_read_data_low'])
-            high = struct.pack('!H', resppkt['sdram_async_read_data_high'])
+            low = struct.pack('!H', resp_pkt['sdram_async_read_data_low'])
+            high = struct.pack('!H', resp_pkt['sdram_async_read_data_high'])
             sdram_data = low + high
             return sdram_data
         if response is not None:
@@ -1844,7 +1831,7 @@ class SkarabTransport(Transport):
         else:
             errmsg = "Bad response received from SKARAB"
             LOGGER.error(errmsg)
-            raise InvalidResponse(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
     def verify_words(self, bitstream, flash_address=sd.DEFAULT_START_ADDRESS):
         """
@@ -1939,12 +1926,12 @@ class SkarabTransport(Transport):
         """
 
         # Split 32-bit Flash Address into 16-bit high and low values
-        flash_address_high, flash_address_low = self.data_split_and_pack(flash_address)
+        flash_addr_high, flash_addr_low = self.data_split_and_pack(flash_address)
 
         # Create instance of ProgramFlashWordsRequest
-        request = sd.ProgramFlashWordsReq(flash_address_high, flash_address_low,
-                                          total_num_words, num_words, do_buffered_prog,
-                                          start_prog, finish_prog, write_words)
+        request = sd.ProgramFlashWordsReq(
+            flash_addr_high, flash_addr_low, total_num_words, num_words,
+            do_buffered_prog, start_prog, finish_prog, write_words)
 
         """
         ProgramFlashWordsResp consists of the following:
@@ -1979,7 +1966,7 @@ class SkarabTransport(Transport):
         else:
             errmsg = "Bad response received from SKARAB"
             LOGGER.error(errmsg)
-            raise InvalidResponse(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
     def program_words(self, bitstream, flash_address=sd.DEFAULT_START_ADDRESS):
         """
@@ -1991,7 +1978,8 @@ class SkarabTransport(Transport):
         """
 
         # bitstream = open(filename, 'rb').read()
-        # As per upload_to_ram() except now we're programming in chunks of 512 words
+        # As per upload_to_ram() except now we're programming in chunks
+        # of 512 words
         size = len(bitstream)
         # Split image into chunks of 512 words = 1024 bytes
         image_chunks = [bitstream[i:i + 1024] for i in range(0, size, 1024)]
@@ -2009,21 +1997,27 @@ class SkarabTransport(Transport):
             # Need to program 256 words at a time, more specifically
             # - Program first half: If passed, continue; else: return
             # - Program second half: If passed, continue; else: return
-            if not self.program_flash_words(flash_address, 512, 256, True, True, False, chunk[:512]):
+            if not self.program_flash_words(flash_address, 512, 256, True, True,
+                                            False, chunk[:512]):
                 # Did not successfully program the first 256 words
-                errmsg = "Failed to program first 256 words of 512 word image block"
+                errmsg = "Failed to program first 256 words of 512 word " \
+                         "image block"
                 LOGGER.error(errmsg)
                 raise SkarabProgrammingError(errmsg)
-            elif not self.program_flash_words(flash_address + 256, 512, 256, True, False, True, chunk[512:]):
+            elif not self.program_flash_words(flash_address + 256, 512, 256,
+                                              True, False, True, chunk[512:]):
                 # Did not successfully program the first 256 words
-                errmsg = "Failed to program second 256 words of 512 word image block"
+                errmsg = "Failed to program second 256 words of 512 word " \
+                         "image block"
                 LOGGER.error(errmsg)
                 raise SkarabProgrammingError(errmsg)
 
-            flash_address += 512    # Shift the address we are writing to by 512 places
+            # Shift the address we are writing to by 512 places
+            flash_address += 512
             # Loop back to the next image chunk, repeat the process
 
-        # Now done programming the input bitstream, need to return and move on to VerifyWords()
+        # Now done programming the input bitstream, need to return and
+        # move on to VerifyWords()
         return True
 
     # 3.10: ERASE_FLASH_WORDS:
@@ -2042,7 +2036,8 @@ class SkarabTransport(Transport):
         request = sd.EraseFlashBlockReq(address_high, address_low)
 
         # Make the actual function call and (hopefully) return data
-        # - Number of Words to be expected in the Response: 1+1+(1+1)+1+(7-1) = 11
+        # - Number of Words to be expected in the
+        # Response: 1+1+(1+1)+1+(7-1) = 11
         response = self.send_packet(request)
 
         if response is not None:
@@ -2056,66 +2051,61 @@ class SkarabTransport(Transport):
         else:
             errmsg = "Bad response received from SKARAB"
             LOGGER.error(errmsg)
-            raise InvalidResponse(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
     # This is the "Parent function" that invokes erase_flash_block
-    def erase_blocks(self, num_flash_blocks, flash_address=sd.DEFAULT_START_ADDRESS):
+    def erase_blocks(self, num_flash_blocks,
+                     flash_address=sd.DEFAULT_START_ADDRESS):
         """
-        Higher level function call to Erase n-many Flash Blocks in preparation for program_flash_words
+        Higher level function call to Erase n-many Flash Blocks in preparation
+        for program_flash_words
         This method erases the required number of blocks in the flash
         - Only the required number of flash blocks are erased
-        :param num_flash_blocks: Number of Flash Memory Blocks to be erased, to make space for the new image
-        :param flash_address: Start address from where to begin erasing Flash Memory
+        :param num_flash_blocks: Number of Flash Memory Blocks to be erased,
+        to make space for the new image
+        :param flash_address: Start address from where to begin erasing
+        Flash Memory
         :return:
         """
-
-        default_value = True
-        if flash_address != sd.DEFAULT_START_ADDRESS:
-            default_value = False
-            start_address = flash_address
-
+        erase_address = flash_address
         # First, need to SdramReconfigure into 'Flash Mode'
         # - as per Line 1827, in prepare_for_sdram_for_programming
-        if not self.sdram_reconfigure(sd.FLASH_MODE, False, False, False, False,
-                                      False, False,
-                                      False, False, False, 0x0, 0x0):
+        if not self.sdram_reconfigure(
+                sd.FLASH_MODE, False, False, False, False, False, False,
+                False, False, False, 0x0, 0x0):
             errmsg = "Unable to put SDRAM into FLASH Mode"
             LOGGER.error(errmsg)
             raise SkarabProgrammingError(errmsg)
-        # else: Continue
-
         # Now, to do the actual erasing of Flash Memory Blocks
-        infomsg = 'Erasing Flash Blocks from flash_address = {}'.format(flash_address)
-        LOGGER.info(infomsg)
+        LOGGER.info('Erasing Flash Blocks from flash_address = {}'.format(
+            erase_address))
         block_counter = 0
         while block_counter < num_flash_blocks:
-            # Erasing Flash Blocks this way because a request may timeout and result in an out-of-sequence response
-            if not self.erase_flash_block(flash_address):
+            # Erasing Flash Blocks this way because a request may timeout and
+            # result in an out-of-sequence response
+            if not self.erase_flash_block(erase_address):
                 # Problem Erasing the Flash Block
-                errmsg = 'Failed to Erase Flash Memory Block at: 0x{:02X}. Retrying now...'.format(flash_address)
-                LOGGER.error(errmsg)
-
-                # Reset the block_counter and flash_address to their initial values
+                LOGGER.error('Failed to Erase Flash Memory Block at: 0x{:02X}. '
+                             'Retrying now...'.format(erase_address))
+                # Reset the block_counter and erase_address to
+                # their initial values
                 block_counter = 0
-                if default_value:
-                    flash_address = sd.DEFAULT_START_ADDRESS
-                else:
-                    flash_address = start_address
+                erase_address = flash_address
             else:
                 # All good
                 block_counter += 1
-                flash_address += int(sd.DEFAULT_BLOCK_SIZE)
-
+                erase_address += int(sd.DEFAULT_BLOCK_SIZE)
         return True
 
     @staticmethod
     # Only working with BPIx8 .bin files now
     def analyse_file_virtex_flash(filename):
         """
-        This method analyses the input .bin file to determine the number of words to program,
-        and the number of blocks to erase
+        This method analyses the input .bin file to determine the number of
+        words to program, and the number of blocks to erase
         :param filename: Input .bin to be written to the Virtex FPGA
-        :return: Tuple - num_words (in file), num_memory_blocks (required to hold this file)
+        :return: Tuple - num_words (in file), num_memory_blocks (required to
+        hold this file)
         """
 
         contents = open(filename, 'rb').read()      # File contents are in bytes
@@ -2131,17 +2121,24 @@ class SkarabTransport(Transport):
 
         return num_words, num_memory_blocks
 
-    # This function will call all the relevant functions as per the order done in Roach3VirtexFlashReconfigApp.cpp
+    # This function will call all the relevant functions as per the order
+    # done in Roach3VirtexFlashReconfigApp.cpp
     # - AnalyseFile()
     # - EraseBlocks()
     # - ProgramWords()
     # - VerifyWords()
-    def virtex_flash_reconfig(self, filename, flash_address=sd.DEFAULT_START_ADDRESS, blind_reconfig=False):
+    def virtex_flash_reconfig(self, filename,
+                              flash_address=sd.DEFAULT_START_ADDRESS,
+                              blind_reconfig=False):
         """
-        This is the entire function that makes the necessary calls to reconfigure the Virtex7's Flash Memory
-        :param filename: The actual .bin file that is to be written to the Virtex FPGA
-        :param flash_address: 32-bit Address in the NOR flash to start programming from
-        :param blind_reconfig: Reconfigure the board and don't wait to Verify what has been written
+        This is the entire function that makes the necessary calls to
+        reconfigure the Virtex7's Flash Memory
+        :param filename: The actual .bin file that is to be written to
+        the Virtex FPGA
+        :param flash_address: 32-bit Address in the NOR flash to
+        start programming from
+        :param blind_reconfig: Reconfigure the board and don't wait to
+        verify what has been written
         :return: Success/Fail - 0/1
         """
 
@@ -2240,15 +2237,15 @@ class SkarabTransport(Transport):
                 raise SkarabReadFailed('Attempt to perform SPI Read Failed')
         else:
             LOGGER.error("Bad Response Received")
-            raise InvalidResponse('Bad response received from SKARAB')
+            raise SkarabInvalidResponse('Bad response received from SKARAB')
 
     def verify_bytes(self, bitstream):
-        '''
+        """
         This is the high-level function that implements read_spi_page to verify the data from the
         .ufp file that was written to the Spartan FPGA flash memory.
         :param bitstream: of the input .ufp file that was used to reconfigure the Spartan 3AN FPGA
         :return: Boolean - True/False - Success/Fail - 1/0
-        '''
+        """
 
         # We need to read as many sectors as there are 264-byte pages in the bitstream
         # - Easier to manipulate the bitstream here on the fly
@@ -2304,25 +2301,24 @@ class SkarabTransport(Transport):
         return True
 
     def program_spi_page(self, spi_address, num_bytes, write_bytes):
-        '''
+        """
         Low-level function call to program a page to the SPI Flash in the Spartan 3AN FPGA on the SKARAB.
         Up to a full page (264 bytes) can be programmed.
         :param spi_address: 32-bit address to program bytes to
         :param num_bytes: Number of bytes to program to Spartan flash
         :param write_bytes: Data to program - max 264 bytes
         :return: Boolean - Success/Fail - 1/0
-        '''
+        """
 
         # First thing to check:
         if num_bytes > 264 or (len(write_bytes)/2) > 264:
-            errmsg = 'Maximum of 264 bytes can be programmed to an SPI Sector at once.\n' \
-                     'Num_bytes = {}, and len(write_bytes) = {}'.format(num_bytes, len(write_bytes))
+            errmsg = 'Maximum of 264 bytes can be programmed to an SPI Sector' \
+                     ' at once.\nNum_bytes = {}, and len(write_bytes) = {}' \
+                     ''.format(num_bytes, len(write_bytes))
             LOGGER.error(errmsg)
             raise SkarabProgrammingError(errmsg)
-        # else: Continue as per normal
-
-        debugmsg = 'Data is ok continue programming to SPI Address 0x{:02X}'.format(spi_address)
-        LOGGER.debug(debugmsg)
+        LOGGER.debug('Data is ok continue programming to SPI Address 0x{:02X}'
+                     ''.format(spi_address))
 
         """
         ProgramSpiPageReq consists of the following:
@@ -2333,11 +2329,11 @@ class SkarabTransport(Transport):
         - WriteBytes[264] (BytesToWrite): Bytes to program, max = 264 bytes (1 page)
         """
         # Split 32-bit Flash Address into 16-bit high and low values
-        spi_address_high, spi_address_low = self.data_split_and_pack(spi_address)
+        spi_addr_high, spi_addr_low = self.data_split_and_pack(spi_address)
 
         # Create instance of ProgramFlashWordsRequest
         request = sd.ProgramSpiPageReq(
-            spi_address_high, spi_address_low,
+            spi_addr_high, spi_addr_low,
             num_bytes=num_bytes, write_bytes=write_bytes)
 
         """
@@ -2373,17 +2369,17 @@ class SkarabTransport(Transport):
         else:
             errmsg = "Bad response received from SKARAB"
             LOGGER.error(errmsg)
-            raise InvalidResponse(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
     def program_pages(self, bitstream, num_pages):
-        '''
+        """
         Higher level function call to Program n-many words from an input .ufp file.
         This method breaks the bitstream up into chunks of up to 264 bytes.
         - Removed 'num_sectors' parameter; doesn't seem to be needed
         :param bitstream: Of the input .ufp file to write to SPI Sectors, without \r and \n
         :param num_pages: Total Number of Pages to be written to the SPI Sectors
         :return: Boolean - Success/Fail - 1/0
-        '''
+        """
 
         # Need to break up the bitstream in (up to) 264-byte chunks
         pages = [bitstream[i:i+528] for i in range(0, len(bitstream), 528)]
@@ -2435,22 +2431,18 @@ class SkarabTransport(Transport):
         return True
 
     def erase_spi_sector(self, spi_address):
-        '''
-        Used to erase a sector in the SPI Flash in the Spartan 3AN FPGA on the SKARAB.
+        """
+        Used to erase a sector in the SPI Flash in the Spartan 3AN FPGA
+        on the SKARAB.
         :param spi_address: 32-bit address to erase in the Flash
         :return: Boolean - Success/Fail - 1/0
-        '''
-
+        """
         address_high, address_low = self.data_split_and_pack(spi_address)
-
         # Create instance of EraseSpiSectorRequest
         request = sd.EraseSpiSectorReq(address_high, address_low)
-
         # Make the actual function call and (hopefully) return data
-        # - Number of Words to be expected in the response: 1+1+(1+1)+1+(7-1) = 11
-
+        # Number of Words to be expected in the response: 1+1+(1+1)+1+(7-1) = 11
         response = self.send_packet(request)
-
         if response is not None:
             if response.packet['erase_success']:
                 return True
@@ -2465,12 +2457,11 @@ class SkarabTransport(Transport):
             raise SkarabInvalidResponse(errmsg)
 
     def erase_sectors(self, num_sectors):
-        '''
+        """
         Erase required number of sectors for input .ufp file
         :param num_sectors: Required number of sectors to be erased
         :return: Boolean - Success/Fail - 1/0
-        '''
-
+        """
         for sector_counter in range(0, num_sectors+1):
             # Get associated 32-bit pre-defined Sector Address
             sector_address = sd.SECTOR_ADDRESS[sector_counter]
@@ -2484,21 +2475,19 @@ class SkarabTransport(Transport):
                 LOGGER.error(errmsg)
                 # No custom 'EraseError' to raise; raise error in main function call
                 return False
-
-            debugmsg = 'Successfully erased SPI Sector Address: 0x{:02X} - ({} of {})'\
-                .format(sd.SECTOR_ADDRESS[sector_counter], sector_counter, num_sectors)
-            LOGGER.debug(debugmsg)
-
+            LOGGER.debug('Successfully erased SPI Sector Address: 0x{:02X} - '
+                         '({} of {})'.format(sd.SECTOR_ADDRESS[sector_counter],
+                                             sector_counter, num_sectors))
         return True
 
     @staticmethod
     def check_ufp_bitstream(filename):
-        '''
+        """
         Utility to check bitstream of .ufp file used to program/configure Spartan Flash.
         Also removes all escape characters, i.e. \r, \n
         :param filename: of the input .ufp file
         :return: tuple - (True/False, bitstream)
-        '''
+        """
 
         contents = open(filename, 'rb').read()
         if len(contents) < 1:
@@ -2517,12 +2506,12 @@ class SkarabTransport(Transport):
 
     @staticmethod
     def analyse_ufp_bitstream(bitstream):
-        '''
+        """
         This method analyses the input .ufp file to determine the number of pages to program,
         and the number of sectors to erase
         :param bitstream: Input .ufp file to be written to the SPARTAN 3AN FPGA
         :return: Tuple - (num_pages, num_sectors)
-        '''
+        """
 
         num_bytes = len(bitstream) / 2       # Number of Bytes in input .ufp file
         num_pages = num_bytes / 264         # 1 Page = 264 bytes
@@ -2540,14 +2529,14 @@ class SkarabTransport(Transport):
 
     @staticmethod
     def reverse_byte(input_byte):
-        '''
+        """
         Method created to replicate 'SwappedByte' method in SpartanFlashReconfigApp.cpp;
         "This is done so that the .ufp bitstream matches raw data format" (?)
         Mirrors 8-bit integer (byte) about its center-point
         e.g. 0b01010110 -> 0b01101010
         :param input_byte: to be byte-swapped/mirrored
         :return: Reversed-byte
-        '''
+        """
         #TODO: clean this function up, better way to do this
 
         mirrored_byte = 0x0
@@ -2573,13 +2562,13 @@ class SkarabTransport(Transport):
 
     @staticmethod
     def verify_bytes_now(written_bytes, returned_bytes):
-        '''
+        """
         Used to 'Verify on the fly' the data programmed to SPARTAN Flash
         via program_spi_page.
         :param written_bytes:
         :param returned_bytes:
         :return:
-        '''
+        """
 
         if len(written_bytes) != len(returned_bytes):
             # Problem
@@ -2601,12 +2590,12 @@ class SkarabTransport(Transport):
         return True
 
     def spartan_flash_reconfig(self, filename, blind_reconfig=False):
-        '''
+        """
         This is the entire function that makes the necessary function calls to reconfigure the Spartan's Flash
         :param filename: The actual .ufp file that is to be written to the Spartan FPGA
         :param blind_reconfig: Reconfigure the board and don't wait to verify what has been written
         :return: Boolean - Success/Fail - 1/0
-        '''
+        """
 
         # TODO: Figure out how we can use get_spartan_firmware_version in checking versions
 
@@ -2851,7 +2840,7 @@ class SkarabTransport(Transport):
 
         if response is None:
             errmsg = 'Invalid response to HMC I2C read request.'
-            raise InvalidResponse(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
         if not response.packet['read_success']:
             errmsg = 'HMC I2C read failed!'

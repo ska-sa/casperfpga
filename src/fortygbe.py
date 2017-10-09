@@ -188,14 +188,15 @@ class FortyGbe(object):
         self.port=port
 
     def get_10gbe_core_details(self,read_arp=False,read_cpu=False):
-        return self.get_core_details(read_arp=read_arp,read_cpu=read_cpu)
+        return self.get_core_details(read_arp=read_arp, read_cpu=read_cpu)
 
-    def get_core_details(self,read_arp=False, read_cpu=False):
+    def get_core_details(self, read_arp=False, read_cpu=False):
         """
         Get the details of the ethernet core from the device memory map. 
         Updates local variables as well.
         :return: 
         """
+        raise NotImplementedError
         from tengbe import IpAddress, Mac
         gbebase = self.address
         gbedata = []
@@ -306,13 +307,13 @@ class FortyGbe(object):
         # mask_high = mask.ip_int >> 16
         # mask_low = mask.ip_int & 65535
         request = ConfigureMulticastReq(1, ip_high, ip_low, mask_high, mask_low)
-        resp = self.parent.transport.send_packet(request)
-        resp_ip = IpAddress(
-            resp.fabric_multicast_ip_address_high << 16 |
-            resp.fabric_multicast_ip_address_low)
+        response = self.parent.transport.send_packet(request)
+        resp_pkt = response.packet
+        resp_ip = IpAddress(resp_pkt['fabric_multicast_ip_address_high'] << 16 |
+                            resp_pkt['fabric_multicast_ip_address_low'])
         resp_mask = IpAddress(
-            resp.fabric_multicast_ip_address_mask_high << 16 |
-            resp.fabric_multicast_ip_address_mask_low)
+            resp_pkt['fabric_multicast_ip_address_mask_high'] << 16 |
+            resp_pkt['fabric_multicast_ip_address_mask_low'])
         LOGGER.info('%s: multicast configured: addr(%s) mask(%s)' % (
             self.name, resp_ip.ip_str, resp_mask.ip_str))
         self.set_port(7148)

@@ -477,9 +477,6 @@ class Response(Command):
         unpacked_data = cls.unpack_preprocess(
             rawdata, number_of_words, pad_words)
         unpacked_data = cls.unpack_process(unpacked_data)
-
-        print(cls.__class__,  unpacked_data)
-
         obj = cls(*unpacked_data)
         return obj
 
@@ -1018,7 +1015,8 @@ class DebugConfigureEthernetReq(Command):
         self.packet['fabric_ip_address_low'] = fabric_ip_address_low
         self.packet['fabric_multicast_ip_address_high'] =  \
             fabric_multicast_ip_address_high
-        self.packet['fabric_multicast_ip_address_low'] = fabric_multicast_ip_address_low
+        self.packet['fabric_multicast_ip_address_low'] = \
+            fabric_multicast_ip_address_low
         self.packet['fabric_multicast_ip_address_mask_high'] = \
             fabric_multicast_ip_address_mask_high
         self.packet['fabric_multicast_ip_address_mask_low'] = \
@@ -1161,7 +1159,7 @@ class ConfigureMulticastReq(Command):
         self.expect_response = True
         self.response = ConfigureMulticastResp
         self.num_words = 11
-        self.pad_words = 2
+        self.pad_words = 4
         self.packet['id'] = interface_id
         self.packet['fabric_multicast_ip_address_high'] =  \
             fabric_multicast_ip_address_high
