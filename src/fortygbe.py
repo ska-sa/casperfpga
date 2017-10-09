@@ -305,15 +305,8 @@ class FortyGbe(object):
         # mask = IpAddress('255.255.255.240')
         # mask_high = mask.ip_int >> 16
         # mask_low = mask.ip_int & 65535
-        request = ConfigureMulticastReq(
-            self.parent.transport._seq_num, 1, ip_high, ip_low,
-            mask_high, mask_low)
-        resp = self.parent.transport.send_packet(
-            payload=request.create_payload(),
-            response_type='ConfigureMulticastResp',
-            expect_response=True,
-            command_id=MULTICAST_REQUEST,
-            number_of_words=11, pad_words=4)
+        request = ConfigureMulticastReq(1, ip_high, ip_low, mask_high, mask_low)
+        resp = self.parent.transport.send_packet(request)
         resp_ip = IpAddress(
             resp.fabric_multicast_ip_address_high << 16 |
             resp.fabric_multicast_ip_address_low)
