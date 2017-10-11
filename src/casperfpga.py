@@ -636,4 +636,11 @@ class CasperFpga(object):
         else:
             return [(f, git_info[f]) for f in files if f != 'tag']
 
+    def __str__(self):
+        """
+
+        :return:
+        """
+        return self.host
+
 # end

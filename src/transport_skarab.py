@@ -3211,7 +3211,8 @@ class SkarabTransport(Transport):
         """
         Checks the bitstream to see if it is valid.
         i.e. if it contains a known, correct substring in its header
-        If bitstream endianness is incorrect, byte-swap data and return altered bitstream
+        If bitstream endianness is incorrect, byte-swap data and return
+        altered bitstream
         :param bitstream: Of the input (.bin) file to be checked
         :return: tuple - (True/False, bitstream)
         """
@@ -3365,6 +3366,7 @@ class SkarabTransport(Transport):
         :param num_bytes: number of bytes in command
         :return: Read bytes if successful
         """
+        raise DeprecationWarning
 
         # do a PMBus i2c read
         data = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
@@ -3389,6 +3391,7 @@ class SkarabTransport(Transport):
         :param open_switch: True if the i2c switch must be opened
         :return: read fan speed in RPM
         """
+        raise DeprecationWarning
 
         # find the address of the desired fan
         if fan == 'LeftFrontFan':

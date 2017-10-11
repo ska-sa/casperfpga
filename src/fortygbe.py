@@ -315,7 +315,7 @@ class FortyGbe(object):
         resp_mask = IpAddress(
             resp_pkt['fabric_multicast_ip_address_mask_high'] << 16 |
             resp_pkt['fabric_multicast_ip_address_mask_low'])
-        LOGGER.info('%s: multicast configured: addr(%s) mask(%s)' % (
+        LOGGER.debug('%s: multicast configured: addr(%s) mask(%s)' % (
             self.name, resp_ip.ip_str, resp_mask.ip_str))
         self.set_port(7148)
 
