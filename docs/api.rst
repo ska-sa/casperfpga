@@ -24,3 +24,10 @@ TapcpTransport Module
 .. autoclass:: casperfpga.TapcpTransport
    :members:
    :undoc-members:
+
+Forty Gbe Module
+----------------
+
+.. autoclass:: casperfpga.fortygbe
+   :members:
+   :undoc-members:
