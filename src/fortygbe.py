@@ -211,9 +211,12 @@ class FortyGbe(object):
             gbebytes.append((d >> 0) & 0xff)
         pd = gbebytes
         returnval = {
-            'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
+             #no longer meaningful, since subnet can be less than 256?
+            #'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
             'ip': IpAddress('%i.%i.%i.%i' % (
                 pd[0x10], pd[0x11], pd[0x12], pd[0x13])),
+            'subnet_mask': IpAddress('%i.%i.%i.%i' % (
+                    pd[0x38], pd[0x39], pd[0x3a], pd[0x3b])),
             'mac': Mac('%i:%i:%i:%i:%i:%i' % (
                 pd[0x02], pd[0x03], pd[0x04], pd[0x05], pd[0x06], pd[0x07])),
             'gateway_ip': IpAddress('%i.%i.%i.%i' % (
@@ -235,9 +238,7 @@ class FortyGbe(object):
                 'base_ip': IpAddress('%i.%i.%i.%i' % (
                     pd[0x30], pd[0x31], pd[0x32], pd[0x33])),
                 'ip_mask': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x34], pd[0x35], pd[0x36], pd[0x37])),
-                'subnet_mask': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x38], pd[0x39], pd[0x3a], pd[0x3b]))}
+                    pd[0x34], pd[0x35], pd[0x36], pd[0x37]))}
         }
         possible_addresses = [int(returnval['multicast']['base_ip'])]
         mask_int = int(returnval['multicast']['ip_mask'])

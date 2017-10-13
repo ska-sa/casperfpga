@@ -499,7 +499,7 @@ class TenGbe(Memory):
         0x2b    :    TX_diff_ctrl
         0x30 - 0x33: Multicast IP RX base address
         0x34 - 0x37: Multicast IP mask
-        0x38 - 0x3b: Multicast subnet mask
+        0x38 - 0x3b: Subnet mask
         0x1000  :    CPU TX buffer
         0x2000  :    CPU RX buffer
         0x3000  :    ARP tables start
@@ -542,6 +542,8 @@ class TenGbe(Memory):
             'ip_prefix': '%i.%i.%i.' % (data[0x10], data[0x11], data[0x12]),
             'ip': IpAddress('%i.%i.%i.%i' % (data[0x10], data[0x11], 
                                              data[0x12], data[0x13])),
+            'subnet_mask': IpAddress('%i.%i.%i.%i' % (
+                              data[0x38], data[0x39], data[0x3a], data[0x3b])),
             'mac': Mac('%i:%i:%i:%i:%i:%i' % (data[0x02], data[0x03],
                                               data[0x04], data[0x05],
                                               data[0x06], data[0x07])),
@@ -559,8 +561,6 @@ class TenGbe(Memory):
                 data[0x30], data[0x31], data[0x32], data[0x33])),
                           'ip_mask': IpAddress('%i.%i.%i.%i' % (
                               data[0x34], data[0x35], data[0x36], data[0x37])),
-                          'subnet_mask': IpAddress('%i.%i.%i.%i' % (
-                              data[0x38], data[0x39], data[0x3a], data[0x3b])),
                           'rx_ips': []}
         }
         possible_addresses = [int(returnval['multicast']['base_ip'])]
