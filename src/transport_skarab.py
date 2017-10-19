@@ -2063,9 +2063,13 @@ class SkarabTransport(Transport):
 
         if len(contents) % 2 != 0:
             # Problem
-            errmsg = "Invalid file size: Number of Words is not whole"
-            LOGGER.error(errmsg)
-            raise SkarabInvalidBitstream(errmsg)
+            if len(contents) % 2 == 1:
+                # hex file with carriage return (\n) at the end
+                contents = contents[:-1]
+            else:
+                errmsg = "Invalid file size: Number of Words is not whole"
+                LOGGER.error(errmsg)
+                raise SkarabInvalidBitstream(errmsg)
         # else: Continue
         num_words = len(contents) / 2
         num_memory_blocks = int(math.ceil(num_words / sd.DEFAULT_BLOCK_SIZE))
