@@ -64,7 +64,11 @@ class SNAPADC(object):
 
 		self.curDelay = [[defaultDelayTap]*len(self.laneList)]*len(self.adcList)
 
-		self.lmx = LMX2581(interface,'lmx_ctrl', fosc=ref)
+        if ref is not None:
+		    self.lmx = LMX2581(interface,'lmx_ctrl', fosc=ref)
+        else:
+            self.lmx = None
+
 		self.clksw = HMC922(interface,'adc16_use_synth')
 		self.ram = [WishBoneDevice(interface,name) for name in self.ramList]
 
@@ -124,16 +128,20 @@ class SNAPADC(object):
 
 		self.selectADC()
 
-		logging.info("Reseting frequency synthesizer")
-		self.lmx.init()
+        if self.lmx is not None:
+		    logging.info("Reseting frequency synthesizer")
+		    self.lmx.init()
 
-		logging.info("Configuring frequency synthesizer")
-		self.lmx.setFreq(samplingRate)
-		if not self.lmx.getDiagnoses('LD_PINSTATE'):
-			return self.ERROR_LMX
+		    logging.info("Configuring frequency synthesizer")
+		    self.lmx.setFreq(samplingRate)
+		    if not self.lmx.getDiagnoses('LD_PINSTATE'):
+		        return self.ERROR_LMX
 
 		logging.info("Configuring clock source switch")
-		self.clksw.setSwitch('a')
+        if self.lmx is not None:
+		    self.clksw.setSwitch('a')
+        else
+		    self.clksw.setSwitch('b')
 
 		logging.info("Initialising ADCs")
 		self.adc.init()
