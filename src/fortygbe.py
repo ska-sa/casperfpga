@@ -1,70 +1,54 @@
 import logging
 import time
-import struct
+
 from network import IpAddress, Mac
-from skarab_definitions import MULTICAST_REQUEST, ConfigureMulticastReq
-from utils import check_changing_status
+from skarab_definitions import ConfigureMulticastReq
+from gbe import Gbe
 
 LOGGER = logging.getLogger(__name__)
 
 
-class FortyGbe(object):
+class FortyGbe(Gbe):
     """
 
     """
 
-    def __init__(self, parent, name, position, address=0x50000,
-                 length_bytes=0x4000, device_info=None):
+    def __init__(self, parent, name, address=0x50000, length_bytes=0x4000,
+                 device_info=None, position=None):
         """
 
-        :param parent: 
-        :param position: 
+        :param parent:
+        :param name:
+        :param position:
+        :param address:
+        :param length_bytes:
+        :param device_info:
         """
-        self.name = name
-        self.parent = parent
+        super(FortyGbe, self).__init__(
+            parent, name, address, length_bytes, device_info)
         self.position = position
-        self.address = address
-        self.length = length_bytes
-        self.block_info = device_info
-        self.snaps = {'tx': None, 'rx': None}
-        self.registers = {'tx': [], 'rx': []}
-        self.multicast_subscriptions = []
-        self.mac = None
-        self.ip_address = None
-        self.port = None
 
     def post_create_update(self, raw_device_info):
         """
         Update the device with information not available at creation.
         :param raw_device_info: info about this block that may be useful
         """
-        self.registers = {'tx': [], 'rx': []}
-        for register in self.parent.registers:
-            if register.name.find(self.name + '_') == 0:
-                name = register.name.replace(self.name + '_', '')
-                if name[0:2] == 'tx' and name.find('txs_') == -1:
-                    self.registers['tx'].append(register.name)
-                elif name[0:2] == 'rx' and name.find('rxs_') == -1:
-                    self.registers['rx'].append(register.name)
-                else:
-                    if not (name.find('txs_') == 0 or name.find('rxs_') == 0):
-                        LOGGER.warn('%s,%s: odd register name %s under '
-                                    'fortygbe block' % (
-                                        self.parent.host, self.name,
-                                        register.name))
+        super(FortyGbe, self).post_create_update(raw_device_info)
         self.snaps = {'tx': None, 'rx': None}
-        for snapshot in self.parent.snapshots:
-            if snapshot.name.find(self.name + '_') == 0:
-                name = snapshot.name.replace(self.name + '_', '')
-                if name == 'txs_ss':
-                    self.snaps['tx'] = snapshot.name
-                elif name == 'rxs_ss':
-                    self.snaps['rx'] = snapshot.name
+        snapnames = self.parent.snapshots.names()
+        for txrx in ['r', 't']:
+            name = self.name + '_%sxs0_ss' % txrx
+            if name in snapnames:
+                if (self.name + '_%sxs1_ss' % txrx not in snapnames) or \
+                        (self.name + '_%sxs2_ss' % txrx not in snapnames):
+                    LOGGER.error('%sX snapshots misconfigured: %s' % (
+                        txrx.upper(), snapnames))
                 else:
-                    LOGGER.error('%s,%s: incorrect snap %s under fortygbe '
-                                 'block' % (self.parent.host, self.name,
-                                            snapshot.name))
-        self.get_core_details()
+                    self.snaps['%sx' % txrx] = [
+                        self.parent.snapshots[self.name + '_%sxs0_ss' % txrx],
+                        self.parent.snapshots[self.name + '_%sxs1_ss' % txrx],
+                        self.parent.snapshots[self.name + '_%sxs2_ss' % txrx]]
+        self.get_gbe_core_details()
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
@@ -77,26 +61,10 @@ class FortyGbe(object):
         :param memorymap_dict: a dictionary containing the device memory map
         :return: a TenGbe object
         """
-        # address, length_bytes = -1, -1
-        # for mem_name in memorymap_dict.keys():
-        #     if mem_name == device_name:
-        #         address = memorymap_dict[mem_name]['address']
-        #         length_bytes = memorymap_dict[mem_name]['bytes']
-        #         break
-        # if address == -1 or length_bytes == -1:
-        #     raise RuntimeError('Could not find address or length '
-        #                        'for FortyGbe %s' % device_name)
         # TODO: fix this hard-coding!
         address = 0x50000
         length_bytes = 0x4000
-        return cls(parent, device_name, 0, address, length_bytes, device_info)
-
-    def __str__(self):
-        """
-        String representation of this 10Gbe interface.
-        """
-        return '%s: MAC(%s) IP(%s) Port(%s)' % (
-            self.name, str(self.mac), str(self.ip_address), str(self.port))
+        return cls(parent, device_name, address, length_bytes, device_info, 0)
 
     def _wbone_rd(self, addr):
         """
@@ -115,7 +83,7 @@ class FortyGbe(object):
         """
         return self.parent.transport.write_wishbone(addr, val)
 
-    def enable(self):
+    def fabric_enable(self):
         """
         Enables 40G core.
         :return: 
@@ -130,7 +98,7 @@ class FortyGbe(object):
             LOGGER.error(errmsg)
             raise ValueError(errmsg)
 
-    def disable(self):
+    def fabric_disable(self):
         """
         Disables 40G core.
         :return: 
@@ -150,8 +118,8 @@ class FortyGbe(object):
         Retrieve core's configured MAC address from HW.
         :return: Mac object
         """
-        details = self.get_core_details()
-        return self.mac
+        details = self.get_gbe_core_details()
+        return details['mac']
 
     def get_ip(self):
         """
@@ -189,16 +157,12 @@ class FortyGbe(object):
             raise ValueError(errmsg)
         self.port = port
 
-    def get_10gbe_core_details(self, read_arp=False, read_cpu=False):
-        return self.get_core_details(read_arp=read_arp, read_cpu=read_cpu)
-
-    def get_core_details(self, read_arp=False, read_cpu=False):
+    def get_gbe_core_details(self, read_arp=False, read_cpu=False):
         """
         Get the details of the ethernet core from the device memory map. 
         Updates local variables as well.
         :return: 
         """
-        from tengbe import IpAddress, Mac
         gbebase = self.address
         gbedata = []
         for ctr in range(0, 0x40, 4):
@@ -211,8 +175,8 @@ class FortyGbe(object):
             gbebytes.append((d >> 0) & 0xff)
         pd = gbebytes
         returnval = {
-             #no longer meaningful, since subnet can be less than 256?
-            #'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
+            # no longer meaningful, since subnet can be less than 256?
+            # 'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
             'ip': IpAddress('%i.%i.%i.%i' % (
                 pd[0x10], pd[0x11], pd[0x12], pd[0x13])),
             'subnet_mask': IpAddress('%i.%i.%i.%i' % (
@@ -270,21 +234,9 @@ class FortyGbe(object):
         :param port_dump: list - A list of raw bytes from interface memory;
             if not supplied, fetch from hardware.
         """
-        raise NotImplementedError
-        LOGGER.error("Retrieving ARP buffers not yet implemented.") 
+        # TODO
+        LOGGER.error('Retrieving ARP buffers not yet implemented.')
         return None
-        # # TODO: fix this function. It appears to be returning garbage.
-        # # Have the offsets changed? word lengths?
-        # if port_dump is None:
-        #    port_dump = self.parent.read(self.name, 16384)
-        #    port_dump = list(struct.unpack('>16384B', port_dump))
-        # returnval = []
-        # for addr in range(256):
-        #    mac = []
-        #    for ctr in range(2, 8):
-        #        mac.append(port_dump[0x3000 + (addr * 8) + ctr])
-        #    returnval.append(mac)
-        # return returnval
 
     def multicast_receive(self, ip_str, group_size):
         """
@@ -302,12 +254,6 @@ class FortyGbe(object):
         mask = IpAddress('255.255.255.%i' % (256 - group_size))
         mask_high = mask.ip_int >> 16
         mask_low = mask.ip_int & 65535
-        # ip = IpAddress('239.2.0.64')
-        # ip_high = ip.ip_int >> 16
-        # ip_low = ip.ip_int & 65535
-        # mask = IpAddress('255.255.255.240')
-        # mask_high = mask.ip_int >> 16
-        # mask_low = mask.ip_int & 65535
         request = ConfigureMulticastReq(1, ip_high, ip_low, mask_high, mask_low)
         response = self.parent.transport.send_packet(request)
         resp_pkt = response.packet
@@ -320,90 +266,11 @@ class FortyGbe(object):
             self.name, resp_ip.ip_str, resp_mask.ip_str))
         self.set_port(7148)
 
-    def tx_okay(self, wait_time=0.2, checks=10):
-        """
-        Is this gbe core transmitting okay?
-        i.e. _txctr incrementing and _txerrctr not incrementing
-        :param wait_time: seconds to wait between checks
-        :param checks: times to run check
-        :return: True/False
-        """
-        if checks < 2:
-            raise RuntimeError('Cannot check less often than twice?')
-        fields = {
-            # name, required, True = same|False = different
-            self.name + '_txctr': (True, False),
-            self.name + '_txfullctr': (False, True),
-            self.name + '_txofctr': (False, True),
-            self.name + '_txerrctr': (False, True),
-            self.name + '_txvldctr': (False, False),
-        }
-        result, message = check_changing_status(fields, self.read_tx_counters,
-                                                wait_time, checks)
-        if not result:
-            LOGGER.error('%s: %s' % (self.name, message))
-            return False
-        return True
-
-    def rx_okay(self, wait_time=0.2, checks=10):
-        """
-        Is this gbe core receiving okay?
-        i.e. _rxctr incrementing and _rxerrctr not incrementing
-        :param wait_time: seconds to wait between checks
-        :param checks: times to run check
-        :return: True/False
-        """
-        if checks < 2:
-            raise RuntimeError('Cannot check less often than twice?')
-        fields = {
-            # name, required, True = same|False = different
-            self.name + '_rxctr': (True, False),
-            self.name + '_rxfullctr': (False, True),
-            self.name + '_rxofctr': (False, True),
-            self.name + '_rxerrctr': (False, True),
-            self.name + '_rxvldctr': (False, False),
-        }
-        result, message = check_changing_status(fields, self.read_rx_counters,
-                                                wait_time, checks)
-        if not result:
-            LOGGER.error('%s: %s' % (self.name, message))
-            return False
-        return True
-
-    def read_rx_counters(self):
-        """
-        Read all RX counters embedded in this FortyGBE yellow block
-        """
-        results = {}
-        for reg in self.registers['rx']:
-            results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
-        return results
-
-    def read_tx_counters(self):
-        """
-        Read all TX counters embedded in this FortyGBE yellow block
-        """
-        results = {}
-        for reg in self.registers['tx']:
-            results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
-        return results
-
-    def read_counters(self):
-        """
-        Read all the counters embedded in this FortyGBE yellow block
-        """
-        results = {}
-        for direction in ['tx', 'rx']:
-            for reg in self.registers[direction]:
-                tmp = self.parent.memory_devices[reg].read()
-                results[reg] = tmp['data']['reg']
-        return results
-
-    def print_core_details(self):
+    def print_gbe_core_details(self, arp=False, cpu=False, refresh=True):
         """
         Prints 40GbE core details.
         """
-        details = self.get_core_details()
+        details = self.get_gbe_core_details()
         print('------------------------')
         print('%s configuration:' % self.name)
         print('MAC: ', Mac.mac2str(int(details['mac'])))
@@ -425,33 +292,15 @@ class FortyGbe(object):
         for k in details['multicast']:
             print('\t%s: %s' % (k, details['multicast'][k].__str__()))
 
-    def print_arp_details(self, only_hits=False):
+    def print_arp_details(self, refresh=False, only_hits=False):
         """
         Print nicely formatted ARP info.
+        :param refresh:
         :param only_hits:
         :return:
         """
-        LOGGER.warn("Retrieving ARP details not yet implemented.") 
-#        details = self.get_arp_details()
-#        print('ARP Table: ')
-#        for ip_address in range(256):
-#            all_fs = True
-#            if only_hits:
-#                for mac in range(0, 6):
-#                    if details['arp'][ip_address][mac] != 255:
-#                        all_fs = False
-#                        break
-#            printmac = True
-#            if only_hits and all_fs:
-#                printmac = False
-#            if printmac:
-#                print '%3d: MAC:' % (ip_address),
-#                for mac in range(0, 6):
-#                    print '%02X' % details[ip_address][mac],
-#                    if mac==5:
-#                        print('')
-#                    else:
-#                        print '-',
+        LOGGER.warn("Retrieving ARP details not yet implemented.")
+        raise NotImplementedError
 
     def get_stats(self):
         """
@@ -497,5 +346,33 @@ class FortyGbe(object):
         rv['tx_pkt_cnt'] = second[txcnt]
         rv['rx_pkt_cnt'] = second['%s_rxctr' % name]
         return rv
+
+    def read_txsnap(self):
+        """
+        Read the TX snapshot embedded in this GbE yellow block
+        :return:
+        """
+        d = self.snaps['tx'][0].read()['data']
+        d1 = self.snaps['tx'][1].read(arm=False)['data']
+        d2 = self.snaps['tx'][1].read(arm=False)['data']
+        d['data'] = [
+            ((d1['data_msw'][ctr] << 128) + d2['data_lsw'][ctr])
+            for ctr in range(len(d1['data_msw']))
+        ]
+        return d
+
+    def read_rxsnap(self):
+        """
+        Read the RX snapshot embedded in this GbE yellow block
+        :return:
+        """
+        d = self.snaps['rx'][0].read()['data']
+        d1 = self.snaps['rx'][1].read(arm=False)['data']
+        d2 = self.snaps['rx'][1].read(arm=False)['data']
+        d['data'] = [
+            ((d1['data_msw'][ctr] << 128) + d2['data_lsw'][ctr])
+            for ctr in range(len(d1['data_msw']))
+        ]
+        return d
 
 # end
