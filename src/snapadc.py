@@ -163,7 +163,7 @@ class SNAPADC(object):
         elif type(self.adc) is HMCAD1520:
             self.adc.setOperatingMode(numChannel,1,lowClkFreq,resolution)
 
-        self.setDemux()
+        self.setDemux(numChannel=1) # calibrate in full interleave mode
 
         if not self.getWord('ADC16_LOCKED'):
             logging.error('MMCM not locked.')
@@ -178,6 +178,9 @@ class SNAPADC(object):
         if not np.all(np.array([adc.values() for adc in errs.values()])==0):
             logging.error('ADCs failed on ramp test.')
             return self.ERROR_RAMP
+
+        # Finally place ADC in "correct" mode
+        self.setDemux(numChannel=numChannel)
 
         return self.SUCCESS
 
@@ -202,18 +205,19 @@ class SNAPADC(object):
         else:
             raise ValueError("Invalid parameter")
 
-    def setDemux(self, mode=2):
+    def setDemux(self, numChannel=1):
         """
-
-        when mode==0:
+        when mode==0: numChannel=4
             data = data[:,[0,4,1,5,2,6,3,7]]
-        when mode==1:
+        when mode==1: numChannel=2
             data = data[:,[0,1,4,5,2,3,6,7]]
-        when mode==2:
+        when mode==2: numChannel=1
             data = data[:,[0,1,2,3,4,5,6,7]]
         """
-        if mode not in [0,1,2]:
+        modeMap = {4:0, 2:1, 1:2} # mapping of numChannel to mode
+        if numChannel not in mode.keys():
             raise ValueError("Invalid parameter")
+        mode = modeMap[numChannel]
         val = self._set(0x0, mode,  self.M_WB_W_DEMUX_MODE)
         val = self._set(val, 0b1,   self.M_WB_W_DEMUX_WRITE)
         self.adc._write(val, self.A_WB_W_CTRL)
