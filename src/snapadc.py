@@ -215,7 +215,7 @@ class SNAPADC(object):
             data = data[:,[0,1,2,3,4,5,6,7]]
         """
         modeMap = {4:0, 2:1, 1:2} # mapping of numChannel to mode
-        if numChannel not in mode.keys():
+        if numChannel not in modeMap.keys():
             raise ValueError("Invalid parameter")
         mode = modeMap[numChannel]
         val = self._set(0x0, mode,  self.M_WB_W_DEMUX_MODE)
