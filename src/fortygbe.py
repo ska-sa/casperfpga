@@ -354,7 +354,7 @@ class FortyGbe(Gbe):
         """
         d = self.snaps['tx'][0].read()['data']
         d1 = self.snaps['tx'][1].read(arm=False)['data']
-        d2 = self.snaps['tx'][1].read(arm=False)['data']
+        d2 = self.snaps['tx'][2].read(arm=False)['data']
         d['data'] = [
             ((d1['data_msw'][ctr] << 128) + d2['data_lsw'][ctr])
             for ctr in range(len(d1['data_msw']))
@@ -368,7 +368,7 @@ class FortyGbe(Gbe):
         """
         d = self.snaps['rx'][0].read()['data']
         d1 = self.snaps['rx'][1].read(arm=False)['data']
-        d2 = self.snaps['rx'][1].read(arm=False)['data']
+        d2 = self.snaps['rx'][2].read(arm=False)['data']
         d['data'] = [
             ((d1['data_msw'][ctr] << 128) + d2['data_lsw'][ctr])
             for ctr in range(len(d1['data_msw']))
