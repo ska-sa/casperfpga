@@ -911,7 +911,7 @@ class SkarabTransport(Transport):
                     (response.packet['ack'] == 0):
                 return True
         # at this point, the transmission of the chunk failed
-        LOGGER.warning('Tranmission of chunk failed.')
+        LOGGER.error('Tranmission of chunk failed.')
         return False
 
     def upload_to_ram_and_program(self, filename, port=-1,
@@ -1277,7 +1277,7 @@ class SkarabTransport(Transport):
                 self.host, str(address), repr(response_payload)))
             # check the opcode of the response i.e. first two bytes
             if response_payload[:2] == '\xff\xff':
-                LOGGER.error('%s: received unsupported opcode: 0xffff. '
+                LOGGER.warning('%s: received unsupported opcode: 0xffff. '
                              'Discarding response.' % self.host)
                 return None
             # unpack the response before checking it
@@ -1289,13 +1289,13 @@ class SkarabTransport(Transport):
                 response_object.seq_num))
             expected_response_id = request_object.type + 1
             if response_object.type != expected_response_id:
-                LOGGER.error('%s: incorrect command ID in response. Expected'
+                LOGGER.warning('%s: incorrect command ID in response. Expected'
                              '(%i) got(%i). Discarding response.' % (
                                 self.host, expected_response_id,
                                 response_object.type))
                 return None
             elif response_object.seq_num != self._seq_num:
-                LOGGER.error('%s: incorrect sequence number in response. Expec'
+                LOGGER.warning('%s: incorrect sequence number in response. Expec'
                              'ted(%i,%i), got(%i). Discarding response.' % (
                                 self.host, self._seq_num,
                                 request_object.packet['seq_num'],
