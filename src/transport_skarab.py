@@ -158,7 +158,7 @@ class SkarabTransport(Transport):
         Is the FPGA programmed and running?
         :return: True or False
         """
-        [golden_img, multiboot, version] = self.get_firmware_version()
+        [golden_img, multiboot, version] = self.get_virtex7_firmware_version()
         if golden_img == 0 and multiboot == 0:
             return True
         return False
@@ -911,7 +911,7 @@ class SkarabTransport(Transport):
                     (response.packet['ack'] == 0):
                 return True
         # at this point, the transmission of the chunk failed
-        LOGGER.warning('Tranmission of chunk failed.')
+        LOGGER.error('Tranmission of chunk failed.')
         return False
 
     def upload_to_ram_and_program(self, filename, port=-1,
@@ -947,7 +947,7 @@ class SkarabTransport(Transport):
                 # self.config_prog_mux(user_data=1)
                 # time.sleep(1)
                 [golden_image, multiboot, firmware_version] = \
-                    self.get_firmware_version()
+                    self.get_virtex7_firmware_version()
                 if golden_image == 0 and multiboot == 0:
                     prog_time = time.time() - prog_start_time
                     LOGGER.info(
@@ -1030,7 +1030,7 @@ class SkarabTransport(Transport):
                 # self.config_prog_mux(user_data=1)
                 # time.sleep(1)
                 [golden_image, multiboot, firmware_version] = \
-                    self.get_firmware_version()
+                    self.get_virtex7_firmware_version()
                 if golden_image == 0 and multiboot == 0:
                     prog_time = time.time() - prog_start_time
                     LOGGER.info(
@@ -1277,7 +1277,7 @@ class SkarabTransport(Transport):
                 self.host, str(address), repr(response_payload)))
             # check the opcode of the response i.e. first two bytes
             if response_payload[:2] == '\xff\xff':
-                LOGGER.error('%s: received unsupported opcode: 0xffff. '
+                LOGGER.warning('%s: received unsupported opcode: 0xffff. '
                              'Discarding response.' % self.host)
                 return None
             # unpack the response before checking it
@@ -1289,13 +1289,13 @@ class SkarabTransport(Transport):
                 response_object.seq_num))
             expected_response_id = request_object.type + 1
             if response_object.type != expected_response_id:
-                LOGGER.error('%s: incorrect command ID in response. Expected'
+                LOGGER.warning('%s: incorrect command ID in response. Expected'
                              '(%i) got(%i). Discarding response.' % (
                                 self.host, expected_response_id,
                                 response_object.type))
                 return None
             elif response_object.seq_num != self._seq_num:
-                LOGGER.error('%s: incorrect sequence number in response. Expec'
+                LOGGER.warning('%s: incorrect sequence number in response. Expec'
                              'ted(%i,%i), got(%i). Discarding response.' % (
                                 self.host, self._seq_num,
                                 request_object.packet['seq_num'],
@@ -1497,7 +1497,7 @@ class SkarabTransport(Transport):
                 response.packet['reg_data_low'])
         return 0
 
-    def get_embedded_software_ver(self):
+    def get_embedded_software_version(self):
         """
         Read the version of the microcontroller embedded software
         :return: embedded software version
@@ -2731,9 +2731,9 @@ class SkarabTransport(Transport):
         }
         return packet_count
 
-    def get_firmware_version(self):
+    def get_virtex7_firmware_version(self):
         """
-        Read the version of the firmware
+        Read the version of the Virtex 7 firmware
         :return: golden_image, multiboot, firmware_major_version,
         firmware_minor_version
         """
@@ -2745,17 +2745,16 @@ class SkarabTransport(Transport):
                 firmware_major_version, firmware_minor_version)
         return None, None, None
 
-    def get_soc_version(self):
+    def get_microblaze_hardware_version(self):
         """
-        Read the version of the soc
-        :return: golden_image, multiboot, soc_major_version, soc_minor_version
+        Read the version of the microblaze hardware (SoC) implementation
+        :return: soc_version (string)
         """
         reg_data = self.read_board_reg(sd.C_RD_SOC_VERSION_ADDR)
         if reg_data:
             soc_major_version = (reg_data >> 16) & 0x3FFF
             soc_minor_version = reg_data & 0xFFFF
-            return reg_data >> 31, reg_data >> 30 & 0x1, '{}.{}'.format(
-                soc_major_version, soc_minor_version)
+            return '{}.{}'.format(soc_major_version, soc_minor_version)
         return None
 
     def front_panel_status_leds(self, led_0_on, led_1_on, led_2_on, led_3_on,
@@ -2878,6 +2877,34 @@ class SkarabTransport(Transport):
             LOGGER.info('Binary: \t {:#032b}'.format(hmc_read_word))
             LOGGER.info('Hex:    \t ' + '0x' + '{:08x}'.format(hmc_read_word))
         return hmc_read_word
+
+    def get_skarab_version_info(self):
+        """
+        Get version info of all SKARAB components
+        :return: dictionary containing all SKARAB version numbers:
+        {
+         virtex7_firmware_version:,
+         embedded_software_version:,
+         spartan_firmware_version:,
+         soc_version:,
+         multiboot_image:,
+         golden_image:,
+         toolflow_image:
+         }
+        """
+
+        skarab_version_info = dict()
+
+        golden_image, multiboot_image, firmware_version = self.get_virtex7_firmware_version()
+        skarab_version_info['golden_image'] = bool(golden_image)
+        skarab_version_info['multiboot_image'] = bool(multiboot_image)
+        skarab_version_info['virtex7_firmware_version'] = firmware_version
+        skarab_version_info['toolflow_image'] = not (golden_image or multiboot_image)
+        skarab_version_info['spartan_firmware_version'] = self.get_spartan_firmware_version()
+        skarab_version_info['microblaze_hardware_version'] = self.get_microblaze_hardware_version()
+        skarab_version_info['emdedded_software_version'] = self.get_embedded_software_version()
+        
+        return skarab_version_info
 
     def get_sensor_data(self):
         """

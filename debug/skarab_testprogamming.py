@@ -26,8 +26,8 @@ while loopctr < loops:
         print('\t%s' % host, end='')
         try:
             f = skarab_fpga.SkarabFpga(host)
-            print(f.get_firmware_version(), end='')
-            print(f.get_embedded_software_ver(), end='')
+            print(f.get_virtex7_firmware_version(), end='')
+            print(f.get_embedded_software_version(), end='')
             res = f.upload_to_ram_and_program(
                 '/home/paulp/bofs/spead_test_2017-4-10_1528.fpg')
             if not res:
