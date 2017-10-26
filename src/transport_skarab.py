@@ -2261,7 +2261,7 @@ class SkarabTransport(Transport):
         Up to a full page (264 bytes) can be programmed.
         :param spi_address: 32-bit address to program bytes to
         :param num_bytes: Number of bytes to program to Spartan flash
-        :param write_bytes: Data to program - max 264 bytes
+        :param write_bytes: Data to program - max 264 bytes --> HEX-ENCODED STRING DATA
         :return: Boolean - Success/Fail - 1/0
         """
 
@@ -2287,9 +2287,18 @@ class SkarabTransport(Transport):
         spi_addr_high, spi_addr_low = self.data_split_and_pack(spi_address)
 
         # Create instance of ProgramFlashWordsRequest
-        request = sd.ProgramSpiPageReq(
-            spi_addr_high, spi_addr_low,
-            num_bytes=num_bytes, write_bytes=write_bytes)
+        request = sd.ProgramSpiPageReq(spi_addr_high, spi_addr_low,
+                                       num_bytes=num_bytes, write_bytes=write_bytes)
+
+        if '\x00\xbe\x00\xaf' in write_bytes[:10]:
+            # Flash Magic Byte case - DON'T HANDLE RESPONSE
+            debugmsg = 'Making Magic Bytes request...'
+            LOGGER.debug(debugmsg)
+
+            # It seems the response was still being handled after the first EraseSpiSectorRequest
+            # request.expect_response = False
+        # else: Continue
+
 
         """
         ProgramSpiPageResp consists of the following:
@@ -2306,6 +2315,12 @@ class SkarabTransport(Transport):
         - 1+1+(1+1)+1+264+1+(2-1) = 271 16-bit words
         """
         response = self.send_packet(request)
+        if not request.expect_response:
+            # Just return True (?)
+            debugmsg = 'No response to handle...'
+            LOGGER.debug(debugmsg)
+            return True
+
         if response is not None:
             # We have some data back
             if response.packet['program_spi_page_success']:
@@ -2435,6 +2450,58 @@ class SkarabTransport(Transport):
                                              sector_counter, num_sectors))
         return True
 
+    def enable_isp_flash(self):
+        '''
+        This method Enables access to ISP Flash by writing two Magic Bytes to a certain address space
+        :return:
+        '''
+        # This will return the SpartanFirmwareVersion as an integer_tuple (major, minor)
+        (major_version, minor_version) = self.get_spartan_firmware_version(return_tuple=True)
+        flash_magic_bytes = []
+
+        # This check is done to see if the SPARTAN requires 'unlocking' to access the in-system flash
+        if ((major_version == sd.CURRENT_SPARTAN_MAJOR_VER) and (minor_version >= sd.CURRENT_SPARTAN_MINOR_VER)) \
+                or (major_version > sd.CURRENT_SPARTAN_MAJOR_VER):
+            # Write Flash Magic Byte to enable access to ISP Flash
+
+            flash_magic_bytes = [sd.SPARTAN_FLASH_MAGIC_BYTE_0, sd.SPARTAN_FLASH_MAGIC_BYTE_1]
+
+            # Need to pack these magic_bytes in the format that the function wants
+            raw_magic_bytes = ''
+            for value in flash_magic_bytes:
+                raw_magic_bytes += struct.pack('!H', value)
+
+            # padding just to test whether the packet needs to be 264-bytes long
+            # - 266 because testing lead to this result
+            raw_magic_bytes += (266 - (len(raw_magic_bytes) % 264)) * '\x00\xff'
+
+            debugmsg = 'Writing Magic Bytes %s to Flash...' % raw_magic_bytes
+            LOGGER.debug(debugmsg)
+
+            self.program_spi_page(sd.SPARTAN_SPI_REG_ADDR, 2, raw_magic_bytes)  # Ignore result
+
+    def disable_isp_flash(self):
+        '''
+        This method Disables access to ISP Flash by reading from a certain address space
+        (And subsequently clearing the Magic Flash Byte)
+        :return:
+        '''
+
+        # This will return the SpartanFirmwareVersion as an integer_tuple (major, minor)
+        (major_version, minor_version) = self.get_spartan_firmware_version(return_tuple=True)
+
+        if ((major_version == sd.CURRENT_SPARTAN_MAJOR_VER) and (minor_version >= sd.CURRENT_SPARTAN_MINOR_VER)) \
+                or (major_version > sd.CURRENT_SPARTAN_MAJOR_VER):
+            # Seems as though we just need to read a certain address to clear it
+            debugmsg = 'Reading address to clear Magic Bytes...'
+            LOGGER.debug(debugmsg)
+
+            if len(self.read_spi_page(sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_SPI_CLEAR_FLASH_MAGIC_BYTE_OFFSET, 1)) < 1:
+                # Failed to read
+                errmsg = 'Failed to disable access to ISP Flash'
+                LOGGER.error(errmsg)
+                raise SkarabProgrammingError(errmsg)
+
     @staticmethod
     def check_ufp_bitstream(filename):
         """
@@ -2561,6 +2628,9 @@ class SkarabTransport(Transport):
             LOGGER.error(errmsg)
             raise SkarabInvalidBitstream(errmsg)
 
+        # Before we breakdown the bitstream, check the SpartanFirmwareVersion
+        self.enable_isp_flash()
+
         # Currently there is no real method of confirming the integrity of the data
         # in the input .ufp file
         LOGGER.debug('Checking input .ufp bitstream...')
@@ -2588,7 +2658,12 @@ class SkarabTransport(Transport):
             raise SkarabProgrammingError(errmsg)
         # else: Continue
 
+        # Second part of the Magic Flash Bytes
+        self.disable_isp_flash()
+
         LOGGER.debug('SPARTAN FLASH RECONFIG: Programming Words to SPI Sectors')
+        self.enable_isp_flash()
+
         # For Debug purposes
         # (result, returned_data) = self.program_pages(image_to_program, num_pages)
         if not self.program_pages(image_to_program, num_pages):
@@ -2598,10 +2673,14 @@ class SkarabTransport(Transport):
             raise SkarabProgrammingError(errmsg)
         # else: Continue
 
+        self.disable_isp_flash()
+
         if not blind_reconfig:
 
             LOGGER.debug('VIRTEX FLASH RECONFIG: Verifying words that were written '
                          'to Flash Memory')
+
+            self.enable_isp_flash()
 
             if not self.verify_bytes(image_to_program):
                 # Problem
@@ -2610,11 +2689,13 @@ class SkarabTransport(Transport):
                 raise SkarabProgrammingError(errmsg)
                 # else: Continue
 
+            self.disable_isp_flash()
+
         # Print new SpartanFirmwareVersion
         # new_firmware_version = self.get_spartan_firmware_version()
         # --> Can't do that anymore! Spartan Firmware Version only updates after full power cycle!
         debugmsg = 'Please do a full power cycle of the SKARAB in order to complete ' \
-                   'SpartanFlashReconfig Process    '
+                   'SpartanFlashReconfig Process'
         LOGGER.debug(debugmsg)
 
         return True
@@ -3518,19 +3599,33 @@ class SkarabTransport(Transport):
         spartan_flash_write_checksum = (upper_byte << 8) | lower_byte
         return spartan_flash_write_checksum
 
-    def get_spartan_firmware_version(self):
+    def get_spartan_firmware_version(self, return_tuple=False):
         """
         Using read_spi_page() function to read two SPI Addresses which give
         the major and minor version numbers of the SPARTAN Firmware Version
-        :return: String containing 'Major.Minor'
+        :param return_tuple: Boolean to dictate whether to return data as an integer tuple
+                             to be used in spartan_flash_reconfig
+        :return: String containing 'Major.Minor' || Integer Tuple (Major, Minor)
         """
-        spi_address = 0x001ffe00
         # Just a heads-up, read_spi_page(address, num_bytes)
         # returns a list of bytes of length = num_bytes
-        major = self.read_spi_page(spi_address, 1)[0]
-        minor = self.read_spi_page(spi_address + 1, 1)[0]
+        major = self.read_spi_page(sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_MAJOR_VER_OFFSET, 1)[0]
+        minor = self.read_spi_page(sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_MINOR_VER_OFFSET, 1)[0]
+
+        if return_tuple:
+            return major, minor
+
         version_number = str(major) + '.' + str(minor)
         return version_number
+
+    @staticmethod
+    def configure_magic_flash_byte():
+        '''
+        Method created to simplify the checking of SpartanFirmwareVersion
+        :return:
+        '''
+
+        return NotImplementedError
 
     @staticmethod
     def extract_md5_from_fpg(filename):
