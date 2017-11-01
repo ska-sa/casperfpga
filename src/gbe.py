@@ -192,7 +192,8 @@ class Gbe(object):
             self.name + '_rxctr': (True, False),
             self.name + '_rxfullctr': (False, True),
             self.name + '_rxofctr': (False, True),
-            self.name + '_rxerrctr': (True, True),
+            self.name + '_rxerrctr': (False, True),
+            self.name + '_rxbadctr': (False, True),
             self.name + '_rxvldctr': (False, False),
         }
         result, message = check_changing_status(fields, self.read_rx_counters,

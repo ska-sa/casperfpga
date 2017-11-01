@@ -305,7 +305,7 @@ class FortyGbe(Gbe):
     def get_stats(self):
         """
         Retrieves some statistics for this core.
-        Needs to have the debug registers compiled-in to the core.
+        Needs to have the debug registers compiled-in to the core at 32b.
         :return:
         """
         rv = {}
@@ -318,33 +318,50 @@ class FortyGbe(Gbe):
         rxvldcnt = '%s_rxvldctr' % name
         txcnt = '%s_txctr' % name
         rxcnt = '%s_rxctr' % name
-                
-        if second[txvldcnt] >= first[txvldcnt]:
-            rv['tx_gbps'] = 2 * 256 / 1e9 * (second[txvldcnt] - first[txvldcnt])
-        else:
-            rv['tx_gbps'] = 2 * 256 / 1e9 * (
-                second[txvldcnt] - first[txvldcnt] + (2 ** 32))
 
-        if second[rxvldcnt] >= first[rxvldcnt]:
-            rv['rx_gbps'] = 2 * 256 / 1e9 * (second[rxvldcnt] - first[rxvldcnt])
-        else:
-            rv['rx_gbps'] = 2 * 256 / 1e9 * (
-                second[rxvldcnt] - first[rxvldcnt] + (2 ** 32))
+        txofcnt = '%s_txofctr' % name
+        rxofcnt = '%s_rxofctr' % name
+        rxbadcnt = '%s_rxbadctr' % name
 
-        if second[txcnt] >= first[txcnt]:
-            rv['tx_pps'] = 2 * (second[txcnt] - first[txcnt])
-        else:
-            rv['tx_pps'] = 2 * (second[txcnt] - first[txcnt]) + (2 ** 32)
+        if int(self.block_info['debug_ctr_width']) != 32:
+            raise RuntimeError("Please recompile your design with larger,"\
+               " >28b, debug registers to use this function.")
+            return
 
-        if second[rxcnt] >= first[rxcnt]:
-            rv['rx_pps'] = 2 * (second[rxcnt] - first[rxcnt])
-        else:
-            rv['rx_pps'] = 2 * (second[rxcnt] - first[rxcnt]) + (2 ** 32)
+        if txvldcnt in first:
+            if second[txvldcnt] >= first[txvldcnt]:
+                rv['tx_gbps'] = 2 * 256 / 1e9 * (second[txvldcnt] - first[txvldcnt])
+            else:
+                rv['tx_gbps'] = 2 * 256 / 1e9 * (
+                    second[txvldcnt] - first[txvldcnt] + (2 ** 32))
 
-        rv['rx_over'] = second['%s_rxofctr' % name]
-        rv['tx_over'] = second['%s_txofctr' % name]
-        rv['tx_pkt_cnt'] = second[txcnt]
-        rv['rx_pkt_cnt'] = second['%s_rxctr' % name]
+        if rxvldcnt in first:
+            if second[rxvldcnt] >= first[rxvldcnt]:
+                rv['rx_gbps'] = 2 * 256 / 1e9 * (second[rxvldcnt] - first[rxvldcnt])
+            else:
+                rv['rx_gbps'] = 2 * 256 / 1e9 * (
+                    second[rxvldcnt] - first[rxvldcnt] + (2 ** 32))
+
+        if txcnt in first:
+            rv['tx_pkt_cnt'] = second[txcnt]
+            if second[txcnt] >= first[txcnt]:
+                rv['tx_pps'] = 2 * (second[txcnt] - first[txcnt])
+            else:
+                rv['tx_pps'] = 2 * (second[txcnt] - first[txcnt]) + (2 ** 32)
+
+        if rxcnt in first:
+            rv['rx_pkt_cnt'] = second[rxcnt]
+            if second[rxcnt] >= first[rxcnt]:
+                rv['rx_pps'] = 2 * (second[rxcnt] - first[rxcnt])
+            else:
+                rv['rx_pps'] = 2 * (second[rxcnt] - first[rxcnt]) + (2 ** 32)
+
+        if txofcnt in second:
+            rv['tx_over'] = second['%s_txofctr' % name]
+        if rxofcnt in second:
+            rv['rx_over'] = second['%s_rxofctr' % name]
+        if rxbadcnt in second:
+            rv['rx_bad_pkts'] = second['%s_rxbadctr' % name]
         return rv
 
     def read_txsnap(self):
