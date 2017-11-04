@@ -10,7 +10,7 @@ __author__ = 'jackh'
 __date__ = 'June 2017'
 
 LOGGER = logging.getLogger(__name__)
-tftpy.setLogLevel(logging.ERROR)
+tftpy.setLogLevel(logging.WARNING)
 
 def set_log_level(level):
     tftpy.setLogLevel(level)
@@ -74,16 +74,18 @@ class TapcpTransport(Transport):
 
         self.t = tftpy.TftpClient(kwargs['host'], 69)
         self._logger = LOGGER
-        self.timeout = kwargs.get('timeout', 3)
+        self.timeout = kwargs.get('timeout', 1.2) # long enough to account for Flash erases
+        self.server_timeout = 4 # Microblaze timeout period
+        self.retries = kwargs.get('retries', 8)
 
     def listdev(self):
         buf = StringIO()
-        self.t.download('/listdev', buf, timeout=4)
+        self.t.download('/listdev', buf, timeout=self.timeout)
         return decode_csl(buf.getvalue())
 
     def listdev_pl(self):
         buf = StringIO()
-        self.t.download('/listdev', buf, timeout=4)
+        self.t.download('/listdev', buf, timeout=self.timeout)
         return decode_csl_pl(buf.getvalue())
 
     def progdev(self, addr=0):
@@ -132,6 +134,15 @@ class TapcpTransport(Transport):
         :return: binary data string
         """
         buf = StringIO()
+        for retry in range(self.retries - 1):
+            try:
+                self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.server_timeout)
+                return buf.getvalue()
+            except:
+                # if we fail to get a response after a bunch of packet re-sends, wait for the
+                # server to timeout and restart the whole transaction.
+                time.sleep(self.server_timeout)
+                LOGGER.warning('Tftp error on read -- retrying. %.3f' % time.time())
         self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
         return buf.getvalue()
 
@@ -148,6 +159,15 @@ class TapcpTransport(Transport):
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
         buf = StringIO(data)
+        for retry in range(self.retries - 1):
+            try:
+                self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
+                return
+            except:
+                # if we fail to get a response after a bunch of packet re-sends, wait for the
+                # server to timeout and restart the whole transaction.
+                time.sleep(self.server_timeout)
+                LOGGER.warning('Tftp error on write -- retrying')
         self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
 
     def deprogram(self):
