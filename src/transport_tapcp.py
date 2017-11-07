@@ -109,10 +109,31 @@ class TapcpTransport(Transport):
 
     def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True):
         USER_FLASH_LOC = 0x800000
-        with open(filename, 'r') as fh:
-            self.blindwrite('/flash', fh.read(), offset=USER_FLASH_LOC)
-        self.progdev(USER_FLASH_LOC)
 
+        if(filename.endswith('.fpg')):
+            headend_str = bytearray('\n?quit\n')
+            pad = bytearray('0')
+
+            with open(filename, 'r') as fh:
+                fpg = bytearray(fh.read())
+
+            header_offset = fpg.rfind(headend_str) + len(headend_str)
+            header = str(fpg[0:header_offset] + pad*(1024-header_offset%1024))
+            prog = str(fpg[header_offset:]+pad*(1024-(len(fpg)-header_offset)%1024))
+            
+            if prog.startswith('\x1f\x8b\x08'):
+                prog = zlib.decompress(prog, 16 + zlib.MAX_WBITS)
+
+            #print '%s \n\n\n\n %s'%(header[-1024:],prog[:1024])        
+
+            self.blindwrite('/flash',header+prog, offset=USER_FLASH_LOC)
+            self.progdev(USER_FLASH_LOC+len(header))
+
+        else:
+            with open(filename,'r') as fh:
+                self.blindwrite('/flash', fh.read(), offset=USER_FLASH_LOC)
+            self.progdev(USER_FLASH_LOC)
+    
 
     def _get_device_address(self, device_name):
         """
