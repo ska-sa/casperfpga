@@ -1,0 +1,957 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>casperfpga.tengbe &mdash; casperfpga 1.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="../../genindex.html"/>
+        <link rel="search" title="Search" href="../../search.html"/>
+    <link rel="top" title="casperfpga 1.0 documentation" href="../../index.html"/>
+        <link rel="up" title="Module code" href="../index.html"/> 
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> casperfpga
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">casperfpga</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>casperfpga.tengbe</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for casperfpga.tengbe</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">struct</span>
+
+<span class="kn">from</span> <span class="nn">utils</span> <span class="k">import</span> <span class="n">check_changing_status</span>
+
+<span class="kn">from</span> <span class="nn">memory</span> <span class="k">import</span> <span class="n">Memory</span>
+<span class="kn">from</span> <span class="nn">network</span> <span class="k">import</span> <span class="n">Mac</span><span class="p">,</span> <span class="n">IpAddress</span>
+
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="TenGbe"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe">[docs]</a><span class="k">class</span> <span class="nc">TenGbe</span><span class="p">(</span><span class="n">Memory</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    To do with the CASPER ten GBE yellow block implemented on FPGAs,</span>
+<span class="sd">    and interfaced-to via KATCP memory reads/writes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">length_bytes</span><span class="p">,</span> <span class="n">device_info</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        :param parent:</span>
+<span class="sd">        :param name:</span>
+<span class="sd">        :param address:</span>
+<span class="sd">        :param length_bytes:</span>
+<span class="sd">        :param device_info:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mac</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">TenGbe</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">width_bits</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">address</span><span class="o">=</span><span class="n">address</span><span class="p">,</span>
+                                     <span class="n">length_bytes</span><span class="o">=</span><span class="n">length_bytes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="o">=</span> <span class="n">parent</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">host</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">block_info</span> <span class="o">=</span> <span class="n">device_info</span>
+        <span class="k">if</span> <span class="n">device_info</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fabric_ip</span> <span class="o">=</span> <span class="n">device_info</span><span class="p">[</span><span class="s1">&#39;fab_ip&#39;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">fabric_ip</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;(2^24) + &#39;</span><span class="p">)</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="n">device_info</span><span class="p">[</span><span class="s1">&#39;fab_ip&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">fabric_ip</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;*(2^24) + &#39;</span><span class="p">,</span> <span class="s1">&#39;.&#39;</span><span class="p">)</span>
+                                         <span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;*(2^16) + &#39;</span><span class="p">,</span> <span class="s1">&#39;.&#39;</span><span class="p">)</span>
+                                         <span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;*(2^8) + &#39;</span><span class="p">,</span> <span class="s1">&#39;.&#39;</span><span class="p">)</span>
+                                         <span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;*(2^0)&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">))</span>
+            <span class="n">fabric_mac</span> <span class="o">=</span> <span class="n">device_info</span><span class="p">[</span><span class="s1">&#39;fab_mac&#39;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">fabric_mac</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;hex2dec&#39;</span><span class="p">)</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="n">fabric_mac</span> <span class="o">=</span> <span class="n">fabric_mac</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;hex2dec(</span><span class="se">\&#39;</span><span class="s1">&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+                <span class="n">fabric_mac</span> <span class="o">=</span> <span class="n">fabric_mac</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\&#39;</span><span class="s1">)&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+                <span class="n">device_info</span><span class="p">[</span><span class="s1">&#39;fab_mac&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">fabric_mac</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span> <span class="n">fabric_mac</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span>
+                    <span class="n">fabric_mac</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">6</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span> <span class="n">fabric_mac</span><span class="p">[</span><span class="mi">6</span><span class="p">:</span><span class="mi">8</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span>
+                    <span class="n">fabric_mac</span><span class="p">[</span><span class="mi">8</span><span class="p">:</span><span class="mi">10</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span> <span class="n">fabric_mac</span><span class="p">[</span><span class="mi">10</span><span class="p">:])</span>
+            <span class="n">mac</span> <span class="o">=</span> <span class="n">device_info</span><span class="p">[</span><span class="s1">&#39;fab_mac&#39;</span><span class="p">]</span>
+            <span class="n">ip_address</span> <span class="o">=</span> <span class="n">device_info</span><span class="p">[</span><span class="s1">&#39;fab_ip&#39;</span><span class="p">]</span>
+            <span class="n">port</span> <span class="o">=</span> <span class="n">device_info</span><span class="p">[</span><span class="s1">&#39;fab_udp&#39;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">mac</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">ip_address</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">port</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: 10Gbe interface must &#39;</span>
+                                 <span class="s1">&#39;have mac, ip and port.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">setup</span><span class="p">(</span><span class="n">mac</span><span class="p">,</span> <span class="n">ip_address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">core_details</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snaps</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;tx&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;rx&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">registers</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;tx&#39;</span><span class="p">:</span> <span class="p">[],</span> <span class="s1">&#39;rx&#39;</span><span class="p">:</span> <span class="p">[]}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">multicast_subscriptions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># TODO</span>
+        <span class="c1"># if self.parent.is_connected():</span>
+        <span class="c1">#     self._check()</span>
+
+<div class="viewcode-block" id="TenGbe.from_device_info"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.from_device_info">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_device_info</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">device_info</span><span class="p">,</span> <span class="n">memorymap_dict</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process device info and the memory map to get all necessary info </span>
+<span class="sd">        and return a TenGbe instance.</span>
+<span class="sd">        :param parent: the parent device, normally an FPGA instance</span>
+<span class="sd">        :param device_name: the unique device name</span>
+<span class="sd">        :param device_info: information about this device</span>
+<span class="sd">        :param memorymap_dict: a dictionary containing the device memory map</span>
+<span class="sd">        :return: a TenGbe object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">address</span><span class="p">,</span> <span class="n">length_bytes</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="k">for</span> <span class="n">mem_name</span> <span class="ow">in</span> <span class="n">memorymap_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">mem_name</span> <span class="o">==</span> <span class="n">device_name</span><span class="p">:</span>
+                <span class="n">address</span> <span class="o">=</span> <span class="n">memorymap_dict</span><span class="p">[</span><span class="n">mem_name</span><span class="p">][</span><span class="s1">&#39;address&#39;</span><span class="p">]</span>
+                <span class="n">length_bytes</span> <span class="o">=</span> <span class="n">memorymap_dict</span><span class="p">[</span><span class="n">mem_name</span><span class="p">][</span><span class="s1">&#39;bytes&#39;</span><span class="p">]</span>
+                <span class="k">break</span>
+        <span class="k">if</span> <span class="n">address</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">or</span> <span class="n">length_bytes</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Could not find address or length &#39;</span>
+                               <span class="s1">&#39;for TenGbe </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">device_name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">length_bytes</span><span class="p">,</span> <span class="n">device_info</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s1">&#39;</span><span class="si">%s</span><span class="s1">:</span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        String representation of this 10Gbe interface.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: MAC(</span><span class="si">%s</span><span class="s1">) IP(</span><span class="si">%s</span><span class="s1">) Port(</span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mac</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">))</span>
+
+<div class="viewcode-block" id="TenGbe.setup"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.setup">[docs]</a>    <span class="k">def</span> <span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mac</span><span class="p">,</span> <span class="n">ipaddress</span><span class="p">,</span> <span class="n">port</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Set up the MAC, IP and port for this interface</span>
+<span class="sd">        :param mac: </span>
+<span class="sd">        :param ipaddress: </span>
+<span class="sd">        :param port: </span>
+<span class="sd">        :return: </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mac</span> <span class="o">=</span> <span class="n">Mac</span><span class="p">(</span><span class="n">mac</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span> <span class="o">=</span> <span class="n">IpAddress</span><span class="p">(</span><span class="n">ipaddress</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">port</span> <span class="o">=</span> <span class="n">port</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">port</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">port</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TenGbe.post_create_update"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.post_create_update">[docs]</a>    <span class="k">def</span> <span class="nf">post_create_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw_device_info</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Update the device with information not available at creation.</span>
+<span class="sd">        :param raw_device_info: info about this block that may be useful</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">registers</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;tx&#39;</span><span class="p">:</span> <span class="p">[],</span> <span class="s1">&#39;rx&#39;</span><span class="p">:</span> <span class="p">[]}</span>
+        <span class="k">for</span> <span class="n">register</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">registers</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">register</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">register</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">name</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;tx&#39;</span> <span class="ow">and</span> <span class="n">name</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;txs_&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">registers</span><span class="p">[</span><span class="s1">&#39;tx&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">register</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">name</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;rx&#39;</span> <span class="ow">and</span> <span class="n">name</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;rxs_&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">registers</span><span class="p">[</span><span class="s1">&#39;rx&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">register</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">name</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;txs_&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">name</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;rxs_&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
+                        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: odd register name </span><span class="si">%s</span><span class="s1"> under tengbe &#39;</span>
+                                    <span class="s1">&#39;block&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">,</span> <span class="n">register</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snaps</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;tx&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;rx&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">snapshot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">snapshots</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s1">&#39;txs_ss&#39;</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">snaps</span><span class="p">[</span><span class="s1">&#39;tx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">name</span>
+                <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s1">&#39;rxs_ss&#39;</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">snaps</span><span class="p">[</span><span class="s1">&#39;rx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">name</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">errmsg</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: incorrect snap </span><span class="si">%s</span><span class="s1"> under tengbe &#39;</span> \
+                             <span class="s1">&#39;block&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">,</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                    <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">errmsg</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">errmsg</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_check</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Does this device exist on the parent and it is accessible?</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TenGbe.read_txsnap"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.read_txsnap">[docs]</a>    <span class="k">def</span> <span class="nf">read_txsnap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read the TX snapshot embedded in this TenGBE yellow block</span>
+<span class="sd">        :return: </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">memory_devices</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_txs_ss&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tmp</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="TenGbe.read_rxsnap"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.read_rxsnap">[docs]</a>    <span class="k">def</span> <span class="nf">read_rxsnap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read the RX snapshot embedded in this TenGBE yellow block</span>
+<span class="sd">        :return: </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">memory_devices</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_rxs_ss&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tmp</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="TenGbe.read_rx_counters"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.read_rx_counters">[docs]</a>    <span class="k">def</span> <span class="nf">read_rx_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read all RX counters embedded in this TenGBE yellow block</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">reg</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">registers</span><span class="p">[</span><span class="s1">&#39;rx&#39;</span><span class="p">]:</span>
+            <span class="n">results</span><span class="p">[</span><span class="n">reg</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">memory_devices</span><span class="p">[</span><span class="n">reg</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">()[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;reg&#39;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">results</span></div>
+
+<div class="viewcode-block" id="TenGbe.read_tx_counters"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.read_tx_counters">[docs]</a>    <span class="k">def</span> <span class="nf">read_tx_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read all TX counters embedded in this TenGBE yellow block</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">reg</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">registers</span><span class="p">[</span><span class="s1">&#39;tx&#39;</span><span class="p">]:</span>
+            <span class="n">results</span><span class="p">[</span><span class="n">reg</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">memory_devices</span><span class="p">[</span><span class="n">reg</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">()[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;reg&#39;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">results</span></div>
+
+<div class="viewcode-block" id="TenGbe.read_counters"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.read_counters">[docs]</a>    <span class="k">def</span> <span class="nf">read_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read all the counters embedded in this TenGBE yellow block</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">direction</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;tx&#39;</span><span class="p">,</span> <span class="s1">&#39;rx&#39;</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">reg</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">registers</span><span class="p">[</span><span class="n">direction</span><span class="p">]:</span>
+                <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">memory_devices</span><span class="p">[</span><span class="n">reg</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+                <span class="n">results</span><span class="p">[</span><span class="n">reg</span><span class="p">]</span> <span class="o">=</span> <span class="n">tmp</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;reg&#39;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">results</span></div>
+
+<div class="viewcode-block" id="TenGbe.rx_okay"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.rx_okay">[docs]</a>    <span class="k">def</span> <span class="nf">rx_okay</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wait_time</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">checks</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Is this gbe core receiving okay?</span>
+<span class="sd">        i.e. _rxctr incrementing and _rxerrctr not incrementing</span>
+<span class="sd">        :param wait_time: seconds to wait between checks</span>
+<span class="sd">        :param checks: times to run check</span>
+<span class="sd">        :return: True/False</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">checks</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Cannot check less often than twice?&#39;</span><span class="p">)</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="c1"># name, required, True=same|False=different</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_rxctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_rxfullctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_rxofctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_rxerrctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_rxvldctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="n">result</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="n">check_changing_status</span><span class="p">(</span><span class="n">fields</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_rx_counters</span><span class="p">,</span>
+                                                <span class="n">wait_time</span><span class="p">,</span> <span class="n">checks</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">result</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">,</span> <span class="n">message</span><span class="p">))</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="TenGbe.tx_okay"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.tx_okay">[docs]</a>    <span class="k">def</span> <span class="nf">tx_okay</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wait_time</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">checks</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Is this gbe core transmitting okay?</span>
+<span class="sd">        i.e. _txctr incrementing and _txerrctr not incrementing</span>
+<span class="sd">        :param wait_time: seconds to wait between checks</span>
+<span class="sd">        :param checks: times to run check</span>
+<span class="sd">        :return: True/False</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">checks</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Cannot check less often than twice?&#39;</span><span class="p">)</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="c1"># name, required, True=same|False=different</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_txctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_txfullctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_txofctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_txerrctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_txvldctr&#39;</span><span class="p">:</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="n">result</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="n">check_changing_status</span><span class="p">(</span><span class="n">fields</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_tx_counters</span><span class="p">,</span>
+                                                <span class="n">wait_time</span><span class="p">,</span> <span class="n">checks</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">result</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">,</span> <span class="n">message</span><span class="p">))</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+    <span class="c1"># def fabric_start(self):</span>
+    <span class="c1">#    &quot;&quot;&quot;</span>
+    <span class="c1">#    Setup the interface by writing to the fabric directly, bypassing tap.</span>
+    <span class="c1">#    :param self:</span>
+    <span class="c1">#    :return:</span>
+    <span class="c1">#    &quot;&quot;&quot;</span>
+    <span class="c1">#    if self.tap_running():</span>
+    <span class="c1">#        log_runtime_error(</span>
+    <span class="c1">#            LOGGER, &#39;TAP running on %s, stop tap before &#39;</span>
+    <span class="c1">#                    &#39;accessing fabric directly.&#39; % self.name)</span>
+    <span class="c1">#    mac_location = 0x00</span>
+    <span class="c1">#    ip_location = 0x10</span>
+    <span class="c1">#    port_location = 0x22</span>
+    <span class="c1">#    self.parent.write(self.name, self.mac.packed(), mac_location)</span>
+    <span class="c1">#    self.parent.write(self.name, self.ip_address.packed(), ip_location)</span>
+    <span class="c1">#    # self.parent.write_int(self.name, self.port, offset = port_location)</span>
+
+<div class="viewcode-block" id="TenGbe.dhcp_start"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.dhcp_start">[docs]</a>    <span class="k">def</span> <span class="nf">dhcp_start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Configure this interface, then start a DHCP client on ALL interfaces.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mac</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># TODO get MAC from EEPROM serial number and assign here</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mac</span> <span class="o">=</span> <span class="s1">&#39;0&#39;</span>
+        <span class="n">reply</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;tap-start&#39;</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+            <span class="n">require_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s1">&#39;0.0.0.0&#39;</span><span class="p">,</span>
+                          <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mac</span><span class="p">),</span> <span class="p">))</span>
+        <span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;ok&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: failure starting tap driver.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+        <span class="n">reply</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;tap-arp-config&#39;</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">require_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s1">&#39;mode&#39;</span><span class="p">,</span> <span class="s1">&#39;0&#39;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;ok&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: failure disabling ARP.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+        <span class="n">reply</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;tap-dhcp&#39;</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+            <span class="n">require_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="p">))</span>
+        <span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;ok&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: failure starting DHCP client.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+        <span class="n">reply</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;tap-arp-config&#39;</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">require_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s1">&#39;mode&#39;</span><span class="p">,</span> <span class="s1">&#39;-1&#39;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;ok&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: failure re-enabling ARP.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="c1"># it looks like the command completed without error, so</span>
+        <span class="c1"># update the basic core details</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">get_10gbe_core_details</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="TenGbe.tap_start"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.tap_start">[docs]</a>    <span class="k">def</span> <span class="nf">tap_start</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">restart</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Program a 10GbE device and start the TAP driver.</span>
+<span class="sd">        :param restart: stop before starting</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">8</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: tap device identifier must be shorter than 9 &#39;</span>
+                            <span class="s1">&#39;characters..&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">restart</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tap_stop</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tap_running</span><span class="p">():</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: tap already running.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: starting tap driver.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">)</span>
+        <span class="n">reply</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;tap-start&#39;</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">require_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span><span class="p">),</span>
+                          <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mac</span><span class="p">),</span> <span class="p">))</span>
+        <span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;ok&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: failure starting tap driver.&#39;</span> <span class="o">%</span>
+                               <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TenGbe.tap_stop"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.tap_stop">[docs]</a>    <span class="k">def</span> <span class="nf">tap_stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Stop a TAP driver.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">tap_running</span><span class="p">():</span>
+            <span class="k">return</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: stopping tap driver.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">)</span>
+        <span class="n">reply</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;tap-stop&#39;</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">require_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="p">))</span>
+        <span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;ok&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: failure stopping tap &#39;</span>
+                               <span class="s1">&#39;device.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TenGbe.tap_info"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.tap_info">[docs]</a>    <span class="k">def</span> <span class="nf">tap_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get info on the tap instance running on this interface.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">uninforms</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">def</span> <span class="nf">handle_inform</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
+            <span class="n">uninforms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">unhandled_inform_handler</span> <span class="o">=</span> <span class="n">handle_inform</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">informs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;tap-info&#39;</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">require_ok</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">unhandled_inform_handler</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># process the tap-info</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">informs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="n">informs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="s1">&#39;ip&#39;</span><span class="p">:</span> <span class="n">informs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">informs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;ip&#39;</span><span class="p">:</span> <span class="s1">&#39;&#39;</span><span class="p">}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: invalid return from tap-info?&#39;</span> <span class="o">%</span>
+                               <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">)</span></div>
+        <span class="c1"># TODO - this request should return okay if the tap isn&#39;t</span>
+        <span class="c1"># running - it shouldn&#39;t fail</span>
+        <span class="c1"># if reply.arguments[0] != &#39;ok&#39;:</span>
+        <span class="c1">#     log_runtime_error(LOGGER, &#39;Failure getting tap info for &#39;</span>
+        <span class="c1">#                               &#39;device %s.&quot; % str(self))</span>
+
+<div class="viewcode-block" id="TenGbe.tap_running"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.tap_running">[docs]</a>    <span class="k">def</span> <span class="nf">tap_running</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Determine if an instance if tap is already running on for this</span>
+<span class="sd">        ten GBE interface.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tapinfo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tap_info</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">tapinfo</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="TenGbe.tap_arp_reload"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.tap_arp_reload">[docs]</a>    <span class="k">def</span> <span class="nf">tap_arp_reload</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Have the tap driver reload its ARP table right now.</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">reply</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;tap-arp-reload&quot;</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">require_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="p">))</span>
+        <span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;ok&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Failure requesting ARP reload for tap &#39;</span>
+                               <span class="s1">&#39;device </span><span class="si">%s</span><span class="s1">.&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="TenGbe.multicast_receive"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.multicast_receive">[docs]</a>    <span class="k">def</span> <span class="nf">multicast_receive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ip_str</span><span class="p">,</span> <span class="n">group_size</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send a request to KATCP to have this tap instance send a multicast</span>
+<span class="sd">        group join request.</span>
+<span class="sd">        :param ip_str: A dotted decimal string representation of the base</span>
+<span class="sd">        mcast IP address.</span>
+<span class="sd">        :param group_size: An integer for how many mcast addresses from</span>
+<span class="sd">        base to respond to.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># mask = 255*(2 ** 24) + 255*(2 ** 16) + 255*(2 ** 8) + (255-group_size)</span>
+        <span class="c1"># self.parent.write_int(self.name, str2ip(ip_str), offset=12)</span>
+        <span class="c1"># self.parent.write_int(self.name, mask, offset=13)</span>
+
+        <span class="c1"># mcast_group_string = ip_str + &#39;+&#39; + str(group_size)</span>
+        <span class="n">mcast_group_string</span> <span class="o">=</span> <span class="n">ip_str</span>
+        <span class="n">reply</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+            <span class="s1">&#39;tap-multicast-add&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s1">&#39;recv&#39;</span><span class="p">,</span>
+                                                         <span class="n">mcast_group_string</span><span class="p">,</span> <span class="p">))</span>
+        <span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;ok&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">mcast_group_string</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">multicast_subscriptions</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">multicast_subscriptions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">mcast_group_string</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: failed adding multicast receive </span><span class="si">%s</span><span class="s1"> to &#39;</span>
+                               <span class="s1">&#39;tap device.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">,</span>
+                                                <span class="n">mcast_group_string</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="TenGbe.multicast_remove"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.multicast_remove">[docs]</a>    <span class="k">def</span> <span class="nf">multicast_remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ip_str</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send a request to be removed from a multicast group.</span>
+<span class="sd">        :param ip_str: A dotted decimal string representation of the base</span>
+<span class="sd">        mcast IP address.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">reply</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">katcprequest</span><span class="p">(</span>
+                <span class="s1">&#39;tap-multicast-remove&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="n">request_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">IpAddress</span><span class="o">.</span><span class="n">str2ip</span><span class="p">(</span><span class="n">ip_str</span><span class="p">),</span> <span class="p">))</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: tap-multicast-remove does not seem to &#39;</span>
+                               <span class="s1">&#39;be supported on </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">,</span>
+                                                       <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">host</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">reply</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;ok&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">ip_str</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">multicast_subscriptions</span><span class="p">:</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: That is odd, </span><span class="si">%s</span><span class="s1"> removed from mcast subscriptions, but &#39;</span>
+                    <span class="s1">&#39;it was not in its list of sbscribed addresses.&#39;</span> <span class="o">%</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">,</span> <span class="n">ip_str</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">multicast_subscriptions</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">ip_str</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: failed removing multicast address </span><span class="si">%s</span><span class="s1"> &#39;</span>
+                               <span class="s1">&#39;from tap device&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">,</span>
+                                                    <span class="n">IpAddress</span><span class="o">.</span><span class="n">str2ip</span><span class="p">(</span><span class="n">ip_str</span><span class="p">)))</span></div>
+
+    <span class="k">def</span> <span class="nf">_fabric_enable_disable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">target_val</span><span class="p">):</span>
+        <span class="c1"># 0x20 or (0x20 / 4)? What was the /4 for?</span>
+        <span class="n">word_bytes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;4B&#39;</span><span class="p">,</span>
+                                        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mh">0x20</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="n">word_bytes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">target_val</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">word_bytes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_val</span>
+        <span class="n">word_packed</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;4B&#39;</span><span class="p">,</span> <span class="o">*</span><span class="n">word_bytes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">word_packed</span><span class="p">,</span> <span class="mh">0x20</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TenGbe.fabric_enable"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.fabric_enable">[docs]</a>    <span class="k">def</span> <span class="nf">fabric_enable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Enable the core fabric</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fabric_enable_disable</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TenGbe.fabric_disable"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.fabric_disable">[docs]</a>    <span class="k">def</span> <span class="nf">fabric_disable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Enable the core fabric</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fabric_enable_disable</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TenGbe.fabric_soft_reset_toggle"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.fabric_soft_reset_toggle">[docs]</a>    <span class="k">def</span> <span class="nf">fabric_soft_reset_toggle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Toggle the fabric soft reset</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">word_bytes</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;4B&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mh">0x20</span><span class="p">))</span>
+        <span class="n">word_bytes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">word_bytes</span><span class="p">)</span>
+
+        <span class="k">def</span> <span class="nf">write_val</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
+            <span class="n">word_bytes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+            <span class="n">word_packed</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;4B&#39;</span><span class="p">,</span> <span class="o">*</span><span class="n">word_bytes</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">val</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">word_packed</span><span class="p">,</span> <span class="mh">0x20</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">blindwrite</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">word_packed</span><span class="p">,</span> <span class="mh">0x20</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">word_bytes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">write_val</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">write_val</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">write_val</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TenGbe.get_10gbe_core_details"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.get_10gbe_core_details">[docs]</a>    <span class="k">def</span> <span class="nf">get_10gbe_core_details</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">read_arp</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">read_cpu</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get 10GbE core details.</span>
+<span class="sd">        assemble struct for header stuff...</span>
+<span class="sd">        0x00 - 0x07: MAC address</span>
+<span class="sd">        0x08 - 0x0b: Not used</span>
+<span class="sd">        0x0c - 0x0f: Gateway addr</span>
+<span class="sd">        0x10 - 0x13: IP addr</span>
+<span class="sd">        0x14 - 0x17: Not assigned</span>
+<span class="sd">        0x18 - 0x1b: Buffer sizes</span>
+<span class="sd">        0x1c - 0x1f: Not assigned</span>
+<span class="sd">        0x20    :    Soft reset (bit 0)</span>
+<span class="sd">        0x21    :    Fabric enable (bit 0)</span>
+<span class="sd">        0x22 - 0x23: Fabric port</span>
+<span class="sd">        0x24 - 0x27: XAUI status (bit 2,3,4,5 = lane sync, bit6 = chan_bond)</span>
+<span class="sd">        0x28 - 0x2b: PHY config</span>
+<span class="sd">        0x28    :    RX_eq_mix</span>
+<span class="sd">        0x29    :    RX_eq_pol</span>
+<span class="sd">        0x2a    :    TX_preemph</span>
+<span class="sd">        0x2b    :    TX_diff_ctrl</span>
+<span class="sd">        0x30 - 0x33: Multicast IP RX base address</span>
+<span class="sd">        0x34 - 0x37: Multicast IP mask</span>
+<span class="sd">        0x38 - 0x3b: Multicast subnet mask</span>
+<span class="sd">        0x1000  :    CPU TX buffer</span>
+<span class="sd">        0x2000  :    CPU RX buffer</span>
+<span class="sd">        0x3000  :    ARP tables start</span>
+<span class="sd">        word_width = 8</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;mac0&#39;, 0,            word_width,                 0, 0 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;mac1&#39;, 0,            word_width,                 0, 1 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;mac2&#39;, 0,            word_width,                 0, 2 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;mac3&#39;, 0,            word_width,                 0, 3 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;mac4&#39;, 0,            word_width,                 0, 4 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;mac5&#39;, 0,            word_width,                 0, 5 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;mac6&#39;, 0,            word_width,                 0, 6 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;mac7&#39;, 0,            word_width,                 0, 7 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;unused_1&#39;, 0,        (0x0c - 0x08) * word_width, 0, 8 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;gateway_ip0&#39;, 0,     word_width,                 0, 0x0c * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;gateway_ip1&#39;, 0,     word_width,                 0, 0x0d * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;gateway_ip2&#39;, 0,     word_width,                 0, 0x0e * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;gateway_ip3&#39;, 0,     word_width,                 0, 0x0f * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;ip0&#39;, 0,             word_width,                 0, 0x10 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;ip1&#39;, 0,             word_width,                 0, 0x11 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;ip2&#39;, 0,             word_width,                 0, 0x12 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;ip3&#39;, 0,             word_width,                 0, 0x13 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;unused_2&#39;, 0,        (0x18 - 0x14) * word_width, 0, 0x14 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;buf_sizes&#39;, 0,       (0x1c - 0x18) * word_width, 0, 0x18 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;unused_3&#39;, 0,        (0x20 - 0x1c) * word_width, 0, 0x1c * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;soft_reset&#39;, 2,      1,                          0, 0x20 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;fabric_enable&#39;, 2,   1,                          0, 0x21 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;port&#39;, 0,            (0x24 - 0x22) * word_width, 0, 0x22 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;xaui_status&#39;, 0,     (0x28 - 0x24) * word_width, 0, 0x24 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;rx_eq_mix&#39;, 0,       word_width,                 0, 0x28 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;rq_eq_pol&#39;, 0,       word_width,                 0, 0x29 * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;tx_preempth&#39;, 0,     word_width,                 0, 0x2a * word_width))</span>
+<span class="sd">        self.add_field(Bitfield.Field(&#39;tx_diff_ctrl&#39;, 0,    word_width,                 0, 0x2b * word_width))</span>
+<span class="sd">        #self.add_field(Bitfield.Field(&#39;buffer_tx&#39;, 0,       0x1000 * word_width,        0, 0x1000 * word_width))</span>
+<span class="sd">        #self.add_field(Bitfield.Field(&#39;buffer_rx&#39;, 0,       0x1000 * word_width,        0, 0x2000 * word_width))</span>
+<span class="sd">        #self.add_field(Bitfield.Field(&#39;arp_table&#39;, 0,       0x1000 * word_width,        0, 0x3000 * word_width))</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="mi">16384</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;16384B&#39;</span><span class="p">,</span> <span class="n">data</span><span class="p">))</span>
+        <span class="n">returnval</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;ip_prefix&#39;</span><span class="p">:</span> <span class="s1">&#39;</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x10</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x11</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x12</span><span class="p">]),</span>
+            <span class="s1">&#39;ip&#39;</span><span class="p">:</span> <span class="n">IpAddress</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x10</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x11</span><span class="p">],</span> 
+                                             <span class="n">data</span><span class="p">[</span><span class="mh">0x12</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x13</span><span class="p">])),</span>
+            <span class="s1">&#39;mac&#39;</span><span class="p">:</span> <span class="n">Mac</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%i</span><span class="s1">:</span><span class="si">%i</span><span class="s1">:</span><span class="si">%i</span><span class="s1">:</span><span class="si">%i</span><span class="s1">:</span><span class="si">%i</span><span class="s1">:</span><span class="si">%i</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x02</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x03</span><span class="p">],</span>
+                                              <span class="n">data</span><span class="p">[</span><span class="mh">0x04</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x05</span><span class="p">],</span>
+                                              <span class="n">data</span><span class="p">[</span><span class="mh">0x06</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x07</span><span class="p">])),</span>
+            <span class="s1">&#39;gateway_ip&#39;</span><span class="p">:</span> <span class="n">IpAddress</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x0c</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x0d</span><span class="p">],</span>
+                                                     <span class="n">data</span><span class="p">[</span><span class="mh">0x0e</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x0f</span><span class="p">])),</span>
+            <span class="s1">&#39;fabric_port&#39;</span><span class="p">:</span> <span class="p">((</span><span class="n">data</span><span class="p">[</span><span class="mh">0x22</span><span class="p">]</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x23</span><span class="p">])),</span>
+            <span class="s1">&#39;fabric_en&#39;</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x21</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="s1">&#39;xaui_lane_sync&#39;</span><span class="p">:</span> <span class="p">[</span><span class="nb">bool</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x27</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mi">4</span><span class="p">),</span> <span class="nb">bool</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x27</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mi">8</span><span class="p">),</span>
+                               <span class="nb">bool</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x27</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mi">16</span><span class="p">),</span> <span class="nb">bool</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x27</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mi">32</span><span class="p">)],</span>
+            <span class="s1">&#39;xaui_status&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">data</span><span class="p">[</span><span class="mh">0x24</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x25</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x26</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x27</span><span class="p">]],</span>
+            <span class="s1">&#39;xaui_chan_bond&#39;</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mh">0x27</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mi">64</span><span class="p">),</span>
+            <span class="s1">&#39;xaui_phy&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;rx_eq_mix&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x28</span><span class="p">],</span> <span class="s1">&#39;rx_eq_pol&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x29</span><span class="p">],</span>
+                         <span class="s1">&#39;tx_preemph&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x2a</span><span class="p">],</span> <span class="s1">&#39;tx_swing&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x2b</span><span class="p">]},</span>
+            <span class="s1">&#39;multicast&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;base_ip&#39;</span><span class="p">:</span> <span class="n">IpAddress</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span>
+                <span class="n">data</span><span class="p">[</span><span class="mh">0x30</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x31</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x32</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x33</span><span class="p">])),</span>
+                          <span class="s1">&#39;ip_mask&#39;</span><span class="p">:</span> <span class="n">IpAddress</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span>
+                              <span class="n">data</span><span class="p">[</span><span class="mh">0x34</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x35</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x36</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x37</span><span class="p">])),</span>
+                          <span class="s1">&#39;subnet_mask&#39;</span><span class="p">:</span> <span class="n">IpAddress</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">.</span><span class="si">%i</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span>
+                              <span class="n">data</span><span class="p">[</span><span class="mh">0x38</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x39</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x3a</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mh">0x3b</span><span class="p">])),</span>
+                          <span class="s1">&#39;rx_ips&#39;</span><span class="p">:</span> <span class="p">[]}</span>
+        <span class="p">}</span>
+        <span class="n">possible_addresses</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">returnval</span><span class="p">[</span><span class="s1">&#39;multicast&#39;</span><span class="p">][</span><span class="s1">&#39;base_ip&#39;</span><span class="p">])]</span>
+        <span class="n">mask_int</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">returnval</span><span class="p">[</span><span class="s1">&#39;multicast&#39;</span><span class="p">][</span><span class="s1">&#39;ip_mask&#39;</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">ctr</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">32</span><span class="p">):</span>
+            <span class="n">mask_bit</span> <span class="o">=</span> <span class="p">(</span><span class="n">mask_int</span> <span class="o">&gt;&gt;</span> <span class="n">ctr</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">mask_bit</span><span class="p">:</span>
+                <span class="n">new_ips</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">ip</span> <span class="ow">in</span> <span class="n">possible_addresses</span><span class="p">:</span>
+                    <span class="n">new_ips</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ip</span> <span class="o">&amp;</span> <span class="p">(</span><span class="o">~</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">ctr</span><span class="p">)))</span>
+                    <span class="n">new_ips</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_ips</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">|</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">ctr</span><span class="p">))</span>
+                <span class="n">possible_addresses</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">new_ips</span><span class="p">)</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">possible_addresses</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">ip</span> <span class="ow">in</span> <span class="n">tmp</span><span class="p">:</span>
+            <span class="n">returnval</span><span class="p">[</span><span class="s1">&#39;multicast&#39;</span><span class="p">][</span><span class="s1">&#39;rx_ips&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">IpAddress</span><span class="p">(</span><span class="n">ip</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">read_arp</span><span class="p">:</span>
+            <span class="n">returnval</span><span class="p">[</span><span class="s1">&#39;arp&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_arp_details</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">read_cpu</span><span class="p">:</span>
+            <span class="n">returnval</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_cpu_details</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">core_details</span> <span class="o">=</span> <span class="n">returnval</span>
+        <span class="k">return</span> <span class="n">returnval</span></div>
+
+<div class="viewcode-block" id="TenGbe.get_arp_details"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.get_arp_details">[docs]</a>    <span class="k">def</span> <span class="nf">get_arp_details</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port_dump</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get ARP details from this interface.</span>
+<span class="sd">        :param port_dump: list - A list of raw bytes from interface memory.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">port_dump</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">port_dump</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="mi">16384</span><span class="p">)</span>
+            <span class="n">port_dump</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;16384B&#39;</span><span class="p">,</span> <span class="n">port_dump</span><span class="p">))</span>
+        <span class="n">returnval</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">addr</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">256</span><span class="p">):</span>
+            <span class="n">mac</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">ctr</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">):</span>
+                <span class="n">mac</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">port_dump</span><span class="p">[</span><span class="mh">0x3000</span> <span class="o">+</span> <span class="p">(</span><span class="n">addr</span> <span class="o">*</span> <span class="mi">8</span><span class="p">)</span> <span class="o">+</span> <span class="n">ctr</span><span class="p">])</span>
+            <span class="n">returnval</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">mac</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">returnval</span></div>
+
+<div class="viewcode-block" id="TenGbe.get_cpu_details"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.get_cpu_details">[docs]</a>    <span class="k">def</span> <span class="nf">get_cpu_details</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port_dump</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read details of the CPU buffers.</span>
+<span class="sd">        :param port_dump:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">port_dump</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">port_dump</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="mi">16384</span><span class="p">)</span>
+            <span class="n">port_dump</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;16384B&#39;</span><span class="p">,</span> <span class="n">port_dump</span><span class="p">))</span>
+        <span class="n">returnval</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;cpu_tx&#39;</span><span class="p">:</span> <span class="p">{}}</span>
+        <span class="k">for</span> <span class="n">ctr</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4096</span> <span class="o">/</span> <span class="mi">8</span><span class="p">):</span>
+            <span class="n">tmp</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">ctr2</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
+                <span class="n">tmp</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">port_dump</span><span class="p">[</span><span class="mi">4096</span> <span class="o">+</span> <span class="p">(</span><span class="mi">8</span> <span class="o">*</span> <span class="n">ctr</span><span class="p">)</span> <span class="o">+</span> <span class="n">ctr2</span><span class="p">])</span>
+            <span class="n">returnval</span><span class="p">[</span><span class="s1">&#39;cpu_tx&#39;</span><span class="p">][</span><span class="n">ctr</span><span class="o">*</span><span class="mi">8</span><span class="p">]</span> <span class="o">=</span> <span class="n">tmp</span>
+        <span class="n">returnval</span><span class="p">[</span><span class="s1">&#39;cpu_rx_buf_unack_data&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">port_dump</span><span class="p">[</span><span class="mi">6</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">+</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">returnval</span><span class="p">[</span><span class="s1">&#39;cpu_rx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">ctr</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">port_dump</span><span class="p">[</span><span class="mi">6</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">+</span> <span class="mi">3</span><span class="p">]</span> <span class="o">+</span> <span class="mi">8</span><span class="p">):</span>
+            <span class="n">tmp</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">ctr2</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
+                <span class="n">tmp</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">port_dump</span><span class="p">[</span><span class="mi">8192</span> <span class="o">+</span> <span class="p">(</span><span class="mi">8</span> <span class="o">*</span> <span class="n">ctr</span><span class="p">)</span> <span class="o">+</span> <span class="n">ctr2</span><span class="p">])</span>
+            <span class="n">returnval</span><span class="p">[</span><span class="s1">&#39;cpu_rx&#39;</span><span class="p">][</span><span class="n">ctr</span> <span class="o">*</span> <span class="mi">8</span><span class="p">]</span> <span class="o">=</span> <span class="n">tmp</span>
+        <span class="k">return</span> <span class="n">returnval</span></div>
+
+<div class="viewcode-block" id="TenGbe.print_10gbe_core_details"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.print_10gbe_core_details">[docs]</a>    <span class="k">def</span> <span class="nf">print_10gbe_core_details</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arp</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">cpu</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">refresh</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prints 10GbE core details.</span>
+<span class="sd">        :param arp: boolean, include the ARP table</span>
+<span class="sd">        :param cpu: boolean, include the CPU packet buffers</span>
+<span class="sd">        :param refresh: read the 10gbe details first</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">refresh</span> <span class="ow">or</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">core_details</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">get_10gbe_core_details</span><span class="p">(</span><span class="n">arp</span><span class="p">,</span> <span class="n">cpu</span><span class="p">)</span>
+        <span class="n">details</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">core_details</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;------------------------&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1"> configuration:&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">fullname</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;MAC: &#39;</span><span class="p">,</span> <span class="n">Mac</span><span class="o">.</span><span class="n">mac2str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">details</span><span class="p">[</span><span class="s1">&#39;mac&#39;</span><span class="p">])))</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Gateway: &#39;</span><span class="p">,</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;gateway_ip&#39;</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;IP: &#39;</span><span class="p">,</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;ip&#39;</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Fabric port: &#39;</span><span class="p">,)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%5d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;fabric_port&#39;</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Fabric interface is currently: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span>
+              <span class="s1">&#39;Enabled&#39;</span> <span class="k">if</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;fabric_en&#39;</span><span class="p">]</span> <span class="k">else</span> <span class="s1">&#39;Disabled&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;XAUI Status: &#39;</span><span class="p">,</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;xaui_status&#39;</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">ctr</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">lane sync </span><span class="si">%i</span><span class="s1">:  </span><span class="si">%i</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">ctr</span><span class="p">,</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;xaui_lane_sync&#39;</span><span class="p">][</span><span class="n">ctr</span><span class="p">]))</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">Channel bond: </span><span class="si">%i</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;xaui_chan_bond&#39;</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;XAUI PHY config: &#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">RX_eq_mix: </span><span class="si">%2X</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;xaui_phy&#39;</span><span class="p">][</span><span class="s1">&#39;rx_eq_mix&#39;</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">RX_eq_pol: </span><span class="si">%2X</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;xaui_phy&#39;</span><span class="p">][</span><span class="s1">&#39;rx_eq_pol&#39;</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">TX_pre-emph: </span><span class="si">%2X</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;xaui_phy&#39;</span><span class="p">][</span><span class="s1">&#39;tx_preemph&#39;</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">TX_diff_ctrl: </span><span class="si">%2X</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;xaui_phy&#39;</span><span class="p">][</span><span class="s1">&#39;tx_swing&#39;</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Multicast:&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;multicast&#39;</span><span class="p">]:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="si">%s</span><span class="s1">: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;multicast&#39;</span><span class="p">][</span><span class="n">k</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="n">arp</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">print_arp_details</span><span class="p">(</span><span class="n">refresh</span><span class="o">=</span><span class="n">refresh</span><span class="p">,</span> <span class="n">only_hits</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cpu</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">print_cpu_details</span><span class="p">(</span><span class="n">refresh</span><span class="o">=</span><span class="n">refresh</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TenGbe.print_arp_details"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.print_arp_details">[docs]</a>    <span class="k">def</span> <span class="nf">print_arp_details</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">refresh</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">only_hits</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Print nicely formatted ARP info.</span>
+<span class="sd">        :param refresh:</span>
+<span class="sd">        :param only_hits:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">details</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">core_details</span>
+        <span class="k">if</span> <span class="n">details</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">refresh</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="s1">&#39;arp&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">details</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">refresh</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">refresh</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">get_10gbe_core_details</span><span class="p">(</span><span class="n">read_arp</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;ARP Table: &#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ip_address</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">256</span><span class="p">):</span>
+            <span class="n">all_fs</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="n">only_hits</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">mac</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">6</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;arp&#39;</span><span class="p">][</span><span class="n">ip_address</span><span class="p">][</span><span class="n">mac</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">255</span><span class="p">:</span>
+                        <span class="n">all_fs</span> <span class="o">=</span> <span class="kc">False</span>
+                        <span class="k">break</span>
+            <span class="n">printmac</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="n">only_hits</span> <span class="ow">and</span> <span class="n">all_fs</span><span class="p">:</span>
+                <span class="n">printmac</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">if</span> <span class="n">printmac</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;IP: </span><span class="si">%s%3d</span><span class="s1">: MAC:&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">details</span><span class="p">[</span><span class="s1">&#39;ip_prefix&#39;</span><span class="p">],</span> <span class="n">ip_address</span><span class="p">),)</span>
+                <span class="k">for</span> <span class="n">mac</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">6</span><span class="p">):</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%02X</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;arp&#39;</span><span class="p">][</span><span class="n">ip_address</span><span class="p">][</span><span class="n">mac</span><span class="p">],)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TenGbe.print_cpu_details"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.print_cpu_details">[docs]</a>    <span class="k">def</span> <span class="nf">print_cpu_details</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">refresh</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Print nicely formatted CPU details info.</span>
+<span class="sd">        :param refresh:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">details</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">core_details</span>
+        <span class="k">if</span> <span class="n">details</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">refresh</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="s1">&#39;cpu_rx&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">details</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">refresh</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">refresh</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">get_10gbe_core_details</span><span class="p">(</span><span class="n">read_cpu</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;CPU TX Interface (at offset 4096 bytes):&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Byte offset: Contents (Hex)&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;cpu_tx&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%04i</span><span class="s1">:    &#39;</span> <span class="o">%</span> <span class="n">key</span><span class="p">,)</span>
+            <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%02x</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">val</span><span class="p">,)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;------------------------&#39;</span><span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;CPU RX Interface (at offset 8192bytes):&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;CPU packet RX buffer unacknowledged data: </span><span class="si">%i</span><span class="s1">&#39;</span> <span class="o">%</span>
+              <span class="n">details</span><span class="p">[</span><span class="s1">&#39;cpu_rx_buf_unack_data&#39;</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Byte offset: Contents (Hex)&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">details</span><span class="p">[</span><span class="s1">&#39;cpu_rx&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%04i</span><span class="s1">:    &#39;</span> <span class="o">%</span> <span class="n">key</span><span class="p">,)</span>
+            <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%02x</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">val</span><span class="p">,)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;------------------------&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TenGbe.set_arp_table"><a class="viewcode-back" href="../../api.html#casperfpga.TenGbe.set_arp_table">[docs]</a>    <span class="k">def</span> <span class="nf">set_arp_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">macs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set the ARP table with a list of MAC addresses. The list, `macs`,</span>
+<span class="sd">        is passed such that the zeroth element is the MAC address of the</span>
+<span class="sd">        device with IP XXX.XXX.XXX.0, and element N is the MAC address of the</span>
+<span class="sd">        device with IP XXX.XXX.XXX.N&quot;&quot;&quot;</span>
+        <span class="n">macs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">macs</span><span class="p">)</span>
+        <span class="n">macs_pack</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;</span><span class="si">%d</span><span class="s1">Q&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">macs</span><span class="p">)),</span> <span class="o">*</span><span class="n">macs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">macs_pack</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mh">0x3000</span><span class="p">)</span></div></div>
+
+<span class="c1"># end</span>
+</pre></div>
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, Deepthi.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../',
+            VERSION:'1.0',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

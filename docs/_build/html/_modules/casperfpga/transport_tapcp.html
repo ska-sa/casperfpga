@@ -1,0 +1,415 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>casperfpga.transport_tapcp &mdash; casperfpga 1.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="../../genindex.html"/>
+        <link rel="search" title="Search" href="../../search.html"/>
+    <link rel="top" title="casperfpga 1.0 documentation" href="../../index.html"/>
+        <link rel="up" title="Module code" href="../index.html"/> 
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> casperfpga
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">casperfpga</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>casperfpga.transport_tapcp</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for casperfpga.transport_tapcp</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">struct</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">tftpy</span>
+<span class="kn">from</span> <span class="nn">StringIO</span> <span class="k">import</span> <span class="n">StringIO</span>
+
+<span class="kn">from</span> <span class="nn">transport</span> <span class="k">import</span> <span class="n">Transport</span>
+
+<span class="n">__author__</span> <span class="o">=</span> <span class="s1">&#39;jackh&#39;</span>
+<span class="n">__date__</span> <span class="o">=</span> <span class="s1">&#39;June 2017&#39;</span>
+
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">tftpy</span><span class="o">.</span><span class="n">setLogLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">ERROR</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">set_log_level</span><span class="p">(</span><span class="n">level</span><span class="p">):</span>
+    <span class="n">tftpy</span><span class="o">.</span><span class="n">setLogLevel</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">get_log_level</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">tftpy</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">level</span>
+
+<span class="k">def</span> <span class="nf">get_core_info_payload</span><span class="p">(</span><span class="n">payload_str</span><span class="p">):</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;LLB&#39;</span><span class="p">,</span> <span class="n">payload_str</span><span class="p">)</span>
+    <span class="n">rw</span>      <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0x3</span>
+    <span class="n">addr</span>    <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0xfffffffa</span>
+    <span class="n">size</span>    <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">typenum</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;rw&#39;</span> <span class="p">:</span> <span class="n">rw</span><span class="p">,</span> <span class="s1">&#39;addr&#39;</span> <span class="p">:</span> <span class="n">addr</span><span class="p">,</span> <span class="s1">&#39;size&#39;</span> <span class="p">:</span> <span class="n">size</span><span class="p">,</span> <span class="s1">&#39;typenum&#39;</span> <span class="p">:</span> <span class="n">typenum</span><span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">decode_csl_pl</span><span class="p">(</span><span class="n">csl</span><span class="p">):</span>
+    <span class="n">OFFSET</span> <span class="o">=</span> <span class="mi">2</span> <span class="c1"># ???</span>
+    <span class="n">regs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">v</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%d</span><span class="s1">B&#39;</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">csl</span><span class="p">),</span> <span class="n">csl</span><span class="p">)</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%d</span><span class="s1">s&#39;</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">csl</span><span class="p">),</span> <span class="n">csl</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="c1"># payload size is first byte</span>
+    <span class="n">pl</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="n">OFFSET</span><span class="p">]</span>
+    <span class="n">prev_str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+    <span class="n">nrepchars</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">OFFSET</span>
+    <span class="n">line</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="p">(</span><span class="n">c</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">csl</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">c</span> <span class="o">!=</span> <span class="n">OFFSET</span><span class="p">:</span>
+            <span class="n">nrepchars</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="n">c</span><span class="p">]</span>
+        <span class="n">c</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">nchars</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="n">c</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">nchars</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">nrepchars</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
+            <span class="k">break</span>
+        <span class="n">c</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">this_str</span> <span class="o">=</span> <span class="n">prev_str</span><span class="p">[:</span><span class="n">nrepchars</span><span class="p">]</span> <span class="o">+</span> <span class="n">s</span><span class="p">[</span><span class="n">c</span> <span class="p">:</span> <span class="n">c</span> <span class="o">+</span> <span class="n">nchars</span><span class="p">]</span>
+        <span class="n">c</span> <span class="o">+=</span> <span class="n">nchars</span>
+        <span class="c1">#this_pl = v[c : c + pl]</span>
+        <span class="n">regs</span><span class="p">[</span><span class="n">this_str</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_core_info_payload</span><span class="p">(</span><span class="n">csl</span><span class="p">[</span><span class="n">c</span> <span class="p">:</span> <span class="n">c</span> <span class="o">+</span> <span class="n">pl</span><span class="p">])</span>
+        <span class="n">c</span> <span class="o">+=</span> <span class="n">pl</span>
+        <span class="n">prev_str</span> <span class="o">=</span> <span class="n">this_str</span><span class="p">[:]</span>
+    <span class="k">return</span> <span class="n">regs</span>
+
+<span class="k">def</span> <span class="nf">decode_csl</span><span class="p">(</span><span class="n">csl</span><span class="p">):</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">decode_csl_pl</span><span class="p">(</span><span class="n">csl</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="n">x</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">x</span>
+
+
+<div class="viewcode-block" id="TapcpTransport"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport">[docs]</a><span class="k">class</span> <span class="nc">TapcpTransport</span><span class="p">(</span><span class="n">Transport</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The network transport for a tapcp-type interface.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialized Tapcp FPGA object</span>
+<span class="sd">        :param host: IP Address of the targeted Board</span>
+<span class="sd">        :return: none</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">Transport</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">t</span> <span class="o">=</span> <span class="n">tftpy</span><span class="o">.</span><span class="n">TftpClient</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;host&#39;</span><span class="p">],</span> <span class="mi">69</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span> <span class="o">=</span> <span class="n">LOGGER</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;timeout&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TapcpTransport.listdev"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.listdev">[docs]</a>    <span class="k">def</span> <span class="nf">listdev</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="s1">&#39;/listdev&#39;</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">decode_csl</span><span class="p">(</span><span class="n">buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.listdev_pl"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.listdev_pl">[docs]</a>    <span class="k">def</span> <span class="nf">listdev_pl</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="s1">&#39;/listdev&#39;</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">decode_csl_pl</span><span class="p">(</span><span class="n">buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.progdev"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.progdev">[docs]</a>    <span class="k">def</span> <span class="nf">progdev</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">addr</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="c1"># address shifts down because we operate in 32-bit addressing mode</span>
+        <span class="c1"># see xilinx docs. Todo, fix this microblaze side</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">(</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;L&#39;</span><span class="p">,</span> <span class="n">addr</span> <span class="o">&gt;&gt;</span> <span class="mi">8</span><span class="p">))</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">upload</span><span class="p">(</span><span class="s1">&#39;/progdev&#39;</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">pass</span> <span class="c1"># the progdev command kills the host, so things will start erroring</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.get_temp"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.get_temp">[docs]</a>    <span class="k">def</span> <span class="nf">get_temp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="s1">&#39;/temp&#39;</span><span class="p">,</span> <span class="n">buf</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;f&#39;</span><span class="p">,</span> <span class="n">buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.is_connected"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.is_connected">[docs]</a>    <span class="k">def</span> <span class="nf">is_connected</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;sys_clkcounter&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>        </div>
+
+<div class="viewcode-block" id="TapcpTransport.upload_to_ram_and_program"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.upload_to_ram_and_program">[docs]</a>    <span class="k">def</span> <span class="nf">upload_to_ram_and_program</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">wait_complete</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="n">USER_FLASH_LOC</span> <span class="o">=</span> <span class="mh">0x800000</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">blindwrite</span><span class="p">(</span><span class="s1">&#39;/flash&#39;</span><span class="p">,</span> <span class="n">fh</span><span class="o">.</span><span class="n">read</span><span class="p">(),</span> <span class="n">offset</span><span class="o">=</span><span class="n">USER_FLASH_LOC</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">progdev</span><span class="p">(</span><span class="n">USER_FLASH_LOC</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_get_device_address</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        </span>
+<span class="sd">        :param device_name: </span>
+<span class="sd">        :return: </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+<div class="viewcode-block" id="TapcpTransport.read"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.read">[docs]</a>    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">use_bulk</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return size_bytes of binary data with carriage-return escape-sequenced.</span>
+<span class="sd">        :param device_name: name of memory device from which to read</span>
+<span class="sd">        :param size: how many bytes to read</span>
+<span class="sd">        :param offset: start at this offset, offset in bytes</span>
+<span class="sd">        :param use_bulk: Does nothing. Kept for API compatibility</span>
+<span class="sd">        :return: binary data string</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">.</span><span class="si">%x</span><span class="s1">.</span><span class="si">%x</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="n">offset</span><span class="o">//</span><span class="mi">4</span><span class="p">,</span> <span class="n">size</span><span class="o">//</span><span class="mi">4</span><span class="p">),</span> <span class="n">buf</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.blindwrite"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.blindwrite">[docs]</a>    <span class="k">def</span> <span class="nf">blindwrite</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">use_bulk</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Unchecked data write.</span>
+<span class="sd">        :param device_name: the memory device to which to write</span>
+<span class="sd">        :param data: the byte string to write</span>
+<span class="sd">        :param offset: the offset, in bytes, at which to write</span>
+<span class="sd">        :param use_bulk: Does nothing. Kept for API compatibility</span>
+<span class="sd">        :return: &lt;nothing&gt;</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="nb">str</span><span class="p">),</span> <span class="s1">&#39;Must supply binary packed string data&#39;</span>
+        <span class="k">assert</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">%</span> <span class="mi">4</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="s1">&#39;Must write 32-bit-bounded words&#39;</span>
+        <span class="k">assert</span> <span class="p">(</span><span class="n">offset</span> <span class="o">%</span> <span class="mi">4</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="s1">&#39;Must write 32-bit-bounded words&#39;</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">upload</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">.</span><span class="si">%x</span><span class="s1">.0&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="n">offset</span><span class="o">//</span><span class="mi">4</span><span class="p">),</span> <span class="n">buf</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.deprogram"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.deprogram">[docs]</a>    <span class="k">def</span> <span class="nf">deprogram</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Deprogram the FPGA.</span>
+<span class="sd">        This actually reboots &amp; boots from the Golden Image</span>
+<span class="sd">        :return: nothing</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># trigger reboot of FPGA</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">progdev</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: deprogrammed okay&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.write_wishbone"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.write_wishbone">[docs]</a>    <span class="k">def</span> <span class="nf">write_wishbone</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wb_address</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Used to perform low level wishbone write to a wishbone slave. Gives</span>
+<span class="sd">        low level direct access to wishbone bus.</span>
+<span class="sd">        :param wb_address: address of the wishbone slave to write to</span>
+<span class="sd">        :param data: data to write</span>
+<span class="sd">        :return: response object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">blindwrite</span><span class="p">(</span><span class="s1">&#39;/fpga&#39;</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">wb_address</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.read_wishbone"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.read_wishbone">[docs]</a>    <span class="k">def</span> <span class="nf">read_wishbone</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wb_address</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Used to perform low level wishbone read from a Wishbone slave.</span>
+<span class="sd">        :param wb_address: address of the wishbone slave to read from</span>
+<span class="sd">        :return: Read Data or None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;/fpga&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">wb_address</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.get_firmware_version"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.get_firmware_version">[docs]</a>    <span class="k">def</span> <span class="nf">get_firmware_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read the version of the firmware</span>
+<span class="sd">        :return: golden_image, multiboot, firmware_major_version,</span>
+<span class="sd">        firmware_minor_version</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+<div class="viewcode-block" id="TapcpTransport.get_soc_version"><a class="viewcode-back" href="../../api.html#casperfpga.TapcpTransport.get_soc_version">[docs]</a>    <span class="k">def</span> <span class="nf">get_soc_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read the version of the soc</span>
+<span class="sd">        :return: golden_image, multiboot, soc_major_version, soc_minor_version</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div></div>
+</pre></div>
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, Deepthi.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../',
+            VERSION:'1.0',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

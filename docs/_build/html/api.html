@@ -1,0 +1,863 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Casperfpga API reference &mdash; casperfpga 1.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="genindex.html"/>
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="casperfpga 1.0 documentation" href="index.html"/> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> casperfpga
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">Casperfpga API reference</a><ul>
+<li><a class="reference internal" href="#the-fpga-client">The FPGA Client</a></li>
+<li><a class="reference internal" href="#the-10gbe-module">The 10Gbe Module</a></li>
+<li><a class="reference internal" href="#tapcptransport-module">TapcpTransport Module</a></li>
+</ul>
+</li>
+</ul>
+</div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">casperfpga</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Casperfpga API reference</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/api.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-casperfpga">
+<span id="casperfpga-api-reference"></span><h1>Casperfpga API reference<a class="headerlink" href="#module-casperfpga" title="Permalink to this headline">¶</a></h1>
+<p>control and monitor fpga-based casper designs.</p>
+<div class="section" id="the-fpga-client">
+<h2>The FPGA Client<a class="headerlink" href="#the-fpga-client" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="casperfpga.CasperFpga">
+<em class="property">class </em><code class="descclassname">casperfpga.</code><code class="descname">CasperFpga</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga" title="Permalink to this definition">¶</a></dt>
+<dd><p>A FPGA host board that has a CASPER design running on it. Or will soon have.</p>
+<dl class="method">
+<dt id="casperfpga.CasperFpga.blindwrite">
+<code class="descname">blindwrite</code><span class="sig-paren">(</span><em>device_name</em>, <em>data</em>, <em>offset=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.blindwrite"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.blindwrite" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.check_rx_raw">
+<code class="descname">check_rx_raw</code><span class="sig-paren">(</span><em>wait_time=0.2</em>, <em>checks=10</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.check_rx_raw"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.check_rx_raw" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check to see whether this host is receiving packets without
+error on all its GBE interfaces.
+:param wait_time: seconds to wait between checks
+:param checks: times to run check
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.check_tx_raw">
+<code class="descname">check_tx_raw</code><span class="sig-paren">(</span><em>wait_time=0.2</em>, <em>checks=10</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.check_tx_raw"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.check_tx_raw" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check to see whether this host is transmitting packets without
+error on all its GBE interfaces.
+:param wait_time: seconds to wait between checks
+:param checks: times to run check
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.connect">
+<code class="descname">connect</code><span class="sig-paren">(</span><em>timeout=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.connect"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.connect" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.deprogram">
+<code class="descname">deprogram</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.deprogram"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.deprogram" title="Permalink to this definition">¶</a></dt>
+<dd><p>The child class will deprogram the FPGA, we just reset out
+device information
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.device_names_by_container">
+<code class="descname">device_names_by_container</code><span class="sig-paren">(</span><em>container_name</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.device_names_by_container"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.device_names_by_container" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a list of devices in a certain container.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.devices_by_container">
+<code class="descname">devices_by_container</code><span class="sig-paren">(</span><em>container</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.devices_by_container"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.devices_by_container" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get devices using container type.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.disconnect">
+<code class="descname">disconnect</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.disconnect"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.disconnect" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.dram_bulkread">
+<code class="descname">dram_bulkread</code><span class="sig-paren">(</span><em>device</em>, <em>size</em>, <em>offset</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.dram_bulkread"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.dram_bulkread" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body"></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.estimate_fpga_clock">
+<code class="descname">estimate_fpga_clock</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.estimate_fpga_clock"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.estimate_fpga_clock" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the estimated clock of the running FPGA, in Mhz.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.get_system_information">
+<code class="descname">get_system_information</code><span class="sig-paren">(</span><em>filename=None</em>, <em>fpg_info=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.get_system_information"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.get_system_information" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get information about the design running on the FPGA.
+If filename is given, get it from file, otherwise query the</p>
+<blockquote>
+<div>host via KATCP.</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>filename</strong> – fpg filename</li>
+<li><strong>fpg_info</strong> – a tuple containing device_info and coreinfo 
+dictionaries</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">&lt;nothing&gt; the information is populated in the class</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.get_version_info">
+<code class="descname">get_version_info</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.get_version_info"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.get_version_info" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body"></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.is_connected">
+<code class="descname">is_connected</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.is_connected"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.is_connected" title="Permalink to this definition">¶</a></dt>
+<dd><p>Is the transport connected to the host?
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.is_running">
+<code class="descname">is_running</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.is_running"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.is_running" title="Permalink to this definition">¶</a></dt>
+<dd><p>Is the FPGA programmed and running?
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.listdev">
+<code class="descname">listdev</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.listdev"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.listdev" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a list of the memory bus items in this design.
+:return: a list of memory devices</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.read">
+<code class="descname">read</code><span class="sig-paren">(</span><em>device_name</em>, <em>size</em>, <em>offset=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.read"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.read" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.read_dram">
+<code class="descname">read_dram</code><span class="sig-paren">(</span><em>size</em>, <em>offset=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.read_dram"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.read_dram" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reads data from a ROACH’s DRAM. Reads are done up to 1MB at a time.
+The 64MB indirect address register is automatically incremented 
+as necessary.
+It returns a string, as per the normal ‘read’ function.
+ROACH has a fixed device name for the DRAM (dram memory).
+Uses dram_bulkread internally.
+:param size: amount of data to read, in bytes
+:param offset: offset at which to read, in bytes
+:return: binary data string</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.read_int">
+<code class="descname">read_int</code><span class="sig-paren">(</span><em>device_name</em>, <em>word_offset=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.read_int"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.read_int" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read an integer from memory device.
+i.e. calls self.read(device_name, size=4, offset=0) and uses 
+struct to unpack it into an integer
+:param device_name: device from which to read
+:param word_offset: the 32-bit word offset at which to read
+:return: signed 32-bit integer</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.read_uint">
+<code class="descname">read_uint</code><span class="sig-paren">(</span><em>device_name</em>, <em>word_offset=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.read_uint"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.read_uint" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read an unsigned integer from memory device.
+:param device_name: device from which to read
+:param word_offset: the 32-bit word offset at which to read
+:return: unsigned 32-bit integer</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.set_igmp_version">
+<code class="descname">set_igmp_version</code><span class="sig-paren">(</span><em>version</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.set_igmp_version"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.set_igmp_version" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>version</strong> – </td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.test_connection">
+<code class="descname">test_connection</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.test_connection"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.test_connection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Write to and read from the scratchpad to test the connection to the FPGA</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.upload_to_ram_and_program">
+<code class="descname">upload_to_ram_and_program</code><span class="sig-paren">(</span><em>filename</em>, <em>port=-1</em>, <em>timeout=10</em>, <em>wait_complete=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.upload_to_ram_and_program"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.upload_to_ram_and_program" title="Permalink to this definition">¶</a></dt>
+<dd><p>Upload an FPG file to RAM and then program the FPGA.
+:param filename: the file to upload
+:param port: the port to use on the rx end, -1 means a random port
+:param timeout: how long to wait, seconds
+:param wait_complete: wait for the transaction to complete, return
+after upload if False
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.write">
+<code class="descname">write</code><span class="sig-paren">(</span><em>device_name</em>, <em>data</em>, <em>offset=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.write"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.write" title="Permalink to this definition">¶</a></dt>
+<dd><p>Write data, then read it to confirm a successful write.
+:param device_name: memory device name to write
+:param data: packed binary data string to write
+:param offset: offset at which to write, in bytes
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.write_dram">
+<code class="descname">write_dram</code><span class="sig-paren">(</span><em>data</em>, <em>offset=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.write_dram"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.write_dram" title="Permalink to this definition">¶</a></dt>
+<dd><p>Writes data to a ROACH’s DRAM. Writes are done up to 512KiB at a time.
+The 64MB indirect address register is automatically 
+incremented as necessary.
+ROACH has a fixed device name for the DRAM (dram memory) and so the 
+user does not need to specify the write register.
+:param data: packed binary string data to write
+:param offset: the offset at which to write
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.CasperFpga.write_int">
+<code class="descname">write_int</code><span class="sig-paren">(</span><em>device_name</em>, <em>integer</em>, <em>blindwrite=False</em>, <em>word_offset=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/casperfpga.html#CasperFpga.write_int"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.CasperFpga.write_int" title="Permalink to this definition">¶</a></dt>
+<dd><p>Writes an integer to the device specified at the offset specified.
+A blind write is optional.
+:param device_name: device to be written
+:param integer: the integer to write
+:param blindwrite: True for blind write, default False
+:param word_offset: the offset at which to write, in 32-bit words
+:return:</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="the-10gbe-module">
+<h2>The 10Gbe Module<a class="headerlink" href="#the-10gbe-module" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="casperfpga.TenGbe">
+<em class="property">class </em><code class="descclassname">casperfpga.</code><code class="descname">TenGbe</code><span class="sig-paren">(</span><em>parent</em>, <em>name</em>, <em>address</em>, <em>length_bytes</em>, <em>device_info=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe" title="Permalink to this definition">¶</a></dt>
+<dd><p>To do with the CASPER ten GBE yellow block implemented on FPGAs,
+and interfaced-to via KATCP memory reads/writes.</p>
+<dl class="method">
+<dt id="casperfpga.TenGbe.dhcp_start">
+<code class="descname">dhcp_start</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.dhcp_start"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.dhcp_start" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configure this interface, then start a DHCP client on ALL interfaces.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.fabric_disable">
+<code class="descname">fabric_disable</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.fabric_disable"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.fabric_disable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable the core fabric
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.fabric_enable">
+<code class="descname">fabric_enable</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.fabric_enable"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.fabric_enable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable the core fabric
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.fabric_soft_reset_toggle">
+<code class="descname">fabric_soft_reset_toggle</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.fabric_soft_reset_toggle"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.fabric_soft_reset_toggle" title="Permalink to this definition">¶</a></dt>
+<dd><p>Toggle the fabric soft reset
+:return:</p>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="casperfpga.TenGbe.from_device_info">
+<em class="property">classmethod </em><code class="descname">from_device_info</code><span class="sig-paren">(</span><em>parent</em>, <em>device_name</em>, <em>device_info</em>, <em>memorymap_dict</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.from_device_info"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.from_device_info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Process device info and the memory map to get all necessary info 
+and return a TenGbe instance.
+:param parent: the parent device, normally an FPGA instance
+:param device_name: the unique device name
+:param device_info: information about this device
+:param memorymap_dict: a dictionary containing the device memory map
+:return: a TenGbe object</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.get_10gbe_core_details">
+<code class="descname">get_10gbe_core_details</code><span class="sig-paren">(</span><em>read_arp=False</em>, <em>read_cpu=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.get_10gbe_core_details"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.get_10gbe_core_details" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get 10GbE core details.
+assemble struct for header stuff…
+0x00 - 0x07: MAC address
+0x08 - 0x0b: Not used
+0x0c - 0x0f: Gateway addr
+0x10 - 0x13: IP addr
+0x14 - 0x17: Not assigned
+0x18 - 0x1b: Buffer sizes
+0x1c - 0x1f: Not assigned
+0x20    :    Soft reset (bit 0)
+0x21    :    Fabric enable (bit 0)
+0x22 - 0x23: Fabric port
+0x24 - 0x27: XAUI status (bit 2,3,4,5 = lane sync, bit6 = chan_bond)
+0x28 - 0x2b: PHY config
+0x28    :    RX_eq_mix
+0x29    :    RX_eq_pol
+0x2a    :    TX_preemph
+0x2b    :    TX_diff_ctrl
+0x30 - 0x33: Multicast IP RX base address
+0x34 - 0x37: Multicast IP mask
+0x38 - 0x3b: Multicast subnet mask
+0x1000  :    CPU TX buffer
+0x2000  :    CPU RX buffer
+0x3000  :    ARP tables start
+word_width = 8
+self.add_field(Bitfield.Field(‘mac0’, 0,            word_width,                 0, 0 * word_width))
+self.add_field(Bitfield.Field(‘mac1’, 0,            word_width,                 0, 1 * word_width))
+self.add_field(Bitfield.Field(‘mac2’, 0,            word_width,                 0, 2 * word_width))
+self.add_field(Bitfield.Field(‘mac3’, 0,            word_width,                 0, 3 * word_width))
+self.add_field(Bitfield.Field(‘mac4’, 0,            word_width,                 0, 4 * word_width))
+self.add_field(Bitfield.Field(‘mac5’, 0,            word_width,                 0, 5 * word_width))
+self.add_field(Bitfield.Field(‘mac6’, 0,            word_width,                 0, 6 * word_width))
+self.add_field(Bitfield.Field(‘mac7’, 0,            word_width,                 0, 7 * word_width))
+self.add_field(Bitfield.Field(‘unused_1’, 0,        (0x0c - 0x08) * word_width, 0, 8 * word_width))
+self.add_field(Bitfield.Field(‘gateway_ip0’, 0,     word_width,                 0, 0x0c * word_width))
+self.add_field(Bitfield.Field(‘gateway_ip1’, 0,     word_width,                 0, 0x0d * word_width))
+self.add_field(Bitfield.Field(‘gateway_ip2’, 0,     word_width,                 0, 0x0e * word_width))
+self.add_field(Bitfield.Field(‘gateway_ip3’, 0,     word_width,                 0, 0x0f * word_width))
+self.add_field(Bitfield.Field(‘ip0’, 0,             word_width,                 0, 0x10 * word_width))
+self.add_field(Bitfield.Field(‘ip1’, 0,             word_width,                 0, 0x11 * word_width))
+self.add_field(Bitfield.Field(‘ip2’, 0,             word_width,                 0, 0x12 * word_width))
+self.add_field(Bitfield.Field(‘ip3’, 0,             word_width,                 0, 0x13 * word_width))
+self.add_field(Bitfield.Field(‘unused_2’, 0,        (0x18 - 0x14) * word_width, 0, 0x14 * word_width))
+self.add_field(Bitfield.Field(‘buf_sizes’, 0,       (0x1c - 0x18) * word_width, 0, 0x18 * word_width))
+self.add_field(Bitfield.Field(‘unused_3’, 0,        (0x20 - 0x1c) * word_width, 0, 0x1c * word_width))
+self.add_field(Bitfield.Field(‘soft_reset’, 2,      1,                          0, 0x20 * word_width))
+self.add_field(Bitfield.Field(‘fabric_enable’, 2,   1,                          0, 0x21 * word_width))
+self.add_field(Bitfield.Field(‘port’, 0,            (0x24 - 0x22) * word_width, 0, 0x22 * word_width))
+self.add_field(Bitfield.Field(‘xaui_status’, 0,     (0x28 - 0x24) * word_width, 0, 0x24 * word_width))
+self.add_field(Bitfield.Field(‘rx_eq_mix’, 0,       word_width,                 0, 0x28 * word_width))
+self.add_field(Bitfield.Field(‘rq_eq_pol’, 0,       word_width,                 0, 0x29 * word_width))
+self.add_field(Bitfield.Field(‘tx_preempth’, 0,     word_width,                 0, 0x2a * word_width))
+self.add_field(Bitfield.Field(‘tx_diff_ctrl’, 0,    word_width,                 0, 0x2b * word_width))
+#self.add_field(Bitfield.Field(‘buffer_tx’, 0,       0x1000 * word_width,        0, 0x1000 * word_width))
+#self.add_field(Bitfield.Field(‘buffer_rx’, 0,       0x1000 * word_width,        0, 0x2000 * word_width))
+#self.add_field(Bitfield.Field(‘arp_table’, 0,       0x1000 * word_width,        0, 0x3000 * word_width))</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.get_arp_details">
+<code class="descname">get_arp_details</code><span class="sig-paren">(</span><em>port_dump=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.get_arp_details"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.get_arp_details" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get ARP details from this interface.
+:param port_dump: list - A list of raw bytes from interface memory.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.get_cpu_details">
+<code class="descname">get_cpu_details</code><span class="sig-paren">(</span><em>port_dump=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.get_cpu_details"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.get_cpu_details" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read details of the CPU buffers.
+:param port_dump:
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.multicast_receive">
+<code class="descname">multicast_receive</code><span class="sig-paren">(</span><em>ip_str</em>, <em>group_size</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.multicast_receive"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.multicast_receive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send a request to KATCP to have this tap instance send a multicast
+group join request.
+:param ip_str: A dotted decimal string representation of the base
+mcast IP address.
+:param group_size: An integer for how many mcast addresses from
+base to respond to.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.multicast_remove">
+<code class="descname">multicast_remove</code><span class="sig-paren">(</span><em>ip_str</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.multicast_remove"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.multicast_remove" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send a request to be removed from a multicast group.
+:param ip_str: A dotted decimal string representation of the base
+mcast IP address.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.post_create_update">
+<code class="descname">post_create_update</code><span class="sig-paren">(</span><em>raw_device_info</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.post_create_update"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.post_create_update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update the device with information not available at creation.
+:param raw_device_info: info about this block that may be useful</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.print_10gbe_core_details">
+<code class="descname">print_10gbe_core_details</code><span class="sig-paren">(</span><em>arp=False</em>, <em>cpu=False</em>, <em>refresh=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.print_10gbe_core_details"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.print_10gbe_core_details" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prints 10GbE core details.
+:param arp: boolean, include the ARP table
+:param cpu: boolean, include the CPU packet buffers
+:param refresh: read the 10gbe details first</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.print_arp_details">
+<code class="descname">print_arp_details</code><span class="sig-paren">(</span><em>refresh=False</em>, <em>only_hits=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.print_arp_details"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.print_arp_details" title="Permalink to this definition">¶</a></dt>
+<dd><p>Print nicely formatted ARP info.
+:param refresh:
+:param only_hits:
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.print_cpu_details">
+<code class="descname">print_cpu_details</code><span class="sig-paren">(</span><em>refresh=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.print_cpu_details"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.print_cpu_details" title="Permalink to this definition">¶</a></dt>
+<dd><p>Print nicely formatted CPU details info.
+:param refresh:
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.read_counters">
+<code class="descname">read_counters</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.read_counters"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.read_counters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read all the counters embedded in this TenGBE yellow block</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.read_rx_counters">
+<code class="descname">read_rx_counters</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.read_rx_counters"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.read_rx_counters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read all RX counters embedded in this TenGBE yellow block</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.read_rxsnap">
+<code class="descname">read_rxsnap</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.read_rxsnap"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.read_rxsnap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the RX snapshot embedded in this TenGBE yellow block
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.read_tx_counters">
+<code class="descname">read_tx_counters</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.read_tx_counters"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.read_tx_counters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read all TX counters embedded in this TenGBE yellow block</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.read_txsnap">
+<code class="descname">read_txsnap</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.read_txsnap"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.read_txsnap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the TX snapshot embedded in this TenGBE yellow block
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.rx_okay">
+<code class="descname">rx_okay</code><span class="sig-paren">(</span><em>wait_time=0.2</em>, <em>checks=10</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.rx_okay"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.rx_okay" title="Permalink to this definition">¶</a></dt>
+<dd><p>Is this gbe core receiving okay?
+i.e. _rxctr incrementing and _rxerrctr not incrementing
+:param wait_time: seconds to wait between checks
+:param checks: times to run check
+:return: True/False</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.set_arp_table">
+<code class="descname">set_arp_table</code><span class="sig-paren">(</span><em>macs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.set_arp_table"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.set_arp_table" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the ARP table with a list of MAC addresses. The list, <cite>macs</cite>,
+is passed such that the zeroth element is the MAC address of the
+device with IP XXX.XXX.XXX.0, and element N is the MAC address of the
+device with IP XXX.XXX.XXX.N</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.setup">
+<code class="descname">setup</code><span class="sig-paren">(</span><em>mac</em>, <em>ipaddress</em>, <em>port</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.setup"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.setup" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set up the MAC, IP and port for this interface
+:param mac: 
+:param ipaddress: 
+:param port: 
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.tap_arp_reload">
+<code class="descname">tap_arp_reload</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.tap_arp_reload"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.tap_arp_reload" title="Permalink to this definition">¶</a></dt>
+<dd><p>Have the tap driver reload its ARP table right now.
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.tap_info">
+<code class="descname">tap_info</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.tap_info"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.tap_info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get info on the tap instance running on this interface.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.tap_running">
+<code class="descname">tap_running</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.tap_running"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.tap_running" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine if an instance if tap is already running on for this
+ten GBE interface.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.tap_start">
+<code class="descname">tap_start</code><span class="sig-paren">(</span><em>restart=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.tap_start"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.tap_start" title="Permalink to this definition">¶</a></dt>
+<dd><p>Program a 10GbE device and start the TAP driver.
+:param restart: stop before starting</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.tap_stop">
+<code class="descname">tap_stop</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.tap_stop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.tap_stop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stop a TAP driver.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TenGbe.tx_okay">
+<code class="descname">tx_okay</code><span class="sig-paren">(</span><em>wait_time=0.2</em>, <em>checks=10</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/tengbe.html#TenGbe.tx_okay"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TenGbe.tx_okay" title="Permalink to this definition">¶</a></dt>
+<dd><p>Is this gbe core transmitting okay?
+i.e. _txctr incrementing and _txerrctr not incrementing
+:param wait_time: seconds to wait between checks
+:param checks: times to run check
+:return: True/False</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="tapcptransport-module">
+<h2>TapcpTransport Module<a class="headerlink" href="#tapcptransport-module" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="casperfpga.TapcpTransport">
+<em class="property">class </em><code class="descclassname">casperfpga.</code><code class="descname">TapcpTransport</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport" title="Permalink to this definition">¶</a></dt>
+<dd><p>The network transport for a tapcp-type interface.</p>
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.blindwrite">
+<code class="descname">blindwrite</code><span class="sig-paren">(</span><em>device_name</em>, <em>data</em>, <em>offset=0</em>, <em>use_bulk=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.blindwrite"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.blindwrite" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unchecked data write.
+:param device_name: the memory device to which to write
+:param data: the byte string to write
+:param offset: the offset, in bytes, at which to write
+:param use_bulk: Does nothing. Kept for API compatibility
+:return: &lt;nothing&gt;</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.deprogram">
+<code class="descname">deprogram</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.deprogram"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.deprogram" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deprogram the FPGA.
+This actually reboots &amp; boots from the Golden Image
+:return: nothing</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.get_firmware_version">
+<code class="descname">get_firmware_version</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.get_firmware_version"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.get_firmware_version" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the version of the firmware
+:return: golden_image, multiboot, firmware_major_version,
+firmware_minor_version</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.get_soc_version">
+<code class="descname">get_soc_version</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.get_soc_version"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.get_soc_version" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the version of the soc
+:return: golden_image, multiboot, soc_major_version, soc_minor_version</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.get_temp">
+<code class="descname">get_temp</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.get_temp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.get_temp" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.is_connected">
+<code class="descname">is_connected</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.is_connected"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.is_connected" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.listdev">
+<code class="descname">listdev</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.listdev"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.listdev" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.listdev_pl">
+<code class="descname">listdev_pl</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.listdev_pl"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.listdev_pl" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.progdev">
+<code class="descname">progdev</code><span class="sig-paren">(</span><em>addr=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.progdev"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.progdev" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.read">
+<code class="descname">read</code><span class="sig-paren">(</span><em>device_name</em>, <em>size</em>, <em>offset=0</em>, <em>use_bulk=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.read"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.read" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return size_bytes of binary data with carriage-return escape-sequenced.
+:param device_name: name of memory device from which to read
+:param size: how many bytes to read
+:param offset: start at this offset, offset in bytes
+:param use_bulk: Does nothing. Kept for API compatibility
+:return: binary data string</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.read_wishbone">
+<code class="descname">read_wishbone</code><span class="sig-paren">(</span><em>wb_address</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.read_wishbone"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.read_wishbone" title="Permalink to this definition">¶</a></dt>
+<dd><p>Used to perform low level wishbone read from a Wishbone slave.
+:param wb_address: address of the wishbone slave to read from
+:return: Read Data or None</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.upload_to_ram_and_program">
+<code class="descname">upload_to_ram_and_program</code><span class="sig-paren">(</span><em>filename</em>, <em>port=None</em>, <em>timeout=None</em>, <em>wait_complete=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.upload_to_ram_and_program"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.upload_to_ram_and_program" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="casperfpga.TapcpTransport.write_wishbone">
+<code class="descname">write_wishbone</code><span class="sig-paren">(</span><em>wb_address</em>, <em>data</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/casperfpga/transport_tapcp.html#TapcpTransport.write_wishbone"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#casperfpga.TapcpTransport.write_wishbone" title="Permalink to this definition">¶</a></dt>
+<dd><p>Used to perform low level wishbone write to a wishbone slave. Gives
+low level direct access to wishbone bus.
+:param wb_address: address of the wishbone slave to write to
+:param data: data to write
+:return: response object</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, Deepthi.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'1.0',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>
