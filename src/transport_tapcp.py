@@ -10,7 +10,7 @@ __author__ = 'jackh'
 __date__ = 'June 2017'
 
 LOGGER = logging.getLogger(__name__)
-tftpy.setLogLevel(logging.WARNING)
+tftpy.setLogLevel(logging.ERROR)
 
 def set_log_level(level):
     tftpy.setLogLevel(level)
@@ -108,6 +108,12 @@ class TapcpTransport(Transport):
             return True
         except:
             return False        
+
+    def is_running(self):
+        """
+        This is currently an alias for 'is_connected'
+        """
+        return self.is_connected()
 
     def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True):
         USER_FLASH_LOC = 0x800000
