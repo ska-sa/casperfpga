@@ -771,19 +771,54 @@ class SkarabTransport(Transport):
         """
         # process the given file and get an image ready to send
         image_to_program = self._upload_to_ram_prepare_image(filename)
+        checksum_dict = {}
+        local_checksum = 0x0
+        packet_size = 0x0
 
         if os.path.splitext(filename)[1] == '.fpg':
-            self.check_md5sum(filename=filename,
-                              image_to_program=image_to_program)
+            # 'FlashWriteChecksum' to be compared to SpartanFlashChecksum now stored in fpg-header
+            # - Get all the checksums at once
+            # - Method will handle fail-case
+            checksum_dict = self.extract_checksums_from_fpg(filename)
+
+            if sd.CHECKSUM_ERROR in checksum_dict.keys():
+                # Problem
+                LOGGER.error(checksum_dict[sd.CHECKSUM_ERROR])
+                raise SkarabInvalidBitstream(checksum_dict[sd.CHECKSUM_ERROR])
+            # else: Continue
+            # - Calculate md5_checksum on bitstream
+            bitstream_md5sum = hashlib.md5(image_to_program).hexdigest()
+            if bitstream_md5sum != checksum_dict[sd.MD5_BITSTREAM]:
+                errmsg = "bitstream_md5sum != fpgfile_md5sum"
+                LOGGER.error(errmsg)
+                raise SkarabInvalidBitstream(errmsg)
+            # else: All good
+            debugmsg = 'MD5 checksums matched...'
+            LOGGER.debug(debugmsg)
+
+        '''
+        Before we continue:
+        - local_checksum calculated during generation of the fpg file in mlib_devel
+          - Previously was being calculated in casperfpga for each instance of upload_to_ram
+        - packet_size parameter affects how the SPARTAN Checksum is being calculated
+        - Therefore, as a precaution, the packet_size used to generate the local_checksum
+          is tagged onto the value: localChecksum_packetSize
+          - packet_size value can be found in mlib_devel/jasper_library/constraints.py
+        '''
+        if sd.FLASH_WRITE_CHECKSUM in checksum_dict.keys():
+            values = checksum_dict[sd.FLASH_WRITE_CHECKSUM].split('_')
+            [local_checksum, packet_size] = [int(x, 10) for x in values]
+        else:
+            # Value was not present in the fpg-header
+            packet_size = sd.MAX_IMAGE_CHUNK_SIZE
+
         image_size = len(image_to_program)
-        image_chunks = [image_to_program[ctr:ctr + sd.MAX_IMAGE_CHUNK_SIZE]
-                        for ctr in range(0, image_size,
-                                         sd.MAX_IMAGE_CHUNK_SIZE
-                                         )]
+        image_chunks = [image_to_program[ctr:ctr + packet_size]
+                        for ctr in range(0, image_size, packet_size)]
         # pad the last chunk to max chunk size, if required
-        padding = (image_size % sd.MAX_IMAGE_CHUNK_SIZE != 0)
+        padding = (image_size % packet_size != 0)
         if padding:
-            image_chunks[-1] += '\xff' * (sd.MAX_IMAGE_CHUNK_SIZE - len(
+            image_chunks[-1] += '\xff' * (packet_size - len(
                 image_chunks[-1]))
 
         # get the total number of chunks to be sent
@@ -828,12 +863,18 @@ class SkarabTransport(Transport):
                         verify = False
                 checksum_match = True
                 if verify:
-                    spartan_checksum = self.get_spartan_checksum()
-                    local_checksum = self.calculate_checksum_using_file(
-                        file_name=filename, packet_size=sd.MAX_IMAGE_CHUNK_SIZE)
-                    checksum_match = self.check_checksum(
-                        spartan_checksum=spartan_checksum,
-                        local_checksum=local_checksum)
+                    # if sd.FLASH_WRITE_CHECKSUM in checksum_dict.keys():
+                    if local_checksum:
+                        # i.e. If the value is non-zero
+                        spartan_checksum = self.get_spartan_checksum()
+
+                        checksum_match = self.check_checksum(
+                            spartan_checksum=spartan_checksum,
+                            local_checksum=local_checksum)
+                    else:
+                        debugmsg = '%s generated using an older version of mlib_devel,' \
+                                   ' not calculating checksum' % filename
+                        LOGGER.debug(debugmsg)
                 if checksum_match:
                     self.prog_info['last_uploaded'] = filename
                     self._sdram_programmed = True
@@ -853,7 +894,9 @@ class SkarabTransport(Transport):
         :param image_to_program: bitstream extracted from fpg file
         :return: nothing if successful, else raise error
         """
+
         (md5_header, md5_bitstream) = self.extract_md5_from_fpg(filename)
+
         if md5_header is not None and md5_bitstream is not None:
             # Calculate and compare MD5 sums here, before carrying on
             # system_info is a dictionary
@@ -862,6 +905,10 @@ class SkarabTransport(Transport):
                 errmsg = "bitstream_md5sum != fpgfile_md5sum"
                 LOGGER.error(errmsg)
                 raise SkarabInvalidBitstream(errmsg)
+            # else: All good
+            debugmsg = 'MD5 checksums matched...'
+            LOGGER.debug(debugmsg)
+            # return True
         else:
             # .fpg file was created using an older version of mlib_devel
             errmsg = 'An older version of mlib_devel generated ' + \
@@ -2451,10 +2498,10 @@ class SkarabTransport(Transport):
         return True
 
     def enable_isp_flash(self):
-        '''
+        """
         This method Enables access to ISP Flash by writing two Magic Bytes to a certain address space
         :return:
-        '''
+        """
         # This will return the SpartanFirmwareVersion as an integer_tuple (major, minor)
         (major_version, minor_version) = self.get_spartan_firmware_version(return_tuple=True)
         flash_magic_bytes = []
@@ -2481,11 +2528,11 @@ class SkarabTransport(Transport):
             self.program_spi_page(sd.SPARTAN_SPI_REG_ADDR, 2, raw_magic_bytes)  # Ignore result
 
     def disable_isp_flash(self):
-        '''
+        """
         This method Disables access to ISP Flash by reading from a certain address space
         (And subsequently clearing the Magic Flash Byte)
         :return:
-        '''
+        """
 
         # This will return the SpartanFirmwareVersion as an integer_tuple (major, minor)
         (major_version, minor_version) = self.get_spartan_firmware_version(return_tuple=True)
@@ -3620,9 +3667,10 @@ class SkarabTransport(Transport):
         Method for easier access to the Spartan Checksum
         :return: spartan_flash_write_checksum
         """
-        upper_address, lower_address = (0x001ffe02, 0x001ffe03)
-        upper_byte = self.read_spi_page(upper_address, 1)[0]
-        lower_byte = self.read_spi_page(lower_address, 1)[0]
+
+        upper_byte = self.read_spi_page(sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_CHECKSUM_UPPER_OFFSET, 1)[0]
+        lower_byte = self.read_spi_page(sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_CHECKSUM_LOWER_OFFSET, 1)[0]
+
         spartan_flash_write_checksum = (upper_byte << 8) | lower_byte
         return spartan_flash_write_checksum
 
@@ -3647,17 +3695,75 @@ class SkarabTransport(Transport):
 
     @staticmethod
     def configure_magic_flash_byte():
-        '''
+        """
         Method created to simplify the checking of SpartanFirmwareVersion
         :return:
-        '''
+        """
 
         return NotImplementedError
 
     @staticmethod
+    def extract_checksums_from_fpg(filename):
+        """
+        As per 06/11/2017, mlib_devel/jasper_library/toolflow.py holds three checksums in the fpg-header
+        - md5_header: MD5 Checksum calculated on the header information (not including checksums themselves)
+        - md5_bitstream: MD5 Checksum calculated on the binary data itself
+        - flashWriteChecksum: To be compared to the SpartanChecksum, successive-summation of 16-bit words
+        :param filename: Name of input fpg file to be programmed to SDRAM
+        :return: Dictionary of checksums grabbed from fpg-header - better a dict than tuple
+        """
+        if filename[-3:] != 'fpg':
+            errstr = '%s does not seem to be an .fpg file.' % filename
+            LOGGER.error(errstr)
+            raise SkarabInvalidBitstream(errstr)
+        fptr = None
+        checksum_dict = {}
+        # checksum_keys = [sd.MD5_HEADER, sd.MD5_BITSTREAM, sd.FLASH_WRITE_CHECKSUM]
+        # - Realistically, if the md5_bitstream value is in the header then so is md5_header
+        # - However, it is not yet given that flash_write_checksum will be in the header
+        try:
+            fptr = open(filename, 'rb')
+            fline = fptr.readline()
+            if not fline.startswith('#!/bin/kcpfpg'):
+                errstr = '%s does not seem to be a valid .fpg file.' % filename
+                LOGGER.error(errstr)
+                raise SkarabInvalidBitstream(errstr)
+            while not fline.startswith('?quit'):
+                fline = fptr.readline().strip('\n')
+                sep = '\t' if fline.startswith('?meta\t') else ' '
+                if 'md5_header' in fline:
+                    # md5_header = fline.split(sep)[-1]
+                    checksum_dict['md5_header'] = fline.split(sep)[-1]
+                elif 'md5_bitstream' in fline:
+                    # md5_bitstream = fline.split(sep)[-1]
+                    checksum_dict['md5_bitstream'] = fline.split(sep)[-1]
+                elif 'flash_write_checksum' in fline:
+                    # Remember, this will grab it as STRING data - still need to convert to integer
+                    # flash_write_checksum = fline.split(sep)[-1]
+                    checksum_dict['flash_write_checksum'] = fline.split(sep)[-1]
+                # Do we really need to break after it's found the values?
+                # - These three values are the last pieces of info before the ?quit word
+                # - Let the loop run until it breaks
+            if sd.MD5_BITSTREAM not in checksum_dict:
+                # .fpg file was created using an older version of mlib_devel
+                errmsg = 'An older version of mlib_devel generated ' + \
+                         filename + '. Please update to include the md5sum ' \
+                                    'on the bitstream in the .fpg header.'
+                checksum_dict[sd.CHECKSUM_ERROR] = errmsg
+
+        except IOError:
+            errstr = 'Could not open %s.' % filename
+            LOGGER.error(errstr)
+            raise IOError(errstr)
+        finally:
+            if fptr:
+                fptr.close()
+        return checksum_dict
+
+    @staticmethod
     def extract_md5_from_fpg(filename):
         """
-        Given an FPG, extract the md5sum, if it exists
+        Given an FPG, extract the MD5 Checksums, if they exists
         :param filename: 
         :return: 
         """
