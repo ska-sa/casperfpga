@@ -532,13 +532,15 @@ class CasperFpga(object):
         :return: <nothing> the information is populated in the class
         """
         # try and get the info from the running host first
-        if self.transport.is_running() and hasattr(
-                self.transport, 'get_system_information_from_transport'):
+        if self.transport.is_running():
             if (filename is not None) or (fpg_info is not None):
                 LOGGER.info('get_system_information: device running, '
                             'so overriding arguments.')
-            filename, fpg_info = \
-                self.transport.get_system_information_from_transport()
+            try:
+                filename, fpg_info = \
+                    self.transport.get_system_information_from_transport()
+            except NotImplementedError:
+                LOGGER.info('no get_system_information_from_transport available')
         # otherwise look at the arguments given
         if (filename is None) and (fpg_info is None):
             raise RuntimeError('Either filename or parsed fpg data '

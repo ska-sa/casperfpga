@@ -1,0 +1,872 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>casperfpga.casperfpga &mdash; casperfpga 1.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="../../genindex.html"/>
+        <link rel="search" title="Search" href="../../search.html"/>
+    <link rel="top" title="casperfpga 1.0 documentation" href="../../index.html"/>
+        <link rel="up" title="Module code" href="../index.html"/> 
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> casperfpga
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">casperfpga</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>casperfpga.casperfpga</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for casperfpga.casperfpga</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">struct</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">socket</span>
+<span class="kn">import</span> <span class="nn">select</span>
+
+<span class="kn">import</span> <span class="nn">register</span>
+<span class="kn">import</span> <span class="nn">sbram</span>
+<span class="kn">import</span> <span class="nn">snap</span>
+<span class="kn">import</span> <span class="nn">tengbe</span>
+<span class="kn">import</span> <span class="nn">fortygbe</span>
+<span class="kn">import</span> <span class="nn">qdr</span>
+<span class="kn">from</span> <span class="nn">attribute_container</span> <span class="k">import</span> <span class="n">AttributeContainer</span>
+<span class="kn">import</span> <span class="nn">skarab_definitions</span> <span class="k">as</span> <span class="nn">skarab_defs</span>
+<span class="kn">from</span> <span class="nn">transport_katcp</span> <span class="k">import</span> <span class="n">KatcpTransport</span>
+<span class="kn">from</span> <span class="nn">transport_tapcp</span> <span class="k">import</span> <span class="n">TapcpTransport</span><span class="p">,</span> <span class="n">set_log_level</span><span class="p">,</span> <span class="n">get_log_level</span>
+<span class="kn">from</span> <span class="nn">transport_skarab</span> <span class="k">import</span> <span class="n">SkarabTransport</span>
+<span class="kn">from</span> <span class="nn">utils</span> <span class="k">import</span> <span class="n">parse_fpg</span>
+
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># known CASPER memory-accessible devices and their associated</span>
+<span class="c1"># classes and containers</span>
+<span class="n">CASPER_MEMORY_DEVICES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;xps:bram&#39;</span><span class="p">:</span>         <span class="p">{</span><span class="s1">&#39;class&#39;</span><span class="p">:</span> <span class="n">sbram</span><span class="o">.</span><span class="n">Sbram</span><span class="p">,</span>       <span class="s1">&#39;container&#39;</span><span class="p">:</span> <span class="s1">&#39;sbrams&#39;</span><span class="p">},</span>
+    <span class="s1">&#39;xps:qdr&#39;</span><span class="p">:</span>          <span class="p">{</span><span class="s1">&#39;class&#39;</span><span class="p">:</span> <span class="n">qdr</span><span class="o">.</span><span class="n">Qdr</span><span class="p">,</span>           <span class="s1">&#39;container&#39;</span><span class="p">:</span> <span class="s1">&#39;qdrs&#39;</span><span class="p">},</span>
+    <span class="s1">&#39;xps:sw_reg&#39;</span><span class="p">:</span>       <span class="p">{</span><span class="s1">&#39;class&#39;</span><span class="p">:</span> <span class="n">register</span><span class="o">.</span><span class="n">Register</span><span class="p">,</span> <span class="s1">&#39;container&#39;</span><span class="p">:</span> <span class="s1">&#39;registers&#39;</span><span class="p">},</span>
+    <span class="s1">&#39;xps:tengbe_v2&#39;</span><span class="p">:</span>    <span class="p">{</span><span class="s1">&#39;class&#39;</span><span class="p">:</span> <span class="n">tengbe</span><span class="o">.</span><span class="n">TenGbe</span><span class="p">,</span>     <span class="s1">&#39;container&#39;</span><span class="p">:</span> <span class="s1">&#39;gbes&#39;</span><span class="p">},</span>
+    <span class="s1">&#39;xps:forty_gbe&#39;</span><span class="p">:</span>    <span class="p">{</span><span class="s1">&#39;class&#39;</span><span class="p">:</span> <span class="n">fortygbe</span><span class="o">.</span><span class="n">FortyGbe</span><span class="p">,</span> <span class="s1">&#39;container&#39;</span><span class="p">:</span> <span class="s1">&#39;gbes&#39;</span><span class="p">},</span>
+    <span class="s1">&#39;casper:snapshot&#39;</span><span class="p">:</span>  <span class="p">{</span><span class="s1">&#39;class&#39;</span><span class="p">:</span> <span class="n">snap</span><span class="o">.</span><span class="n">Snap</span><span class="p">,</span>         <span class="s1">&#39;container&#39;</span><span class="p">:</span> <span class="s1">&#39;snapshots&#39;</span><span class="p">},</span>
+<span class="p">}</span>
+
+
+<span class="c1"># other devices - blocks that aren&#39;t memory devices, but about which we&#39;d</span>
+<span class="c1"># like to know tagged in the simulink diagram</span>
+<span class="n">CASPER_OTHER_DEVICES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;casper:bitsnap&#39;</span><span class="p">:</span>               <span class="s1">&#39;bitsnap&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:dec_fir&#39;</span><span class="p">:</span>               <span class="s1">&#39;dec_fir&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:fft&#39;</span><span class="p">:</span>                   <span class="s1">&#39;fft&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:fft_biplex_real_2x&#39;</span><span class="p">:</span>    <span class="s1">&#39;fft_biplex_real_2x&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:fft_biplex_real_4x&#39;</span><span class="p">:</span>    <span class="s1">&#39;fft_biplex_real_4x&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:fft_wideband_real&#39;</span><span class="p">:</span>     <span class="s1">&#39;fft_wideband_real&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:info&#39;</span><span class="p">:</span>                  <span class="s1">&#39;info&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:pfb_fir&#39;</span><span class="p">:</span>               <span class="s1">&#39;pfb_fir&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:pfb_fir_async&#39;</span><span class="p">:</span>         <span class="s1">&#39;pfb_fir_async&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:pfb_fir_generic&#39;</span><span class="p">:</span>       <span class="s1">&#39;pfb_fir_generic&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:pfb_fir_real&#39;</span><span class="p">:</span>          <span class="s1">&#39;pfb_fir_real&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:spead_pack&#39;</span><span class="p">:</span>            <span class="s1">&#39;spead_pack&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:spead_unpack&#39;</span><span class="p">:</span>          <span class="s1">&#39;spead_unpack&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:vacc&#39;</span><span class="p">:</span>                  <span class="s1">&#39;vacc&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;casper:xeng&#39;</span><span class="p">:</span>                  <span class="s1">&#39;xeng&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;xps:xsg&#39;</span><span class="p">:</span>                      <span class="s1">&#39;xps&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;xps:katadc&#39;</span><span class="p">:</span>                   <span class="s1">&#39;katadc&#39;</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">choose_transport</span><span class="p">(</span><span class="n">host_ip</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Test whether a given host is a katcp client or a skarab</span>
+<span class="sd">    :param host_ip: </span>
+<span class="sd">    :return: </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Trying to figure out what kind of device </span><span class="si">%s</span><span class="s1"> is&#39;</span> <span class="o">%</span> <span class="n">host_ip</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">skarab_ctrl_sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_DGRAM</span><span class="p">)</span>
+        <span class="n">skarab_ctrl_sock</span><span class="o">.</span><span class="n">setblocking</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">skarab_eth_ctrl_port</span> <span class="o">=</span> <span class="p">(</span><span class="n">host_ip</span><span class="p">,</span> <span class="n">skarab_defs</span><span class="o">.</span><span class="n">ETHERNET_CONTROL_PORT_ADDRESS</span><span class="p">)</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="n">skarab_defs</span><span class="o">.</span><span class="n">ReadRegReq</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="n">skarab_defs</span><span class="o">.</span><span class="n">BOARD_REG</span><span class="p">,</span> <span class="n">skarab_defs</span><span class="o">.</span><span class="n">C_RD_VERSION_ADDR</span><span class="p">)</span>
+        <span class="n">skarab_ctrl_sock</span><span class="o">.</span><span class="n">sendto</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">create_payload</span><span class="p">(),</span> <span class="n">skarab_eth_ctrl_port</span><span class="p">)</span>
+        <span class="n">data_ready</span> <span class="o">=</span> <span class="n">select</span><span class="o">.</span><span class="n">select</span><span class="p">([</span><span class="n">skarab_ctrl_sock</span><span class="p">],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="mf">0.2</span><span class="p">)</span>
+        <span class="n">skarab_ctrl_sock</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_ready</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1"> seems to be a SKARAB&#39;</span> <span class="o">%</span> <span class="n">host_ip</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">SkarabTransport</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1"> is not a SKARAB. Trying Tapcp&#39;</span> <span class="o">%</span> <span class="n">host_ip</span><span class="p">)</span>
+            <span class="n">board</span> <span class="o">=</span> <span class="n">TapcpTransport</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="n">host_ip</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+            <span class="c1"># Temporarily turn off logging so if tftp doesn&#39;t respond</span>
+            <span class="c1"># there&#39;s no error. Remember the existing log level so that</span>
+            <span class="c1"># it can be re-set afterwards if tftp connects ok.</span>
+            <span class="n">log_level</span> <span class="o">=</span> <span class="n">get_log_level</span><span class="p">()</span>
+            <span class="n">set_log_level</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">CRITICAL</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">board</span><span class="o">.</span><span class="n">is_connected</span><span class="p">():</span>
+                <span class="n">set_log_level</span><span class="p">(</span><span class="n">log_level</span><span class="p">)</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1"> seems to be a Tapcp host&#39;</span> <span class="o">%</span> <span class="n">host_ip</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">TapcpTransport</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1"> seems to be a ROACH&#39;</span> <span class="o">%</span> <span class="n">host_ip</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">KatcpTransport</span>
+    <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">gaierror</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Address/host </span><span class="si">%s</span><span class="s1"> makes no sense to &#39;</span>
+                           <span class="s1">&#39;the OS?&#39;</span> <span class="o">%</span> <span class="n">host_ip</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Could not connect to </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">host_ip</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_kwarg</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">kwargs</span><span class="p">[</span><span class="n">field</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default</span>
+
+
+<div class="viewcode-block" id="CasperFpga"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga">[docs]</a><span class="k">class</span> <span class="nc">CasperFpga</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A FPGA host board that has a CASPER design running on it. Or will soon have.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param host: the hostname of this CasperFpga</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;host&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;port&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+                <span class="k">pass</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">host</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;host&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bitstream</span> <span class="o">=</span> <span class="n">get_kwarg</span><span class="p">(</span><span class="s1">&#39;bitstream&#39;</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">transport</span> <span class="o">=</span> <span class="n">get_kwarg</span><span class="p">(</span><span class="s1">&#39;transport&#39;</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">transport</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">transport</span> <span class="o">=</span> <span class="n">transport</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">transport_class</span> <span class="o">=</span> <span class="n">choose_transport</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;host&#39;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">transport</span> <span class="o">=</span> <span class="n">transport_class</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># this is just for code introspection</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">devices</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">other_devices</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sbrams</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">qdrs</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">registers</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gbes</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snapshots</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system_info</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rcs_info</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># /just for introspection</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset_device_info</span><span class="p">()</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: now a CasperFpga&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CasperFpga.connect"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.connect">[docs]</a>    <span class="k">def</span> <span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CasperFpga.disconnect"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.disconnect">[docs]</a>    <span class="k">def</span> <span class="nf">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">disconnect</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CasperFpga.read"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.read">[docs]</a>    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CasperFpga.blindwrite"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.blindwrite">[docs]</a>    <span class="k">def</span> <span class="nf">blindwrite</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">blindwrite</span><span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CasperFpga.listdev"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.listdev">[docs]</a>    <span class="k">def</span> <span class="nf">listdev</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get a list of the memory bus items in this design.</span>
+<span class="sd">        :return: a list of memory devices</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">listdev</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span></div>
+
+<div class="viewcode-block" id="CasperFpga.deprogram"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.deprogram">[docs]</a>    <span class="k">def</span> <span class="nf">deprogram</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The child class will deprogram the FPGA, we just reset out</span>
+<span class="sd">        device information</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">deprogram</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset_device_info</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CasperFpga.set_igmp_version"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.set_igmp_version">[docs]</a>    <span class="k">def</span> <span class="nf">set_igmp_version</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">version</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        </span>
+<span class="sd">        :param version: </span>
+<span class="sd">        :return: </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">set_igmp_version</span><span class="p">(</span><span class="n">version</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CasperFpga.upload_to_ram_and_program"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.upload_to_ram_and_program">[docs]</a>    <span class="k">def</span> <span class="nf">upload_to_ram_and_program</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">port</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                                  <span class="n">wait_complete</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Upload an FPG file to RAM and then program the FPGA.</span>
+<span class="sd">        :param filename: the file to upload</span>
+<span class="sd">        :param port: the port to use on the rx end, -1 means a random port</span>
+<span class="sd">        :param timeout: how long to wait, seconds</span>
+<span class="sd">        :param wait_complete: wait for the transaction to complete, return</span>
+<span class="sd">        after upload if False</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">upload_to_ram_and_program</span><span class="p">(</span>
+            <span class="n">filename</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">wait_complete</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">filename</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span> <span class="o">==</span> <span class="s1">&#39;fpg&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">get_system_information</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">rv</span></div>
+
+<div class="viewcode-block" id="CasperFpga.is_connected"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.is_connected">[docs]</a>    <span class="k">def</span> <span class="nf">is_connected</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Is the transport connected to the host?</span>
+<span class="sd">        :return: </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">is_connected</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CasperFpga.is_running"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.is_running">[docs]</a>    <span class="k">def</span> <span class="nf">is_running</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Is the FPGA programmed and running?</span>
+<span class="sd">        :return: </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">is_running</span><span class="p">()</span></div>
+
+    <span class="k">def</span> <span class="nf">_reset_device_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Reset information of devices this FPGA knows about.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># device dictionaries:</span>
+        <span class="c1">#   devices: all of them</span>
+        <span class="c1">#   memory_devices: only devices on the bus</span>
+        <span class="c1">#   other_devices: anything not on the bus</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">devices</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">other_devices</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c1"># containers</span>
+        <span class="k">for</span> <span class="n">container_</span> <span class="ow">in</span> <span class="n">CASPER_MEMORY_DEVICES</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container_</span><span class="p">[</span><span class="s1">&#39;container&#39;</span><span class="p">],</span> <span class="n">AttributeContainer</span><span class="p">())</span>
+
+        <span class="c1"># hold misc information about the bof file, program time, etc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system_info</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rcs_info</span> <span class="o">=</span> <span class="p">{}</span>
+
+<div class="viewcode-block" id="CasperFpga.test_connection"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.test_connection">[docs]</a>    <span class="k">def</span> <span class="nf">test_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write to and read from the scratchpad to test the connection to the FPGA</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">test_connection</span><span class="p">()</span></div>
+
+    <span class="c1"># def __getattribute__(self, name):</span>
+    <span class="c1">#     if name == &#39;registers&#39;:</span>
+    <span class="c1">#         return {self.memory_devices[r].name: self.memory_devices[r]</span>
+    <span class="c1">#                 for r in self.memory_devices_memory[&#39;register&#39;][&#39;items&#39;]}</span>
+    <span class="c1">#     return object.__getattribute__(self, name)</span>
+
+<div class="viewcode-block" id="CasperFpga.dram_bulkread"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.dram_bulkread">[docs]</a>    <span class="k">def</span> <span class="nf">dram_bulkread</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        </span>
+<span class="sd">        :return: </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+<div class="viewcode-block" id="CasperFpga.read_dram"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.read_dram">[docs]</a>    <span class="k">def</span> <span class="nf">read_dram</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Reads data from a ROACH&#39;s DRAM. Reads are done up to 1MB at a time.</span>
+<span class="sd">        The 64MB indirect address register is automatically incremented </span>
+<span class="sd">        as necessary.</span>
+<span class="sd">        It returns a string, as per the normal &#39;read&#39; function.</span>
+<span class="sd">        ROACH has a fixed device name for the DRAM (dram memory).</span>
+<span class="sd">        Uses dram_bulkread internally.</span>
+<span class="sd">        :param size: amount of data to read, in bytes</span>
+<span class="sd">        :param offset: offset at which to read, in bytes</span>
+<span class="sd">        :return: binary data string</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">n_reads</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">last_dram_page</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="n">dram_indirect_page_size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">64</span><span class="o">*</span><span class="mi">1024</span><span class="o">*</span><span class="mi">1024</span><span class="p">)</span>
+        <span class="c1"># read_chunk_size = (1024*1024)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: reading a total of </span><span class="si">%8i</span><span class="s1"> bytes from offset </span><span class="si">%8i</span><span class="s1">...&#39;</span> <span class="o">%</span>
+                     <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">offset</span><span class="p">))</span>
+        <span class="k">while</span> <span class="n">n_reads</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">:</span>
+            <span class="n">dram_page</span> <span class="o">=</span> <span class="p">(</span><span class="n">offset</span> <span class="o">+</span> <span class="n">n_reads</span><span class="p">)</span> <span class="o">/</span> <span class="n">dram_indirect_page_size</span>
+            <span class="n">local_offset</span> <span class="o">=</span> <span class="p">(</span><span class="n">offset</span> <span class="o">+</span> <span class="n">n_reads</span><span class="p">)</span> <span class="o">%</span> <span class="n">dram_indirect_page_size</span>
+            <span class="c1"># local_reads = min(read_chunk_size, size - n_reads,</span>
+            <span class="c1">#                   dram_indirect_page_size -</span>
+            <span class="c1">#                   (offset % dram_indirect_page_size))</span>
+            <span class="n">local_reads</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">size</span> <span class="o">-</span> <span class="n">n_reads</span><span class="p">,</span> <span class="n">dram_indirect_page_size</span> <span class="o">-</span>
+                              <span class="p">(</span><span class="n">offset</span> <span class="o">%</span> <span class="n">dram_indirect_page_size</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">last_dram_page</span> <span class="o">!=</span> <span class="n">dram_page</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">write_int</span><span class="p">(</span><span class="s1">&#39;dram_controller&#39;</span><span class="p">,</span> <span class="n">dram_page</span><span class="p">)</span>
+                <span class="n">last_dram_page</span> <span class="o">=</span> <span class="n">dram_page</span>
+            <span class="n">local_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dram_bulkread</span><span class="p">(</span><span class="s1">&#39;dram_memory&#39;</span><span class="p">,</span>
+                                            <span class="n">local_reads</span><span class="p">,</span> <span class="n">local_offset</span><span class="p">)</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">local_data</span><span class="p">)</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: reading </span><span class="si">%8i</span><span class="s1"> bytes from indirect &#39;</span>
+                         <span class="s1">&#39;address </span><span class="si">%4i</span><span class="s1"> at local offset </span><span class="si">%8i</span><span class="s1">... done.&#39;</span> <span class="o">%</span>
+                         <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">local_reads</span><span class="p">,</span> <span class="n">dram_page</span><span class="p">,</span> <span class="n">local_offset</span><span class="p">))</span>
+            <span class="n">n_reads</span> <span class="o">+=</span> <span class="n">local_reads</span>
+        <span class="k">return</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CasperFpga.write_dram"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.write_dram">[docs]</a>    <span class="k">def</span> <span class="nf">write_dram</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes data to a ROACH&#39;s DRAM. Writes are done up to 512KiB at a time.</span>
+<span class="sd">        The 64MB indirect address register is automatically </span>
+<span class="sd">        incremented as necessary.</span>
+<span class="sd">        ROACH has a fixed device name for the DRAM (dram memory) and so the </span>
+<span class="sd">        user does not need to specify the write register.</span>
+<span class="sd">        :param data: packed binary string data to write</span>
+<span class="sd">        :param offset: the offset at which to write</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">n_writes</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">last_dram_page</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="n">dram_indirect_page_size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">64</span><span class="o">*</span><span class="mi">1024</span><span class="o">*</span><span class="mi">1024</span><span class="p">)</span>
+        <span class="n">write_chunk_size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1024</span><span class="o">*</span><span class="mi">512</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: writing a total of </span><span class="si">%8i</span><span class="s1"> bytes from offset </span><span class="si">%8i</span><span class="s1">...&#39;</span> <span class="o">%</span>
+                     <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">offset</span><span class="p">))</span>
+
+        <span class="k">while</span> <span class="n">n_writes</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">:</span>
+            <span class="n">dram_page</span> <span class="o">=</span> <span class="p">(</span><span class="n">offset</span><span class="o">+</span><span class="n">n_writes</span><span class="p">)</span><span class="o">/</span><span class="n">dram_indirect_page_size</span>
+            <span class="n">local_offset</span> <span class="o">=</span> <span class="p">(</span><span class="n">offset</span><span class="o">+</span><span class="n">n_writes</span><span class="p">)</span> <span class="o">%</span> <span class="n">dram_indirect_page_size</span>
+            <span class="n">local_writes</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">write_chunk_size</span><span class="p">,</span> <span class="n">size</span> <span class="o">-</span> <span class="n">n_writes</span><span class="p">,</span>
+                               <span class="n">dram_indirect_page_size</span> <span class="o">-</span>
+                               <span class="p">(</span><span class="n">offset</span> <span class="o">%</span> <span class="n">dram_indirect_page_size</span><span class="p">))</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: writing </span><span class="si">%8i</span><span class="s1"> bytes from indirect address </span><span class="si">%4i</span><span class="s1"> &#39;</span>
+                         <span class="s1">&#39;at local offset </span><span class="si">%8i</span><span class="s1">...&#39;</span> <span class="o">%</span> <span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">local_writes</span><span class="p">,</span> <span class="n">dram_page</span><span class="p">,</span> <span class="n">local_offset</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">last_dram_page</span> <span class="o">!=</span> <span class="n">dram_page</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">write_int</span><span class="p">(</span><span class="s1">&#39;dram_controller&#39;</span><span class="p">,</span> <span class="n">dram_page</span><span class="p">)</span>
+                <span class="n">last_dram_page</span> <span class="o">=</span> <span class="n">dram_page</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">blindwrite</span><span class="p">(</span>
+                <span class="s1">&#39;dram_memory&#39;</span><span class="p">,</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">n_writes</span><span class="p">:</span><span class="n">n_writes</span> <span class="o">+</span> <span class="n">local_writes</span><span class="p">],</span> <span class="n">local_offset</span><span class="p">)</span>
+            <span class="n">n_writes</span> <span class="o">+=</span> <span class="n">local_writes</span></div>
+
+<div class="viewcode-block" id="CasperFpga.write"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write data, then read it to confirm a successful write.</span>
+<span class="sd">        :param device_name: memory device name to write</span>
+<span class="sd">        :param data: packed binary data string to write</span>
+<span class="sd">        :param offset: offset at which to write, in bytes</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">blindwrite</span><span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span>
+        <span class="n">new_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span> <span class="n">offset</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">new_data</span> <span class="o">!=</span> <span class="n">data</span><span class="p">:</span>
+            <span class="c1"># TODO - this error message won&#39;t show you the problem if</span>
+            <span class="c1"># it&#39;s not in the first word</span>
+            <span class="n">unpacked_wrdata</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;L&#39;</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">4</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">unpacked_rddata</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;L&#39;</span><span class="p">,</span> <span class="n">new_data</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">4</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">err_str</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: verification of write to </span><span class="si">%s</span><span class="s1"> at offset </span><span class="si">%d</span><span class="s1"> failed. &#39;</span> \
+                      <span class="s1">&#39;Wrote 0x</span><span class="si">%08x</span><span class="s1">... but got back 0x</span><span class="si">%08x</span><span class="s1">.&#39;</span> <span class="o">%</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span>
+                <span class="n">unpacked_wrdata</span><span class="p">,</span> <span class="n">unpacked_rddata</span><span class="p">)</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">err_str</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err_str</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CasperFpga.read_int"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.read_int">[docs]</a>    <span class="k">def</span> <span class="nf">read_int</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">word_offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read an integer from memory device.</span>
+<span class="sd">        i.e. calls self.read(device_name, size=4, offset=0) and uses </span>
+<span class="sd">        struct to unpack it into an integer</span>
+<span class="sd">        :param device_name: device from which to read</span>
+<span class="sd">        :param word_offset: the 32-bit word offset at which to read</span>
+<span class="sd">        :return: signed 32-bit integer</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">word_offset</span><span class="o">*</span><span class="mi">4</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;i&#39;</span><span class="p">,</span> <span class="n">data</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="CasperFpga.read_uint"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.read_uint">[docs]</a>    <span class="k">def</span> <span class="nf">read_uint</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">word_offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read an unsigned integer from memory device.</span>
+<span class="sd">        :param device_name: device from which to read</span>
+<span class="sd">        :param word_offset: the 32-bit word offset at which to read</span>
+<span class="sd">        :return: unsigned 32-bit integer</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">word_offset</span><span class="o">*</span><span class="mi">4</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;I&#39;</span><span class="p">,</span> <span class="n">data</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="CasperFpga.write_int"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.write_int">[docs]</a>    <span class="k">def</span> <span class="nf">write_int</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">integer</span><span class="p">,</span> <span class="n">blindwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">word_offset</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes an integer to the device specified at the offset specified.</span>
+<span class="sd">        A blind write is optional.</span>
+<span class="sd">        :param device_name: device to be written</span>
+<span class="sd">        :param integer: the integer to write</span>
+<span class="sd">        :param blindwrite: True for blind write, default False</span>
+<span class="sd">        :param word_offset: the offset at which to write, in 32-bit words</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># careful of packing input data into 32 bit - check range: if</span>
+        <span class="c1"># negative, must be signed int; if positive over 2^16, must be unsigned</span>
+        <span class="c1"># int.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;i&#39;</span> <span class="k">if</span> <span class="n">integer</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s1">&#39;&gt;I&#39;</span><span class="p">,</span> <span class="n">integer</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ve</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Writing integer </span><span class="si">%i</span><span class="s1"> failed with error: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span>
+                <span class="n">integer</span><span class="p">,</span> <span class="n">ve</span><span class="o">.</span><span class="n">message</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Writing integer </span><span class="si">%i</span><span class="s1"> failed with error: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span>
+                <span class="n">integer</span><span class="p">,</span> <span class="n">ve</span><span class="o">.</span><span class="n">message</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">blindwrite</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">blindwrite</span><span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">word_offset</span><span class="o">*</span><span class="mi">4</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">device_name</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">word_offset</span><span class="o">*</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: write_int </span><span class="si">%8x</span><span class="s1"> to register </span><span class="si">%s</span><span class="s1"> at word offset </span><span class="si">%d</span><span class="s1"> &#39;</span>
+                     <span class="s1">&#39;okay</span><span class="si">%s</span><span class="s1">.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">integer</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span>
+                                  <span class="n">word_offset</span><span class="p">,</span>
+                                  <span class="s1">&#39; (blind)&#39;</span> <span class="k">if</span> <span class="n">blindwrite</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">))</span></div>
+
+    <span class="c1"># def get_rcs(self, rcs_block_name=&#39;rcs&#39;):</span>
+    <span class="c1">#     &quot;&quot;&quot;</span>
+    <span class="c1">#     Retrieves and decodes a revision control block.</span>
+    <span class="c1">#     &quot;&quot;&quot;</span>
+    <span class="c1">#     raise NotImplementedError</span>
+    <span class="c1">#     rv = {&#39;user&#39;: self.read_uint(rcs_block_name + &#39;_user&#39;)}</span>
+    <span class="c1">#     app = self.read_uint(rcs_block_name+&#39;_app&#39;)</span>
+    <span class="c1">#     lib = self.read_uint(rcs_block_name+&#39;_lib&#39;)</span>
+    <span class="c1">#     if lib &amp; (1 &lt;&lt; 31):</span>
+    <span class="c1">#         rv[&#39;compile_timestamp&#39;] = lib &amp; ((2 ** 31)-1)</span>
+    <span class="c1">#     else:</span>
+    <span class="c1">#         if lib &amp; (1 &lt;&lt; 30):</span>
+    <span class="c1">#             # type is svn</span>
+    <span class="c1">#             rv[&#39;lib_rcs_type&#39;] = &#39;svn&#39;</span>
+    <span class="c1">#         else:</span>
+    <span class="c1">#             # type is git</span>
+    <span class="c1">#             rv[&#39;lib_rcs_type&#39;] = &#39;git&#39;</span>
+    <span class="c1">#         if lib &amp; (1 &lt;&lt; 28):</span>
+    <span class="c1">#             # dirty bit</span>
+    <span class="c1">#             rv[&#39;lib_dirty&#39;] = True</span>
+    <span class="c1">#         else:</span>
+    <span class="c1">#             rv[&#39;lib_dirty&#39;] = False</span>
+    <span class="c1">#         rv[&#39;lib_rev&#39;] = lib &amp; ((2 ** 28)-1)</span>
+    <span class="c1">#     if app &amp; (1 &lt;&lt; 31):</span>
+    <span class="c1">#         rv[&#39;app_last_modified&#39;] = app &amp; ((2 ** 31)-1)</span>
+    <span class="c1">#     else:</span>
+    <span class="c1">#         if app &amp; (1 &lt;&lt; 30):</span>
+    <span class="c1">#             # type is svn</span>
+    <span class="c1">#             rv[&#39;app_rcs_type&#39;] = &#39;svn&#39;</span>
+    <span class="c1">#         else:</span>
+    <span class="c1">#             # type is git</span>
+    <span class="c1">#             rv[&#39;app_rcs_type&#39;] = &#39;git&#39;</span>
+    <span class="c1">#         if app &amp; (1 &lt;&lt; 28):</span>
+    <span class="c1">#             # dirty bit</span>
+    <span class="c1">#             rv[&#39;app_dirty&#39;] = True</span>
+    <span class="c1">#         else:</span>
+    <span class="c1">#             rv[&#39;lib_dirty&#39;] = False</span>
+    <span class="c1">#         rv[&#39;app_rev&#39;] = app &amp; ((2 ** 28)-1)</span>
+    <span class="c1">#     return rv</span>
+
+    <span class="k">def</span> <span class="nf">_create_memory_devices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_dict</span><span class="p">,</span> <span class="n">memorymap_dict</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create memory devices from dictionaries of design information.</span>
+<span class="sd">        :param device_dict: raw dictionary of information from tagged</span>
+<span class="sd">        blocks in Simulink design, keyed on device name</span>
+<span class="sd">        :param memorymap_dict: dictionary of information that would have been</span>
+<span class="sd">        in coreinfo.tab - memory bus information</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># create and add memory devices to the memory device dictionary</span>
+        <span class="k">for</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">device_info</span> <span class="ow">in</span> <span class="n">device_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">device_name</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s1">&#39;There</span><span class="se">\&#39;</span><span class="s1">s a problem somewhere, got a blank &#39;</span>
+                                <span class="s1">&#39;device name?&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">device_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s1">&#39;Memory device </span><span class="si">%s</span><span class="s1"> already exists&#39;</span> <span class="o">%</span> <span class="n">device_name</span><span class="p">)</span>
+            <span class="c1"># get the class from the known devices, if it exists there</span>
+            <span class="n">tag</span> <span class="o">=</span> <span class="n">device_info</span><span class="p">[</span><span class="s1">&#39;tag&#39;</span><span class="p">]</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">known_device_class</span> <span class="o">=</span> <span class="n">CASPER_MEMORY_DEVICES</span><span class="p">[</span><span class="n">tag</span><span class="p">][</span><span class="s1">&#39;class&#39;</span><span class="p">]</span>
+                <span class="n">known_device_container</span> <span class="o">=</span> <span class="n">CASPER_MEMORY_DEVICES</span><span class="p">[</span><span class="n">tag</span><span class="p">][</span><span class="s1">&#39;container&#39;</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">known_device_class</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1"> is not a callable Memory class - &#39;</span>
+                                    <span class="s1">&#39;that</span><span class="se">\&#39;</span><span class="s1">s a problem.&#39;</span> <span class="o">%</span> <span class="n">known_device_class</span><span class="p">)</span>
+                <span class="n">new_device</span> <span class="o">=</span> <span class="n">known_device_class</span><span class="o">.</span><span class="n">from_device_info</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">device_info</span><span class="p">,</span> <span class="n">memorymap_dict</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">new_device</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                    <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span>
+                        <span class="s1">&#39;Device called </span><span class="si">%s</span><span class="s1"> of type </span><span class="si">%s</span><span class="s1"> already exists in &#39;</span>
+                        <span class="s1">&#39;devices list.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">new_device</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">new_device</span><span class="p">)))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="n">device_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_device</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span><span class="p">[</span><span class="n">device_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_device</span>
+                <span class="n">container</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">known_device_container</span><span class="p">)</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">new_device</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="nb">id</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">device_name</span><span class="p">))</span> <span class="o">==</span> <span class="nb">id</span><span class="p">(</span><span class="n">new_device</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="nb">id</span><span class="p">(</span><span class="n">new_device</span><span class="p">)</span> <span class="o">==</span> <span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span><span class="p">[</span><span class="n">device_name</span><span class="p">])</span>
+        <span class="c1"># allow created devices to update themselves with full device info</span>
+        <span class="c1"># link control registers, etc</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">device</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">device</span><span class="o">.</span><span class="n">post_create_update</span><span class="p">(</span><span class="n">device_dict</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>  <span class="c1"># the device may not have an update function</span>
+                <span class="k">pass</span>
+
+    <span class="k">def</span> <span class="nf">_create_other_devices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_dict</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Store non-memory device information in a dictionary</span>
+<span class="sd">        :param device_dict: raw dictionary of information from tagged</span>
+<span class="sd">        blocks in Simulink design, keyed on device name</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">device_info</span> <span class="ow">in</span> <span class="n">device_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">device_name</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s1">&#39;There</span><span class="se">\&#39;</span><span class="s1">s a problem somewhere, got a &#39;</span>
+                                <span class="s1">&#39;blank device name?&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">device_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">other_devices</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s1">&#39;Other device </span><span class="si">%s</span><span class="s1"> already exists.&#39;</span> <span class="o">%</span> <span class="n">device_name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">device_info</span><span class="p">[</span><span class="s1">&#39;tag&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">CASPER_OTHER_DEVICES</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="n">device_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">device_info</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">other_devices</span><span class="p">[</span><span class="n">device_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">device_info</span>
+
+<div class="viewcode-block" id="CasperFpga.device_names_by_container"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.device_names_by_container">[docs]</a>    <span class="k">def</span> <span class="nf">device_names_by_container</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return a list of devices in a certain container.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">devname</span> <span class="k">for</span> <span class="n">devname</span><span class="p">,</span> <span class="n">container</span>
+                <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">container</span> <span class="o">==</span> <span class="n">container_name</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="CasperFpga.devices_by_container"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.devices_by_container">[docs]</a>    <span class="k">def</span> <span class="nf">devices_by_container</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get devices using container type.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CasperFpga.get_system_information"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.get_system_information">[docs]</a>    <span class="k">def</span> <span class="nf">get_system_information</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fpg_info</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get information about the design running on the FPGA.</span>
+<span class="sd">        If filename is given, get it from file, otherwise query the </span>
+<span class="sd">            host via KATCP.</span>
+<span class="sd">        :param filename: fpg filename</span>
+<span class="sd">        :param fpg_info: a tuple containing device_info and coreinfo </span>
+<span class="sd">            dictionaries</span>
+<span class="sd">        :return: &lt;nothing&gt; the information is populated in the class</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># try and get the info from the running host first</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">is_running</span><span class="p">()</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="p">,</span> <span class="s1">&#39;get_system_information_from_transport&#39;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">filename</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">fpg_info</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;get_system_information: device running, &#39;</span>
+                            <span class="s1">&#39;so overriding arguments.&#39;</span><span class="p">)</span>
+            <span class="n">filename</span><span class="p">,</span> <span class="n">fpg_info</span> <span class="o">=</span> \
+                <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">get_system_information_from_transport</span><span class="p">()</span>
+        <span class="c1"># otherwise look at the arguments given</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">filename</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">fpg_info</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Either filename or parsed fpg data &#39;</span>
+                               <span class="s1">&#39;must be given.&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">filename</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">device_dict</span><span class="p">,</span> <span class="n">memorymap_dict</span> <span class="o">=</span> <span class="n">parse_fpg</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">device_dict</span> <span class="o">=</span> <span class="n">fpg_info</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">memorymap_dict</span> <span class="o">=</span> <span class="n">fpg_info</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="c1"># add system registers</span>
+        <span class="n">device_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_add_sys_registers</span><span class="p">())</span>
+        <span class="c1"># reset current devices and create new ones from the new</span>
+        <span class="c1"># design information</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset_device_info</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_memory_devices</span><span class="p">(</span><span class="n">device_dict</span><span class="p">,</span> <span class="n">memorymap_dict</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_other_devices</span><span class="p">(</span><span class="n">device_dict</span><span class="p">)</span>
+        <span class="c1"># populate some system information</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">system_info</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">device_dict</span><span class="p">[</span><span class="s1">&#39;77777&#39;</span><span class="p">])</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: no sys info key in design info!&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">)</span>
+        <span class="c1"># and RCS information if included</span>
+        <span class="k">for</span> <span class="n">device_name</span> <span class="ow">in</span> <span class="n">device_dict</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">device_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;77777_git_&#39;</span><span class="p">):</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">device_name</span><span class="p">[</span><span class="n">device_name</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span>
+                <span class="k">if</span> <span class="s1">&#39;git&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">rcs_info</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">rcs_info</span><span class="p">[</span><span class="s1">&#39;git&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">rcs_info</span><span class="p">[</span><span class="s1">&#39;git&#39;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">device_dict</span><span class="p">[</span><span class="n">device_name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s1">&#39;77777_svn&#39;</span> <span class="ow">in</span> <span class="n">device_dict</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">rcs_info</span><span class="p">[</span><span class="s1">&#39;svn&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">device_dict</span><span class="p">[</span><span class="s1">&#39;77777_svn&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">memory_devices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_devices</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">gbes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gbes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transport</span><span class="o">.</span><span class="n">post_get_system_information</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CasperFpga.estimate_fpga_clock"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.estimate_fpga_clock">[docs]</a>    <span class="k">def</span> <span class="nf">estimate_fpga_clock</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the estimated clock of the running FPGA, in Mhz.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">firstpass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_uint</span><span class="p">(</span><span class="s1">&#39;sys_clkcounter&#39;</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">2.0</span><span class="p">)</span>
+        <span class="n">secondpass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_uint</span><span class="p">(</span><span class="s1">&#39;sys_clkcounter&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">firstpass</span> <span class="o">&gt;</span> <span class="n">secondpass</span><span class="p">:</span>
+            <span class="n">secondpass</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">2</span><span class="o">**</span><span class="mi">32</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">secondpass</span> <span class="o">-</span> <span class="n">firstpass</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2000000.0</span></div>
+
+<div class="viewcode-block" id="CasperFpga.check_tx_raw"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.check_tx_raw">[docs]</a>    <span class="k">def</span> <span class="nf">check_tx_raw</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wait_time</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">checks</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check to see whether this host is transmitting packets without</span>
+<span class="sd">        error on all its GBE interfaces.</span>
+<span class="sd">        :param wait_time: seconds to wait between checks</span>
+<span class="sd">        :param checks: times to run check</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">gbecore</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gbes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">gbecore</span><span class="o">.</span><span class="n">tx_okay</span><span class="p">(</span><span class="n">wait_time</span><span class="o">=</span><span class="n">wait_time</span><span class="p">,</span> <span class="n">checks</span><span class="o">=</span><span class="n">checks</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="CasperFpga.check_rx_raw"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.check_rx_raw">[docs]</a>    <span class="k">def</span> <span class="nf">check_rx_raw</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wait_time</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">checks</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check to see whether this host is receiving packets without</span>
+<span class="sd">        error on all its GBE interfaces.</span>
+<span class="sd">        :param wait_time: seconds to wait between checks</span>
+<span class="sd">        :param checks: times to run check</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">gbecore</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gbes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">gbecore</span><span class="o">.</span><span class="n">rx_okay</span><span class="p">(</span><span class="n">wait_time</span><span class="o">=</span><span class="n">wait_time</span><span class="p">,</span> <span class="n">checks</span><span class="o">=</span><span class="n">checks</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_add_sys_registers</span><span class="p">():</span>
+        <span class="n">standard_reg</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;tag&#39;</span><span class="p">:</span> <span class="s1">&#39;xps:sw_reg&#39;</span><span class="p">,</span> <span class="s1">&#39;io_dir&#39;</span><span class="p">:</span> <span class="s1">&#39;To Processor&#39;</span><span class="p">,</span>
+                        <span class="s1">&#39;io_delay&#39;</span><span class="p">:</span> <span class="s1">&#39;1&#39;</span><span class="p">,</span> <span class="s1">&#39;sample_period&#39;</span><span class="p">:</span> <span class="s1">&#39;1&#39;</span><span class="p">,</span> <span class="s1">&#39;names&#39;</span><span class="p">:</span> <span class="s1">&#39;reg&#39;</span><span class="p">,</span>
+                        <span class="s1">&#39;bitwidths&#39;</span><span class="p">:</span> <span class="s1">&#39;32&#39;</span><span class="p">,</span> <span class="s1">&#39;bin_pts&#39;</span><span class="p">:</span> <span class="s1">&#39;0&#39;</span><span class="p">,</span> <span class="s1">&#39;arith_types&#39;</span><span class="p">:</span> <span class="s1">&#39;0&#39;</span><span class="p">,</span>
+                        <span class="s1">&#39;sim_port&#39;</span><span class="p">:</span> <span class="s1">&#39;off&#39;</span><span class="p">,</span> <span class="s1">&#39;show_format&#39;</span><span class="p">:</span> <span class="s1">&#39;off&#39;</span><span class="p">,</span> <span class="p">}</span>
+        <span class="n">sys_registers</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;sys_board_id&#39;</span><span class="p">:</span> <span class="n">standard_reg</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+                         <span class="s1">&#39;sys_rev&#39;</span><span class="p">:</span> <span class="n">standard_reg</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+                         <span class="s1">&#39;sys_rev_rcs&#39;</span><span class="p">:</span> <span class="n">standard_reg</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+                         <span class="s1">&#39;sys_scratchpad&#39;</span><span class="p">:</span> <span class="n">standard_reg</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+                         <span class="s1">&#39;sys_clkcounter&#39;</span><span class="p">:</span> <span class="n">standard_reg</span><span class="o">.</span><span class="n">copy</span><span class="p">()}</span>
+        <span class="k">return</span> <span class="n">sys_registers</span>
+
+<div class="viewcode-block" id="CasperFpga.get_version_info"><a class="viewcode-back" href="../../api.html#casperfpga.CasperFpga.get_version_info">[docs]</a>    <span class="k">def</span> <span class="nf">get_version_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :return: </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="s1">&#39;git&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">rcs_info</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rcs_info</span><span class="p">[</span><span class="s1">&#39;git&#39;</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="n">git_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rcs_info</span><span class="p">[</span><span class="s1">&#39;git&#39;</span><span class="p">]</span>
+        <span class="n">files</span> <span class="o">=</span> <span class="n">git_info</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="n">old_version</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">git_info</span><span class="p">[</span><span class="n">files</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="s1">&#39;keys&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">old_version</span><span class="p">:</span>
+            <span class="n">rv</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">filename</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+                <span class="k">if</span> <span class="s1">&#39;git_info_found&#39;</span> <span class="ow">in</span> <span class="n">git_info</span><span class="p">[</span><span class="n">filename</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">git_info</span><span class="p">[</span><span class="n">filename</span><span class="p">][</span><span class="s1">&#39;git_info_found&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="p">[</span><span class="s1">&#39;1&#39;</span><span class="p">]:</span>
+                        <span class="n">rv</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">git_info</span><span class="p">[</span><span class="n">filename</span><span class="p">][</span><span class="s1">&#39;commit_hash&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span>
+                             <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="n">git_info</span><span class="p">[</span><span class="n">filename</span><span class="p">][</span><span class="s1">&#39;status&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]))</span>
+                    <span class="k">continue</span>
+                <span class="n">rv</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">filename</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">git_info</span><span class="p">[</span><span class="n">filename</span><span class="p">])))</span>
+            <span class="k">return</span> <span class="n">rv</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[(</span><span class="n">f</span><span class="p">,</span> <span class="n">git_info</span><span class="p">[</span><span class="n">f</span><span class="p">])</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span> <span class="k">if</span> <span class="n">f</span> <span class="o">!=</span> <span class="s1">&#39;tag&#39;</span><span class="p">]</span></div></div>
+
+<span class="c1"># end</span>
+</pre></div>
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, Deepthi.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../',
+            VERSION:'1.0',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>
