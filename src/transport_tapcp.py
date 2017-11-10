@@ -3,6 +3,7 @@ import struct
 import time
 import tftpy
 from StringIO import StringIO
+import zlib
 
 from transport import Transport
 
