@@ -142,7 +142,7 @@ class TapcpTransport(Transport):
         chksum = hashlib.md5()
         chksum.update(fpg)
 
-        return header, prog, chksum
+        return header, prog, chksum.hexdigest()
 
     def get_metadata(self):
         """
@@ -181,7 +181,7 @@ class TapcpTransport(Transport):
         metadict['flash'] = '?sector_size\t%d'%SECTOR_SIZE
         metadict['head']  = '?header_start\t%d?header_length\t%d'%(head_loc,hlen)
         metadict['prog']  = '?prog_bitstream_start\t%d?prog_bitstream_length\t%d'%(prog_loc,plen)
-        metadict['md5']   =  '?md5sum\t' + md5.digest() #md5.digest_size + '\t' + md5.digest()
+        metadict['md5']   =  '?md5sum\t' + md5
         metadict['file']  = '?filename\t' + filename.split('/')[-1]
         for m in metadict.values():
             meta += m
@@ -198,7 +198,7 @@ class TapcpTransport(Transport):
         if(filename.endswith('.fpg')):
             header, prog, md5 = self._extract_bitstream(filename)
             meta_inflash = self.get_metadata()
-            if (meta_inflash['md5sum'] == md5.digest()):
+            if (meta_inflash['md5sum'] == md5):
                 print('File already on flash!')
                 self.progdev(int(meta_inflash['prog_bitstream_start']))
             else:
