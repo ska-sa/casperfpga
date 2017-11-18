@@ -4,6 +4,7 @@ import time
 import tftpy
 from StringIO import StringIO
 import zlib
+import hashlib
 
 from transport import Transport
 
@@ -98,6 +99,13 @@ class TapcpTransport(Transport):
         except:
             pass # the progdev command kills the host, so things will start erroring
 
+    def prog_user_image(self):
+        """ (Re)Program the FPGA with the file already on flash """
+        meta = self.get_metadata()
+        addr = int(meta['prog_bitstream_start'])
+        print("File in flash is:  %s"%meta['filename'])   
+        self.progdev(addr=addr)
+
     def get_temp(self):
         buf = StringIO()
         self.t.download('/temp', buf)
@@ -116,27 +124,87 @@ class TapcpTransport(Transport):
         """
         return self.is_connected()
 
+    def _extract_bitstream(self,filename):
+        """
+        Extract the header and program bitstream from the input file provided.
+        """
+
+        with open(filename, 'r') as fh:
+            fpg = fh.read()
+
+        header_offset = fpg.find('\n?quit\n') + 7
+        header = fpg[0:header_offset] + '0'*(1024-header_offset%1024)
+        prog = fpg[header_offset:]+'0'*(1024-(len(fpg)-header_offset)%1024)
+        
+        if prog.startswith('\x1f\x8b\x08'):
+            prog = zlib.decompress(prog, 16 + zlib.MAX_WBITS)
+
+        chksum = hashlib.md5()
+        chksum.update(fpg)
+
+        return header, prog, chksum.hexdigest()
+
+    def get_metadata(self):
+        """
+        Read meta data from user_flash_loc on the fpga flash drive
+        """
+        USER_FLASH_LOC = 0x800000
+        meta = ''; offset=0
+        while (meta.find('?end')==-1):
+            meta += self.read('/flash',4,offset=USER_FLASH_LOC+offset)
+            offset += 4
+        
+        metadict = {};        
+        for _ in meta.split('?'):
+             args = _.split('\t')
+             if len(args) > 1:
+                 metadict[args[0]] = args[1]
+
+        return metadict
+
+
+    def _update_metadata(self,filename,hlen,plen,md5):
+        """
+        Update the meta data at user_flash_loc. Metadata is written 
+        as 5  32bit integers in the following order:
+        header-location, length of header (in bytes), 
+        program-location, length of the program bitstream (B),
+        md5sum of the fpg file
+        """
+        USER_FLASH_LOC = 0x800000
+        SECTOR_SIZE = 0x10000
+
+        head_loc = USER_FLASH_LOC + SECTOR_SIZE
+        prog_loc = head_loc + hlen 
+        
+        metadict = {}; meta = ''
+        metadict['flash'] = '?sector_size\t%d'%SECTOR_SIZE
+        metadict['head']  = '?header_start\t%d?header_length\t%d'%(head_loc,hlen)
+        metadict['prog']  = '?prog_bitstream_start\t%d?prog_bitstream_length\t%d'%(prog_loc,plen)
+        metadict['md5']   =  '?md5sum\t' + md5
+        metadict['file']  = '?filename\t' + filename.split('/')[-1]
+        for m in metadict.values():
+            meta += m
+        meta += '?end'
+        meta += '0'*(1024-len(meta)%1024)
+
+        self.blindwrite('/flash',meta,offset=USER_FLASH_LOC)
+
+        return head_loc, prog_loc
+
     def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True):
         USER_FLASH_LOC = 0x800000
-
+        sector_size = 0x10000
         if(filename.endswith('.fpg')):
-            headend_str = bytearray('\n?quit\n')
-            pad = bytearray('0')
-
-            with open(filename, 'r') as fh:
-                fpg = bytearray(fh.read())
-
-            header_offset = fpg.rfind(headend_str) + len(headend_str)
-            header = str(fpg[0:header_offset] + pad*(1024-header_offset%1024))
-            prog = str(fpg[header_offset:]+pad*(1024-(len(fpg)-header_offset)%1024))
-            
-            if prog.startswith('\x1f\x8b\x08'):
-                prog = zlib.decompress(prog, 16 + zlib.MAX_WBITS)
-
-            #print '%s \n\n\n\n %s'%(header[-1024:],prog[:1024])        
-
-            self.blindwrite('/flash',header+prog, offset=USER_FLASH_LOC)
-            self.progdev(USER_FLASH_LOC+len(header))
+            header, prog, md5 = self._extract_bitstream(filename)
+            meta_inflash = self.get_metadata()
+            if (meta_inflash['md5sum'] == md5):
+                print('File already on flash!')
+                self.progdev(int(meta_inflash['prog_bitstream_start']))
+            else:
+                HEAD_LOC, PROG_LOC = self._update_metadata(filename,len(header),len(prog),md5)
+                self.blindwrite('/flash',header+prog, offset= HEAD_LOC)
+                self.progdev(PROG_LOC)
 
         else:
             with open(filename,'r') as fh:
