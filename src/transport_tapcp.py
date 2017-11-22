@@ -148,11 +148,25 @@ class TapcpTransport(Transport):
         """
         Read meta data from user_flash_loc on the fpga flash drive
         """
-        USER_FLASH_LOC = 0x800000
-        meta = ''; offset=0
+        USER_FLASH_LOC  = 0x800000
+        READ_CHUNK_SIZE = 1024     # size of flash chunks to read
+        MAX_SEARCH      = 128*1024 # give up if we get this far
+        meta   = ''
+        offset = 0
+        # We want to find the end of the metadata, marked by the
+        # string end. But, to save lots of short tftp commands
+        # read data from flash 1kB at a time and search that
+        page_offset = 0
         while (meta.find('?end')==-1):
-            meta += self.read('/flash',4,offset=USER_FLASH_LOC+offset)
-            offset += 4
+            meta_page = self.read('/flash', READ_CHUNK_SIZE, offset=USER_FLASH_LOC + page_offset)
+            page_offset += READ_CHUNK_SIZE
+            if page_offset > MAX_SEARCH:
+                return None
+            for i in range(READ_CHUNK_SIZE/4):
+                meta += meta_page[4*i:4*(i+1)]
+                offset += 4
+                if (meta.find('?end')!=-1):
+                    break
         
         metadict = {};        
         for _ in meta.split('?'):
@@ -198,7 +212,7 @@ class TapcpTransport(Transport):
         if(filename.endswith('.fpg')):
             header, prog, md5 = self._extract_bitstream(filename)
             meta_inflash = self.get_metadata()
-            if (meta_inflash['md5sum'] == md5):
+            if ((meta_inflash is not None) and (meta_inflash['md5sum'] == md5)):
                 print('File already on flash!')
                 self.progdev(int(meta_inflash['prog_bitstream_start']))
             else:
