@@ -166,12 +166,12 @@ class Snap(Memory):
         """
         Arm the snapshot block.
         """
-        ctr_reg = self.control_registers['control']['register']
+        ctrl_reg = self.control_registers['control']['register']
         if offset >= 0:
             self.control_registers['trig_offset']['register'].write_int(offset)
-        ctr_reg.write_int(
+        ctrl_reg.write_int(
             (0 + (man_trig << 1) + (man_valid << 2) + (circular_capture << 3)))
-        ctr_reg.write_int(
+        ctrl_reg.write_int(
             (1 + (man_trig << 1) + (man_valid << 2) + (circular_capture << 3)))
 
     def print_snap(self, limit_lines=-1, **kwargs):
