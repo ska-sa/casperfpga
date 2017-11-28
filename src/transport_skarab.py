@@ -1322,6 +1322,15 @@ class SkarabTransport(Transport):
             response_payload, address = data
             LOGGER.debug('%s: response from %s = %s' % (
                 self.host, str(address), repr(response_payload)))
+            # check if response is from the expected SKARAB
+            recvd_from_addr = address[0]
+            expected_recvd_from_addr = socket.gethostbyname(self.host)
+            if recvd_from_addr != expected_recvd_from_addr:
+                LOGGER.warning('%s: received response from  %s, '
+                               'expected response from %s .'
+                               'Discarding response.' % (self.host,
+                               recvd_from_addr, expected_recvd_from_addr))
+                return None
             # check the opcode of the response i.e. first two bytes
             if response_payload[:2] == '\xff\xff':
                 LOGGER.warning('%s: received unsupported opcode: 0xffff. '
