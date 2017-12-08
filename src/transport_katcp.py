@@ -9,7 +9,7 @@ import socket
 import struct
 
 from transport import Transport
-from utils import create_meta_dictionary
+from utils import create_meta_dictionary, get_hostname, get_kwarg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -77,18 +77,12 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param connect:
         :return:
         """
-        try:
-            port = kwargs['port']
-        except KeyError:
-            port = 7147
-        try:
-            timeout = kwargs['timeout']
-        except KeyError:
-            timeout = 10
-        katcp.CallbackClient.__init__(
-            self, kwargs['host'], port, tb_limit=20,
-            timeout=timeout, logger=LOGGER, auto_reconnect=True)
+        port = get_kwarg('port', kwargs, 7147)
+        timeout = get_kwarg('timeout', kwargs, 10)
         Transport.__init__(self, **kwargs)
+        katcp.CallbackClient.__init__(
+            self, self.host, port, tb_limit=20,
+            timeout=timeout, logger=LOGGER, auto_reconnect=True)
         self.system_info = {}
         self.unhandled_inform_handler = None
         self._timeout = timeout
@@ -314,8 +308,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             the formats supported by the device. e.g. fpg, bof, bin
         :return:
         """
-        #raise DeprecationWarning('This does not seem to be used anymore.'
-        #                         'Use upload_to_ram_and_program')
+        # raise DeprecationWarning('This does not seem to be used anymore.'
+        #                          'Use upload_to_ram_and_program')
         # TODO - The logic here is for broken TCPBORPHSERVER, needs fixing
         if 'program_filename' in self.system_info.keys():
             if filename is None:
@@ -693,11 +687,10 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :return: 
         """
         if not self.is_running():
-            raise RuntimeError('This can only be run on a running device '
-                               'when no file is given.')
+            return self.bitstream, None
         device_dict = self._read_design_info_from_host()
         memorymap_dict = self._read_coreinfo_from_host()
-        return None, (device_dict, memorymap_dict)
+        return self.bitstream, (device_dict, memorymap_dict)
 
     def unhandled_inform(self, msg):
         """

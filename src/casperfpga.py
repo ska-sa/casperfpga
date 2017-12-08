@@ -2,7 +2,6 @@ import logging
 import struct
 import time
 import socket
-import select
 
 import register
 import sbram
@@ -11,11 +10,10 @@ import tengbe
 import fortygbe
 import qdr
 from attribute_container import AttributeContainer
-import skarab_definitions as skarab_defs
 from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
-from utils import parse_fpg
+from utils import parse_fpg, get_hostname, get_kwarg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -76,13 +74,6 @@ def choose_transport(host_ip):
         raise RuntimeError('Could not connect to %s' % host_ip)
 
 
-def get_kwarg(field, kwargs, default=None):
-    try:
-        return kwargs[field]
-    except KeyError:
-        return default
-
-
 class CasperFpga(object):
     """
     A FPGA host board that has a CASPER design running on it. Or will soon have.
@@ -98,14 +89,12 @@ class CasperFpga(object):
                 kwargs['port'] = args[1]
             except IndexError:
                 pass
-        self.host = kwargs['host']
-        self.bitstream = get_kwarg('bitstream', kwargs)
-
+        self.host, self.bitstream = get_hostname(**kwargs)
         transport = get_kwarg('transport', kwargs)
         if transport:
             self.transport = transport(**kwargs)
         else:
-            transport_class = choose_transport(kwargs['host'])
+            transport_class = choose_transport(self.host)
             self.transport = transport_class(**kwargs)
 
         # this is just for code introspection
@@ -519,15 +508,10 @@ class CasperFpga(object):
             dictionaries
         :return: <nothing> the information is populated in the class
         """
-        # try and get the info from the running host first
-        if self.transport.is_running() and hasattr(
-                self.transport, 'get_system_information_from_transport'):
-            if (filename is not None) or (fpg_info is not None):
-                LOGGER.info('get_system_information: device running, '
-                            'so overriding arguments.')
-            filename, fpg_info = \
-                self.transport.get_system_information_from_transport()
-        # otherwise look at the arguments given
+        t_filename, t_fpg_info = \
+            self.transport.get_system_information_from_transport()
+        filename = filename or t_filename
+        fpg_info = fpg_info or t_fpg_info
         if (filename is None) and (fpg_info is None):
             raise RuntimeError('Either filename or parsed fpg data '
                                'must be given.')
@@ -558,7 +542,6 @@ class CasperFpga(object):
         if '77777_svn' in device_dict:
             self.rcs_info['svn'] = device_dict['77777_svn']
         self.transport.memory_devices = self.memory_devices
-        self.transport.gbes = self.gbes
         self.transport.post_get_system_information()
 
     def estimate_fpga_clock(self):

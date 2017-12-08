@@ -3,7 +3,7 @@
 # pylint: disable-msg=C0103
 # pylint: disable-msg=C0301
 """
-View the contents of a TenGBE RX or TX snapblock.
+View the contents of a GBE RX or TX snapblock.
 
 @author: paulp
 """
@@ -18,10 +18,12 @@ from casperfpga import spead as casperspead
 from casperfpga import snap as caspersnap
 
 parser = argparse.ArgumentParser(
-    description='Display the contents of an FPGA''s 10Gbe buffers.',
+    description='Display the contents of an FPGA''s Gbe interface snapshots.',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(dest='hostname', type=str, action='store',
-                    help='the hostname of the digitiser')
+                    help='The hostname of the CASPER host. For some host-types,'
+                         'e.g. SKARABs, this must be a comma-seperated pair of'
+                         'hostname and bitstream path')
 parser.add_argument('-l', '--listcores', dest='listcores', action='store_true',
                     default=False,
                     help='list cores on this device')
@@ -31,7 +33,6 @@ parser.add_argument('-c', '--core', dest='core', action='store',
 parser.add_argument('-d', '--direction', dest='direction', action='store',
                     default='tx', type=str,
                     help='tx or rx stream')
-
 parser.add_argument('-s', '--spead', dest='spead', action='store_true',
                     default=False,
                     help='try and decode spead in this 10Gbe stream')
@@ -84,21 +85,32 @@ if args.listcores:
     fpga.disconnect()
     sys.exit(0)
 
+if args.core not in fpga.gbes.keys():
+    fpga.disconnect()
+    raise RuntimeError('No gbe core \'%s\' found.' % args.core)
+
 # read the snap block based on the direction chosen
+gbecore = fpga.gbes[args.core]
 if args.direction == 'tx':
+    if gbecore.snaps['tx'] is None:
+        fpga.disconnect()
+        raise RuntimeError('No TX snapshot found in running design.')
     key_order = ['led_tx', 'eof', 'valid', 'tx_full', 'tx_over',
                  'link_up', 'ip', 'data']
     data_key = 'data'
     ip_key = 'ip'
     eof_key = 'eof'
-    coredata = fpga.gbes[args.core].read_txsnap()
+    coredata = gbecore.read_txsnap()
 else:
+    if gbecore.snaps['rx'] is None:
+        fpga.disconnect()
+        raise RuntimeError('No RX snapshot found in running design.')
     key_order = ['led_up', 'led_rx', 'valid_in', 'eof_in', 'bad_frame',
                  'overrun', 'ip_in', 'data_in']
     data_key = 'data_in'
     ip_key = 'ip_in'
     eof_key = 'eof_in'
-    coredata = fpga.gbes[args.core].read_rxsnap()
+    coredata = gbecore.read_rxsnap()
 fpga.disconnect()
 
 if args.spead:

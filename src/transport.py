@@ -1,3 +1,6 @@
+from utils import get_hostname
+
+
 class Transport(object):
     """
     The actual network transport of data for a CasperFpga object.
@@ -7,9 +10,8 @@ class Transport(object):
         
         :param host: 
         """
-        self.host = kwargs['host']
-        self.memory_devices = {}
-        self.gbes = []
+        self.host, self.bitstream = get_hostname(**kwargs)
+        self.memory_devices = None
         self.prog_info = {'last_uploaded': '', 'last_programmed': '',
                           'system_name': ''}
 
@@ -25,6 +27,13 @@ class Transport(object):
         """
         Is the FPGA programmed and running?
         :return: True or False
+        """
+        raise NotImplementedError
+
+    def is_connected(self):
+        """
+
+        :return:
         """
         raise NotImplementedError
 
@@ -116,6 +125,13 @@ class Transport(object):
         :return:
         """
         raise NotImplementedError
+
+    def get_system_information_from_transport(self):
+        """
+
+        :return:
+        """
+        return self.bitstream, None
 
     def post_get_system_information(self):
         """

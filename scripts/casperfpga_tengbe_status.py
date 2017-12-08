@@ -14,8 +14,10 @@ from casperfpga.casperfpga import CasperFpga
 
 try:
     import corr2
+    import os
 except ImportError:
     corr2 = None
+    os = None
 
 parser = argparse.ArgumentParser(
     description='Display TenGBE interface information about a MeerKAT '
@@ -49,23 +51,23 @@ if args.log_level != '':
 # logging.info('****************************************************')
 
 # create the devices and connect to them
-if corr2 is not None:
-    import os
-    if 'CORR2INI' in os.environ.keys() and args.hosts == '':
-        args.hosts = os.environ['CORR2INI']
-    hosts = corr2.utils.parse_hosts(args.hosts)
+if args.hosts.strip() == '':
+    if corr2 is None or 'CORR2INI' not in os.environ.keys():
+        raise RuntimeError('No hosts given and no corr2 config found. '
+                           'No hosts.')
+    fpgas = corr2.utils.script_get_fpgas(args)
 else:
     hosts = args.hosts.strip().replace(' ', '').split(',')
-if len(hosts) == 0:
-    raise RuntimeError('No good carrying on without hosts.')
-fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
-utils.threaded_fpga_function(fpgas, 10, 'test_connection')
-utils.threaded_fpga_function(fpgas, 15, 'get_system_information')
+    if len(hosts) == 0:
+        raise RuntimeError('No good carrying on without hosts.')
+    fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
+    utils.threaded_fpga_function(fpgas, 15, ('get_system_information', [], {}))
+
 for fpga in fpgas:
     numgbes = len(fpga.gbes)
     if numgbes < 1:
-        raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
-    print('%s: found %i 10gbe core%s.' % (
+        raise RuntimeWarning('Host %s has no gbe cores', fpga.host)
+    print('%s: found %i gbe core%s.' % (
         fpga.host, numgbes, '' if numgbes == 1 else 's'))
 
 if args.resetctrs:
@@ -107,7 +109,10 @@ def get_tap_data(fpga):
     """
     data = {}
     for gbecore in fpga.gbes.names():
-        data[gbecore] = fpga.gbes[gbecore].tap_info()
+        if hasattr(fpga.gbes[gbecore], 'tap_info'):
+            data[gbecore] = fpga.gbes[gbecore].tap_info()
+        else:
+            data[gbecore] = None
     return data
 
 # get gbe and tap data

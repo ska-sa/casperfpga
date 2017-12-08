@@ -12,8 +12,8 @@ import random
 from threading import Lock
 
 import skarab_definitions as sd
-
 from transport import Transport
+from utils import get_hostname
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
@@ -79,7 +79,6 @@ class SkarabTransport(Transport):
         :return: none
         """
         Transport.__init__(self, **kwargs)
-
         self.lock = Lock()
 
         # sequence number for control packets
@@ -1325,7 +1324,7 @@ class SkarabTransport(Transport):
             # check the opcode of the response i.e. first two bytes
             if response_payload[:2] == '\xff\xff':
                 LOGGER.warning('%s: received unsupported opcode: 0xffff. '
-                             'Discarding response.' % self.host)
+                               'Discarding response.' % self.host)
                 return None
             # unpack the response before checking it
             response_object = request_object.response.from_raw_data(
@@ -1337,22 +1336,23 @@ class SkarabTransport(Transport):
             expected_response_id = request_object.type + 1
             if response_object.type != expected_response_id:
                 LOGGER.warning('%s: incorrect command ID in response. Expected'
-                             '(%i) got(%i). Discarding response.' % (
+                               '(%i) got(%i). Discarding response.' % (
                                 self.host, expected_response_id,
                                 response_object.type))
                 return None
             elif response_object.seq_num != self._seq_num:
-                LOGGER.warning('%s: incorrect sequence number in response. Expec'
-                             'ted(%i,%i), got(%i). Discarding response.' % (
-                                self.host, self._seq_num,
-                                request_object.packet['seq_num'],
-                                response_object.seq_num))
+                LOGGER.warning('%s: incorrect sequence number in response. '
+                               'Expected(%i,%i), got(%i). Discarding '
+                               'response.' % (
+                                    self.host, self._seq_num,
+                                    request_object.packet['seq_num'],
+                                    response_object.seq_num))
                 return None
             return response_object
         else:
-            errmsg = '%s: timeout; no packet received for seq %i. Will retra' \
-                     'nsmit as seq %i.' % (self.host, self._seq_num,
-                                           self._seq_num + 1)
+            errmsg = '%s: timeout; no packet received for seq %i. Will ' \
+                     'retransmit as seq %i.' % (
+                        self.host, self._seq_num, self._seq_num + 1)
             LOGGER.debug(errmsg)
             raise SkarabResponseNotReceivedError(errmsg)
 
@@ -1426,7 +1426,8 @@ class SkarabTransport(Transport):
         LOGGER.error(errmsg)
         raise SkarabSendPacketError(errmsg)
 
-    def clear_recv_buffer(self, skarab_socket):
+    @staticmethod
+    def clear_recv_buffer(skarab_socket):
         """
         Clears the recv buffer to discard unhandled responses from the SKARAB
         :param skarab_socket: socket object to be used

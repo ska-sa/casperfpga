@@ -34,6 +34,26 @@ def create_meta_dictionary(metalist):
     return meta_items
 
 
+def get_kwarg(field, kwargs, default=None):
+    try:
+        return kwargs[field]
+    except KeyError:
+        return default
+
+
+def get_hostname(**kwargs):
+    """
+
+    :param kwargs:
+    :return:
+    """
+    host = kwargs['host']
+    bitstream = get_kwarg('bitstream', kwargs)
+    if ',' in host:
+        host, bitstream = host.split(',')
+    return host, bitstream
+
+
 def parse_fpg(filename):
     """
     Read the meta information from the FPG file.
