@@ -67,8 +67,8 @@ for fpga in fpgas:
     numgbes = len(fpga.gbes)
     if numgbes < 1:
         raise RuntimeWarning('Host %s has no gbe cores', fpga.host)
-    print('%s: found %i gbe core%s.' % (
-        fpga.host, numgbes, '' if numgbes == 1 else 's'))
+    print('%s: found %i gbe core%s: %s' % (
+        fpga.host, numgbes, '' if numgbes == 1 else 's', fpga.gbes.keys()))
 
 if args.resetctrs:
     def reset_gbe_debug(fpga_):
@@ -166,6 +166,14 @@ for hdr in fpga_headers:
 
 max_1st_col_offset += 5
 
+# gbe_data = utils.threaded_fpga_operation(fpgas, 10, get_gbe_data)
+# for f in gbe_data:
+#     d = gbe_data[f]
+#     print f
+#     for core in d:
+#         print '\t', core, d[core]
+# raise RuntimeError
+
 # set up the curses scroll screen
 scroller = scroll.Scroll(debug=False)
 scroller.screen_setup()
@@ -208,9 +216,13 @@ try:
                     start_pos += pos_increment
                 scroller.add_string('', cr=True)
                 for core, core_data in fpga_data.items():
-                    tap_running = tap_data[fpga.host][core]['name'] == ''
+                    if tap_data[fpga.host][core] is not None:
+                        tap_running = tap_data[fpga.host][core]['name'] == ''
+                        fpga_data[core]['ip'] = tap_data[fpga.host][core]['ip']
+                    else:
+                        tap_running = False
+                        fpga_data[core]['ip'] = 'n/a'
                     fpga_data[core]['tap_running'] = not tap_running
-                    fpga_data[core]['ip'] = tap_data[fpga.host][core]['ip']
                     start_pos = max_1st_col_offset
                     line = scroller.add_string(core)
                     for header_register in fpga_headers:
