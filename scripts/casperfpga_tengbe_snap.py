@@ -16,6 +16,7 @@ from casperfpga import tengbe
 from casperfpga.casperfpga import CasperFpga
 from casperfpga import spead as casperspead
 from casperfpga import snap as caspersnap
+from casperfpga import utils as casperutils
 
 parser = argparse.ArgumentParser(
     description='Display the contents of an FPGA''s Gbe interface snapshots.',
@@ -105,12 +106,15 @@ else:
     if gbecore.snaps['rx'] is None:
         fpga.disconnect()
         raise RuntimeError('No RX snapshot found in running design.')
-    key_order = ['led_up', 'led_rx', 'valid_in', 'eof_in', 'bad_frame',
-                 'overrun', 'ip_in', 'data_in']
-    data_key = 'data_in'
-    ip_key = 'ip_in'
-    eof_key = 'eof_in'
+    key_order = ['led_up', 'led_rx', 'valid_in', 'EOF_KEY', 'bad_frame',
+                 'overrun', 'IP_KEY', 'DATA_KEY']
     coredata = gbecore.read_rxsnap()
+    data_key = 'data' if 'data' in coredata.keys() else 'data_in'
+    key_order[key_order.index('DATA_KEY')] = data_key
+    ip_key = 'ip' if 'ip' in coredata.keys() else 'ip_in'
+    key_order[key_order.index('IP_KEY')] = ip_key
+    eof_key = 'eof' if 'eof' in coredata.keys() else 'eof_in'
+    key_order[key_order.index('EOF_KEY')] = eof_key
 fpga.disconnect()
 
 if args.spead:
@@ -123,7 +127,6 @@ if args.spead:
     else:
         spead_processor = casperspead.SpeadProcessor(None, None, None, None)
         expected_packet_length = -1
-
     gbe_packets = caspersnap.Snap.packetise_snapdata(coredata, eof_key)
     gbe_data = []
     for pkt in gbe_packets:
@@ -135,33 +138,41 @@ if args.spead:
         gbe_data.append(pkt[data_key])
     spead_processor.process_data(gbe_data)
     spead_data = []
-    for spead_pkt in spead_processor.packets:
-        spead_data.extend(spead_pkt.get_strings())
+    for ctr, spead_pkt in enumerate(spead_processor.packets):
+        spead_pkt_strings = spead_pkt.get_strings(
+            headers_only=False, hex_nums=args.hex)
+        spead_data.extend(spead_pkt_strings)
+        if len(spead_pkt_strings) < len(gbe_packets[ctr][data_key]):
+            padding = len(gbe_packets[ctr][data_key]) - len(spead_pkt_strings)
+            for ctr2 in range(padding):
+                spead_data.append(' --- padding --- ')
     coredata[data_key] = spead_data
 
 packet_counter = 0
 for ctr in range(0, len(coredata[data_key])):
     if coredata[eof_key][ctr-1]:
         packet_counter = 0
-    print('%5d,%3d' % (ctr, packet_counter), end='')
+    print('%5d,%3d\t' % (ctr, packet_counter), end='')
     for key in key_order:
         if key == ip_key:
-            if key == 'ip':
-                display_key = 'dst_ip'
-            elif key == 'ip_in':
-                display_key = 'src_ip'
-            else:
-                raise RuntimeError('Unknown IP key?')
             ip_str = str(tengbe.IpAddress(coredata[key][ctr]))
-            print('%s(%s)\t' % (display_key, ip_str), end='')
+            print('ip(%s)\t' % ip_str, end='')
         elif (key == data_key) and args.spead:
             print('%s(%s)\t' % (key, coredata[data_key][ctr]), end='')
         else:
-            if args.hex:
+            if key in ['eof', 'valid', 'tx_full', 'tx_over', 'link_up',
+                       'led_up', 'led_rx', 'valid_in', 'eof_in',
+                       'bad_frame', 'overrun']:
+                if key in coredata:
+                    print(key.upper() + '\t' if coredata[key][ctr]
+                          else (' ' * len(key) + '\t'), end='')
+            elif args.hex:
                 print('%s(0x%X)\t' % (key, coredata[key][ctr]), end='')
             else:
                 print('%s(%s)\t' % (key, coredata[key][ctr]), end='')
     print('')
+    if coredata[eof_key][ctr]:
+        print('-' * 100)
     packet_counter += 1
 
 # end

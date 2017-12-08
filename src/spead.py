@@ -194,22 +194,23 @@ class SpeadPacket(object):
         """
         Get a list of the string representation of this packet.
         """
-        rv = []
+        rv = ['header 0x0000: version(%i) flavour(%s) num_headers(%i)' % (
+            self.headers[0]['version'], self.headers[0]['flavour'],
+            self.headers[0]['num_headers'])]
         for hdr_id, hdr_value in self.headers.items():
             if hdr_id == 0x0000:
-                rv.append('header 0x0000: version(%i) flavour(%s) '
-                          'num_headers(%i)' % (self.headers[0]['version'],
-                                               self.headers[0]['flavour'],
-                                               self.headers[0]['num_headers']))
+                continue
+            if hex_nums:
+                rv.append('header 0x%04x: 0x%x' % (hdr_id, hdr_value))
             else:
-                if hex_nums:
-                    rv.append('header 0x%04x: 0x%x' % (hdr_id, hdr_value))
-                else:
-                    rv.append('header 0x%04x: %i' % (hdr_id, hdr_value))
+                rv.append('header 0x%04x: %i' % (hdr_id, hdr_value))
         if headers_only:
             return rv
         for dataword in self.data:
-            rv.append('%i' % dataword)
+            if hex_nums:
+                rv.append('0x%016x' % dataword)
+            else:
+                rv.append('%i' % dataword)
         return rv
 
     def print_packet(self, headers_only=False, hex_nums=False):

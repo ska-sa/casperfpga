@@ -364,6 +364,27 @@ class FortyGbe(Gbe):
             rv['rx_bad_pkts'] = second['%s_rxbadctr' % name]
         return rv
 
+    @staticmethod
+    def convert_128_to_64(w128):
+        return [(w128 >> (64-(ctr*64))) & (2 ** 64 - 1) for ctr in range(2)]
+
+    @staticmethod
+    def process_snap_data(d, d1, d2):
+        # convert the 256-bit data to 64-bit data
+        d64 = {k: [] for k in d.keys()}
+        d64['data'] = []
+        for ctr in range(len(d1['data_msw'])):
+            for k in d.keys():
+                if k == 'eof':
+                    d64[k].extend([0] * 3)
+                    d64[k].append(d[k][ctr])
+                else:
+                    for ctr4 in range(4):
+                        d64[k].append(d[k][ctr])
+            d64['data'].extend(FortyGbe.convert_128_to_64(d1['data_msw'][ctr]))
+            d64['data'].extend(FortyGbe.convert_128_to_64(d2['data_lsw'][ctr]))
+        return d64
+
     def read_txsnap(self):
         """
         Read the TX snapshot embedded in this GbE yellow block
@@ -372,11 +393,7 @@ class FortyGbe(Gbe):
         d = self.snaps['tx'][0].read()['data']
         d1 = self.snaps['tx'][1].read(arm=False)['data']
         d2 = self.snaps['tx'][2].read(arm=False)['data']
-        d['data'] = [
-            ((d1['data_msw'][ctr] << 128) + d2['data_lsw'][ctr])
-            for ctr in range(len(d1['data_msw']))
-        ]
-        return d
+        return FortyGbe.process_snap_data(d, d1, d2)
 
     def read_rxsnap(self):
         """
@@ -386,10 +403,10 @@ class FortyGbe(Gbe):
         d = self.snaps['rx'][0].read()['data']
         d1 = self.snaps['rx'][1].read(arm=False)['data']
         d2 = self.snaps['rx'][2].read(arm=False)['data']
-        d['data'] = [
-            ((d1['data_msw'][ctr] << 128) + d2['data_lsw'][ctr])
-            for ctr in range(len(d1['data_msw']))
-        ]
-        return d
+        for key in ['eof_in', 'valid_in', 'ip_in', ]:
+            if key in d:
+                d[key.replace('_in', '')] = d[key]
+                d.pop(key)
+        return FortyGbe.process_snap_data(d, d1, d2)
 
 # end

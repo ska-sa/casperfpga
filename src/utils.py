@@ -471,4 +471,3 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         returnval[fpga_.host] = frv
         fpga_.nb_pop_request_by_id(request_id)
     return returnval
-

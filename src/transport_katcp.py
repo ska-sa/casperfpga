@@ -89,6 +89,9 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.connect()
         LOGGER.info('%s: port(%s) created and connected.' % (self.host, port))
 
+    def is_connected(self):
+        return katcp.CallbackClient.is_connected(self)
+
     def connect(self, timeout=None):
         """
         Establish a connection to the KATCP server on the device.
