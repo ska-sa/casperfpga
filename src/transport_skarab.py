@@ -149,7 +149,12 @@ class SkarabTransport(Transport):
         Tries to read a register
         :return: True or False
         """
-        data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries)
+        data=False
+        try:
+            data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries)
+        except:
+            data=False
+            pass
         return True if data else False
 
     def is_running(self):
@@ -494,7 +499,7 @@ class SkarabTransport(Transport):
             raise SkarabSdramError(errmsg)
         # trigger reboot
         self._complete_sdram_configuration()
-        LOGGER.info('Booting from SDRAM.')
+        #LOGGER.info('Booting from SDRAM.')
         # clear sdram programmed flag
         self._sdram_programmed = False
         # still update programming info
@@ -766,9 +771,23 @@ class SkarabTransport(Transport):
         """
         Upload a bitstream to the SKARAB over the wishone --> SDRAM interface
         :param filename: fpga image to upload
+        :param skip_upload_verification: Boolean, if true, don't verify upload success
+        :param skip_bitstream_verification: Boolean, if true, don't hash bitstream
         :return: True if success
         """
-        # process the given file and get an image ready to send
+        image_chunks,local_checksum=self.gen_image_chunks(filename,**kwargs)
+        if self.upload_chunks_to_ram(image_chunks=image_chunks,checksum=local_checksum):
+            self.prog_info['last_uploaded'] = filename
+        return True
+
+    def gen_image_chunks(self, filename, **kwargs):
+        """
+        Upload a bitstream to the SKARAB over the wishone --> SDRAM interface
+        :param filename: fpga image to upload
+        :param skip_upload_verification: Boolean, if true, don't verify upload success
+        :param skip_bitstream_verification: Boolean, if true, don't hash bitstream
+        :return: True if success
+        """
         image_to_program = self._upload_to_ram_prepare_image(filename)
         checksum_dict = {}
         local_checksum = 0x0
@@ -784,16 +803,26 @@ class SkarabTransport(Transport):
                 # Problem
                 LOGGER.error(checksum_dict[sd.CHECKSUM_ERROR])
                 raise SkarabInvalidBitstream(checksum_dict[sd.CHECKSUM_ERROR])
-            # else: Continue
+
+            skip_bitstream_verification=False
             # - Calculate md5_checksum on bitstream
-            bitstream_md5sum = hashlib.md5(image_to_program).hexdigest()
-            if bitstream_md5sum != checksum_dict[sd.MD5_BITSTREAM]:
-                errmsg = "bitstream_md5sum != fpgfile_md5sum"
-                LOGGER.error(errmsg)
-                raise SkarabInvalidBitstream(errmsg)
-            # else: All good
-            debugmsg = 'MD5 checksums matched...'
-            LOGGER.debug(debugmsg)
+            if 'skip_bitstream_verification' in kwargs:
+                skip_bitstream_verification = kwargs['skip_bitstream_verification']
+            else:
+                skip_bitstream_verification = False
+
+            if not skip_bitstream_verification:
+                bitstream_md5sum = hashlib.md5(image_to_program).hexdigest()
+                if bitstream_md5sum != checksum_dict[sd.MD5_BITSTREAM]:
+                    errmsg = "bitstream_md5sum != fpgfile_md5sum"
+                    LOGGER.error(errmsg)
+                    image_to_program=None
+                    raise SkarabInvalidBitstream(errmsg)
+                else:
+                    debugmsg = 'Bitstream MD5 checksums matched.'
+                    LOGGER.debug(debugmsg)
+            else:
+                    LOGGER.warning('Skipped bitstream verification.')
 
         '''
         Before we continue:
@@ -819,17 +848,19 @@ class SkarabTransport(Transport):
         if padding:
             image_chunks[-1] += '\xff' * (packet_size - len(
                 image_chunks[-1]))
+        return image_chunks, local_checksum
 
-        # get the total number of chunks to be sent
+
+    def upload_chunks_to_ram(self, image_chunks, checksum=0):
+        """Upload a list of chunks to SDRAM on SKARAB. 
+            If checksum=0, will not perform verification of upload."""
         num_total_chunks = len(image_chunks)
-
-        LOGGER.debug("Number of Chunks: {}".format(num_total_chunks))
-
+        LOGGER.debug("Number of chunks to send: %i"%num_total_chunks)
+        
         # send chunk zero - initialization chunk
         init_success = self._send_image_chunk(chunk_id=0,
                                               num_total_chunks=num_total_chunks,
                                               chunk_data=image_chunks[0])
-
         if not init_success:
             errmsg = "Failed to transmit SDRAM programming initialization " \
                      "packet."
@@ -837,7 +868,6 @@ class SkarabTransport(Transport):
 
         # send other chunks
         for chunk_number in range(0, num_total_chunks):
-
             LOGGER.debug("Sending chunk {}\n".format(chunk_number))
 
             chunk_transmit_success = self._send_image_chunk(
@@ -846,45 +876,35 @@ class SkarabTransport(Transport):
                 chunk_data=image_chunks[chunk_number])
 
             if not chunk_transmit_success:
-                LOGGER.error("Tranmission of chunk %d failed. Programming "
-                             "failed. Clearing SDRAM" % chunk_number)
+                errmsg="Transmission of chunk %d failed. Programming " \
+                             "failed." % chunk_number
+                LOGGER.error(errmsg)
                 self.clear_sdram()
-                break
+                raise SkarabProgrammingError(errmsg)
 
-            # chunk transmitted successfully, send next one
-            # first check if we sent the last chunk
-            if chunk_number + 1 == num_total_chunks:
-                # all chunks sent ok!
-                LOGGER.debug("All images chunks transmitted successfully!")
-                verify = True
-                if 'skip_verification' in kwargs:
-                    if kwargs['skip_verification']:
-                        verify = False
-                checksum_match = True
-                if verify:
-                    # if sd.FLASH_WRITE_CHECKSUM in checksum_dict.keys():
-                    if local_checksum:
-                        # i.e. If the value is non-zero
-                        spartan_checksum = self.get_spartan_checksum()
+        # check if we sent the last chunk
+        # all chunks sent ok!
+        LOGGER.debug("All images chunks transmitted successfully!")
 
-                        checksum_match = self.check_checksum(
-                            spartan_checksum=spartan_checksum,
-                            local_checksum=local_checksum)
-                    else:
-                        debugmsg = '%s generated using an older version of mlib_devel,' \
-                                   ' not calculating checksum' % filename
-                        LOGGER.debug(debugmsg)
-                if checksum_match:
-                    self.prog_info['last_uploaded'] = filename
-                    self._sdram_programmed = True
-                    return True
-                else:
-                    errmsg = "Checksum mismatch. Clearing SDRAM."
-                    self.clear_sdram()
-                    raise SkarabProgrammingError(errmsg)
-            else:
-                # not all chunk sent yet
-                continue
+        checksum_match = True
+        if checksum:
+            # i.e. If the value is non-zero
+            spartan_checksum = self.get_spartan_checksum()
+            checksum_match = self.check_checksum(
+                spartan_checksum=spartan_checksum,
+                local_checksum=checksum)
+        else:
+            debugmsg = 'Not verifying Spartan/upload checksum.'
+            LOGGER.debug(debugmsg)
+
+        if checksum_match:
+            self._sdram_programmed = True
+            return True
+        else:
+            errmsg = "Checksum mismatch. Clearing SDRAM."
+            LOGGER.error(errmsg)
+            self.clear_sdram()
+            raise SkarabProgrammingError(errmsg)
 
     def check_md5sum(self, filename, image_to_program):
         """
@@ -929,8 +949,8 @@ class SkarabTransport(Transport):
         LOGGER.debug("Local Checksum: %s" % local_checksum)
 
         if spartan_checksum == local_checksum:
-            msg = "Checksum match! Bitstream uploaded successfully!. SKARAB " \
-                  "ready to boot from new image"
+            msg = "Checksum match. Bitstream uploaded successfully. SKARAB " \
+                  "ready to boot from new image."
             LOGGER.debug(msg)
             return True
         else:
@@ -957,12 +977,11 @@ class SkarabTransport(Transport):
                     (response.packet['ack'] == 0):
                 return True
         # at this point, the transmission of the chunk failed
-        LOGGER.error('Tranmission of chunk failed.')
         return False
 
     def upload_to_ram_and_program(self, filename, port=-1,
-                                  timeout=60, wait_complete=True,
-                                  skip_verification=False):
+                                  timeout=60,
+                                  **kwargs):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -973,49 +992,48 @@ class SkarabTransport(Transport):
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return
         after upload if False
-        :param skip_verification: do not verify the uploaded file before reboot
+        :param skip_upload_verification: do not verify the uploaded file before reboot
+        :param skip_bitstream_verification: Boolean, if true, don't hash bitstream
         :return: True, if success
         """
-        prog_start_time = time.time()
-
-        self.upload_to_ram(filename, skip_verification=skip_verification)
+        upload_start_time = time.time()
+        self.upload_to_ram(filename,timeout=timeout,**kwargs)
+        upload_time=time.time()-upload_start_time
+        LOGGER.debug('Uploaded bitstream in %.1f seconds.'%(upload_time))
+        reboot_start_time = time.time()
         self.boot_from_sdram()
         # wait for board to come back up
-        # this can be reduced when the 40gbe switch issue is resolved
         timeout = timeout + time.time()
         while timeout > time.time():
-            # TODO - look at this logic. Should not have a timeout and the retries in the is_connected - duplication
-            # setting the retries to 20 allows about 60s for the 40gbe switch
-            # to come back. It also prevents errors being logged when there
-            # is no response.
-            if self.is_connected(retries=20):
+            if self.is_connected(retries=1):
                 # # configure the mux back to user_date mode
                 # self.config_prog_mux(user_data=1)
-                # time.sleep(1)
                 [golden_image, multiboot, firmware_version] = \
                     self.get_virtex7_firmware_version()
                 if golden_image == 0 and multiboot == 0:
-                    prog_time = time.time() - prog_start_time
+                    reboot_time = time.time() - reboot_start_time
                     LOGGER.info(
-                        'SKARAB back up, in %.3f seconds with firmware version '
-                        '%s' % (prog_time, firmware_version))
+                        '%s back up, in %.1f seconds (%.1f + %.1f) with FW ver '
+                        '%s' % (self.host, upload_time+reboot_time,upload_time,reboot_time, firmware_version))
                     return True
                 elif golden_image == 1 and multiboot == 0:
                     LOGGER.error(
-                        'SKARAB back up, but fell back to golden image with '
-                        'firmware version %s' % firmware_version)
+                        '%s back up, but fell back to golden image with '
+                        'firmware version %s' % (self.host,firmware_version))
                     return False
                 elif golden_image == 0 and multiboot == 1:
                     LOGGER.error(
-                        'SKARAB back up, but fell back to multiboot image with '
-                        'firmware version %s' % firmware_version)
+                        '%s back up, but fell back to multiboot image with '
+                        'firmware version %s' % (self.host,firmware_version))
                     return False
                 else:
                     LOGGER.error(
-                        'SKARAB back up, but unknown image with firmware '
-                        'version number %s' % firmware_version)
+                        '%s back up, but unknown image with firmware '
+                        'version number %s' % (self.host,firmware_version))
                     return False
-        LOGGER.error('SKARAB has not come back')
+            time.sleep(0.1)
+
+        LOGGER.error('%s has not come back!'%self.host)
         return False
 
     def _forty_gbe_get_port(self, port_addr=0x50000):
@@ -1426,13 +1444,13 @@ class SkarabTransport(Transport):
                 LOGGER.warning('{}: keyboard interrupt, clearing '
                                'buffer.'.format(self.host))
                 # wait to receive incoming responses
-                time.sleep(3)
+                time.sleep(1)
                 if self.clear_recv_buffer(skarab_socket):
                     LOGGER.info('{}: cleared recv buffer.'.format(self.host))
                 raise KeyboardInterrupt
             retransmit_count += 1
         errmsg = '{}: retransmit count exceeded. Giving up.'.format(self.host)
-        LOGGER.error(errmsg)
+        LOGGER.debug(errmsg)
         raise SkarabSendPacketError(errmsg)
 
     @staticmethod
@@ -1472,7 +1490,7 @@ class SkarabTransport(Transport):
         output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
                                       sd.ROACH3_FPGA_RESET, False)
         # sleep to allow DHCP configuration
-        time.sleep(1)
+        #time.sleep(1)
         return output
 
     def shutdown_skarab(self):
@@ -3365,6 +3383,7 @@ class SkarabTransport(Transport):
         if bitstream.startswith('\x1f\x8b\x08'):
             # decompress
             bitstream = zlib.decompress(bitstream, 16 + zlib.MAX_WBITS)
+            LOGGER.info("Decompressing compressed bitstream.")
 
         # write binary file to disk?
         if extract_to_disk:
