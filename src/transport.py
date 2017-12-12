@@ -99,7 +99,8 @@ class Transport(object):
         pass
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
-                                  wait_complete=True):
+                                  wait_complete=True,
+                                  skip_verification=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: the file to upload
@@ -107,6 +108,7 @@ class Transport(object):
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return
         after upload if False
+        :param skip_verification: don't verify the image after uploading it
         :return:
         """
         raise NotImplementedError

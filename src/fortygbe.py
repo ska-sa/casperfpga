@@ -2,7 +2,6 @@ import logging
 import time
 
 from network import IpAddress, Mac
-from skarab_definitions import ConfigureMulticastReq
 from gbe import Gbe
 
 LOGGER = logging.getLogger(__name__)
@@ -206,14 +205,15 @@ class FortyGbe(Gbe):
         }
         possible_addresses = [int(returnval['multicast']['base_ip'])]
         mask_int = int(returnval['multicast']['ip_mask'])
-        for ctr in range(32):
-            mask_bit = (mask_int >> ctr) & 1
-            if not mask_bit:
-                new_ips = []
-                for ip in possible_addresses:
-                    new_ips.append(ip & (~(1 << ctr)))
-                    new_ips.append(new_ips[-1] | (1 << ctr))
-                possible_addresses.extend(new_ips)
+        # TODO
+        # for ctr in range(32):
+        #     mask_bit = (mask_int >> ctr) & 1
+        #     if not mask_bit:
+        #         new_ips = []
+        #         for ip in possible_addresses:
+        #             new_ips.append(ip & (~(1 << ctr)))
+        #             new_ips.append(new_ips[-1] | (1 << ctr))
+        #         possible_addresses.extend(new_ips)
         returnval['multicast']['rx_ips'] = []
         tmp = list(set(possible_addresses))
         for ip in tmp:
@@ -222,7 +222,7 @@ class FortyGbe(Gbe):
             returnval['arp'] = self.get_arp_details()
         if read_cpu:
             # returnval.update(self.get_cpu_details(gbedata))
-            LOGGER.warn("Retrieving CPU packet buffers not yet implemented.") 
+            LOGGER.warn('Retrieving CPU packet buffers not yet implemented.')
         self.mac = returnval['mac']
         self.ip_address = returnval['ip']
         self.port = returnval['fabric_port']
@@ -249,21 +249,8 @@ class FortyGbe(Gbe):
         :return:
         """
         ip = IpAddress(ip_str)
-        ip_high = ip.ip_int >> 16
-        ip_low = ip.ip_int & 65535
         mask = IpAddress('255.255.255.%i' % (256 - group_size))
-        mask_high = mask.ip_int >> 16
-        mask_low = mask.ip_int & 65535
-        request = ConfigureMulticastReq(1, ip_high, ip_low, mask_high, mask_low)
-        response = self.parent.transport.send_packet(request)
-        resp_pkt = response.packet
-        resp_ip = IpAddress(resp_pkt['fabric_multicast_ip_address_high'] << 16 |
-                            resp_pkt['fabric_multicast_ip_address_low'])
-        resp_mask = IpAddress(
-            resp_pkt['fabric_multicast_ip_address_mask_high'] << 16 |
-            resp_pkt['fabric_multicast_ip_address_mask_low'])
-        LOGGER.debug('%s: multicast configured: addr(%s) mask(%s)' % (
-            self.name, resp_ip.ip_str, resp_mask.ip_str))
+        self.parent.transport.multicast_receive(self.name, ip, mask)
         self.set_port(7148)
 
     def print_gbe_core_details(self, arp=False, cpu=False, refresh=True):
