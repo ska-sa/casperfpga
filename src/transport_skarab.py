@@ -13,7 +13,7 @@ from threading import Lock
 
 import skarab_definitions as sd
 from transport import Transport
-from utils import get_hostname
+from network import IpAddress
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
@@ -618,13 +618,13 @@ class SkarabTransport(Transport):
             self.clear_sdram()
             errmsg1 = 'Error programming bitstream into SDRAM: sent(%i) ' \
                       'received(%i). Issue the fpga.transport.reset_fpga() ' \
-                      'command and try again.' % (sent_pkt_counter,
-                                                  rx_pkt_counts['Ethernet '
-                                                                'Frames'])
+                      'command and try again.' % (
+                        sent_pkt_counter, rx_pkt_counts['Ethernet Frames'])
             LOGGER.error(errmsg1)
-            errmsg2 = 'Ensure that 1) You are programming via the correct port/connection; ' \
-                      'and \n2) all Network Switches and endpoints are configured to ' \
-                      'support MTU Size of 9000 (Jumbo Packet size).'
+            errmsg2 = 'Ensure that 1) You are programming via the correct ' \
+                      'port/connection; and \n2) all Network Switches and ' \
+                      'endpoints are configured to support MTU Size of ' \
+                      '9000 (Jumbo Packet size).'
             LOGGER.error(errmsg2)
             raise SkarabProgrammingError(errmsg1 + '.\n' + errmsg2)
         LOGGER.info('Bitstream successfully programmed into SDRAM.')
@@ -642,6 +642,7 @@ class SkarabTransport(Transport):
         minimum value = 1
         :return:
         """
+        raise DeprecationWarning
 
         if retries < 1:
             errmsg = 'Minimum number of programming attempts must be 1!'
@@ -1036,29 +1037,29 @@ class SkarabTransport(Transport):
         LOGGER.error('%s has not come back!'%self.host)
         return False
 
-    def _forty_gbe_get_port(self, port_addr=0x50000):
-        """
-
-        :return: 
-        """
-        en_port = self.read_wishbone(port_addr + 0x20)
-        return en_port & (2 ** 16 - 1)
-
-    def _forty_gbe_set_port(self, port, port_addr=0x50000):
-        """
-
-        :param port: 
-        :return: 
-        """
-        en_port = self.read_wishbone(port_addr + 0x20)
-        if en_port & (2 ** 16 - 1) == port:
-            return
-        en_port_new = ((en_port >> 16) << 16) + port
-        self.write_wishbone(port_addr + 0x20, en_port_new)
-        if self.read_wishbone(port_addr + 0x20) != en_port_new:
-            errmsg = 'Error setting 40gbe port to 0x%04x' % port
-            LOGGER.error(errmsg)
-            raise ValueError(errmsg)
+    # def _forty_gbe_get_port(self, port_addr=0x50000):
+    #     """
+    #
+    #     :return:
+    #     """
+    #     en_port = self.read_wishbone(port_addr + 0x20)
+    #     return en_port & (2 ** 16 - 1)
+    #
+    # def _forty_gbe_set_port(self, port, port_addr=0x50000):
+    #     """
+    #
+    #     :param port:
+    #     :return:
+    #     """
+    #     en_port = self.read_wishbone(port_addr + 0x20)
+    #     if en_port & (2 ** 16 - 1) == port:
+    #         return
+    #     en_port_new = ((en_port >> 16) << 16) + port
+    #     self.write_wishbone(port_addr + 0x20, en_port_new)
+    #     if self.read_wishbone(port_addr + 0x20) != en_port_new:
+    #         errmsg = 'Error setting 40gbe port to 0x%04x' % port
+    #         LOGGER.error(errmsg)
+    #         raise ValueError(errmsg)
 
     def _upload_to_ram_and_program_deprecated(self, filename, port=-1,
                                               timeout=60,
@@ -1074,6 +1075,7 @@ class SkarabTransport(Transport):
         and hex files)
         :return: True, if success
         """
+        raise DeprecationWarning
         prog_start_time = time.time()
 
         # Moved setting Port Address(es) into upload_to_ram()
@@ -1346,7 +1348,7 @@ class SkarabTransport(Transport):
                 LOGGER.warning('%s: received response from  %s, '
                                'expected response from %s .'
                                'Discarding response.' % (self.host,
-                               recvd_from_addr, expected_recvd_from_addr))
+                                    recvd_from_addr, expected_recvd_from_addr))
                 return None
             # check the opcode of the response i.e. first two bytes
             if response_payload[:2] == '\xff\xff':
@@ -3857,4 +3859,29 @@ class SkarabTransport(Transport):
             raise SkarabInvalidBitstream(errmsg)
         # If it got here, checksums matched
         return True
+
+    def multicast_receive(self, gbename, ip, mask):
+        """
+
+        :param gbename:
+        :param ip:
+        :param mask:
+        :return:
+        """
+        ip_high = ip.ip_int >> 16
+        ip_low = ip.ip_int & (2 ** 16 - 1)
+        mask_high = mask.ip_int >> 16
+        mask_low = mask.ip_int & (2 ** 16 - 1)
+        request = sd.ConfigureMulticastReq(
+            1, ip_high, ip_low, mask_high, mask_low)
+        response = self.send_packet(request)
+        resp_pkt = response.packet
+        resp_ip = IpAddress(resp_pkt['fabric_multicast_ip_address_high'] << 16 |
+                            resp_pkt['fabric_multicast_ip_address_low'])
+        resp_mask = IpAddress(
+            resp_pkt['fabric_multicast_ip_address_mask_high'] << 16 |
+            resp_pkt['fabric_multicast_ip_address_mask_low'])
+        LOGGER.debug('%s: multicast configured: addr(%s) mask(%s)' % (
+            gbename, resp_ip.ip_str, resp_mask.ip_str))
+
 # end

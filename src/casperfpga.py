@@ -10,10 +10,12 @@ import tengbe
 import fortygbe
 import qdr
 from attribute_container import AttributeContainer
+from utils import parse_fpg, get_hostname, get_kwarg
 from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
-from utils import parse_fpg, get_hostname, get_kwarg
+from transport_dummy import DummyTransport
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,10 +57,12 @@ CASPER_OTHER_DEVICES = {
 def choose_transport(host_ip):
     """
     Test whether a given host is a katcp client or a skarab
-    :param host_ip: 
-    :return: 
+    :param host_ip:
+    :return:
     """
     LOGGER.debug('Trying to figure out what kind of device %s is' % host_ip)
+    if host_ip.startswith('CasperDummy'):
+        return DummyTransport
     try:
         if SkarabTransport.test_host_type(host_ip):
             return SkarabTransport
@@ -134,7 +138,6 @@ class CasperFpga(object):
             return self.transport.listdev()
         except AttributeError:
             return self.memory_devices.keys()
-        raise RuntimeError
 
     def deprogram(self):
         """
@@ -318,8 +321,8 @@ class CasperFpga(object):
             unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
             err_str = '%s: verification of write to %s at offset %d failed. ' \
                       'Wrote 0x%08x... but got back 0x%08x.' % (
-                self.host, device_name, offset,
-                unpacked_wrdata, unpacked_rddata)
+                        self.host, device_name, offset,
+                        unpacked_wrdata, unpacked_rddata)
             LOGGER.error(err_str)
             raise ValueError(err_str)
 

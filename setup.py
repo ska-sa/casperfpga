@@ -4,11 +4,9 @@ import glob
 
 setup(
     name='casperfpga',
-    version='0.0.1',
     author='P.Prozesky',
     author_email='paulp@ska.ac.za',
-    # scripts=['bin/stowe-towels.py','bin/wash-towels.py'],
-    url='',
+    url='http://pypi.python.org/pypi/casperfpga',
     license='LICENSE.txt',
     description='Talk to CASPER fpga devices using katcp or dcp.',
     long_description=open('README.txt').read(),
