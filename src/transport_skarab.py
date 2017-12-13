@@ -768,26 +768,37 @@ class SkarabTransport(Transport):
         self._sdram_programmed = True
         self.prog_info['last_uploaded'] = filename
 
-    def upload_to_ram(self, filename, **kwargs):
+    def upload_to_ram(self, filename=None, **kwargs):
         """
         Upload a bitstream to the SKARAB over the wishone --> SDRAM interface
         :param filename: fpga image to upload
-        :param skip_upload_verification: Boolean, if true, don't verify upload success
-        :param skip_bitstream_verification: Boolean, if true, don't hash bitstream
         :return: True if success
         """
-        image_chunks,local_checksum=self.gen_image_chunks(filename,**kwargs)
-        if self.upload_chunks_to_ram(image_chunks=image_chunks,checksum=local_checksum):
-            self.prog_info['last_uploaded'] = filename
-        return True
+        #if the binary has already been unpacked, no need to do it again...
+        if filename!=None:
+            LOGGER.debug("Uploading specified file %s."%filename)
+            self.image_chunks,self.local_checksum=self.gen_image_chunks(filename,**kwargs)
+        elif hasattr(self,'image_chunks'):
+            if self.image_chunks != None:
+                LOGGER.debug("Uploading from raw image chunks.")
+            else:
+                raise RuntimeError('Cannot program %s with empty '
+                               'image chunks.' % self.host)
+        else:
+            raise RuntimeError('Cannot program %s with no '
+                               'bitstream.' % self.host)
+
+        result=self.upload_chunks_to_ram(image_chunks=self.image_chunks,
+                checksum=self.local_checksum)
+        self.image_chunks=None
+        return result
 
     def gen_image_chunks(self, filename, **kwargs):
         """
         Upload a bitstream to the SKARAB over the wishone --> SDRAM interface
         :param filename: fpga image to upload
-        :param skip_upload_verification: Boolean, if true, don't verify upload success
-        :param skip_bitstream_verification: Boolean, if true, don't hash bitstream
-        :return: True if success
+        :param skip_bitstream_verification: Boolean; don't hash bitstream
+        :return: image_chunks, local_checksum (list, int)
         """
         image_to_program = self._upload_to_ram_prepare_image(filename)
         checksum_dict = {}
@@ -980,7 +991,7 @@ class SkarabTransport(Transport):
         # at this point, the transmission of the chunk failed
         return False
 
-    def upload_to_ram_and_program(self, filename, port=-1,
+    def upload_to_ram_and_program(self, filename=None, port=-1,
                                   timeout=60,
                                   **kwargs):
         """
@@ -988,7 +999,7 @@ class SkarabTransport(Transport):
         from the new image.
         *** WARNING: Do NOT attempt to upload a BSP/Flash image to the SDRAM.
         :param filename: fpga image to upload (currently supports bin, bit
-        and hex files)
+        and hex files; if not specified, use self.image_chunks)
         :param port: the port to use on the rx end, -1 means a random port
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return

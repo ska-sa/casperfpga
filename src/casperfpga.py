@@ -159,19 +159,29 @@ class CasperFpga(object):
     def upload_to_ram_and_program(self, filename=None, **kwargs):
         """
         Upload an FPG file to RAM and then program the FPGA.
-        :param filename: the file to upload
+        :param filename: the file to upload; if not specified,
+            either use object's image_chunks, or else bitstream.
         :param **kwargs sent down to lower-level transport
         :return:
         """
-        filename = filename or self.bitstream
-        if filename is None:
-            raise RuntimeError('Cannot program %s with no '
+        if filename==None:
+            #if the binary for skarabs has already been unpacked, no need to do it again...
+            if isinstance(self.transport,SkarabTransport) and hasattr(self.transport,'image_chunks'):
+                LOGGER.debug("Programming from raw image chunks.")
+                self.bitstream = None
+            elif hasattr(self,'bitstream'):
+                LOGGER.debug("Programming %s."%self.bitstream)
+            else:
+                raise RuntimeError('Cannot program %s with no '
                                'bitstream.' % self.host)
-        rv = self.transport.upload_to_ram_and_program(
-            filename, **kwargs)
-        self.bitstream = filename
-        if filename[-3:] == 'fpg':
-            self.get_system_information(filename)
+        else:
+            self.bitstream = filename
+            LOGGER.debug("Programming specified file %s."%self.bitstream)
+
+        rv = self.transport.upload_to_ram_and_program(filename=self.bitstream,**kwargs)
+        if self.bitstream:
+            if self.bitstream[-3:] == 'fpg':
+                self.get_system_information(filename)
         return rv
 
     def is_connected(self):
