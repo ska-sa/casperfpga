@@ -2990,7 +2990,8 @@ class SkarabTransport(Transport):
         skarab_version_info['toolflow_image'] = not (golden_image or multiboot_image)
         skarab_version_info['spartan_firmware_version'] = self.get_spartan_firmware_version()
         skarab_version_info['microblaze_hardware_version'] = self.get_microblaze_hardware_version()
-        skarab_version_info['emdedded_software_version'] = self.get_embedded_software_version()
+        skarab_version_info['embedded_software_version'] = \
+            self.get_embedded_software_version()
         
         return skarab_version_info
 
