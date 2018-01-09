@@ -292,7 +292,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
         Uses much faster bulkread katcp command which returns data in pages
-        using informs rather than one read reply, which has significant 
+        using informs rather than one read reply, which has significant
         buffering overhead on the ROACH.
         :param device_name: name of the memory device from which to read
         :param size: how many bytes to read
@@ -307,7 +307,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def program(self, filename=None):
         """
         Program the FPGA with the specified binary file.
-        :param filename: name of file to program, can vary depending on 
+        :param filename: name of file to program, can vary depending on
             the formats supported by the device. e.g. fpg, bof, bin
         :return:
         """
@@ -390,7 +390,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def _unsubscribe_all_taps(self):
         """
         Remove all multicast subscriptions before deprogramming the ROACH
-        :return: 
+        :return:
         """
         reply, informs = self.katcprequest(name='tap-info', require_ok=True)
         taps = [inform.arguments[0] for inform in informs]
@@ -686,8 +686,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def get_system_information_from_transport(self):
         """
-        
-        :return: 
+
+        :return:
         """
         if not self.is_running():
             return self.bitstream, None
@@ -698,7 +698,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def unhandled_inform(self, msg):
         """
         Overloaded from CallbackClient
-        What do we do with unhandled KATCP inform messages that 
+        What do we do with unhandled KATCP inform messages that
         this device receives?
         Pass it onto the registered function, if it's not None
         """
@@ -707,8 +707,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def check_phy_counter(self):
         """
-        
-        :return: 
+
+        :return:
         """
         request_args = ((0, 0), (0, 1), (1, 0), (1, 1))
         for arg in request_args:

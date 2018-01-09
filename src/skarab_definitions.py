@@ -429,6 +429,14 @@ FT4232H_FPGA_ONLY_JTAG_CHAIN = 0x40
 FT4232H_INCLUDE_MONITORS_IN_JTAG_CHAIN = 0x80
 
 
+class SkarabInvalidBitstream(ValueError):
+    pass
+
+
+class SkarabProgrammingError(ValueError):
+    pass
+
+
 # command packet structure
 class Command(object):
     def __init__(self, command_id, seq_num=None):
@@ -674,7 +682,8 @@ class SdramReconfigureReq(Command):
         self.packet['do_reboot'] = do_reboot
         self.packet['reset_sdram_read_address'] = reset_sdram_read_address
         self.packet['clear_ethernet_stats'] = clear_ethernet_stats
-        self.packet['enable_debug_sdram_read_mode'] = enable_debug_sdram_read_mode
+        self.packet['enable_debug_sdram_read_mode'] = \
+            enable_debug_sdram_read_mode
         self.packet['do_sdram_async_read'] = do_sdram_async_read
         self.packet['do_continuity_test'] = do_continuity_test
         self.packet['continuity_test_output_low'] = continuity_test_output_low
@@ -1335,6 +1344,7 @@ class BigWriteWishboneResp(Response):
         self.packet['start_address_low'] = start_address_low
         self.packet['number_of_writes_done'] = number_of_writes_done
         self.packet['padding'] = padding
+
 
 MAX_IMAGE_CHUNK_SIZE = 1988
 

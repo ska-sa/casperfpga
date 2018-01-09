@@ -156,29 +156,28 @@ class CasperFpga(object):
         """
         return self.transport.set_igmp_version(version)
 
-    def upload_to_ram_and_program(self, filename=None, **kwargs):
+    def upload_to_ram_and_program(self, filename=None, image_chunks=None,
+                                  wait_complete=True):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: the file to upload; if not specified,
             either use object's image_chunks, or else bitstream.
-        :param **kwargs sent down to lower-level transport
-        :return:
+        :param image_chunks: a pointer to the image chunks to use:
+            (chunks, checksum)
+        :param wait_complete: do not wait for this operation, just return
+        after upload
+        :return: True or False
         """
-        if filename==None:
-            #if the binary for skarabs has already been unpacked, no need to do it again...
-            if isinstance(self.transport,SkarabTransport) and hasattr(self.transport,'image_chunks'):
-                LOGGER.debug("Programming from raw image chunks.")
-                self.bitstream = None
-            elif hasattr(self,'bitstream'):
-                LOGGER.debug("Programming %s."%self.bitstream)
-            else:
-                raise RuntimeError('Cannot program %s with no '
-                               'bitstream.' % self.host)
-        else:
+        if filename is not None:
             self.bitstream = filename
-            LOGGER.debug("Programming specified file %s."%self.bitstream)
-
-        rv = self.transport.upload_to_ram_and_program(filename=self.bitstream,**kwargs)
+        elif image_chunks is not None:
+            self.transport.image_chunks = image_chunks
+        else:
+            filename = self.bitstream
+        rv = self.transport.upload_to_ram_and_program(
+            filename=filename, wait_complete=wait_complete)
+        if not wait_complete:
+            return True
         if self.bitstream:
             if self.bitstream[-3:] == 'fpg':
                 self.get_system_information(filename)

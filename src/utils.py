@@ -324,8 +324,8 @@ def _check_target_func(target_function):
 
 def threaded_fpga_function(fpga_list, timeout, target_function):
     """
-    Thread the running of any KatcpClientFpga function on a list of
-    KatcpClientFpga objects. Much faster.
+    Thread the running of any CasperFpga function on a list of
+        CasperFpga objects. Much faster.
     :param fpga_list: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
     :param target_function: a tuple with three parts:
