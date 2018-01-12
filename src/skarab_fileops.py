@@ -662,28 +662,13 @@ def calculate_checksum_using_bitstream(bitstream, packet_size=8192):
     return flash_write_checksum
 
 
-def progska(fpgas, fpg_filename, timeout=200):
-    try:
-        subprocess.call(['progska', '-h'])
-    except OSError:
-        raise sd.SkarabProgrammingError('Could not find progska binary.')
-    binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
-    extract_bitstream(fpg_filename, True, binname)
-    upload_start = time.time()
-    hostnames = [fpga.host for fpga in fpgas]
-    spargs = ['progska', '-f', binname]
-    spargs.extend(hostnames)
-    p = subprocess.call(spargs)
-    os.remove(binname)
-    if p != 0:
-        raise sd.SkarabProgrammingError('progska returned code 1')
-    upload_time = time.time() - upload_start
+def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
+    """
 
-    def fpga_reboot(fpga):
-        fpga.transport._sdram_programmed = True
-        fpga.transport.boot_from_sdram()
-    thop(fpgas, 5, fpga_reboot)
-
+    :param fpgas:
+    :param timeout:
+    :return:
+    """
     # now wait for the last one to come up
     # last_fpga = fpgas[-1]
     timeout = timeout + time.time()
@@ -792,5 +777,31 @@ def progska(fpgas, fpg_filename, timeout=200):
     #     raise sd.SkarabProgrammingError('These FPGAs never came up correctly '
     #                                     'after programming: %s' % str(failed))
     # print(upload_time, reboot_time)
+
+
+def progska(fpgas, fpg_filename, timeout=200, wait_for_reboot=True):
+    try:
+        subprocess.call(['progska', '-h'])
+    except OSError:
+        raise sd.SkarabProgrammingError('Could not find progska binary.')
+    binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
+    extract_bitstream(fpg_filename, True, binname)
+    upload_start = time.time()
+    hostnames = [fpga.host for fpga in fpgas]
+    spargs = ['progska', '-f', binname]
+    spargs.extend(hostnames)
+    p = subprocess.call(spargs)
+    os.remove(binname)
+    if p != 0:
+        raise sd.SkarabProgrammingError('progska returned code 1')
+    upload_time = time.time() - upload_start
+
+    def fpga_reboot(fpga):
+        fpga.transport._sdram_programmed = True
+        fpga.transport.boot_from_sdram()
+    thop(fpgas, 5, fpga_reboot)
+
+    if wait_for_reboot:
+        wait_after_reboot(fpgas, timeout, upload_time)
 
 # end
