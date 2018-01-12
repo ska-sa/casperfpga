@@ -6,6 +6,7 @@ import struct
 import time
 import os
 import random
+import subprocess
 
 from threading import Lock
 
@@ -147,16 +148,17 @@ class SkarabTransport(Transport):
             return True
         return False
 
-    def is_connected(self, retries=3):
+    def is_connected(self, retries=3, timeout=1):
         """
         'ping' the board to see if it is connected and running.
         Tries to read a register
         :return: True or False
         """
         try:
-            data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries)
+            data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries,
+                                       timeout=timeout)
             return True if data else False
-        except ValueError:
+        except ValueError as vexc:
             return False
 
     def is_running(self):
@@ -512,15 +514,31 @@ class SkarabTransport(Transport):
         :return: True if success
         """
         upload_start_time = time.time()
-        if filename is not None:
-            LOGGER.debug('Splitting file to chunks: %s.' % filename)
-            self.image_chunks, self.local_checksum = skfops.gen_image_chunks(
-                filename, verify)
-        if self.image_chunks is None:
-            raise RuntimeError('%s: cannot upload with empty image '
-                               'chunks.' % self.host)
-        self.upload_chunks_to_ram(image_chunks=self.image_chunks,
-                                  local_checksum=self.local_checksum)
+        # look for progska
+        try:
+            subprocess.call(['progska', '-h'])
+            use_c = True
+        except OSError:
+            use_c = False
+        if use_c:
+            binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
+            bitstream = skfops.extract_bitstream(filename, True, binname)
+            binfile = filename[0:-3] + 'bin'
+            p = subprocess.call(['progska', '-f', binname, self.host])
+            os.remove(binname)
+            if p != 0:
+                raise sd.SkarabProgrammingError('progska returned code 1')
+            self._sdram_programmed = True
+        else:
+            if filename is not None:
+                LOGGER.debug('Splitting file to chunks: %s.' % filename)
+                self.image_chunks, self.local_checksum = skfops.gen_image_chunks(
+                    filename, verify)
+            if self.image_chunks is None:
+                raise RuntimeError('%s: cannot upload with empty image '
+                                   'chunks.' % self.host)
+            self.upload_chunks_to_ram(image_chunks=self.image_chunks,
+                                      local_checksum=self.local_checksum)
         self.image_chunks, self.local_checksum = None, None
         upload_time = time.time() - upload_start_time
         LOGGER.debug('Uploaded bitstream in %.1f seconds.' % upload_time)
@@ -592,6 +610,31 @@ class SkarabTransport(Transport):
                 return True
         return False
 
+    def check_running_firmware(self, retries=20):
+        """
+
+        :return:
+        """
+        [golden_image, multiboot, firmware_version] = \
+            self.get_virtex7_firmware_version(retries=retries)
+        if golden_image == 0 and multiboot == 0:
+            return True, firmware_version
+        elif golden_image == 1 and multiboot == 0:
+            LOGGER.error(
+                '%s back up, but fell back to golden image with '
+                'firmware version %s' % (self.host, firmware_version))
+            return False, firmware_version
+        elif golden_image == 0 and multiboot == 1:
+            LOGGER.error(
+                '%s back up, but fell back to multiboot image with '
+                'firmware version %s' % (self.host, firmware_version))
+            return False, firmware_version
+        else:
+            LOGGER.error(
+                '%s back up, but unknown image with firmware '
+                'version number %s' % (self.host, firmware_version))
+            return False, firmware_version
+
     def upload_to_ram_and_program(self, filename=None, port=-1, timeout=60,
                                   wait_complete=True, skip_verification=False):
         """
@@ -613,35 +656,21 @@ class SkarabTransport(Transport):
             return True
         self.boot_from_sdram()
         # wait for board to come back up
-        reboot_start_time = time.time()
         timeout = timeout + time.time()
+        reboot_start_time = time.time()
         while timeout > time.time():
             if self.is_connected(retries=1):
                 # # configure the mux back to user_date mode
                 # self.config_prog_mux(user_data=1)
-                [golden_image, multiboot, firmware_version] = \
-                    self.get_virtex7_firmware_version()
-                if golden_image == 0 and multiboot == 0:
+                result, firmware_version = self.check_running_firmware()
+                if result:
                     reboot_time = time.time() - reboot_start_time
                     LOGGER.info(
                         '%s back up, in %.1f seconds (%.1f + %.1f) with FW ver '
                         '%s' % (self.host, upload_time + reboot_time,
                                 upload_time, reboot_time, firmware_version))
                     return True
-                elif golden_image == 1 and multiboot == 0:
-                    LOGGER.error(
-                        '%s back up, but fell back to golden image with '
-                        'firmware version %s' % (self.host, firmware_version))
-                    return False
-                elif golden_image == 0 and multiboot == 1:
-                    LOGGER.error(
-                        '%s back up, but fell back to multiboot image with '
-                        'firmware version %s' % (self.host, firmware_version))
-                    return False
                 else:
-                    LOGGER.error(
-                        '%s back up, but unknown image with firmware '
-                        'version number %s' % (self.host, firmware_version))
                     return False
             time.sleep(0.1)
         LOGGER.error('%s: has not come back after programming' % self.host)
@@ -874,9 +903,8 @@ class SkarabTransport(Transport):
         with self.lock:
             self._seq_num = random.randint(0, 0xffff)
 
-    def send_packet(self, request_object,
-                    timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=5,
-                    skarab_socket=None, port=None):
+    def send_packet(self, request_object, timeout=sd.CONTROL_RESPONSE_TIMEOUT,
+                    retries=5, skarab_socket=None, port=None):
         """
         Make send_packet thread safe
         :param request_object
@@ -1091,7 +1119,7 @@ class SkarabTransport(Transport):
         write_reg_response = self.send_packet(request)
         return write_reg_response
 
-    def read_board_reg(self, reg_address, retries=5):
+    def read_board_reg(self, reg_address, retries=5, timeout=None):
         """
         Read from a specified board register
         :param reg_address: address of register to read
@@ -1099,7 +1127,9 @@ class SkarabTransport(Transport):
         :return: data read from register
         """
         request = sd.ReadRegReq(sd.BOARD_REG, reg_address)
-        read_reg_resp = self.send_packet(request, retries=retries)
+        stime = time.time()
+        read_reg_resp = self.send_packet(request, retries=retries,
+                                         timeout=timeout)
         if read_reg_resp is None:
             raise ValueError('Got None reading board register '
                              '0x%010x' % reg_address)
@@ -2374,13 +2404,13 @@ class SkarabTransport(Transport):
         }
         return packet_count
 
-    def get_virtex7_firmware_version(self):
+    def get_virtex7_firmware_version(self, retries=20):
         """
         Read the version of the Virtex 7 firmware
         :return: golden_image, multiboot, firmware_major_version,
         firmware_minor_version
         """
-        reg_data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=20)
+        reg_data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=retries)
         if reg_data:
             firmware_major_version = (reg_data >> 16) & 0x3fff
             firmware_minor_version = reg_data & 0xffff

@@ -4,8 +4,13 @@ import logging
 import zlib
 import hashlib
 from math import ceil
+import subprocess
+import time
+import socket
 
+from network import IpAddress
 import skarab_definitions as sd
+from utils import threaded_fpga_operation as thop
 
 LOGGER = logging.getLogger(__name__)
 
@@ -408,7 +413,7 @@ def convert_bit_to_bin(bit_file, extract_to_disk=False):
     return bitstream
 
 
-def extract_bitstream(filename, extract_to_disk=False):
+def extract_bitstream(filename, extract_to_disk=False, binname=None):
     """
     Loads fpg file extracts bin file. Also checks if
     the bin file is compressed and decompresses it.
@@ -443,7 +448,10 @@ def extract_bitstream(filename, extract_to_disk=False):
     # write binary file to disk?
     if extract_to_disk:
         # write to bin file
-        bin_file = open(name + '.bin', 'wb')
+        if binname is not None:
+            bin_file = open(binname, 'wb')
+        else:
+            bin_file = open(name + '.bin', 'wb')
         bin_file.write(bitstream)
         bin_file.close()
         LOGGER.info('Output binary filename: {}'.format(name + '.bin'))
@@ -654,150 +662,135 @@ def calculate_checksum_using_bitstream(bitstream, packet_size=8192):
     return flash_write_checksum
 
 
-# import time
-# import random
-# import socket
-#
-#
-# def utrap(hostname, skarab_image):
-#
-#     def update_seq(seq_num):
-#         if seq_num >= 0xffff:
-#             seq_num = 0
-#         else:
-#             seq_num += 1
-#         return seq_num
-#
-#     def send_packet(request_object, seq_num, skarab_socket, port,
-#                     timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=5,):
-#         return SkarabTransport._send_packet(
-#             request_object, seq_num, skarab_socket=skarab_socket,
-#             port=port, timeout=timeout, retries=retries,
-#             hostname=hostname)
-#
-#     def send_image_chunk(seq_num, skarab_socket, port,
-#                          chunk_id, num_chunks, chunk_data):
-#         request = sd.SdramProgramWishboneReq(chunk_id, num_chunks,
-#                                              chunk_data)
-#         response = send_packet(request, seq_num, skarab_socket, port)
-#         return (response.packet['chunk_id'] == chunk_id) and \
-#                (response.packet['ack'] == 0)
-#
-#     upload_start_time = time.time()
-#     seq_num = random.randint(0, 0xffff)
-#
-#     try:
-#         skarab_image.chunks
-#     except AttributeError:
-#         skarab_image = SkarabImage(skarab_image)
-#         skarab_image.chunkify()
-#
-#     num_chunks = skarab_image.num_chunks()
-#     LOGGER.debug('Number of chunks to send: %i' % num_chunks)
-#
-#     skarab_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-#     skarab_socket.setblocking(0)
-#     skarab_port = (hostname, sd.ETHERNET_CONTROL_PORT_ADDRESS)
-#
-#     # send chunk zero - initialization chunk
-#     seq_num = update_seq(seq_num)
-#     init_success = send_image_chunk(
-#         seq_num, skarab_socket, skarab_port,
-#         chunk_id=0, num_chunks=num_chunks,
-#         chunk_data=skarab_image.chunks[0])
-#     if not init_success:
-#         errmsg = 'Failed to transmit SDRAM programming initialization ' \
-#                  'packet.'
-#         raise sd.SkarabProgrammingError(errmsg)
-#
-#     # send other chunks
-#     for chunk_number in range(1, num_chunks):
-#         LOGGER.debug('Sending chunk {}\n'.format(chunk_number))
-#
-#         seq_num = update_seq(seq_num)
-#         chunk_transmit_success = send_image_chunk(
-#             seq_num, skarab_socket, skarab_port,
-#             chunk_id=chunk_number + 1, num_chunks=num_chunks,
-#             chunk_data=skarab_image.chunks[chunk_number])
-#
-#         if not chunk_transmit_success:
-#             errmsg = 'Transmission of chunk %d failed. Programming ' \
-#                      'failed.' % chunk_number
-#             LOGGER.error(errmsg)
-#
-#             request = sd.SdramReconfigureReq(
-#                 sd.SDRAM_PROGRAM_MODE, True, False, False, False, False,
-#                 True, False, False, False, 0, 0)
-#             seq_num = update_seq(seq_num)
-#             send_packet(request, seq_num, skarab_socket, skarab_port)
-#             raise sd.SkarabProgrammingError(errmsg)
-#     LOGGER.debug('All images chunks transmitted successfully!')
-#
-#     # checksum_match = True
-#     # if skarab_image.checksum:
-#     #     # i.e. If the value is non-zero
-#     #     spartan_checksum = get_spartan_checksum()
-#     #     checksum_match = check_checksum(
-#     #         spartan_checksum=spartan_checksum,
-#     #         local_checksum=skarab_image.skarab_image)
-#     # else:
-#     #     debugmsg = 'Not verifying Spartan/upload checksum.'
-#     #     LOGGER.debug(debugmsg)
-#
-#     # if checksum_match:
-#     #     return True
-#     # else:
-#     #     errmsg = 'Checksum mismatch. Clearing SDRAM.'
-#     #     LOGGER.error(errmsg)
-#     #     request = sd.SdramReconfigureReq(
-#     #         sd.SDRAM_PROGRAM_MODE, True, False, False, False, False,
-#     #         True, False, False, False, 0, 0)
-#     #     seq_num = update_seq(seq_num)
-#     #     send_packet(request, seq_num, skarab_socket, skarab_port)
-#     #     raise sd.SkarabProgrammingError(errmsg)
-#
-#     upload_time = time.time() - upload_start_time
-#     LOGGER.debug('Uploaded bitstream in %.1f seconds.' % upload_time)
-#     reboot_start_time = time.time()
-#
-#     request = sd.SdramReconfigureReq(
-#         sd.SDRAM_PROGRAM_MODE, False, False, True, False, False,
-#         False, False, False, False, 0, 0)
-#     seq_num = update_seq(seq_num)
-#     send_packet(request, seq_num, skarab_socket, skarab_port)
-#
-#     # wait for board to come back up
-#     timeout = 100
-#     timeout = timeout + time.time()
-#     while timeout > time.time():
-#         if self.is_connected(retries=1):
-#             # # configure the mux back to user_date mode
-#             # self.config_prog_mux(user_data=1)
-#             [golden_image, multiboot, firmware_version] = \
-#                 get_virtex7_firmware_version()
-#             if golden_image == 0 and multiboot == 0:
-#                 reboot_time = time.time() - reboot_start_time
-#                 LOGGER.info(
-#                     '%s back up, in %.1f seconds (%.1f + %.1f) with FW '
-#                     'ver %s' % (self.host, upload_time + reboot_time,
-#                             upload_time, reboot_time, firmware_version))
-#                 return True
-#             elif golden_image == 1 and multiboot == 0:
-#                 LOGGER.error(
-#                     '%s back up, but fell back to golden image with '
-#                     'firmware version %s' % (self.host, firmware_version))
-#                 return False
-#             elif golden_image == 0 and multiboot == 1:
-#                 LOGGER.error(
-#                     '%s back up, but fell back to multiboot image with '
-#                     'firmware version %s' % (self.host, firmware_version))
-#                 return False
-#             else:
-#                 LOGGER.error(
-#                     '%s back up, but unknown image with firmware '
-#                     'version number %s' % (self.host, firmware_version))
-#                 return False
-#         time.sleep(0.1)
-#
-#     LOGGER.error('%s has not come back!' % self.host)
-#     return False
+def progska(fpgas, fpg_filename, timeout=200):
+    try:
+        subprocess.call(['progska', '-h'])
+    except OSError:
+        raise sd.SkarabProgrammingError('Could not find progska binary.')
+    binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
+    extract_bitstream(fpg_filename, True, binname)
+    upload_start = time.time()
+    hostnames = [fpga.host for fpga in fpgas]
+    spargs = ['progska', '-f', binname]
+    spargs.extend(hostnames)
+    p = subprocess.call(spargs)
+    os.remove(binname)
+    if p != 0:
+        raise sd.SkarabProgrammingError('progska returned code 1')
+    upload_time = time.time() - upload_start
+
+    def fpga_reboot(fpga):
+        fpga.transport._sdram_programmed = True
+        fpga.transport.boot_from_sdram()
+    thop(fpgas, 5, fpga_reboot)
+
+    # now wait for the last one to come up
+    # last_fpga = fpgas[-1]
+    timeout = timeout + time.time()
+    reboot_start_time = time.time()
+    reboot_time = -1
+    # last_fpga_okay = False
+    # last_fpga_connected = False
+    missing = [f for f in fpgas]
+    fpga_error = []
+    results = {}
+    loopctr = 0
+    while len(missing) > 0 and timeout > time.time():
+        # print(loopctr)
+        to_remove = []
+        for fpga in missing:
+            status_str = 'checking ' + fpga.host + ':'
+            # fpga.transport.skarab_ctrl_sock = socket.socket(socket.AF_INET,
+            #                                                 socket.SOCK_DGRAM)
+            # fpga.transport.skarab_ctrl_sock.setblocking(0)
+            if fpga.transport.is_connected(retries=1, timeout=0.01):
+                status_str += ' up, checking firmware'
+                result, firmware_version = \
+                    fpga.transport.check_running_firmware(retries=1)
+                to_remove.append(fpga)
+                if result:
+                    this_reboot_time = time.time() - reboot_start_time
+                    LOGGER.info(
+                        '%s back up, in %.1f seconds (%.1f + %.1f) with FW ver '
+                        '%s' % (fpga.host, upload_time + this_reboot_time,
+                                upload_time, this_reboot_time,
+                                firmware_version))
+                    results[fpga.host] = (
+                        upload_time, this_reboot_time,
+                        IpAddress(socket.gethostbyname(fpga.host))
+                    )
+                else:
+                    print(fpga.host, 'came back with ERROR')
+                    fpga_error.append(fpga)
+            else:
+                status_str += ' not yet ready'
+            # print(status_str)
+            # sys.stdout.flush()
+        for remove in to_remove:
+            # print('removed', remove.host)
+            missing.pop(missing.index(remove))
+        loopctr += 1
+    if len(fpga_error) > 0 or len(missing) > 0:
+        error_str = str([f.host for f in fpga_error])
+        error_str += str([f.host for f in missing])
+        # print('ERROR', error_str)
+        raise sd.SkarabProgrammingError('These FPGAs never came up correctly '
+                                        'after programming: '
+                                        '%s' % str(error_str))
+    reboot_time = time.time() - reboot_start_time
+    min_time = 1000
+    max_time = -1
+    for fhost, times in results.items():
+        max_time = max(times[1], max_time)
+        min_time = min(times[1], min_time)
+    # print('MIN MAX:', min_time, max_time)
+
+    # times_by_ip = [(int(res[2]), res) for res in results.values()]
+    # times_by_ip.sort(key=lambda val: val[0])
+    # for t in times_by_ip:
+    #     print(str(t[1][2]), t)
+    #
+    # print('&^%&^&^%&%&%&^%&^%&%&%&%&^%&^%&^%&^%&^%&^%&^%&^%&^%&^%&%')
+    #
+    # times_by_ip = [(int(res[2]), res) for res in results.values()]
+    # times_by_ip.sort(key=lambda val: val[1][1])
+    # for t in times_by_ip:
+    #     print(str(t[1][2]), t)
+
+    # while timeout > time.time():
+    #     if last_fpga.transport.is_connected():
+    #         last_fpga_connected = True
+    #         result, firmware_version = last_fpga.transport.check_running_firmware(retries=1)
+    #         if result:
+    #             reboot_time = time.time() - reboot_start_time
+    #             LOGGER.info(
+    #                 '%s back up, in %.1f seconds (%.1f + %.1f) with FW ver '
+    #                 '%s' % (last_fpga.host, upload_time + reboot_time,
+    #                         upload_time, reboot_time, firmware_version))
+    #             last_fpga_okay = True
+    #         break
+    #     time.sleep(0.1)
+    # if not last_fpga_connected:
+    #     raise sd.SkarabProgrammingError(
+    #         'Last FPGA never connected')
+    # if not last_fpga_okay:
+    #     raise sd.SkarabProgrammingError(
+    #         'Last FPGA was not ready before timeout')
+    # # now check all of them
+    # failed = []
+    # check_start = time.time()
+    # for fpga in fpgas[0:-2]:
+    #     result, firmware_version = fpga.transport.check_running_firmware(
+    #         retries=1)
+    #     if result:
+    #         LOGGER.info('%s back up with FW ver %s' % (fpga.host,
+    #                                                    firmware_version))
+    #     else:
+    #         failed.append(fpga.host)
+    # check_time = time.time() - check_start
+    # if len(failed) > 0:
+    #     raise sd.SkarabProgrammingError('These FPGAs never came up correctly '
+    #                                     'after programming: %s' % str(failed))
+    # print(upload_time, reboot_time)
+
+# end

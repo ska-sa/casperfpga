@@ -22,12 +22,27 @@ sd = casperfpga.skarab_definitions
 dnsmasq = ''
 hosts, lease_filename = corr2utils.hosts_from_dhcp_leases(host_pref='')
 print('Found %i roaches in %s.' % (len(hosts), lease_filename))
-for ctr, host in enumerate(hosts):
-    print('\t%03i: %s' % (ctr, host))
+# for ctr, host in enumerate(hosts):
+#     print('\t%03i: %s' % (ctr, host))
 results = {host: [0, 0] for host in hosts}
 results_details = {host: [] for host in hosts}
 loops = 10
 loopctr = 0
+
+# strip out hosts on leaf 16
+newhosts = []
+for idx, h in enumerate(hosts):
+    ip = socket.gethostbyname(h)
+    octet = ip[ip.index('.') + 1:]
+    octet = octet[octet.index('.') + 1:]
+    octet = octet[0:octet.index('.')]
+    if octet != '16':
+        # print('adding', ip, octet)
+        newhosts.append(h)
+    else:
+        # print('excluding', ip, octet)
+        pass
+hosts = newhosts
 
 
 def tic():
@@ -49,30 +64,31 @@ def toc():
         return -1
 
 
+# tic()
+# fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(hosts[-10:-1], best_effort=True)
+# print('%i: ' % len(fpgas), toc())
+#
+# tic()
+# fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(hosts[0:20], best_effort=True)
+# print('%i: ' % len(fpgas), toc())
+#
+# tic()
+# fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(hosts[0:50], best_effort=True)
+# print('%i: ' % len(fpgas), toc())
+#
+# tic()
+# fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(hosts[0:100], best_effort=True)
+# print('%i: ' % len(fpgas), toc())
+
 tic()
-fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(hosts[0:10])
-print('10: ', toc())
+fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(
+    hosts, timeout=2, best_effort=True)
+print('%i: ' % len(fpgas), toc())
 
-fpgas[5].upload_to_ram_and_program(
-    '/home/paulp/bofs/feng_ct_2017-12-16_0716.fpg')
-
+tic()
+casperfpga.skarab_fileops.progska(fpgas, '/home/paulp/bofs/feng_ct_2017-12-16_0716.fpg')
+print(toc())
 raise RuntimeError
-
-tic()
-fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(hosts[0:20])
-print('20: ', toc())
-
-tic()
-fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(hosts[0:50])
-print('50: ', toc())
-
-tic()
-fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(hosts[0:100])
-print('100: ', toc())
-
-tic()
-fpgas = casperfpga.utils.threaded_create_fpgas_from_hosts(hosts)
-print('ALL: ', toc())
 
 
 # # stripe

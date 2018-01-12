@@ -252,7 +252,7 @@ def program_fpgas(fpga_list, progfile, timeout=10):
 
 
 def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
-                                     port=7147, timeout=10):
+                                     port=7147, timeout=10, best_effort=False):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
     :param fpga_class: the class to insantiate, usually CasperFpga
@@ -293,8 +293,14 @@ def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
         for host in hosts_missing:
             LOGGER.error('Could not create host %s.' % host)
         errstr = 'Given %d hosts, only made %d CasperFpgas.' % (
-            num_hosts, len(fpgas))
+            num_hosts, num_hosts-len(hosts_missing))
         LOGGER.error(errstr)
+        if best_effort:
+            rv = []
+            for fpga in fpgas:
+                if fpga is not None:
+                    rv.append(fpga)
+            return rv
         raise RuntimeError(errstr)
     return fpgas
 
