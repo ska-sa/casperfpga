@@ -109,8 +109,7 @@ class SkarabTransport(Transport):
             LOGGER.info('Error connecting to %s: port%s' % (
                 self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS))
 
-        self.image_chunks, self.local_checksum = None, None
-
+        # self.image_chunks, self.local_checksum = None, None
         # TODO - add the one_gbe
         # self.gbes = []
         # self.gbes.append(FortyGbe(self, 0))
@@ -513,34 +512,17 @@ class SkarabTransport(Transport):
         to the stored one.
         :return: True if success
         """
-        upload_start_time = time.time()
-        # look for progska
-        try:
-            subprocess.call(['progska', '-h'])
-            use_c = True
-        except OSError:
-            use_c = False
-        if use_c:
-            binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
-            bitstream = skfops.extract_bitstream(filename, True, binname)
-            binfile = filename[0:-3] + 'bin'
-            p = subprocess.call(['progska', '-f', binname, self.host])
-            os.remove(binname)
-            if p != 0:
-                raise sd.SkarabProgrammingError('progska returned code 1')
-            self._sdram_programmed = True
-        else:
-            if filename is not None:
-                LOGGER.debug('Splitting file to chunks: %s.' % filename)
-                self.image_chunks, self.local_checksum = skfops.gen_image_chunks(
-                    filename, verify)
-            if self.image_chunks is None:
-                raise RuntimeError('%s: cannot upload with empty image '
-                                   'chunks.' % self.host)
-            self.upload_chunks_to_ram(image_chunks=self.image_chunks,
-                                      local_checksum=self.local_checksum)
-        self.image_chunks, self.local_checksum = None, None
-        upload_time = time.time() - upload_start_time
+        upload_time = skfops.upload_to_ram_progska(filename, [self])
+        # if filename is not None:
+        #     LOGGER.debug('Splitting file to chunks: %s.' % filename)
+        #     self.image_chunks, self.local_checksum = \
+        #         skfops.gen_image_chunks(filename, verify)
+        # if self.image_chunks is None:
+        #     raise RuntimeError('%s: cannot upload with empty image '
+        #                        'chunks.' % self.host)
+        # self.upload_chunks_to_ram(image_chunks=self.image_chunks,
+        #                           local_checksum=self.local_checksum)
+        # self.image_chunks, self.local_checksum = None, None
         LOGGER.debug('Uploaded bitstream in %.1f seconds.' % upload_time)
         return upload_time
 

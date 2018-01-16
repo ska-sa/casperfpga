@@ -1,6 +1,17 @@
-from setuptools import setup
-#from distutils.core import setup
+from distutils.core import setup, Extension
 import glob
+import sysconfig
+
+# extra_compile_args = sysconfig.get_config_var('CFLAGS').split()
+extra_compile_args = ['-O2', '-Wall']
+progska_extension = Extension(
+    'casperfpga.progska',
+    ['progska/_progska.c', 'progska/progska.c', 'progska/th.c',
+     'progska/netc.c'],
+    include_dirs=['progska'],
+    # extra_compile_args=extra_compile_args,
+    # extra_link_args=['-static'],
+)
 
 setup(
     name='casperfpga',
@@ -15,14 +26,16 @@ setup(
         'numpy',
         'odict',
     ],
-    provides=['casperfpga'],
-    packages=['casperfpga'],  # , 'casperfpga.test'],
-    package_dir={'casperfpga': 'src'},
-    package_data={'' : ['LMX2581*.txt']},
-    include_package_data=True,
+    # provides=['casperfpga'],
+    packages=['casperfpga', 'casperfpga.progska'],  # , 'casperfpga.test'],
+    package_dir={'casperfpga': 'src', 'casperfpga.progska': 'progska'},
+    # package_data={'': ['LMX2581*.txt']},
+    # package_data={'casperfpga.progska': ['progska/progska.so']},
+    # include_package_data=True,
     scripts=glob.glob('scripts/*'),
     setup_requires=['katversion'],
-    use_katversion=True
+    use_katversion=True,
+    ext_modules=[progska_extension],
 )
 
 # end

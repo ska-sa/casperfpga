@@ -11,6 +11,7 @@ import socket
 from network import IpAddress
 import skarab_definitions as sd
 from utils import threaded_fpga_operation as thop
+import progska
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +27,40 @@ class SkarabImage(object):
 
     def num_chunks(self):
         return len(self.chunks)
+
+
+def upload_to_ram_progska(filename, fpga_list):
+    """
+    Use the progska C extension to upload an image to a list of skarabs
+    :param filename: the fpg to upload
+    :param fpga_list: a list of the CasperFpga objects
+    :return:
+    """
+    import sys
+    upload_start_time = time.time()
+    binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
+    bitstream = extract_bitstream(filename, True, binname)
+    fpga_hosts = [fpga.host for fpga in fpga_list]
+    retval = 0
+    try:
+        retval = progska.upload(binname, fpga_hosts)
+    except RuntimeError as exc:
+        os.remove(binname)
+        raise sd.SkarabProgrammingError('progska returned '
+                                        'error: %s' % exc.message)
+    os.remove(binname)
+    if retval != 0:
+        raise sd.SkarabProgrammingError('progska returned nonzero '
+                                        'code: %i' % retval)
+    upload_time = time.time() - upload_start_time
+    LOGGER.debug('Uploaded bitstream to %s in %.1f seconds.' % (
+        fpga_hosts, upload_time))
+    for fpga in fpga_list:
+        try:
+            fpga.transport._sdram_programmed = True
+        except AttributeError:
+            pass
+    return upload_time
 
 
 def gen_image_chunks(filename, verify=True):
@@ -779,29 +814,42 @@ def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
     # print(upload_time, reboot_time)
 
 
-def progska(fpgas, fpg_filename, timeout=200, wait_for_reboot=True):
-    try:
-        subprocess.call(['progska', '-h'])
-    except OSError:
-        raise sd.SkarabProgrammingError('Could not find progska binary.')
-    binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
-    extract_bitstream(fpg_filename, True, binname)
-    upload_start = time.time()
-    hostnames = [fpga.host for fpga in fpgas]
-    spargs = ['progska', '-f', binname]
-    spargs.extend(hostnames)
-    p = subprocess.call(spargs)
-    os.remove(binname)
-    if p != 0:
-        raise sd.SkarabProgrammingError('progska returned code 1')
-    upload_time = time.time() - upload_start
-
+def reboot_skarabs_from_sdram(fpgas):
     def fpga_reboot(fpga):
-        fpga.transport._sdram_programmed = True
         fpga.transport.boot_from_sdram()
     thop(fpgas, 5, fpga_reboot)
 
-    if wait_for_reboot:
-        wait_after_reboot(fpgas, timeout, upload_time)
+# def progska(fpgas, fpg_filename, timeout=200, wait_for_reboot=True):
+#     upload_time = SkarabTransport.upload_to_ram_progska(fpg_filename, fpgas)
+#
+#
+#     try:
+#         subprocess.call(['progska', '-h'])
+#     except OSError:
+#         raise sd.SkarabProgrammingError('Could not find progska binary.')
+#     binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
+#     extract_bitstream(fpg_filename, True, binname)
+#     upload_start = time.time()
+#     hostnames = [fpga.host for fpga in fpgas]
+#     spargs = ['progska', '-f', binname]
+#     spargs.extend(hostnames)
+#     try:
+#         p = subprocess.call(spargs)
+#     except:
+#         raise sd.SkarabProgrammingError('Error running progska '
+#                                         'with: %s' % spargs)
+#     os.remove(binname)
+#     if p != 0:
+#         raise sd.SkarabProgrammingError('progska returned code 1 when '
+#                                         'run with: %s' % spargs)
+#     upload_time = time.time() - upload_start
+#
+#     def fpga_reboot(fpga):
+#         fpga.transport._sdram_programmed = True
+#         fpga.transport.boot_from_sdram()
+#     thop(fpgas, 5, fpga_reboot)
+#
+#     if wait_for_reboot:
+#         wait_after_reboot(fpgas, timeout, upload_time)
 
 # end
