@@ -512,7 +512,7 @@ class SkarabTransport(Transport):
         to the stored one.
         :return: True if success
         """
-        upload_time = skfops.upload_to_ram_progska(filename, [self])
+        upload_time = skfops.upload_to_ram_progska(filename, [self.parent])
         # if filename is not None:
         #     LOGGER.debug('Splitting file to chunks: %s.' % filename)
         #     self.image_chunks, self.local_checksum = \
@@ -1734,6 +1734,7 @@ class SkarabTransport(Transport):
         """
         # For completeness, make sure the input file is of a .bin disposition
         file_extension = os.path.splitext(filename)[1]
+        image_to_program = ''
 
         if file_extension == '.hex':
             LOGGER.info('.hex detected. Converting to .bin.')
@@ -1741,13 +1742,14 @@ class SkarabTransport(Transport):
         elif file_extension == '.bin':
             LOGGER.info('.bin file detected.')
             image_to_program = open(filename, 'rb').read()
+            # (result, image_to_program) = skfops.check_bitstream(filename)
         else:
             # File extension was neither .hex nor .bin
             errmsg = 'Please use .hex or .bin file to reconfigure Flash Memory'
             LOGGER.error(errmsg)
             raise sd.SkarabInvalidBitstream(errmsg)
 
-        (result, image_to_program) = skfops.check_bitstream(image_to_program)
+        (result, image_to_program) = skfops.check_bitstream(image_to_program, bitstream=True)
         if not result:
             errmsg = 'Incompatible .bin file detected.'
             LOGGER.error(errmsg)

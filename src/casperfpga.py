@@ -99,6 +99,7 @@ class CasperFpga(object):
             self.transport = transport(**kwargs)
         else:
             transport_class = choose_transport(self.host)
+            kwargs['parent_fpga'] = self
             self.transport = transport_class(**kwargs)
 
         # this is just for code introspection
