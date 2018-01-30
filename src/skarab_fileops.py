@@ -183,7 +183,8 @@ def prepare_image_progska(filename):
                                                return_binname=True)
     elif file_extension == '.bit':
         LOGGER.info('.bit file detected. Converting to .bin.')
-        (result, binname) = convert_bit_to_bin(filename, extract_to_disk=True)
+        (result, binname) = convert_bit_to_bin(filename, extract_to_disk=True,
+                                               return_binname=True)
     elif file_extension == '.bin':
         LOGGER.info('Reading .bin file.')
         (result, binname) = check_bitstream(filename, extract_to_disk=True)
