@@ -20,7 +20,6 @@ __date__ = 'April 2016'
 
 LOGGER = logging.getLogger(__name__)
 
-
 class SkarabSendPacketError(ValueError):
     pass
 
@@ -982,8 +981,10 @@ class SkarabTransport(Transport):
         if data_ready[0]:
             data = skarab_socket.recvfrom(4096)
             response_payload, address = data
+
             LOGGER.debug('%s: response from %s = %s' % (
                 hostname, str(address), repr(response_payload)))
+
             # check if response is from the expected SKARAB
             recvd_from_addr = address[0]
             expected_recvd_from_addr = socket.gethostbyname(hostname)
@@ -998,6 +999,26 @@ class SkarabTransport(Transport):
                 LOGGER.warning('%s: received unsupported opcode: 0xffff. '
                                'Discarding response.' % hostname)
                 return None
+            # check response packet size
+            if (len(response_payload)/2) != request_object.num_words:
+                LOGGER.warning("%s: incorrect response packet size. "
+                               "Discarding response" % hostname)
+
+                LOGGER.pdebug("Response packet not of correct size. "
+                              "Expected %i words, got %i words.\n "
+                              "Incorrect Response: %s" % (
+                               request_object.num_words,
+                               (len(response_payload)/2),
+                               repr(response_payload)))
+                LOGGER.pdebug("%s: command ID - expected (%i) got (%i)" %
+                              (hostname, request_object.type + 1,
+                               (struct.unpack('!H', response_payload[:2]))[0]))
+                LOGGER.pdebug("%s: sequence num - expected (%i) got (%i)" %
+                              (hostname, sequence_number,
+                               (struct.unpack('!H', response_payload[2:4]))[
+                                   0]))
+                return None
+
             # unpack the response before checking it
             response_object = request_object.response.from_raw_data(
                 response_payload, request_object.num_words,
