@@ -102,11 +102,11 @@ class SkarabTransport(Transport):
         self.sensor_data = {}
 
         # check if connected to host
-        if self.is_connected():
+        if self.is_connected(retries=10,timeout=2):
             LOGGER.info('%s: port(%s) created %s.' % (
                 self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS, '& connected'))
         else:
-            LOGGER.info('Error connecting to %s: port%s' % (
+            LOGGER.error('Error connecting to %s: port%s' % (
                 self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS))
 
         # self.image_chunks, self.local_checksum = None, None
@@ -1013,7 +1013,7 @@ class SkarabTransport(Transport):
                                    response_object.type))
                 return None
             elif response_object.seq_num != sequence_number:
-                LOGGER.warning('%s: incorrect sequence number in response. '
+                LOGGER.debug('%s: incorrect sequence number in response. '
                                'Expected(%i,%i), got(%i). Discarding '
                                'response.' % (
                                    hostname, sequence_number,
@@ -2490,7 +2490,7 @@ class SkarabTransport(Transport):
             errmsg = 'Error triggering reboot.'
             LOGGER.error(errmsg)
             raise SkarabSdramError(errmsg)
-        LOGGER.info('Rebooting from SDRAM.')
+        LOGGER.info('%s: Rebooting from SDRAM.'%self.host)
 
     def read_hmc_i2c(self, interface, slave_address, read_address,
                      format_print=False):

@@ -817,7 +817,13 @@ def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
 def reboot_skarabs_from_sdram(fpgas):
     def fpga_reboot(fpga):
         fpga.transport.boot_from_sdram()
-    thop(fpgas, 5, fpga_reboot)
+    #sometimes, the reboot response gets lost.
+    #can't re-request, cos by then uB has rebooted.
+    #application must check to see that correct image booted.
+    try:
+        thop(fpgas, 5, fpga_reboot)
+    except RuntimeError:
+        pass
 
 # def progska(fpgas, fpg_filename, timeout=200, wait_for_reboot=True):
 #     upload_time = SkarabTransport.upload_to_ram_progska(fpg_filename, fpgas)

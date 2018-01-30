@@ -65,8 +65,10 @@ def choose_transport(host_ip):
         return DummyTransport
     try:
         if SkarabTransport.test_host_type(host_ip):
+            LOGGER.debug('%s seems to be a SKARAB' % host_ip)
             return SkarabTransport
         elif TapcpTransport.test_host_type(host_ip):
+            LOGGER.debug('%s seems to be a TapcpTransport' % host_ip)
             return TapcpTransport
         else:
             LOGGER.debug('%s seems to be a ROACH' % host_ip)
