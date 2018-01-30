@@ -1,3 +1,4 @@
+import setuptools
 from distutils.core import setup, Extension
 import glob
 import sysconfig
@@ -13,7 +14,7 @@ progska_extension = Extension(
     # extra_link_args=['-static'],
 )
 
-setup(
+setuptools.setup(
     name='casperfpga',
     author='P.Prozesky',
     author_email='paulp@ska.ac.za',

@@ -38,8 +38,14 @@ def upload_to_ram_progska(filename, fpga_list):
     """
     import sys
     upload_start_time = time.time()
-    binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
-    bitstream = extract_bitstream(filename, True, binname)
+    # binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
+    # bitstream = extract_bitstream(filename, True, binname)
+
+    result, binname = prepare_image_progska(filename)
+    if not result:
+        # It would've broken earlier anyway
+        LOGGER.error('Unable to extract binary bitstream from input file {}'.format(filename))
+
     fpga_hosts = [fpga.host for fpga in fpga_list]
     retval = 0
     try:
@@ -56,10 +62,8 @@ def upload_to_ram_progska(filename, fpga_list):
     LOGGER.debug('Uploaded bitstream to %s in %.1f seconds.' % (
         fpga_hosts, upload_time))
     for fpga in fpga_list:
-        try:
-            fpga.transport._sdram_programmed = True
-        except AttributeError:
-            pass
+        fpga.transport._sdram_programmed = True
+
     return upload_time
 
 
@@ -160,39 +164,104 @@ def _upload_to_ram_prepare_image(filename):
     return image_to_program
 
 
-def check_bitstream(bitstream):
+def prepare_image_progska(filename):
+    """
+    Similar to _prepare_image above, but now storing the extracted/corrected bitstream
+    in temp storage to be used by C-utility.
+    :param filename:
+    :return:
+    """
+    # check file extension to see what we're dealing with
+    file_extension = os.path.splitext(filename)[1]
+    if file_extension == '.fpg':
+        LOGGER.info('.fpg detected. Extracting .bin.')
+        (result, binname) = extract_bitstream(filename, extract_to_disk=True,
+                                              return_binname=True)
+    elif file_extension == '.hex':
+        LOGGER.info('.hex detected. Converting to .bin.')
+        (result, binname) = convert_hex_to_bin(filename, extract_to_disk=True,
+                                               return_binname=True)
+    elif file_extension == '.bit':
+        LOGGER.info('.bit file detected. Converting to .bin.')
+        (result, binname) = convert_bit_to_bin(filename, extract_to_disk=True,
+                                               return_binname=True)
+    elif file_extension == '.bin':
+        LOGGER.info('Reading .bin file.')
+        (result, binname) = check_bitstream(filename, extract_to_disk=True)
+        if not result:
+            LOGGER.info('Incompatible .bin file.')
+    else:
+        raise TypeError('Invalid file type. Only use .fpg, .bit, '
+                        '.hex or .bin files')
+    # check the generated bitstream
+    # (result, image_to_program) = check_bitstream(image_to_program)
+    if not result:
+        errmsg = 'Incompatible image file. Cannot program SKARAB.'
+        LOGGER.error(errmsg)
+        raise sd.SkarabInvalidBitstream(errmsg)
+    LOGGER.info('Valid bitstream detected.')
+    return result, binname
+
+
+def check_bitstream(filename, bitstream=False, extract_to_disk=False):
     """
     Checks the bitstream to see if it is valid.
     i.e. if it contains a known, correct substring in its header
     If bitstream endianness is incorrect, byte-swap data and return
     altered bitstream
-    :param bitstream: Of the input (.bin) file to be checked
-    :return: tuple - (True/False, bitstream)
+    :param filename: Of the input (.bin) file to be checked
+    :param bitstream: Flag to indicate if the first param was a
+                      filename or bitstream
+    :return: tuple - (True/False, filename/bitstream)
     """
 
     # check if filename or bitstream:
-    # if '.bin' in bitstream:
-    #    # filename given
-    #    contents = open(bitstream, 'rb')
-    #    bitstream.close()
-    # else:
-    #    contents = bitstream
+    if bitstream:
+        contents = filename
+    else:
+        # filename given
+        f_in = open(filename, 'rb')
+        contents = f_in.read()
+        f_in.close()
 
     # bitstream = open(filename, 'rb').read()
     valid_string = '\xff\xff\x00\x00\x00\xdd\x88\x44\x00\x22\xff\xff'
 
     # check if the valid header substring exists
-    if bitstream.find(valid_string) == 30:
-        return True, bitstream
+    if contents.find(valid_string) == 30:
+        if bitstream:
+            return True, bitstream
+        else:
+            if extract_to_disk:
+                binname = os.path.splitext(filename)[0] + '_temp.bin'
+                # Need to write this to file, for new programming mechanism
+                bin_file = open(binname, 'wb')
+                bin_file.write(contents)
+                bin_file.close()
+                LOGGER.info('Output binary filename: {}'.format(binname))
+                return True, binname
+            return True, filename
     else:
         # Swap header endianness and compare again
         swapped_string = '\xff\xff\x00\x00\xdd\x00\x44\x88\x22\x00'
-        if bitstream.find(swapped_string) == 30:
+        if contents.find(swapped_string) == 30:
             # Input bitstream has its endianness swapped
-            reordered_bitstream = reorder_bytes_in_bitstream(bitstream)
-            return True, reordered_bitstream
+            reordered_bitstream = reorder_bytes_in_bitstream(contents)
+            reordered_binfilename = os.path.splitext(filename)[0] + '_reordered.bin'
+
+            if extract_to_disk:
+                # Need to write this to file, for new programming mechanism
+                bin_file = open(reordered_binfilename, 'wb')
+                bin_file.write(reordered_bitstream)
+                bin_file.close()
+                LOGGER.info('Output binary filename: {}'.format(reordered_binfilename + '.bin'))
+
+            if bitstream:
+                return True, reordered_bitstream
+            else:
+                return True, reordered_binfilename
         # else: Still problem
-        read_header = bitstream[30:41]
+        read_header = contents[30:41]
         LOGGER.error(
             'Incompatible bitstream detected.\nExpected header: {}\nRead '
             'header: {}'.format(repr(valid_string), repr(read_header)))
@@ -341,7 +410,7 @@ def compare_md5_checksums(filename):
     return True
 
 
-def convert_hex_to_bin(hex_file, extract_to_disk=False):
+def convert_hex_to_bin(hex_file, extract_to_disk=False, return_binname=False):
     # TODO: error checking/handling
     """
     Converts a hex file to a bin file with little endianness for
@@ -353,6 +422,7 @@ def convert_hex_to_bin(hex_file, extract_to_disk=False):
     """
     f_in = open(hex_file, 'rb')  # read from
     bitstream = ''  # blank string for bitstream
+    binname = os.path.splitext(hex_file)[0] + '_from_hex.bin'
     # for packing fpga image data into binary string use little endian
     packer = struct.Struct('<H')
     file_size = os.path.getsize(hex_file)
@@ -386,16 +456,19 @@ def convert_hex_to_bin(hex_file, extract_to_disk=False):
         bitstream += packer.pack(int(word, 16))  # pack into binary string
 
     if extract_to_disk:
-        out_filename = os.path.splitext(hex_file)[0] + '.bin'
-        f_out = open(out_filename, 'wb')  # write to
+        # out_filename = os.path.splitext(hex_file)[0] + '.bin'
+        f_out = open(binname, 'wb')  # write to
         f_out.write(bitstream)
         f_out.close()
-        LOGGER.info('Output binary filename: {}'.format(out_filename))
+        LOGGER.info('Output binary filename: {}'.format(binname))
 
-    return bitstream
+    if return_binname:
+        return True, binname
+
+    return True, bitstream
 
 
-def convert_bit_to_bin(bit_file, extract_to_disk=False):
+def convert_bit_to_bin(bit_file, extract_to_disk=False, return_binname=False):
     """
     Converts a .bit file to a .bin file for programming SKARAB. .bit files
     typically contain the .bin file with an additional prepended header.
@@ -413,6 +486,7 @@ def convert_bit_to_bin(bit_file, extract_to_disk=False):
     header_end = '\xff' * 32  # header identifer
 
     f_in = open(bit_file, 'rb')  # read from
+    binname = os.path.splitext(bit_file)[0] + '_from_bit.bin'
 
     # for unpacking data from bit file and repacking
     data_format = struct.Struct('!B')
@@ -439,26 +513,30 @@ def convert_bit_to_bin(bit_file, extract_to_disk=False):
         bitstream += packer(int('{:08b}'.format(unpacker(data[i])[0])[::-1]
                                 , 2))  # reverse bits each byte
     if extract_to_disk:
-        out_filename = os.path.splitext(bit_file)[0] + '_from_bit.bin'
-        f_out = open(out_filename, 'wb')  # write to
+        # out_filename = os.path.splitext(bit_file)[0] + '_from_bit.bin'
+        f_out = open(binname, 'wb')  # write to
         f_out.write(bitstream)  # write bitstream to file
         f_out.close()
-        LOGGER.info('Output binary filename: {}'.format(out_filename))
+        LOGGER.info('Output binary filename: {}'.format(binname))
 
-    return bitstream
+    if return_binname:
+        return True, binname
+
+    return True, bitstream
 
 
-def extract_bitstream(filename, extract_to_disk=False, binname=None):
+def extract_bitstream(filename, extract_to_disk=False, return_binname=False):
     """
     Loads fpg file extracts bin file. Also checks if
     the bin file is compressed and decompresses it.
     :param filename: fpg file to load
+    :param return_binname: flag whether to return binary filename
     :param extract_to_disk: flag whether or not bin file is extracted
     to harddisk
     :return: bitstream
     """
     # get design name
-    name = os.path.splitext(filename)[0]
+    binname = os.path.splitext(filename)[0] + '_from_fpg.bin'
 
     fpg_file = open(filename, 'r')
     fpg_contents = fpg_file.read()
@@ -483,15 +561,16 @@ def extract_bitstream(filename, extract_to_disk=False, binname=None):
     # write binary file to disk?
     if extract_to_disk:
         # write to bin file
-        if binname is not None:
-            bin_file = open(binname, 'wb')
-        else:
-            bin_file = open(name + '.bin', 'wb')
+        LOGGER.info('Extracting binary bitstream to disk...')
+        bin_file = open(binname, 'wb')
         bin_file.write(bitstream)
         bin_file.close()
-        LOGGER.info('Output binary filename: {}'.format(name + '.bin'))
+        LOGGER.info('Output binary filename: {}'.format(binname))
 
-    return bitstream
+    if return_binname:
+        return True, binname
+
+    return True, bitstream
 
 
 def configure_magic_flash_byte():
@@ -817,7 +896,13 @@ def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
 def reboot_skarabs_from_sdram(fpgas):
     def fpga_reboot(fpga):
         fpga.transport.boot_from_sdram()
-    thop(fpgas, 5, fpga_reboot)
+    #sometimes, the reboot response gets lost.
+    #can't re-request, cos by then uB has rebooted.
+    #application must check to see that correct image booted.
+    try:
+        thop(fpgas, 5, fpga_reboot)
+    except RuntimeError:
+        pass
 
 # def progska(fpgas, fpg_filename, timeout=200, wait_for_reboot=True):
 #     upload_time = SkarabTransport.upload_to_ram_progska(fpg_filename, fpgas)

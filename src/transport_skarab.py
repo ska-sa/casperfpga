@@ -20,7 +20,6 @@ __date__ = 'April 2016'
 
 LOGGER = logging.getLogger(__name__)
 
-
 class SkarabSendPacketError(ValueError):
     pass
 
@@ -118,11 +117,11 @@ class SkarabTransport(Transport):
         self.sensor_data = {}
 
         # check if connected to host
-        if self.is_connected():
+        if self.is_connected(retries=10,timeout=2):
             LOGGER.info('%s: port(%s) created %s.' % (
                 self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS, '& connected'))
         else:
-            LOGGER.info('Error connecting to %s: port%s' % (
+            LOGGER.error('Error connecting to %s: port%s' % (
                 self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS))
 
         # self.image_chunks, self.local_checksum = None, None
@@ -528,7 +527,7 @@ class SkarabTransport(Transport):
         to the stored one.
         :return: True if success
         """
-        upload_time = skfops.upload_to_ram_progska(filename, [self])
+        upload_time = skfops.upload_to_ram_progska(filename, [self.parent])
         # if filename is not None:
         #     LOGGER.debug('Splitting file to chunks: %s.' % filename)
         #     self.image_chunks, self.local_checksum = \
@@ -998,8 +997,10 @@ class SkarabTransport(Transport):
         if data_ready[0]:
             data = skarab_socket.recvfrom(4096)
             response_payload, address = data
+
             LOGGER.debug('%s: response from %s = %s' % (
                 hostname, str(address), repr(response_payload)))
+
             # check if response is from the expected SKARAB
             recvd_from_addr = address[0]
             expected_recvd_from_addr = socket.gethostbyname(hostname)
@@ -1014,6 +1015,26 @@ class SkarabTransport(Transport):
                 LOGGER.warning('%s: received unsupported opcode: 0xffff. '
                                'Discarding response.' % hostname)
                 return None
+            # check response packet size
+            if (len(response_payload)/2) != request_object.num_words:
+                LOGGER.warning("%s: incorrect response packet size. "
+                               "Discarding response" % hostname)
+
+                LOGGER.pdebug("Response packet not of correct size. "
+                              "Expected %i words, got %i words.\n "
+                              "Incorrect Response: %s" % (
+                               request_object.num_words,
+                               (len(response_payload)/2),
+                               repr(response_payload)))
+                LOGGER.pdebug("%s: command ID - expected (%i) got (%i)" %
+                              (hostname, request_object.type + 1,
+                               (struct.unpack('!H', response_payload[:2]))[0]))
+                LOGGER.pdebug("%s: sequence num - expected (%i) got (%i)" %
+                              (hostname, sequence_number,
+                               (struct.unpack('!H', response_payload[2:4]))[
+                                   0]))
+                return None
+
             # unpack the response before checking it
             response_object = request_object.response.from_raw_data(
                 response_payload, request_object.num_words,
@@ -1029,7 +1050,7 @@ class SkarabTransport(Transport):
                                    response_object.type))
                 return None
             elif response_object.seq_num != sequence_number:
-                LOGGER.warning('%s: incorrect sequence number in response. '
+                LOGGER.debug('%s: incorrect sequence number in response. '
                                'Expected(%i,%i), got(%i). Discarding '
                                'response.' % (
                                    hostname, sequence_number,
@@ -1750,6 +1771,7 @@ class SkarabTransport(Transport):
         """
         # For completeness, make sure the input file is of a .bin disposition
         file_extension = os.path.splitext(filename)[1]
+        image_to_program = ''
 
         if file_extension == '.hex':
             LOGGER.info('.hex detected. Converting to .bin.')
@@ -1757,13 +1779,14 @@ class SkarabTransport(Transport):
         elif file_extension == '.bin':
             LOGGER.info('.bin file detected.')
             image_to_program = open(filename, 'rb').read()
+            # (result, image_to_program) = skfops.check_bitstream(filename)
         else:
             # File extension was neither .hex nor .bin
             errmsg = 'Please use .hex or .bin file to reconfigure Flash Memory'
             LOGGER.error(errmsg)
             raise sd.SkarabInvalidBitstream(errmsg)
 
-        (result, image_to_program) = skfops.check_bitstream(image_to_program)
+        (result, image_to_program) = skfops.check_bitstream(image_to_program, bitstream=True)
         if not result:
             errmsg = 'Incompatible .bin file detected.'
             LOGGER.error(errmsg)
@@ -2506,7 +2529,7 @@ class SkarabTransport(Transport):
             errmsg = 'Error triggering reboot.'
             LOGGER.error(errmsg)
             raise SkarabSdramError(errmsg)
-        LOGGER.info('Rebooting from SDRAM.')
+        LOGGER.info('%s: Rebooting from SDRAM.'%self.host)
 
     def read_hmc_i2c(self, interface, slave_address, read_address,
                      format_print=False):
