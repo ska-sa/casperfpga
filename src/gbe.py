@@ -1,7 +1,7 @@
 import logging
 
 from network import Mac, IpAddress
-from utils import check_changing_status
+from utils import check_changing_status, CheckCounter
 
 LOGGER = logging.getLogger(__name__)
 
@@ -187,17 +187,16 @@ class Gbe(object):
         """
         if checks < 2:
             raise RuntimeError('Cannot check less often than twice?')
-        fields = {
-            # name, required, True=same|False=different
-            self.name + '_rxctr': (True, False),
-            self.name + '_rxfullctr': (False, True),
-            self.name + '_rxofctr': (False, True),
-            self.name + '_rxerrctr': (False, True),
-            self.name + '_rxbadctr': (False, True),
-            self.name + '_rxvldctr': (False, False),
-        }
-        result, message = check_changing_status(fields, self.read_rx_counters,
-                                                wait_time, checks)
+        fields = [
+            CheckCounter(self.name + '_rxctr', True, True),
+            CheckCounter(self.name + '_rxfullctr', False),
+            CheckCounter(self.name + '_rxofctr', False),
+            CheckCounter(self.name + '_rxerrctr', False),
+            CheckCounter(self.name + '_rxbadctr', False),
+            CheckCounter(self.name + '_rxvldctr'),
+        ]
+        result, message = check_changing_status(
+            fields, self.read_rx_counters, wait_time, checks)
         if not result:
             LOGGER.error('%s: %s' % (self.fullname, message))
             return False
@@ -214,15 +213,14 @@ class Gbe(object):
         if checks < 2:
             raise RuntimeError('Cannot check less often than twice?')
         fields = {
-            # name, required, True=same|False=different
-            self.name + '_txctr': (True, False),
-            self.name + '_txfullctr': (False, True),
-            self.name + '_txofctr': (False, True),
-            self.name + '_txerrctr': (False, True),
-            self.name + '_txvldctr': (False, False),
+            CheckCounter(self.name + '_txctr', True, True),
+            CheckCounter(self.name + '_txfullctr', False),
+            CheckCounter(self.name + '_txofctr', False),
+            CheckCounter(self.name + '_txerrctr', False),
+            CheckCounter(self.name + '_txvldctr'),
         }
-        result, message = check_changing_status(fields, self.read_tx_counters,
-                                                wait_time, checks)
+        result, message = check_changing_status(
+            fields, self.read_tx_counters, wait_time, checks)
         if not result:
             LOGGER.error('%s: %s' % (self.fullname, message))
             return False

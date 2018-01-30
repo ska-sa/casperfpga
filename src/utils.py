@@ -7,6 +7,22 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 
+class CheckCounter(object):
+
+    def __init__(self, name, must_change=True, required=False):
+        """
+
+        :param name: the name of the counter
+        :param must_change: this counter should be changing
+        :param required: is this counter required?
+        """
+        self.name = name
+        self.must_change = must_change
+        self.required = required
+        self.data = None
+        self.changed = False
+
+
 def create_meta_dictionary(metalist):
     """
     Build a meta information dictionary from a provided raw meta info list.
@@ -162,24 +178,22 @@ def pull_info_from_fpg(fpg_file, parameter):
     return match
 
 
-def check_changing_status(field_dict, data_function,
-                          wait_time, num_checks):
+def check_changing_status(counters, data_function, wait_time, num_checks):
     """
     Check a changing set of status fields.
-    :param field_dict: field descriptions {name: (required, constant)}
+    :param counters: a list of CheckCounters
     :param data_function: a function that will return a single value for the
     fields from field_dict
     :param wait_time: seconds to wait between calls to data_function
     :param num_checks: times to run data_function
     :return:
     """
-    # fields = {
-    #     # name, required, True=same|False=different
-    #     'test_required_diff': (True, False),
-    #     'test_required_same': (True, True),
-    #     'test_diff': (True, False),
-    #     'test_same': (True, True),
-    # }
+    # fields = [
+    #     CheckCounter('test_required_diff', False, True),
+    #     CheckCounter('test_required_same', True, True),
+    #     CheckCounter('test_diff', False, True),
+    #     CheckCounter('test_same', True, True),
+    # ]
     #
     # def get_data():
     #     res = {}
@@ -188,42 +202,43 @@ def check_changing_status(field_dict, data_function,
     #     res['test_diff'] = time.time()
     #     res['test_same'] = 654321
     #     return res
-
+    if num_checks < 2:
+        raise ValueError('num_checks of less than two makes no sense')
     # check that required data fields are returned by the data function
     change_required = {}
     d = data_function()
-    checked_fields = field_dict.copy()
-    for f in checked_fields.keys():
-        req = checked_fields[f][0]
-        if f not in d.keys():
-            if req:
-                return False, 'required field %s not found' % f
-            else:
-                checked_fields.pop(f)
+    to_remove = []
+    for checkctr in counters:
+        if checkctr.name not in d:
+            if checkctr.required:
+                return False, 'required field %s not found' % checkctr.name
+            to_remove.append(checkctr.name)
         else:
-            if not checked_fields[f][1]:
-                change_required[f] = False
-    # collect data, checking fields while we're at it
-    prev_data = [d]
+            checkctr.data = d[checkctr.name]
+    for name in to_remove:
+        for idx, checkctr in enumerate(counters):
+            if checkctr.name == name:
+                counters.pop(idx)
+                break
     time.sleep(wait_time)
-    for loop in range(num_checks-1):
-        d = data_function()
-        for f in checked_fields.keys():
-            same_reqd = checked_fields[f][1]
-            for pd in prev_data:
-                value_the_same = pd[f] == d[f]
-                if not value_the_same:
-                    if same_reqd:
-                        return False, '%s changing: %.3f > %.3f' % (
-                            f, pd[f], d[f])
-                    else:
-                        change_required[f] = True
-        prev_data.append(d)
+    for loop in range(num_checks - 1):
+        dnew = data_function()
+        for checkctr in counters:
+            ctrnew = dnew[checkctr.name]
+            if checkctr.must_change:
+                # must change
+                if ctrnew != checkctr.data:
+                    checkctr.changed = True
+            else:
+                # must stay the same
+                if ctrnew != checkctr.data:
+                    return False, '%s changing: %.3f > %.3f' % (
+                        checkctr.name, checkctr.data, ctrnew)
         time.sleep(wait_time)
-    # did the necessary fields change
-    for f in change_required:
-        if not change_required[f]:
-            return False, '%s is not changing: %.3f' % (f, prev_data[0][f])
+    for checkctr in counters:
+        if checkctr.must_change and (not checkctr.changed):
+            return False, '%s is not changing: %.3f' % (
+                checkctr.name, checkctr.data)
     return True, ''
 
 
@@ -252,13 +267,15 @@ def program_fpgas(fpga_list, progfile, timeout=10):
 
 
 def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
-                                     port=7147, timeout=10, best_effort=False):
+                                     port=7147, timeout=10,
+                                     best_effort=False):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
     :param fpga_class: the class to insantiate, usually CasperFpga
     :param host_list: a comma-seperated list of hosts
     :param port: the port on which to do network comms
     :param timeout: how long to wait, in seconds
+    :param best_effort: return as many hosts as it was possible to make
     :return:
     """
     if fpga_class is None:
@@ -477,3 +494,5 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         returnval[fpga_.host] = frv
         fpga_.nb_pop_request_by_id(request_id)
     return returnval
+
+# end

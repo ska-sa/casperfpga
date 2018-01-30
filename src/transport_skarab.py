@@ -57,6 +57,22 @@ class SkarabResponseNotReceivedError(RuntimeError):
     pass
 
 
+class SkarabReorderWarning(ValueError):
+    pass
+
+
+class SkarabReorderError(ValueError):
+    pass
+
+
+class SkarabSpeadWarning(ValueError):
+    pass
+
+
+class SkarabSpeadError(ValueError):
+    pass
+
+
 class SkarabTransport(Transport):
     """
     The network transport for a SKARAB-type interface.
@@ -2219,7 +2235,7 @@ class SkarabTransport(Transport):
         :param input_byte: to be byte-swapped/mirrored
         :return: Reversed-byte
         """
-        #TODO: clean this function up, better way to do this
+        # TODO: clean this function up, better way to do this
         mirrored_byte = 0x0
         if (input_byte & 0x01) == 0x01:
             mirrored_byte = mirrored_byte | 0x80
