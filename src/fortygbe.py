@@ -205,15 +205,14 @@ class FortyGbe(Gbe):
         }
         possible_addresses = [int(returnval['multicast']['base_ip'])]
         mask_int = int(returnval['multicast']['ip_mask'])
-        # TODO
-        # for ctr in range(32):
-        #     mask_bit = (mask_int >> ctr) & 1
-        #     if not mask_bit:
-        #         new_ips = []
-        #         for ip in possible_addresses:
-        #             new_ips.append(ip & (~(1 << ctr)))
-        #             new_ips.append(new_ips[-1] | (1 << ctr))
-        #         possible_addresses.extend(new_ips)
+        for ctr in range(32):
+            mask_bit = (mask_int >> ctr) & 1
+            if not mask_bit:
+                new_ips = []
+                for ip in possible_addresses:
+                    new_ips.append(ip & (~(1 << ctr)))
+                    new_ips.append(new_ips[-1] | (1 << ctr))
+                possible_addresses.extend(new_ips)
         returnval['multicast']['rx_ips'] = []
         tmp = list(set(possible_addresses))
         for ip in tmp:

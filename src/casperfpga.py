@@ -19,6 +19,16 @@ from transport_dummy import DummyTransport
 
 LOGGER = logging.getLogger(__name__)
 
+# define a custom log level between DEBUG and INFO
+PDEBUG = 15
+logging.addLevelName(PDEBUG, "PDEBUG")
+
+
+def pdebug(self, message, *args, **kwargs):
+    if self.isEnabledFor(PDEBUG):
+        self.log(PDEBUG, message, *args, **kwargs)
+logging.Logger.pdebug = pdebug
+
 # known CASPER memory-accessible devices and their associated
 # classes and containers
 CASPER_MEMORY_DEVICES = {
@@ -65,8 +75,10 @@ def choose_transport(host_ip):
         return DummyTransport
     try:
         if SkarabTransport.test_host_type(host_ip):
+            LOGGER.debug('%s seems to be a SKARAB' % host_ip)
             return SkarabTransport
         elif TapcpTransport.test_host_type(host_ip):
+            LOGGER.debug('%s seems to be a TapcpTransport' % host_ip)
             return TapcpTransport
         else:
             LOGGER.debug('%s seems to be a ROACH' % host_ip)
