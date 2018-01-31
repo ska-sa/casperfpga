@@ -107,11 +107,11 @@ class CasperFpga(object):
                 pass
         self.host, self.bitstream = get_hostname(**kwargs)
         transport = get_kwarg('transport', kwargs)
+        kwargs['parent_fpga'] = self
         if transport:
             self.transport = transport(**kwargs)
         else:
             transport_class = choose_transport(self.host)
-            kwargs['parent_fpga'] = self
             self.transport = transport_class(**kwargs)
 
         # this is just for code introspection
