@@ -184,6 +184,8 @@ class CasperFpga(object):
         if filename is not None:
             self.bitstream = filename
         elif image_chunks is not None:
+            raise DeprecationWarning('Using image chunks is deprecated since'
+                                     'progska came along.')
             self.transport.image_chunks = image_chunks
         else:
             filename = self.bitstream
