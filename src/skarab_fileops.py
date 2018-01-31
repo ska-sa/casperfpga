@@ -2,9 +2,12 @@ import os
 import struct
 import logging
 import time
+import socket
 
 import skarab_definitions as sd
 import progska
+from utils import threaded_fpga_operation as thop
+from network import IpAddress
 
 LOGGER = logging.getLogger(__name__)
 
@@ -488,166 +491,132 @@ def upload_to_ram_progska(filename, fpga_list):
 #     return flash_write_checksum
 
 
-# def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
-#     """
-#
-#     :param fpgas:
-#     :param timeout:
-#     :param upload_time
-#     :return:
-#     """
-#     # now wait for the last one to come up
-#     # last_fpga = fpgas[-1]
-#     timeout = timeout + time.time()
-#     reboot_start_time = time.time()
-#     reboot_time = -1
-#     # last_fpga_okay = False
-#     # last_fpga_connected = False
-#     missing = [f for f in fpgas]
-#     fpga_error = []
-#     results = {}
-#     loopctr = 0
-#     while len(missing) > 0 and timeout > time.time():
-#         # print(loopctr)
-#         to_remove = []
-#         for fpga in missing:
-#             status_str = 'checking ' + fpga.host + ':'
-#             # fpga.transport.skarab_ctrl_sock = socket.socket(socket.AF_INET,
-#             #                                                 socket.SOCK_DGRAM)
-#             # fpga.transport.skarab_ctrl_sock.setblocking(0)
-#             if fpga.transport.is_connected(retries=1, timeout=0.01):
-#                 status_str += ' up, checking firmware'
-#                 result, firmware_version = \
-#                     fpga.transport.check_running_firmware(retries=1)
-#                 to_remove.append(fpga)
-#                 if result:
-#                     this_reboot_time = time.time() - reboot_start_time
-#                     LOGGER.info(
-#                         '%s back up, in %.1f seconds (%.1f + %.1f) with FW ver '
-#                         '%s' % (fpga.host, upload_time + this_reboot_time,
-#                                 upload_time, this_reboot_time,
-#                                 firmware_version))
-#                     results[fpga.host] = (
-#                         upload_time, this_reboot_time,
-#                         IpAddress(socket.gethostbyname(fpga.host))
-#                     )
-#                 else:
-#                     print(fpga.host, 'came back with ERROR')
-#                     fpga_error.append(fpga)
-#             else:
-#                 status_str += ' not yet ready'
-#             # print(status_str)
-#             # sys.stdout.flush()
-#         for remove in to_remove:
-#             # print('removed', remove.host)
-#             missing.pop(missing.index(remove))
-#         loopctr += 1
-#     if len(fpga_error) > 0 or len(missing) > 0:
-#         error_str = str([f.host for f in fpga_error])
-#         error_str += str([f.host for f in missing])
-#         # print('ERROR', error_str)
-#         raise sd.SkarabProgrammingError('These FPGAs never came up correctly '
-#                                         'after programming: '
-#                                         '%s' % str(error_str))
-#     reboot_time = time.time() - reboot_start_time
-#     min_time = 1000
-#     max_time = -1
-#     for fhost, times in results.items():
-#         max_time = max(times[1], max_time)
-#         min_time = min(times[1], min_time)
-#     # print('MIN MAX:', min_time, max_time)
-#
-#     # times_by_ip = [(int(res[2]), res) for res in results.values()]
-#     # times_by_ip.sort(key=lambda val: val[0])
-#     # for t in times_by_ip:
-#     #     print(str(t[1][2]), t)
-#     #
-#     # print('&^%&^&^%&%&%&^%&^%&%&%&%&^%&^%&^%&^%&^%&^%&^%&^%&^%&^%&%')
-#     #
-#     # times_by_ip = [(int(res[2]), res) for res in results.values()]
-#     # times_by_ip.sort(key=lambda val: val[1][1])
-#     # for t in times_by_ip:
-#     #     print(str(t[1][2]), t)
-#
-#     # while timeout > time.time():
-#     #     if last_fpga.transport.is_connected():
-#     #         last_fpga_connected = True
-#     #         result, firmware_version = last_fpga.transport.check_running_firmware(retries=1)
-#     #         if result:
-#     #             reboot_time = time.time() - reboot_start_time
-#     #             LOGGER.info(
-#     #                 '%s back up, in %.1f seconds (%.1f + %.1f) with FW ver '
-#     #                 '%s' % (last_fpga.host, upload_time + reboot_time,
-#     #                         upload_time, reboot_time, firmware_version))
-#     #             last_fpga_okay = True
-#     #         break
-#     #     time.sleep(0.1)
-#     # if not last_fpga_connected:
-#     #     raise sd.SkarabProgrammingError(
-#     #         'Last FPGA never connected')
-#     # if not last_fpga_okay:
-#     #     raise sd.SkarabProgrammingError(
-#     #         'Last FPGA was not ready before timeout')
-#     # # now check all of them
-#     # failed = []
-#     # check_start = time.time()
-#     # for fpga in fpgas[0:-2]:
-#     #     result, firmware_version = fpga.transport.check_running_firmware(
-#     #         retries=1)
-#     #     if result:
-#     #         LOGGER.info('%s back up with FW ver %s' % (fpga.host,
-#     #                                                    firmware_version))
-#     #     else:
-#     #         failed.append(fpga.host)
-#     # check_time = time.time() - check_start
-#     # if len(failed) > 0:
-#     #     raise sd.SkarabProgrammingError('These FPGAs never came up correctly '
-#     #                                     'after programming: %s' % str(failed))
-#     # print(upload_time, reboot_time)
+def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
+    """
+
+    :param fpgas:
+    :param timeout:
+    :param upload_time
+    :return:
+    """
+    # now wait for the last one to come up
+    # last_fpga = fpgas[-1]
+    timeout = timeout + time.time()
+    reboot_start_time = time.time()
+    # last_fpga_okay = False
+    # last_fpga_connected = False
+    missing = [f for f in fpgas]
+    fpga_error = []
+    results = {}
+    loopctr = 0
+    while len(missing) > 0 and timeout > time.time():
+        # print(loopctr)
+        to_remove = []
+        for fpga in missing:
+            status_str = 'checking ' + fpga.host + ':'
+            # fpga.transport.skarab_ctrl_sock = socket.socket(socket.AF_INET,
+            #                                                 socket.SOCK_DGRAM)
+            # fpga.transport.skarab_ctrl_sock.setblocking(0)
+            if fpga.transport.is_connected(retries=1, timeout=0.01):
+                status_str += ' up, checking firmware'
+                result, firmware_version = \
+                    fpga.transport.check_running_firmware(retries=1)
+                to_remove.append(fpga)
+                if result:
+                    this_reboot_time = time.time() - reboot_start_time
+                    LOGGER.info(
+                        '%s back up, in %.1f seconds (%.1f + %.1f) with FW ver '
+                        '%s' % (fpga.host, upload_time + this_reboot_time,
+                                upload_time, this_reboot_time,
+                                firmware_version))
+                    results[fpga.host] = (
+                        upload_time, this_reboot_time,
+                        IpAddress(socket.gethostbyname(fpga.host))
+                    )
+                else:
+                    print(fpga.host, 'came back with ERROR')
+                    fpga_error.append(fpga)
+            else:
+                status_str += ' not yet ready'
+            # print(status_str)
+            # sys.stdout.flush()
+        for remove in to_remove:
+            # print('removed', remove.host)
+            missing.pop(missing.index(remove))
+        loopctr += 1
+    if len(fpga_error) > 0 or len(missing) > 0:
+        error_str = str([f.host for f in fpga_error])
+        error_str += str([f.host for f in missing])
+        # print('ERROR', error_str)
+        raise sd.SkarabProgrammingError('These FPGAs never came up correctly '
+                                        'after programming: '
+                                        '%s' % str(error_str))
+    reboot_time = time.time() - reboot_start_time
+    min_time = 1000
+    max_time = -1
+    for fhost, times in results.items():
+        max_time = max(times[1], max_time)
+        min_time = min(times[1], min_time)
+    # print('MIN MAX:', min_time, max_time)
+
+    # times_by_ip = [(int(res[2]), res) for res in results.values()]
+    # times_by_ip.sort(key=lambda val: val[0])
+    # for t in times_by_ip:
+    #     print(str(t[1][2]), t)
+    #
+    # print('&^%&^&^%&%&%&^%&^%&%&%&%&^%&^%&^%&^%&^%&^%&^%&^%&^%&^%&%')
+    #
+    # times_by_ip = [(int(res[2]), res) for res in results.values()]
+    # times_by_ip.sort(key=lambda val: val[1][1])
+    # for t in times_by_ip:
+    #     print(str(t[1][2]), t)
+
+    # while timeout > time.time():
+    #     if last_fpga.transport.is_connected():
+    #         last_fpga_connected = True
+    #         result, firmware_version = last_fpga.transport.check_running_firmware(retries=1)
+    #         if result:
+    #             reboot_time = time.time() - reboot_start_time
+    #             LOGGER.info(
+    #                 '%s back up, in %.1f seconds (%.1f + %.1f) with FW ver '
+    #                 '%s' % (last_fpga.host, upload_time + reboot_time,
+    #                         upload_time, reboot_time, firmware_version))
+    #             last_fpga_okay = True
+    #         break
+    #     time.sleep(0.1)
+    # if not last_fpga_connected:
+    #     raise sd.SkarabProgrammingError(
+    #         'Last FPGA never connected')
+    # if not last_fpga_okay:
+    #     raise sd.SkarabProgrammingError(
+    #         'Last FPGA was not ready before timeout')
+    # # now check all of them
+    # failed = []
+    # check_start = time.time()
+    # for fpga in fpgas[0:-2]:
+    #     result, firmware_version = fpga.transport.check_running_firmware(
+    #         retries=1)
+    #     if result:
+    #         LOGGER.info('%s back up with FW ver %s' % (fpga.host,
+    #                                                    firmware_version))
+    #     else:
+    #         failed.append(fpga.host)
+    # check_time = time.time() - check_start
+    # if len(failed) > 0:
+    #     raise sd.SkarabProgrammingError('These FPGAs never came up correctly '
+    #                                     'after programming: %s' % str(failed))
+    # print(upload_time, reboot_time)
 
 
-# def reboot_skarabs_from_sdram(fpgas):
-#     def fpga_reboot(fpga):
-#         fpga.transport.boot_from_sdram()
-#     #sometimes, the reboot response gets lost.
-#     #can't re-request, cos by then uB has rebooted.
-#     #application must check to see that correct image booted.
-#     try:
-#         thop(fpgas, 5, fpga_reboot)
-#     except RuntimeError:
-#         pass
-
-# def progska(fpgas, fpg_filename, timeout=200, wait_for_reboot=True):
-#     upload_time = SkarabTransport.upload_to_ram_progska(fpg_filename, fpgas)
-#
-#
-#     try:
-#         subprocess.call(['progska', '-h'])
-#     except OSError:
-#         raise sd.SkarabProgrammingError('Could not find progska binary.')
-#     binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
-#     extract_bitstream(fpg_filename, True, binname)
-#     upload_start = time.time()
-#     hostnames = [fpga.host for fpga in fpgas]
-#     spargs = ['progska', '-f', binname]
-#     spargs.extend(hostnames)
-#     try:
-#         p = subprocess.call(spargs)
-#     except:
-#         raise sd.SkarabProgrammingError('Error running progska '
-#                                         'with: %s' % spargs)
-#     os.remove(binname)
-#     if p != 0:
-#         raise sd.SkarabProgrammingError('progska returned code 1 when '
-#                                         'run with: %s' % spargs)
-#     upload_time = time.time() - upload_start
-#
-#     def fpga_reboot(fpga):
-#         fpga.transport._sdram_programmed = True
-#         fpga.transport.boot_from_sdram()
-#     thop(fpgas, 5, fpga_reboot)
-#
-#     if wait_for_reboot:
-#         wait_after_reboot(fpgas, timeout, upload_time)
+def reboot_skarabs_from_sdram(fpgas):
+    def fpga_reboot(fpga):
+        fpga.transport.boot_from_sdram()
+    # sometimes, the reboot response gets lost.
+    # can't re-request, cos by then uB has rebooted.
+    # application must check to see that correct image booted.
+    try:
+        thop(fpgas, 5, fpga_reboot)
+    except RuntimeError:
+        pass
 
 # end
