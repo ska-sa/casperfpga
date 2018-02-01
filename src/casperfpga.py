@@ -29,6 +29,7 @@ def pdebug(self, message, *args, **kwargs):
         self.log(PDEBUG, message, *args, **kwargs)
 logging.Logger.pdebug = pdebug
 
+
 # known CASPER memory-accessible devices and their associated
 # classes and containers
 CASPER_MEMORY_DEVICES = {
@@ -86,8 +87,9 @@ def choose_transport(host_ip):
     except socket.gaierror:
         raise RuntimeError('Address/host %s makes no sense to '
                            'the OS?' % host_ip)
-    except:
-        raise RuntimeError('Could not connect to %s' % host_ip)
+    except Exception as e:
+        raise RuntimeError('Could not connect to %s: %s' % (
+            host_ip, e.message))
 
 
 class CasperFpga(object):
@@ -106,8 +108,12 @@ class CasperFpga(object):
             except IndexError:
                 pass
         self.host, self.bitstream = get_hostname(**kwargs)
-        transport = get_kwarg('transport', kwargs)
+
+        # some transports, e.g. Skarab, need to know their parent
         kwargs['parent_fpga'] = self
+
+        # was the transport specified?
+        transport = get_kwarg('transport', kwargs)
         if transport:
             self.transport = transport(**kwargs)
         else:

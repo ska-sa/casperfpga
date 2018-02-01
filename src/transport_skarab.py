@@ -87,6 +87,13 @@ class SkarabTransport(Transport):
         :return: none
         """
         Transport.__init__(self, **kwargs)
+
+        try:
+            self.parent = kwargs['parent_fpga']
+        except KeyError:
+            raise RuntimeError('parent_fpga argument not supplied when '
+                               'creating %s.' % self.host)
+
         self.lock = Lock()
 
         # sequence number for control packets
@@ -664,6 +671,8 @@ class SkarabTransport(Transport):
         :param request_object
         :param timeout
         :param retries
+        :param skarab_socket
+        :param port
         :return:
         """
         with self.lock:

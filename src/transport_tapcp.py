@@ -75,7 +75,6 @@ class TapcpTransport(Transport):
         :return: none
         """
         Transport.__init__(self, **kwargs)
-
         self.t = tftpy.TftpClient(kwargs['host'], 69)
         self._logger = LOGGER
         self.timeout = kwargs.get('timeout', 3)

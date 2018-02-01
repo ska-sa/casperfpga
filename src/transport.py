@@ -14,7 +14,6 @@ class Transport(object):
         self.memory_devices = None
         self.prog_info = {'last_uploaded': '', 'last_programmed': '',
                           'system_name': ''}
-        self.parent = kwargs['parent_fpga']
 
     def connect(self, timeout=None):
         """
