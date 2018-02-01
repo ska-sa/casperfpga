@@ -514,9 +514,6 @@ def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
         to_remove = []
         for fpga in missing:
             status_str = 'checking ' + fpga.host + ':'
-            # fpga.transport.skarab_ctrl_sock = socket.socket(socket.AF_INET,
-            #                                                 socket.SOCK_DGRAM)
-            # fpga.transport.skarab_ctrl_sock.setblocking(0)
             if fpga.transport.is_connected(retries=1, timeout=0.01):
                 status_str += ' up, checking firmware'
                 result, firmware_version = \

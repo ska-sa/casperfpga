@@ -7,6 +7,7 @@ import Queue
 import random
 import socket
 import struct
+import contextlib
 
 from transport import Transport
 from utils import create_meta_dictionary, get_hostname, get_kwarg
@@ -42,26 +43,26 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     :param timeout:
     :return:
     """
-    upload_socket = socket.socket()
-    stime = time.time()
-    connected = False
-    while (not connected) and (time.time() - stime < timeout):
+    with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as upload_socket:
+        stime = time.time()
+        connected = False
+        while (not connected) and (time.time() - stime < timeout):
+            try:
+                upload_socket.connect((targethost, port))
+                connected = True
+            except:
+                time.sleep(0.1)
+        if not connected:
+            result_queue.put('Could not connect to upload port.')
         try:
-            upload_socket.connect((targethost, port))
-            connected = True
+            upload_socket.send(open(filename).read())
         except:
-            time.sleep(0.1)
-    if not connected:
-        result_queue.put('Could not connect to upload port.')
-    try:
-        upload_socket.send(open(filename).read())
-    except:
-        result_queue.put('Could not send file to upload port.')
-    else:
-        result_queue.put('')
-    finally:
-        LOGGER.info('%s: upload thread complete at %.3f' %
-                    (targethost, time.time()))
+            result_queue.put('Could not send file to upload port.')
+        else:
+            result_queue.put('')
+        finally:
+            LOGGER.info('%s: upload thread complete at %.3f' %
+                        (targethost, time.time()))
 
 
 class KatcpTransport(Transport, katcp.CallbackClient):

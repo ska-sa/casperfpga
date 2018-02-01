@@ -115,7 +115,7 @@ struct total *create_total()
   t->t_count = 0;
   t->t_vector = NULL;
 
-  t->t_base = NULL;
+  t->t_base = MAP_FAILED;
   t->t_chunks = 0;
   t->t_length = 0;
 
@@ -153,6 +153,30 @@ struct total *create_total()
   }
 
   return t;
+}
+
+void destroy_total(struct total *t)
+{
+  if(t == NULL){
+    return;
+  }
+
+  if(t->t_fd != (-1)){
+    close(t->t_fd);
+    t->t_fd = -1;
+  }
+
+  if(t->t_base != MAP_FAILED){
+    munmap(t->t_base, t->t_chunks * CHUNK_SIZE);
+    t->t_base = MAP_FAILED;
+  }
+
+  if(t->t_vector){
+    free(t->t_vector);
+    t->t_vector = NULL;
+  }
+
+  free(t);
 }
 
 int add_total(struct total *t, char *skarab)
@@ -629,15 +653,6 @@ int main(int argc, char **argv)
   verbose = 2;
   app = argv[0];
 
-//  int ctr;
-//  printf("*&^*&^*&^*&^*^*&^*&^*&^*&^\n");
-//  for(ctr=0; ctr<argc; ctr++){
-//    printf("%i: %s\n", ctr, argv[ctr]);
-//  }
-//  printf("*&^*&^*&^*&^*^*&^*&^*&^*&^\n");
-
-  verbose = 0;
-
   t = create_total();
   if(t == NULL){
     return EX_OSERR;
@@ -650,6 +665,7 @@ int main(int argc, char **argv)
       switch (c) {
         case 'h' :
           usage(argv[0]);
+          destroy_total(t);
           return EX_OK;
 
         case 'v' :
@@ -672,12 +688,14 @@ int main(int argc, char **argv)
 
           if (i >= argc) {
             fprintf(stderr, "%s: usage: option -%c needs a parameter\n", app, c);
+            destroy_total(t);
             return EX_USAGE;
           }
 
           switch(c){
             case 'f' :
               if(open_total(t, argv[i] + j) < 0){
+                destroy_total(t);
                 return EX_OSERR;
               }
               break;
@@ -697,10 +715,12 @@ int main(int argc, char **argv)
           break;
         default:
           fprintf(stderr, "%s: usage: unknown option -%c\n", app, argv[i][j]);
+          destroy_total(t);
           return EX_USAGE;
       }
     } else {
       if(add_total(t, argv[i])){
+        destroy_total(t);
         return EX_SOFTWARE;
       }
       i++;
@@ -717,6 +737,7 @@ int main(int argc, char **argv)
 
   if(start_total(t, verbose)){
     fprintf(stderr, "%s: initialisation failed\n", app);
+    destroy_total(t);
     return EX_SOFTWARE;
   }
 
@@ -737,6 +758,7 @@ int main(int argc, char **argv)
       problems++;
       if(problems > MAX_PROBLEMS){
         fprintf(stderr, "%s: too many problems, giving up\n", app);
+        destroy_total(t);
         return EX_SOFTWARE;
       }
     }
@@ -802,6 +824,8 @@ int main(int argc, char **argv)
       printf("programmed %d of %u skarabs in %lu.%06lus with %d problems\n", completed, t->t_count, delta.tv_sec, delta.tv_usec, problems);
     }
   }
+
+  destroy_total(t);
 
   return EX_OK;
 }

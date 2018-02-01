@@ -27,6 +27,8 @@ logging.addLevelName(PDEBUG, "PDEBUG")
 def pdebug(self, message, *args, **kwargs):
     if self.isEnabledFor(PDEBUG):
         self.log(PDEBUG, message, *args, **kwargs)
+
+
 logging.Logger.pdebug = pdebug
 
 
@@ -74,6 +76,10 @@ def choose_transport(host_ip):
     LOGGER.debug('Trying to figure out what kind of device %s is' % host_ip)
     if host_ip.startswith('CasperDummy'):
         return DummyTransport
+
+    res = SkarabTransport.test_host_type(host_ip)
+    res = TapcpTransport.test_host_type(host_ip)
+
     try:
         if SkarabTransport.test_host_type(host_ip):
             LOGGER.debug('%s seems to be a SKARAB' % host_ip)

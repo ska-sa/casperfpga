@@ -6,7 +6,7 @@ import struct
 import time
 import os
 import random
-import subprocess
+import contextlib
 
 from threading import Lock
 
@@ -94,26 +94,13 @@ class SkarabTransport(Transport):
             raise RuntimeError('parent_fpga argument not supplied when '
                                'creating %s.' % self.host)
 
-        self.lock = Lock()
-
         # sequence number for control packets
         self._seq_num = None
         self.reset_seq_num()
 
-        # initialize UDP socket for ethernet control packets
-        self.skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # prevent socket from blocking
-        self.skarab_ctrl_sock.setblocking(0)
-
         # create tuple for ethernet control packet address
         self.skarab_eth_ctrl_port = (
             self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS)
-
-        # initialize UDP socket for fabric packets
-        self.skarab_fpga_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # self.skarab_fpga_sock.setsockopt(socket.SOL_SOCKET,
-        #                                  socket.SO_SNDBUF, 1)
-        self.skarab_fpga_sock.setblocking(0)
 
         # create tuple for fabric packet address
         self.skarab_fpga_port = (self.host, sd.ETHERNET_FABRIC_PORT_ADDRESS)
@@ -138,18 +125,6 @@ class SkarabTransport(Transport):
         # self.gbes.append(FortyGbe(self, 0))
         # # self.gbes.append(FortyGbe(self, 0, 0x50000 - 0x4000))
 
-    def mangle(self):
-        self.lock = None
-        self.skarab_ctrl_sock = None
-        self.skarab_fpga_sock = None
-
-    def unmangle(self):
-        self.lock = Lock()
-        self.skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.skarab_ctrl_sock.setblocking(0)
-        self.skarab_fpga_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.skarab_fpga_sock.setblocking(0)
-
     @staticmethod
     def test_host_type(host_ip):
         """
@@ -157,17 +132,16 @@ class SkarabTransport(Transport):
         :param host_ip:
         :return:
         """
-        skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        skarab_ctrl_sock.setblocking(0)
-        skarab_eth_ctrl_port = (host_ip, sd.ETHERNET_CONTROL_PORT_ADDRESS)
-        request_object = sd.ReadRegReq(sd.BOARD_REG, sd.C_RD_VERSION_ADDR)
-        request_payload = request_object.create_payload(0xffff)
-        skarab_ctrl_sock.sendto(request_payload, skarab_eth_ctrl_port)
-        data_ready = select.select([skarab_ctrl_sock], [], [], 1)
-        skarab_ctrl_sock.close()
-        if len(data_ready[0]) > 0:
-            LOGGER.debug('%s seems to be a SKARAB' % host_ip)
-            return True
+        with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as sctrl_sock:
+            sctrl_sock.setblocking(0)
+            skarab_eth_ctrl_port = (host_ip, sd.ETHERNET_CONTROL_PORT_ADDRESS)
+            request_object = sd.ReadRegReq(sd.BOARD_REG, sd.C_RD_VERSION_ADDR)
+            request_payload = request_object.create_payload(0xffff)
+            sctrl_sock.sendto(request_payload, skarab_eth_ctrl_port)
+            data_ready = select.select([sctrl_sock], [], [], 1)
+            if len(data_ready[0]) > 0:
+                LOGGER.debug('%s seems to be a SKARAB' % host_ip)
+                return True
         return False
 
     def is_connected(self, retries=3, timeout=1):
@@ -181,6 +155,7 @@ class SkarabTransport(Transport):
                                        timeout=timeout)
             return True if data else False
         except ValueError as vexc:
+            LOGGER.debug('%s is not connected: %s' % (self.host, vexc.message))
             return False
 
     def is_running(self):
@@ -661,35 +636,30 @@ class SkarabTransport(Transport):
         return unpacker.unpack(data)[0]
 
     def reset_seq_num(self):
-        with self.lock:
+        with Lock():
             self._seq_num = random.randint(0, 0xffff)
 
     def send_packet(self, request_object, timeout=sd.CONTROL_RESPONSE_TIMEOUT,
-                    retries=5, skarab_socket=None, port=None):
+                    retries=5):
         """
         Make send_packet thread safe
         :param request_object
         :param timeout
         :param retries
-        :param skarab_socket
-        :param port
         :return:
         """
-        with self.lock:
-            skarab_socket = skarab_socket or self.skarab_ctrl_sock
-            port = port or self.skarab_eth_ctrl_port
+        with Lock():
             if self._seq_num >= 0xffff:
                 self._seq_num = 0
             else:
                 self._seq_num += 1
             return self._send_packet(
-                request_object, self._seq_num, skarab_socket=skarab_socket,
-                port=port, timeout=timeout, retries=retries, hostname=self.host
+                request_object, self._seq_num, port=self.skarab_eth_ctrl_port,
+                timeout=timeout, retries=retries, hostname=self.host
             )
 
     @staticmethod
-    def _send_packet(request_object, sequence_number,
-                     skarab_socket, port,
+    def _send_packet(request_object, sequence_number, port,
                      timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=5,
                      hostname='<unknown_host>'):
         """
@@ -698,7 +668,6 @@ class SkarabTransport(Transport):
         Retransmits request packet if response not received
 
         :param request_object: object containing the data to send to SKARAB
-        :param skarab_socket: socket object to be used
         :param port: port to connect to
         :param timeout: how long to wait for a response before bailing
         :param retries: how many times to retransmit a request
@@ -712,21 +681,24 @@ class SkarabTransport(Transport):
             LOGGER.debug('{}: retransmit attempts: {}'.format(
                 hostname, retransmit_count))
             try:
-                LOGGER.debug('{}: sending pkt({}, {}) to port {}.'.format(
-                    hostname, request_object.packet['command_type'],
-                    request_object.packet['seq_num'], port))
-                skarab_socket.sendto(request_payload, port)
-                if not request_object.expect_response:
-                    LOGGER.debug('{}: no response expected for seq {}, '
-                                 'returning'.format(hostname, sequence_number))
-                    return None
-                # get a required response
-                rx_packet = None
-                while rx_packet is None:
-                    rx_packet = SkarabTransport.receive_packet(
-                        request_object, sequence_number,
-                        skarab_socket, timeout, hostname)
-                return rx_packet
+                with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as sock:
+                    sock.setblocking(0)
+                    LOGGER.debug('{}: sending pkt({}, {}) to port {}.'.format(
+                        hostname, request_object.packet['command_type'],
+                        request_object.packet['seq_num'], port))
+                    sock.sendto(request_payload, port)
+                    if not request_object.expect_response:
+                        LOGGER.debug(
+                            '{}: no response expected for seq {}, '
+                            'returning'.format(hostname, sequence_number))
+                        return None
+                    # get a required response
+                    rx_packet = None
+                    while rx_packet is None:
+                        rx_packet = SkarabTransport.receive_packet(
+                            request_object, sequence_number, sock,
+                            timeout, hostname)
+                    return rx_packet
             except SkarabResponseNotReceivedError:
                 # retransmit the packet
                 pass
@@ -735,7 +707,7 @@ class SkarabTransport(Transport):
                                'buffer.'.format(hostname))
                 # wait to receive incoming responses
                 time.sleep(1)
-                SkarabTransport.clear_recv_buffer(skarab_socket)
+                # SkarabTransport.clear_recv_buffer(skarab_socket)
                 LOGGER.info('{}: cleared recv buffer.'.format(hostname))
                 raise KeyboardInterrupt
             retransmit_count += 1
@@ -830,17 +802,6 @@ class SkarabTransport(Transport):
                          hostname, sequence_number, sequence_number + 1)
             LOGGER.debug(errmsg)
             raise SkarabResponseNotReceivedError(errmsg)
-
-    @staticmethod
-    def clear_recv_buffer(skarab_socket):
-        """
-        Clears the recv buffer to discard unhandled responses from the SKARAB
-        :param skarab_socket: socket object to be used
-        """
-        # check if there is data ready to be handled
-        while select.select([skarab_socket], [], [], 0)[0]:
-            # read away the data in the recv buffer
-            skarab_socket.recvfrom(4096)
 
     # low level access functions
 
@@ -1130,8 +1091,7 @@ class SkarabTransport(Transport):
         :return: None
         """
         request = sd.SdramProgramReq(first_packet, last_packet, write_words)
-        self.send_packet(request, skarab_socket=self.skarab_fpga_sock,
-                         port=self.skarab_fpga_port)
+        self.send_packet(request)
 
     def sdram_reconfigure(self,
                           output_mode=sd.SDRAM_PROGRAM_MODE,
