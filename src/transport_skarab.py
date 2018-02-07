@@ -1494,8 +1494,7 @@ class SkarabTransport(Transport):
         verify what has been written
         :return: Success/Fail - 0/1
         """
-        raise DeprecationWarning('Update this to use ImageProcessor if'
-                                 'it is still needed.')
+
         # For completeness, make sure the input file is of a .bin disposition
         file_extension = os.path.splitext(filename)[1]
         image_to_program = ''
