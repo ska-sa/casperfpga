@@ -206,12 +206,12 @@ class CasperFpga(object):
                 self.get_system_information(filename)
         return rv
 
-    def is_connected(self):
+    def is_connected(self, **kwargs):
         """
         Is the transport connected to the host?
         :return: 
         """
-        return self.transport.is_connected()
+        return self.transport.is_connected(**kwargs)
 
     def is_running(self):
         """
