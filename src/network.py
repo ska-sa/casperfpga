@@ -89,7 +89,7 @@ class Mac(object):
     def from_hostname(cls, hostname, port_num):
         return Mac.from_roach_hostname(hostname, port_num)
 
-def packed(self):
+    def packed(self):
         mac = [0, 0]
         for byte in self.mac_str.split(':'):
             mac.extend([int(byte, base=16)])
