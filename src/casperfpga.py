@@ -144,11 +144,11 @@ class CasperFpga(object):
     def disconnect(self):
         return self.transport.disconnect()
 
-    def read(self, device_name, size, offset=0):
-        return self.transport.read(device_name, size, offset)
+    def read(self, device_name, size, offset=0, **kwargs):
+        return self.transport.read(device_name, size, offset, **kwargs)
 
-    def blindwrite(self, device_name, data, offset=0):
-        return self.transport.blindwrite(device_name, data, offset)
+    def blindwrite(self, device_name, data, offset=0, **kwargs):
+        return self.transport.blindwrite(device_name, data, offset, **kwargs)
 
     def listdev(self):
         """
