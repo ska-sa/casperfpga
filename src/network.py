@@ -1,4 +1,5 @@
 import struct
+import socket
 
 
 class Mac(object):
@@ -69,16 +70,26 @@ class Mac(object):
             hostname = hostname.replace('cbf_oach', 'roach')
             hostname = hostname.replace('dsim', 'roach')
         # /HACK
-        if not hostname.startswith('roach'):
+        if not (hostname.startswith('roach') or hostname.startswith('skarab')):
             raise RuntimeError('Only hostnames beginning with '
-                               'roach supported: %s' % hostname)
-        digits = hostname.replace('roach', '')
+                               'roach or skarab supported: %s' % hostname)
+        if hostname.startswith('roach'):
+            digits = hostname.replace('roach', '')
+        else:
+            digits = hostname.replace('skarab', '')
+            for intsuffix in ['-01', '-02']:
+                if digits.endswith(intsuffix):
+                    digits = digits.replace(intsuffix, '')
         serial = [int(digits[ctr:ctr+2], 16) for ctr in range(0, 6, 2)]
         mac_str = 'fe:00:%02x:%02x:%02x:%02x' % (serial[0], serial[1],
                                                  serial[2], port_num)
         return cls(mac_str)
 
-    def packed(self):
+    @classmethod
+    def from_hostname(cls, hostname, port_num):
+        return Mac.from_roach_hostname(hostname, port_num)
+
+def packed(self):
         mac = [0, 0]
         for byte in self.mac_str.split(':'):
             mac.extend([int(byte, base=16)])
@@ -145,7 +156,9 @@ class IpAddress(object):
         elif isinstance(ip, int):
             ip_int = ip
         if ip_str is not None:
-            if ip_str.find('.') == -1:
+            try:
+                ip_str = socket.gethostbyname(ip_str)
+            except Exception as exc:
                 ip_int = int(ip_str)
                 ip_str = None
         if (ip_str is None) and (ip_int is None):

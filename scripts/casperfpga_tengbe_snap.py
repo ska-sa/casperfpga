@@ -12,7 +12,7 @@ import sys
 import time
 import argparse
 
-from casperfpga import tengbe
+from casperfpga.network import IpAddress
 from casperfpga.casperfpga import CasperFpga
 from casperfpga import spead as casperspead
 from casperfpga import snap as caspersnap
@@ -155,7 +155,7 @@ for ctr in range(0, len(coredata[data_key])):
     print('%5d,%3d\t' % (ctr, packet_counter), end='')
     for key in key_order:
         if key == ip_key:
-            ip_str = str(tengbe.IpAddress(coredata[key][ctr]))
+            ip_str = str(IpAddress(coredata[key][ctr]))
             print('ip(%s)\t' % ip_str, end='')
         elif (key == data_key) and args.spead:
             print('%s(%s)\t' % (key, coredata[data_key][ctr]), end='')
