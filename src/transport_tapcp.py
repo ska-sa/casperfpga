@@ -1,7 +1,5 @@
 import logging
 import struct
-import time
-import tftpy
 from StringIO import StringIO
 
 from transport import Transport
@@ -10,7 +8,6 @@ __author__ = 'jackh'
 __date__ = 'June 2017'
 
 LOGGER = logging.getLogger(__name__)
-tftpy.setLogLevel(logging.ERROR)
 
 
 def set_log_level(level):
@@ -27,7 +24,7 @@ def get_core_info_payload(payload_str):
     addr    = x[0] & 0xfffffffa
     size    = x[1]
     typenum = x[2]
-    return {'rw' : rw, 'addr' : addr, 'size' : size, 'typenum' : typenum}
+    return {'rw': rw, 'addr': addr, 'size': size, 'typenum': typenum}
 
 
 def decode_csl_pl(csl):
@@ -75,6 +72,8 @@ class TapcpTransport(Transport):
         :return: none
         """
         Transport.__init__(self, **kwargs)
+        import tftpy
+        set_log_level(logging.ERROR)
         self.t = tftpy.TftpClient(kwargs['host'], 69)
         self._logger = LOGGER
         self.timeout = kwargs.get('timeout', 3)
