@@ -45,8 +45,8 @@ class Snap(Memory):
         address, length_bytes = -1, -1
         for mem_name in memorymap_dict.keys():
             if mem_name == device_name + '_bram':
-                address, length_bytes = memorymap_dict[mem_name]['address'], \
-                                        memorymap_dict[mem_name]['bytes']
+                address = memorymap_dict[mem_name]['address']
+                length_bytes = memorymap_dict[mem_name]['bytes']
                 break
         word_bits = int(device_info['data_width'])
         num_bytes = pow(2, int(device_info['nsamples'])) * (word_bits/8)
@@ -60,7 +60,8 @@ class Snap(Memory):
                    length_bytes=length_bytes, device_info=device_info)
 
     def post_create_update(self, raw_system_info):
-        """Update the device with information not available at creation.
+        """
+        Update the device with information not available at creation.
         @param raw_system_info: dictionary of device information
         """
         # is this snap block inside a bitsnap block?
@@ -74,7 +75,8 @@ class Snap(Memory):
         self._link_control_registers(raw_system_info)
 
     def update_from_bitsnap(self, info):
-        """Update this device with information from a bitsnap container.
+        """
+        Update this device with information from a bitsnap container.
         :type self: Snap
         :param info: device information dictionary containing Simulink block
         information
@@ -274,8 +276,8 @@ class Snap(Memory):
             # finish capturing. we return empty.
             error_info = 'timeout %2.2f seconds. Addr at stop time: %i. ' \
                          'Now: Still running :%s, addr: %i.' % (
-                snapsetup['timeout'], bram_dmp['length'],
-                'yes' if now_status else 'no', now_addr)
+                            snapsetup['timeout'], bram_dmp['length'],
+                            'yes' if now_status else 'no', now_addr)
             if bram_dmp['length'] != now_addr:
                 raise RuntimeError('Snap %s error: Address still changing '
                                    'after %s' % (self.name, error_info))
