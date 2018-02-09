@@ -1499,31 +1499,16 @@ class SkarabTransport(Transport):
         file_extension = os.path.splitext(filename)[1]
         image_to_program = ''
 
-        if file_extension == '.hex':
-            LOGGER.info('.hex detected. Converting to .bin.')
-            image_to_program = skfops.convert_hex_to_bin(filename)
-        elif file_extension == '.bin':
-            LOGGER.info('.bin file detected.')
-            image_to_program = open(filename, 'rb').read()
-            # (result, image_to_program) = skfops.check_bitstream(filename)
-        else:
-            # File extension was neither .hex nor .bin
-            errmsg = 'Please use .hex or .bin file to reconfigure Flash Memory'
-            LOGGER.error(errmsg)
-            raise sd.SkarabInvalidBitstream(errmsg)
-
-        (result, image_to_program) = skfops.check_bitstream(
-            image_to_program, bitstream=True)
-        if not result:
-            errmsg = 'Incompatible .bin file detected.'
-            LOGGER.error(errmsg)
-            raise sd.SkarabInvalidBitstream(errmsg)
+        # Need to change file-handler to use skarab_fileops.choose_processor(filename)
+        binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
+        processor = skfops.choose_processor(filename)
+        processor = processor(filename, binname)
+        image_to_program, binname = processor.make_bin()
 
         LOGGER.debug('VIRTEX FLASH RECONFIG: Analysing Words')
         # Can still analyse the filename, as the file size should still
         # be the same, regardless of swapping the endianness
-        num_words, num_memory_blocks = skfops.analyse_file_virtex_flash(
-            filename)
+        num_words, num_memory_blocks = skfops.analyse_file_virtex_flash(binname)
 
         if (num_words == 0) or (num_memory_blocks == 0):
             # Problem
@@ -1926,55 +1911,6 @@ class SkarabTransport(Transport):
                 raise sd.SkarabProgrammingError(errmsg)
 
     @staticmethod
-    def check_ufp_bitstream(filename):
-        """
-        Utility to check bitstream of .ufp file used to program/configure
-        Spartan Flash.
-        Also removes all escape characters, i.e. \r, \n
-        :param filename: of the input .ufp file
-        :return: tuple - (True/False, bitstream)
-        """
-
-        contents = open(filename, 'rb').read()
-        if len(contents) < 1:
-            # Problem
-            errmsg = 'Problem opening input .ufp file: %s'.format(filename)
-            LOGGER.error(errmsg)
-            return False, None
-        # else: Continue
-
-        # Remove all CR and LF in .ufp file
-        escape_chars = ['\r', '\n']
-        for value in escape_chars:
-            contents = contents.replace(value, '')
-
-        return True, contents
-
-    @staticmethod
-    def analyse_ufp_bitstream(bitstream):
-        """
-        This method analyses the input .ufp file to determine the
-        number of pages to program,
-        and the number of sectors to erase
-        :param bitstream: Input .ufp file to be written to the SPARTAN 3AN FPGA
-        :return: Tuple - (num_pages, num_sectors)
-        """
-        # Number of Bytes in input .ufp file
-        num_bytes = len(bitstream) / 2
-        # 1 Page = 264 bytes
-        num_pages = num_bytes / 264
-        if num_bytes % 264 != 0:
-            num_pages += 1
-        # 256 Pages/sector
-        num_sectors = num_pages / 256
-        if num_pages % 256 != 0:
-            num_sectors += 1
-        debugmsg = 'Returning num_pages: {} - num_sectors: {}'.format(
-            num_pages, num_sectors)
-        LOGGER.debug(debugmsg)
-        return num_pages, num_sectors
-
-    @staticmethod
     def reverse_byte(input_byte):
         """
         Method created to replicate 'SwappedByte' method in
@@ -2058,14 +1994,14 @@ class SkarabTransport(Transport):
         # Currently there is no real method of confirming the integrity
         # of the data in the input .ufp file
         LOGGER.debug('Checking input .ufp bitstream...')
-        (result, image_to_program) = self.check_ufp_bitstream(filename)
+        (result, image_to_program) = skfops.check_ufp_bitstream(filename)
         if not result:
             errmsg = 'Incompatible .ufp file detected.'
             LOGGER.error(errmsg)
             raise sd.SkarabInvalidBitstream(errmsg)
 
         LOGGER.debug('SPARTAN FLASH RECONFIG: Analysing Words')
-        num_pages, num_sectors = self.analyse_ufp_bitstream(image_to_program)
+        num_pages, num_sectors = skfops.analyse_ufp_bitstream(image_to_program)
 
         if (num_pages == 0) or (num_sectors == 0):
             # Problem

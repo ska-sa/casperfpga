@@ -268,6 +268,54 @@ def upload_to_ram_progska(filename, fpga_list):
     return upload_time
 
 
+def check_ufp_bitstream(filename):
+    """
+    Utility to check bitstream of .ufp file used to program/configure
+    Spartan Flash.
+    Also removes all escape characters, i.e. \r, \n
+    :param filename: of the input .ufp file
+    :return: tuple - (True/False, bitstream)
+    """
+
+    contents = open(filename, 'rb').read()
+    if len(contents) < 1:
+        # Problem
+        errmsg = 'Problem opening input .ufp file: %s'.format(filename)
+        LOGGER.error(errmsg)
+        return False, None
+    # else: Continue
+
+    # Remove all CR and LF in .ufp file
+    escape_chars = ['\r', '\n']
+    for value in escape_chars:
+        contents = contents.replace(value, '')
+
+    return True, contents
+
+
+def analyse_ufp_bitstream(bitstream):
+    """
+    This method analyses the input .ufp file to determine the
+    number of pages to program,
+    and the number of sectors to erase
+    :param bitstream: Input .ufp file to be written to the SPARTAN 3AN FPGA
+    :return: Tuple - (num_pages, num_sectors)
+    """
+    # Number of Bytes in input .ufp file
+    num_bytes = len(bitstream) / 2
+    # 1 Page = 264 bytes
+    num_pages = num_bytes / 264
+    if num_bytes % 264 != 0:
+        num_pages += 1
+    # 256 Pages/sector
+    num_sectors = num_pages / 256
+    if num_pages % 256 != 0:
+        num_sectors += 1
+    debugmsg = 'Returning num_pages: {} - num_sectors: {}'.format(
+        num_pages, num_sectors)
+    LOGGER.debug(debugmsg)
+    return num_pages, num_sectors
+
 # def check_checksum(spartan_checksum, local_checksum):
 #     """
 #     Compares checksums.
@@ -394,30 +442,33 @@ def upload_to_ram_progska(filename, fpga_list):
 #     return checksum_dict
 
 
-# # Only working with BPIx8 .bin files now
-# def analyse_file_virtex_flash(filename):
-#     """
-#     This method analyses the input .bin file to determine the number of
-#     words to program, and the number of blocks to erase
-#     :param filename: Input .bin to be written to the Virtex FPGA
-#     :return: Tuple - num_words (in file), num_memory_blocks (required to
-#     hold this file)
-#     """
-#     # File contents are in bytes
-#     contents = open(filename, 'rb').read()
-#     if len(contents) % 2 != 0:
-#         # Problem
-#         if len(contents) % 2 == 1:
-#             # hex file with carriage return (\n) at the end
-#             contents = contents[:-1]
-#         else:
-#             errmsg = 'Invalid file size: Number of Words is not whole'
-#             LOGGER.error(errmsg)
-#             raise sd.SkarabInvalidBitstream(errmsg)
-#     # else: Continue
-#     num_words = len(contents) / 2
-#     num_memory_blocks = int(ceil(num_words / sd.DEFAULT_BLOCK_SIZE))
-#     return num_words, num_memory_blocks
+# Only working with BPIx8 .bin files now
+def analyse_file_virtex_flash(filename):
+    """
+    This method analyses the input .bin file to determine the number of
+    words to program, and the number of blocks to erase
+    :param filename: Input .bin to be written to the Virtex FPGA
+    :return: Tuple - num_words (in file), num_memory_blocks (required to
+    hold this file)
+    """
+    # File contents are in bytes
+    fptr = open(filename, 'rb')
+    contents = fptr.read()
+    fptr.close()
+    if len(contents) % 2 != 0:
+        # Problem
+        if len(contents) % 2 == 1:
+            # hex file with carriage return (\n) at the end
+            contents = contents[:-1]
+        else:
+            errmsg = 'Invalid file size: Number of Words is not whole'
+            LOGGER.error(errmsg)
+            raise sd.SkarabInvalidBitstream(errmsg)
+    # else: Continue
+    num_words = len(contents) / 2
+    from math import ceil
+    num_memory_blocks = int(ceil(num_words / sd.DEFAULT_BLOCK_SIZE))
+    return num_words, num_memory_blocks
 
 
 # def calculate_checksum_using_file(filename, packet_size=8192):
