@@ -84,6 +84,15 @@ class SkarabTransport(Transport):
         """
         Initialized SKARAB FPGA object
         :param host: IP Address of the targeted SKARAB Board
+        :param parent_fpga: Instance of parent_fpga
+        :param timeout: Send packet timeout in seconds, 
+                        defaults to CONTROL_RESPONSE_TIMEOUT 
+                        in skarab_definitions.py
+        :param retries: Send packet retries, defaults to 
+                        CONTROL_RESPONSE_RETRIES in skarab_definitions.py
+        :param blocking: True (default)/False. If True a SKARAB comms 
+                         check will be performed. If False only the 
+                         instance will be created.
         :return: none
         """
         Transport.__init__(self, **kwargs)
@@ -93,6 +102,18 @@ class SkarabTransport(Transport):
         except KeyError:
             raise RuntimeError('parent_fpga argument not supplied when '
                                'creating %s.' % self.host)
+        try:
+            self.timeout = kwargs['timeout']
+        except KeyError:
+            self.timeout = sd.CONTROL_RESPONSE_TIMEOUT
+        try:
+            self.retries = kwargs['retries']
+        except KeyError:
+            self.retries = sd.CONTROL_RESPONSE_RETRIES
+        try:
+            self.blocking = kwargs['blocking']
+        except KeyError:
+            self.blocking = True
 
         # sequence number for control packets
         self._seq_num = None
@@ -112,12 +133,13 @@ class SkarabTransport(Transport):
         self.sensor_data = {}
 
         # check if connected to host
-        if self.is_connected(retries=10,timeout=2):
-            LOGGER.info('%s: port(%s) created %s.' % (
-                self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS, '& connected'))
-        else:
-            LOGGER.error('Error connecting to %s: port%s' % (
-                self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS))
+        if self.blocking:
+            if self.is_connected():
+                LOGGER.info('%s: port(%s) created %s.' % (
+                    self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS, '& connected'))
+            else:
+                LOGGER.error('Error connecting to %s: port%s' % (
+                    self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS))
 
         # self.image_chunks, self.local_checksum = None, None
         # TODO - add the one_gbe
@@ -144,14 +166,19 @@ class SkarabTransport(Transport):
                 return True
         return False
 
-    def is_connected(self, retries=3, timeout=1):
+    def is_connected(self, 
+                     timeout=None, 
+                     retries=None):
         """
         'ping' the board to see if it is connected and running.
         Tries to read a register
         :return: True or False
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+        
         try:
-            data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries,
+            data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=retries,
                                        timeout=timeout)
             return True if data else False
         except ValueError as vexc:
@@ -168,14 +195,18 @@ class SkarabTransport(Transport):
             return True
         return False
 
-    def loopbacktest(self, iface):
+    def loopbacktest(self, iface, timeout=None, 
+                     retries=None):
         """
         Run the loopback test.
         :param iface:
         :return:
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         request = sd.DebugLoopbackTestReq(iface, 0x77)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         raise RuntimeError('Not yet tested')
 
     def _get_device_address(self, device_name):
@@ -195,7 +226,9 @@ class SkarabTransport(Transport):
         LOGGER.error(errmsg)
         raise SkarabUnknownDeviceError(errmsg)
 
-    def read(self, device_name, size, offset=0, use_bulk=True):
+    def read(self, device_name, size, offset=0, use_bulk=True, 
+             timeout=None, 
+             retries=None):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
@@ -204,6 +237,9 @@ class SkarabTransport(Transport):
         :param use_bulk: use the bulk read function
         :return: binary data string
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         if (size > 4) and use_bulk:
             # use a bulk read if more than 4 bytes are requested
             return self._bulk_read(device_name, size, offset)
@@ -225,7 +261,7 @@ class SkarabTransport(Transport):
         for readctr in range(num_reads):
             addr_high, addr_low = self.data_split_and_pack(addr_start)
             request = sd.ReadWishboneReq(addr_high, addr_low)
-            response = self.send_packet(request)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
             read_low = struct.pack('!H', response.packet['read_data_low'])
             read_high = struct.pack('!H', response.packet['read_data_high'])
@@ -237,13 +273,18 @@ class SkarabTransport(Transport):
         # return the number of bytes requested
         return data[offset_diff: offset_diff + size]
 
-    def _bulk_read_req(self, address, words_to_read):
+    def _bulk_read_req(self, address, words_to_read,
+                       timeout=None, 
+                       retries=None):
         """
         
         :param address: the address at which to read
         :param words_to_read: how many 32-bit words should be read
         :return: binary data string 
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # LOGGER.info('reading @ 0x%06x - %i words' % (address, words_to_read))
         if words_to_read > sd.MAX_READ_32WORDS:
             raise RuntimeError('Cannot read more than %i words - '
@@ -254,7 +295,7 @@ class SkarabTransport(Transport):
         # return the the whole lot, zeros in the rest
         request = sd.BigReadWishboneReq(start_addr_high, start_addr_low,
                                         words_to_read)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is None:
             errmsg = 'Bulk read failed.'
             raise SkarabReadFailed(errmsg)
@@ -296,7 +337,9 @@ class SkarabTransport(Transport):
         # return the number of bytes requested
         return data[offset_diff: size]
 
-    def _bulk_write_req(self, address, data, words_to_write):
+    def _bulk_write_req(self, address, data, words_to_write,
+                        timeout=None, 
+                        retries=None):
         """
         Unchecked data write. Maximum of 1988 bytes per transaction
         :param address: memory device to which to write
@@ -304,6 +347,9 @@ class SkarabTransport(Transport):
         :param words_to_write: number of 32-bit words to write
         :return: number of 32-bit writes done
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         if words_to_write > sd.MAX_WRITE_32WORDS:
             raise RuntimeError('Cannot write more than %i words - '
                                'asked to write %i' % (sd.MAX_WRITE_32WORDS,
@@ -315,7 +361,7 @@ class SkarabTransport(Transport):
                                                    words_to_write))
         request = sd.BigWriteWishboneReq(start_addr_high,
                                          start_addr_low, data, words_to_write)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is None:
             errmsg = 'Bulk write failed. No response from SKARAB.'
             raise SkarabWriteFailed(errmsg)
@@ -396,7 +442,9 @@ class SkarabTransport(Transport):
                                         num_words_to_write)
             raise SkarabWriteFailed(errmsg)
 
-    def read_byte_level(self, device_name, size, offset=0):
+    def read_byte_level(self, device_name, size, offset=0,
+                        timeout=None, 
+                        retries=None):
         """
         Byte_level read. Sorts out reads overlapping registers, and
         reading specific bytes.
@@ -406,6 +454,9 @@ class SkarabTransport(Transport):
         :param offset: start at this offset
         :return: binary data string
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # can only read 32-bits (4 bytes) at a time
         # work out how many reads we require, each read req reads a 32-bit reg
         # need to determine how many registers need to be read
@@ -421,7 +472,7 @@ class SkarabTransport(Transport):
             # TODO: sort out memory mapping of device_name
             addr_high, addr_low = self.data_split_and_pack(addr)
             request = sd.ReadWishboneReq(addr_high, addr_low)
-            response = self.send_packet(request)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
             read_high = struct.pack('!H', response.packet['read_data_high'])
             read_low = struct.pack('!H', response.packet['read_data_low'])
@@ -433,7 +484,9 @@ class SkarabTransport(Transport):
         # return the number of bytes requested
         return data[offset:offset + size]
 
-    def blindwrite(self, device_name, data, offset=0, use_bulk=True):
+    def blindwrite(self, device_name, data, offset=0, use_bulk=True,
+                   timeout=None, 
+                   retries=None):
         """
         Unchecked data write.
         :param device_name: the memory device to which to write
@@ -442,6 +495,9 @@ class SkarabTransport(Transport):
         :param use_bulk: use the bulk write function
         :return: <nothing>
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
@@ -461,7 +517,7 @@ class SkarabTransport(Transport):
             addr_high, addr_low = self.data_split_and_pack(addr)
             request = sd.WriteWishboneReq(addr_high, addr_low,
                                           data_high, data_low)
-            self.send_packet(request)
+            self.send_packet(request, timeout=timeout, retries=retries)
 
     def deprogram(self):
         """
@@ -514,13 +570,17 @@ class SkarabTransport(Transport):
         LOGGER.debug('Uploaded bitstream in %.1f seconds.' % upload_time)
         return upload_time
 
-    def check_running_firmware(self, retries=20):
+    def check_running_firmware(self, timeout=None, retries=None):
         """
 
         :return:
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+
         [golden_image, multiboot, firmware_version] = \
-            self.get_virtex7_firmware_version(retries=retries)
+            self.get_virtex7_firmware_version(timeout=timeout, retries=retries)
         if golden_image == 0 and multiboot == 0:
             return True, firmware_version
         elif golden_image == 1 and multiboot == 0:
@@ -639,8 +699,8 @@ class SkarabTransport(Transport):
         with Lock():
             self._seq_num = random.randint(0, 0xffff)
 
-    def send_packet(self, request_object, timeout=sd.CONTROL_RESPONSE_TIMEOUT,
-                    retries=5):
+    def send_packet(self, request_object, timeout=None, 
+                    retries=None):
         """
         Make send_packet thread safe
         :param request_object
@@ -648,6 +708,9 @@ class SkarabTransport(Transport):
         :param retries
         :return:
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         with Lock():
             if self._seq_num >= 0xffff:
                 self._seq_num = 0
@@ -660,7 +723,8 @@ class SkarabTransport(Transport):
 
     @staticmethod
     def _send_packet(request_object, sequence_number, port,
-                     timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=5,
+                     timeout=sd.CONTROL_RESPONSE_TIMEOUT, 
+                     retries=sd.CONTROL_RESPONSE_RETRIES,
                      hostname='<unknown_host>'):
         """
         Send payload via UDP packet to SKARAB
@@ -674,6 +738,7 @@ class SkarabTransport(Transport):
         :return: response: returns response object or 'None' if no
             response received.
         """
+
         # create the payload and send it
         request_payload = request_object.create_payload(sequence_number)
         retransmit_count = 0
@@ -845,7 +910,9 @@ class SkarabTransport(Transport):
         self.reset_seq_num()
         return output
 
-    def write_board_reg(self, reg_address, data, expect_response=True):
+    def write_board_reg(self, reg_address, data, expect_response=True,
+                        timeout=None, 
+                        retries=None):
         """
         Write to a board register
 
@@ -856,25 +923,32 @@ class SkarabTransport(Transport):
         :return: response object - object created from the response payload 
         (attributes = payload components)
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         data_packed = self.data_split_and_pack(data)
         request = sd.WriteRegReq(sd.BOARD_REG, reg_address, *data_packed)
         # handle special writes that don't return a response
         request.expect_response = expect_response
         # send payload via UDP pkt and return response object (if no response
         # expected should return ok)
-        write_reg_response = self.send_packet(request)
+        write_reg_response = self.send_packet(request, timeout=timeout, retries=retries)
         return write_reg_response
 
-    def read_board_reg(self, reg_address, retries=5, timeout=None):
+    def read_board_reg(self, reg_address, 
+                       timeout=None, 
+                       retries=None):
         """
         Read from a specified board register
         :param reg_address: address of register to read
         :param retries:
         :return: data read from register
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         request = sd.ReadRegReq(sd.BOARD_REG, reg_address)
-        read_reg_resp = self.send_packet(request, retries=retries,
-                                         timeout=timeout)
+        read_reg_resp = self.send_packet(request, timeout=timeout, retries=retries)
         if read_reg_resp is None:
             raise ValueError('Got None reading board register '
                              '0x%010x' % reg_address)
@@ -882,48 +956,65 @@ class SkarabTransport(Transport):
             read_reg_resp.packet['reg_data_high'],
             read_reg_resp.packet['reg_data_low'])
 
-    def write_dsp_reg(self, reg_address, data):
+    def write_dsp_reg(self, reg_address, data,
+                      timeout=None, 
+                      retries=None):
         """
         Write to a dsp register
         :param reg_address: address of register to write to
         :param data: data to write
         :return: response object - object created from the response payload
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         data_packed = self.data_split_and_pack(data)
         request = sd.WriteRegReq(sd.DSP_REG, reg_address, *data_packed)
         # send payload via UDP pkt and return response object
         # (if no response expected should return ok)
-        write_reg_response = self.send_packet(request)
+        write_reg_response = self.send_packet(request, timeout=timeout, retries=retries)
         return write_reg_response
 
-    def read_dsp_reg(self, reg_address):
+    def read_dsp_reg(self, reg_address,
+                     timeout=None, 
+                     retries=None):
         """
         Read from a specified dsp register
         :param reg_address: address of register to read
         :return: data read from register
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         request = sd.ReadRegReq(sd.DSP_REG, reg_address)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             return self.data_unpack_and_merge(
                 response.packet['reg_data_high'],
                 response.packet['reg_data_low'])
         return 0
 
-    def get_embedded_software_version(self):
+    def get_embedded_software_version(self,
+                                      timeout=None, 
+                                      retries=None):
         """
         Read the version of the microcontroller embedded software
         :return: embedded software version
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         request = sd.GetEmbeddedSoftwareVersionReq()
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             major = response.packet['version_major']
             minor = response.packet['version_minor']
             patch = response.packet['version_patch']
             return '{}.{}.{}'.format(major, minor, patch)
 
-    def write_wishbone(self, wb_address, data):
+    def write_wishbone(self, wb_address, data,
+                       timeout=None, 
+                       retries=None):
         """
         Used to perform low level wishbone write to a wishbone slave. Gives
         low level direct access to wishbone bus.
@@ -931,6 +1022,9 @@ class SkarabTransport(Transport):
         :param data: data to write
         :return: response object
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # split data into two 16-bit words (also packs for network transmission)
         data_split = list(self.data_split_and_pack(data))
         # split address into two 16-bit segments: high, low
@@ -940,17 +1034,22 @@ class SkarabTransport(Transport):
         address_and_data = address_split
         address_and_data.extend(data_split)
         request = sd.WriteWishboneReq(*address_and_data)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         return response
 
-    def read_wishbone(self, wb_address):
+    def read_wishbone(self, wb_address,
+                      timeout=None, 
+                      retries=None):
         """
         Used to perform low level wishbone read from a Wishbone slave.
         :param wb_address: address of the wishbone slave to read from
         :return: Read Data or None
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         request = sd.ReadWishboneReq(*self.data_split_and_pack(wb_address))
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             return self.data_unpack_and_merge(
                 response.packet['read_data_high'],
@@ -1005,7 +1104,9 @@ class SkarabTransport(Transport):
             LOGGER.error('Bad response received')
             return False
 
-    def read_i2c(self, interface, slave_address, num_bytes):
+    def read_i2c(self, interface, slave_address, num_bytes,
+                 timeout=None, 
+                 retries=None):
         """
         Perform i2c read on a selected i2c interface.
         Up to 32 bytes can be read in a single i2c transaction.
@@ -1019,6 +1120,9 @@ class SkarabTransport(Transport):
         :param num_bytes: number of bytes to read
         :return: an array of the read bytes if successful, else none
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         if num_bytes > 32:
             LOGGER.error(
                 'Maximum of 32 bytes can be read in a single transaction')
@@ -1026,7 +1130,7 @@ class SkarabTransport(Transport):
 
         # create payload packet structure
         request = sd.ReadI2CReq(interface, slave_address, num_bytes)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             if response.packet['read_success']:
                 return response.packet['read_bytes'][:num_bytes]
@@ -1037,8 +1141,9 @@ class SkarabTransport(Transport):
             LOGGER.error('Bad response received.')
             return
 
-    def pmbus_read_i2c(self, bus, slave_address, command_code,
-                       num_bytes):
+    def pmbus_read_i2c(self, bus, slave_address, command_code, num_bytes,
+                       timeout=None, 
+                       retries=None):
         """
         Perform a PMBus read of the I2C bus.
         :param bus: I2C bus to perform PMBus Read of
@@ -1052,6 +1157,9 @@ class SkarabTransport(Transport):
         :param num_bytes: Number of bytes to read
         :return: array of read bytes if successful, else none
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         if num_bytes > 32:
             LOGGER.error('Maximum of 32 bytes can be read in a '
                          'single transaction')
@@ -1062,7 +1170,7 @@ class SkarabTransport(Transport):
         request = sd.PMBusReadI2CBytesReq(bus, slave_address, command_code,
                                           read_bytes, num_bytes)
         # send payload and return response object
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             if response.packet['read_success']:
                 return response.packet['read_bytes'][:num_bytes]
@@ -1073,7 +1181,9 @@ class SkarabTransport(Transport):
             LOGGER.error('Bad response received.')
             return
 
-    def sdram_program(self, first_packet, last_packet, write_words):
+    def sdram_program(self, first_packet, last_packet, write_words,
+                      timeout=None, 
+                      retries=None):
         """
         Used to program a block of 4096 words to the boot SDRAM. 
         These 4096 words are a chunk of the FPGA image to program to 
@@ -1090,8 +1200,11 @@ class SkarabTransport(Transport):
         :param write_words: chunk of 4096 words from FPGA Image
         :return: None
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         request = sd.SdramProgramReq(first_packet, last_packet, write_words)
-        self.send_packet(request)
+        self.send_packet(request, timeout=timeout, retries=retries)
 
     def sdram_reconfigure(self,
                           output_mode=sd.SDRAM_PROGRAM_MODE,
@@ -1105,7 +1218,10 @@ class SkarabTransport(Transport):
                           do_sdram_async_read=False,
                           do_continuity_test=False,
                           continuity_test_out_low=0x00,
-                          continuity_test_out_high=0x00):
+                          continuity_test_out_high=0x00,
+                          timeout=None, 
+                          retries=None):
+
         """
         Used to perform various tasks realting to programming of the boot 
         SDRAM and config of Virtex7 FPGA from boot SDRAM
@@ -1133,13 +1249,16 @@ class SkarabTransport(Transport):
             specify value to set upper 16 bits of the bus
         :return: data read, if there was any
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # create request object
         request = sd.SdramReconfigureReq(
             output_mode, clear_sdram, finished_writing,
             about_to_boot, do_reboot, reset_sdram_read_addr, clear_eth_stats,
             enable_debug, do_sdram_async_read, do_continuity_test,
             continuity_test_out_low, continuity_test_out_high)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         resp_pkt = response.packet
         if response is None:
             args = locals()
@@ -1165,7 +1284,9 @@ class SkarabTransport(Transport):
     # - Request ReadFlashReq
     # - Response ReadFlashResp
 
-    def read_flash_words(self, flash_address, num_words=256):
+    def read_flash_words(self, flash_address, num_words=256,
+                         timeout=None, 
+                         retries=None):
         """
         Used to read a block of up to 384 16-bit words from the NOR flash
         on the SKARAB motherboard.
@@ -1182,6 +1303,9 @@ class SkarabTransport(Transport):
         - Lower 16 bits of NOR flash address
         - NumWords: Number of 16-bit words to be read
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         if num_words > 384:
             errmsg = 'Failed to ReadFlashWords - Maximum of 384 16-bit words ' \
                      'can be read from the NOR flash'
@@ -1192,7 +1316,7 @@ class SkarabTransport(Transport):
         # Make actual function call and (hopefully) return data
         # - Number of Words to be expected in the
         # Response: 1+1+(1+1)+1+384+(3-1) = 391
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             # Then send back ReadWords[:NumWords]
             return response.packet['read_words'][:num_words]
@@ -1263,7 +1387,9 @@ class SkarabTransport(Transport):
 
     def program_flash_words(self, flash_address, total_num_words, num_words,
                             do_buffered_prog, start_prog, finish_prog,
-                            write_words):
+                            write_words,
+                            timeout=None, 
+                            retries=None):
         """
         This is the low-level function, as per the FUM, to write to
         the Virtex Flash.
@@ -1281,6 +1407,9 @@ class SkarabTransport(Transport):
         :param write_words: Words to program, max = 256 Words
         :return: Boolean - Success/Fail - 1/0
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
 
         # First thing to check:
         if num_words > 256 or len(write_words) > 512:
@@ -1333,7 +1462,7 @@ class SkarabTransport(Transport):
         - Therefore Total Number of Words to be expected in the Response:
           - 1+1+1+1+1+1+1+1+1+1+(2-1) = 11 16-bit words (?)
         """
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             # We have some data back
             if response.packet['program_success']:
@@ -1407,18 +1536,23 @@ class SkarabTransport(Transport):
     # 3.10: ERASE_FLASH_WORDS:
     # - Request sEraseFlashBlockReq
     # - Response sEraseFlashBlockResp
-    def erase_flash_block(self, flash_address=sd.DEFAULT_START_ADDRESS):
+    def erase_flash_block(self, flash_address=sd.DEFAULT_START_ADDRESS,
+                          timeout=None, 
+                          retries=None):
         """
         Used to erase a block in the NOR flash on the SKARAB motherboard
         :param flash_address: 32-bit address in the NOR flash to erase
         :return: erase_success - 0/1
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         address_high, address_low = self.data_split_and_pack(flash_address)
         request = sd.EraseFlashBlockReq(address_high, address_low)
         # Make the actual function call and (hopefully) return data
         # - Number of Words to be expected in the
         # Response: 1+1+(1+1)+1+(7-1) = 11
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             if response.packet['erase_success']:
                 return True
@@ -1544,7 +1678,9 @@ class SkarabTransport(Transport):
             # else: Continue
         return True
 
-    def read_spi_page(self, spi_address, num_bytes):
+    def read_spi_page(self, spi_address, num_bytes,
+                      timeout=None, 
+                      retries=None):
         """
         Used to read a page from the SPI flash in the Spartan 3AN FPGA on the
         SKARAB Motherboard. Up to a full page (264 bytes) can be read.
@@ -1553,6 +1689,9 @@ class SkarabTransport(Transport):
         :param num_bytes: number of bytes in page to be read (max 264 bytes)
         :return: list of read data
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         if num_bytes > 264:
             LOGGER.error('Maximum of 264 bytes (One full page) '
                          'can be read from a single SPI Register')
@@ -1563,7 +1702,7 @@ class SkarabTransport(Transport):
         # create payload packet structure for read request
         request = sd.ReadSpiPageReq(spi_address_high,
                                     spi_address_low, num_bytes)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             if response.packet['read_spi_page_success']:
                 # Then, send back ReadBytes[:NumBytes]
@@ -1644,7 +1783,9 @@ class SkarabTransport(Transport):
 
         return True
 
-    def program_spi_page(self, spi_address, num_bytes, write_bytes):
+    def program_spi_page(self, spi_address, num_bytes, write_bytes,
+                         timeout=None, 
+                         retries=None):
         """
         Low-level function call to program a page to the SPI Flash in the
         Spartan 3AN FPGA on the SKARAB.
@@ -1655,6 +1796,9 @@ class SkarabTransport(Transport):
         HEX-ENCODED STRING DATA
         :return: Boolean - Success/Fail - 1/0
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
 
         # First thing to check:
         if num_bytes > 264 or (len(write_bytes)/2) > 264:
@@ -1708,7 +1852,7 @@ class SkarabTransport(Transport):
         - Therefore Total Number of Words to be expected in the Response:
         - 1+1+(1+1)+1+264+1+(2-1) = 271 16-bit words
         """
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if not request.expect_response:
             # Just return True (?)
             debugmsg = 'No response to handle...'
@@ -1796,19 +1940,24 @@ class SkarabTransport(Transport):
 
         return True
 
-    def erase_spi_sector(self, spi_address):
+    def erase_spi_sector(self, spi_address,
+                         timeout=None, 
+                         retries=None):
         """
         Used to erase a sector in the SPI Flash in the Spartan 3AN FPGA
         on the SKARAB.
         :param spi_address: 32-bit address to erase in the Flash
         :return: Boolean - Success/Fail - 1/0
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         address_high, address_low = self.data_split_and_pack(spi_address)
         # Create instance of EraseSpiSectorRequest
         request = sd.EraseSpiSectorReq(address_high, address_low)
         # Make the actual function call and (hopefully) return data
         # Number of Words to be expected in the response: 1+1+(1+1)+1+(7-1) = 11
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             if response.packet['erase_success']:
                 return True
@@ -2060,12 +2209,17 @@ class SkarabTransport(Transport):
 
     # board level functions
 
-    def check_programming_packet_count(self):
+    def check_programming_packet_count(self,
+                                       timeout=None, 
+                                       retries=None):
         """
         Checks the number of packets programmed into the SDRAM of SKARAB
         :return: {num_ethernet_frames, num_ethernet_bad_frames,
         num_ethernet_overload_frames}
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         sdram_reconfigure_req = sd.SdramReconfigureReq(
             output_mode=sd.SDRAM_PROGRAM_MODE,
             clear_sdram=False,
@@ -2079,7 +2233,8 @@ class SkarabTransport(Transport):
             do_continuity_test=False,
             continuity_test_output_high=0x0,
             continuity_test_output_low=0x0)
-        response = self.send_packet(sdram_reconfigure_req)
+        response = self.send_packet(sdram_reconfigure_req, timeout=timeout, 
+                                    retries=retries)
         packet_count = {
             'Ethernet Frames': response.packet['num_ethernet_frames'],
             'Bad Ethernet Frames': response.packet['num_ethernet_bad_frames'],
@@ -2088,13 +2243,17 @@ class SkarabTransport(Transport):
         }
         return packet_count
 
-    def get_virtex7_firmware_version(self, retries=20):
+    def get_virtex7_firmware_version(self, timeout=None, retries=None):
         """
         Read the version of the Virtex 7 firmware
         :return: golden_image, multiboot, firmware_major_version,
         firmware_minor_version
         """
-        reg_data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=retries)
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        reg_data = self.read_board_reg(sd.C_RD_VERSION_ADDR, timeout=timeout, 
+                                       retries=retries)
         if reg_data:
             firmware_major_version = (reg_data >> 16) & 0x3fff
             firmware_minor_version = reg_data & 0xffff
@@ -2195,7 +2354,9 @@ class SkarabTransport(Transport):
         LOGGER.info('%s: Rebooting from SDRAM.'%self.host)
 
     def read_hmc_i2c(self, interface, slave_address, read_address,
-                     format_print=False):
+                     format_print=False,
+                     timeout=None, 
+                     retries=None):
         """
         Read a register on the HMC device via the I2C interface
         Prints the data in binary (32-bit) and hexadecimal formats
@@ -2210,12 +2371,15 @@ class SkarabTransport(Transport):
         :param read_address: register address on device to read
         :return: read data / None if fails
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # handle read address (pack it as 4 16-bit words)
         # TODO: handle this in the createPayload method
         unpacked = struct.unpack('!4B', struct.pack('!I', read_address))
         read_address = ''.join([struct.pack('!H', x) for x in unpacked])
         request = sd.ReadHMCI2CReq(interface, slave_address, read_address)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is None:
             errmsg = 'Invalid response to HMC I2C read request.'
             raise SkarabInvalidResponse(errmsg)
@@ -2260,7 +2424,9 @@ class SkarabTransport(Transport):
             'microblaze_software_version': self.get_embedded_software_version(),
         }
 
-    def get_sensor_data(self):
+    def get_sensor_data(self,
+                        timeout=None, 
+                        retries=None):
         """
         Get sensor data.
         Units:
@@ -2271,6 +2437,9 @@ class SkarabTransport(Transport):
         Currents - Amps (A)
         :return: all sensor data rolled up into a dictionary
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
 
         def sign_extend(value, bits):
             """
@@ -2480,7 +2649,7 @@ class SkarabTransport(Transport):
                     self.sensor_data[key] = (current, 'amperes',
                                              check_current(key, current))
         request = sd.GetSensorDataReq()
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             # raw sensor data received from SKARAB
             recvd_sensor_data_values = response.packet['sensor_data']
@@ -2493,7 +2662,9 @@ class SkarabTransport(Transport):
             return self.sensor_data
         return False
 
-    def set_fan_speed(self, fan_page, pwm_setting):
+    def set_fan_speed(self, fan_page, pwm_setting,
+                      timeout=None, 
+                      retries=None):
         """
         Sets the speed of a selected fan on the SKARAB motherboard. Desired
         speed is given as a PWM setting: range: 0.0 - 100.0
@@ -2501,12 +2672,15 @@ class SkarabTransport(Transport):
         :param pwm_setting: desired PWM speed (as a value from 0.0 to 100.0
         :return: (new_fan_speed_pwm, new_fan_speed_rpm)
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # check desired fan speed
         if pwm_setting > 100.0 or pwm_setting < 0.0:
             LOGGER.error('Given speed out of expected range.')
             return
         request = sd.SetFanSpeedReq(fan_page, pwm_setting)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             return (response.packet['fan_speed_pwm'] / 100.0,
                     response.packet['fan_speed_rpm'])
@@ -2674,7 +2848,9 @@ class SkarabTransport(Transport):
         minor = self.read_spi_page(rd_minor, 1)[0]
         return major, minor
 
-    def multicast_receive(self, gbename, ip, mask):
+    def multicast_receive(self, gbename, ip, mask,
+                          timeout=None, 
+                          retries=None):
         """
 
         :param gbename:
@@ -2682,13 +2858,16 @@ class SkarabTransport(Transport):
         :param mask:
         :return:
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         ip_high = ip.ip_int >> 16
         ip_low = ip.ip_int & (2 ** 16 - 1)
         mask_high = mask.ip_int >> 16
         mask_low = mask.ip_int & (2 ** 16 - 1)
         request = sd.ConfigureMulticastReq(1, ip_high, ip_low,
                                            mask_high, mask_low)
-        response = self.send_packet(request)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         resp_pkt = response.packet
         resp_ip = IpAddress(resp_pkt['fabric_multicast_ip_address_high'] << 16 |
                             resp_pkt['fabric_multicast_ip_address_low'])
