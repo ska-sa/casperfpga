@@ -495,4 +495,55 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
         fpga_.nb_pop_request_by_id(request_id)
     return returnval
 
+
+def hosts_from_dhcp_leases(host_pref=None,
+                           leases_file='/var/lib/misc/dnsmasq.leases'):
+    """
+    Get a list of hosts from a leases file.
+    :param host_pref: the prefix of the hosts in which we're interested
+    :param leases_file: the file to read
+    :return:
+    """
+    hosts = []
+    if host_pref is None:
+        host_pref = ['roach', 'skarab']
+    if not isinstance(host_pref, list):
+        host_pref = [host_pref]
+    with open(leases_file) as masqfile:
+        masqlines = masqfile.readlines()
+    for line in masqlines:
+        (leasetime, mac, ip, host, mac2) = line.replace('\n', '').split(' ')
+        for host_prefix in host_pref:
+            if host.startswith(host_prefix):
+                hosts.append(host if host != '*' else ip)
+                break
+    return hosts, leases_file
+
+
+def deprogram_hosts(host_list):
+    """
+
+    :param host_list:
+    :return:
+    """
+    if len(host_list) == 0:
+        raise RuntimeError('No good carrying on without hosts.')
+    fpgas = threaded_create_fpgas_from_hosts(host_list)
+    running = threaded_fpga_function(fpgas, 10, 'is_running')
+    deprogrammed = []
+    to_deprogram = []
+    already_deprogrammed = []
+    for fpga in fpgas:
+        if running[fpga.host]:
+            deprogrammed.append(fpga.host)
+            to_deprogram.append(fpga)
+        else:
+            already_deprogrammed.append(fpga.host)
+    running = threaded_fpga_function(to_deprogram, 10, 'deprogram')
+    if len(deprogrammed) != 0:
+        print('%s: deprogrammed okay.' % deprogrammed)
+    if len(already_deprogrammed) != 0:
+        print('%s: already deprogrammed.' % already_deprogrammed)
+    threaded_fpga_function(fpgas, 10, 'disconnect')
+
 # end

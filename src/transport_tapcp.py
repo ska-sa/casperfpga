@@ -9,13 +9,15 @@ __date__ = 'June 2017'
 
 LOGGER = logging.getLogger(__name__)
 
+TFTPY = None
+
 
 def set_log_level(level):
-    tftpy.setLogLevel(level)
+    TFTPY.setLogLevel(level)
 
 
 def get_log_level():
-    return tftpy.log.level
+    return TFTPY.log.level
 
 
 def get_core_info_payload(payload_str):
@@ -73,6 +75,8 @@ class TapcpTransport(Transport):
         """
         try:
             import tftpy
+            global TFTPY
+            TFTPY = tftpy
         except ImportError:
             raise ImportError('You need to install tftpy to use TapcpTransport')
         Transport.__init__(self, **kwargs)
