@@ -71,8 +71,11 @@ class TapcpTransport(Transport):
         :param host: IP Address of the targeted Board
         :return: none
         """
+        try:
+            import tftpy
+        except ImportError:
+            raise ImportError('You need to install tftpy to use TapcpTransport')
         Transport.__init__(self, **kwargs)
-        import tftpy
         set_log_level(logging.ERROR)
         self.t = tftpy.TftpClient(kwargs['host'], 69)
         self._logger = LOGGER
@@ -85,7 +88,12 @@ class TapcpTransport(Transport):
         :param host_ip:
         :return:
         """
-        board = TapcpTransport(host=host_ip, timeout=0.1)
+        try:
+            board = TapcpTransport(host=host_ip, timeout=0.1)
+        except ImportError:
+            LOGGER.error('tftpy is not installed, do not know if %s is a Tapcp'
+                         'client or not' % str(host_ip))
+            return False
         # Temporarily turn off logging so if tftp doesn't respond
         # there's no error. Remember the existing log level so that
         # it can be re-set afterwards if tftp connects ok.
