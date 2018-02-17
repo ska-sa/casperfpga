@@ -12,7 +12,7 @@ __author__ = 'jackh'
 __date__ = 'June 2017'
 
 LOGGER = logging.getLogger(__name__)
-tftpy.setLogLevel(logging.ERROR)
+tftpy.setLogLevel(logging.CRITICAL)
 
 def set_log_level(level):
     tftpy.setLogLevel(level)
@@ -76,9 +76,9 @@ class TapcpTransport(Transport):
 
         self.t = tftpy.TftpClient(kwargs['host'], 69)
         self._logger = LOGGER
-        self.timeout = kwargs.get('timeout', 1.2) # long enough to account for Flash erases
-        self.server_timeout = 4 # Microblaze timeout period
-        self.retries = kwargs.get('retries', 8)
+        self.timeout = kwargs.get('timeout', 0.025) # 1/4 the timeout of the MB
+        self.server_timeout = 0.1 # Microblaze timeout period. So that if a command fails we can wait for the microblaze to terminate the connection before retrying
+        self.retries = kwargs.get('retries', 8) # These are retries of a complete transaction (each of which has it's ofw TFTP retries).
 
     def listdev(self):
         buf = StringIO()
@@ -217,13 +217,75 @@ class TapcpTransport(Transport):
                 self.progdev(int(meta_inflash['prog_bitstream_start']))
             else:
                 HEAD_LOC, PROG_LOC = self._update_metadata(filename,len(header),len(prog),md5)
-                self.blindwrite('/flash',header+prog, offset= HEAD_LOC)
+                payload = header + prog
+                # Write the flash a chunk at a time. Each chunk includes an erase
+                # cycle, so can take ~1s to complete.
+                # So set the timeout high
+                old_timeout = self.timeout
+                self.timeout = 1.5
+                complete_blocks = len(payload) // sector_size
+                trailing_bytes = len(payload) % sector_size
+                for i in range(complete_blocks):
+                    self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=HEAD_LOC+i*sector_size)
+                # Write the not-complete last sector (if any)
+                if trailing_bytes:
+                    last_offset = complete_blocks * sector_size
+                    self.blindwrite('/flash', payload[last_offset :], offset=HEAD_LOC+last_offset)
+                # return timeout to what it used to be
+                self.timeout = old_timeout
+                # Program from new flash image!
                 self.progdev(PROG_LOC)
 
         else:
             with open(filename,'r') as fh:
-                self.blindwrite('/flash', fh.read(), offset=USER_FLASH_LOC)
+                payload = fh.read()
+            # Write the flash a chunk at a time. Each chunk includes an erase
+            # cycle, so can take ~1s to complete.
+            # So set the timeout high
+            old_timeout = self.timeout
+            self.timeout = 1.5
+            complete_blocks = len(payload) // sector_size
+            trailing_bytes = len(payload) % sector_size
+            for i in range(complete_blocks):
+                self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=USER_FLASH_LOC+i*sector_size)
+            # Write the not-complete last sector (if any)
+            if trailing_bytes:
+                last_offset = complete_blocks * sector_size
+                self.blindwrite('/flash', payload[last_offset :], offset=USER_FLASH_LOC+last_offset)
+            # return timeout to what it used to be
+            self.timeout = old_timeout
+            # Program from new flash image!
             self.progdev(USER_FLASH_LOC)
+
+    def _program_new_golden_image(self, imagefile):
+        """
+        Program a new golden image (i.e., the image stored at the
+        start of the flash.
+        Beware: If this command fails, and you reboot your
+        board, chances are it will require JTAG intervention
+        to being back to life!
+        :param imagefile: A .bin file containing a golden image
+        """
+        sector_size = 0x10000
+        with open(imagefile,'r') as fh:
+            payload = fh.read()
+        # Write the flash a chunk at a time. Each chunk includes an erase
+        # cycle, so can take ~1s to complete.
+        # So set the timeout high
+        old_timeout = self.timeout
+        self.timeout = 1.5
+        complete_blocks = len(payload) // sector_size
+        trailing_bytes = len(payload) % sector_size
+        for i in range(complete_blocks):
+            print "Writing block %d of %d" % (i+1, complete_blocks)
+            self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=i*sector_size)
+        # Write the not-complete last sector (if any)
+        if trailing_bytes:
+            print "Writing trailing %d bytes" % trailing_bytes
+            last_offset = complete_blocks * sector_size
+            self.blindwrite('/flash', payload[last_offset :], offset=last_offset)
+        # return timeout to what it used to be
+        self.timeout = old_timeout
     
 
     def _get_device_address(self, device_name):
@@ -246,7 +308,7 @@ class TapcpTransport(Transport):
         buf = StringIO()
         for retry in range(self.retries - 1):
             try:
-                self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.server_timeout)
+                self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
                 return buf.getvalue()
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
