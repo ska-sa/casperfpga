@@ -123,7 +123,7 @@ class Memory(bitfield.Bitfield):
         """
         :return: the memory block's length, in Words
         """
-        return self.width_bits / (self.length_bytes * 8)
+        return self.length_bytes / (self.width_bits / 8)
 
     # def __setattr__(self, name, value):
     #     try:

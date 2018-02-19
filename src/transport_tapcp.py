@@ -1,7 +1,5 @@
 import logging
 import struct
-import time
-import tftpy
 from StringIO import StringIO
 
 from transport import Transport
@@ -10,15 +8,16 @@ __author__ = 'jackh'
 __date__ = 'June 2017'
 
 LOGGER = logging.getLogger(__name__)
-tftpy.setLogLevel(logging.ERROR)
+
+TFTPY = None
 
 
 def set_log_level(level):
-    tftpy.setLogLevel(level)
+    TFTPY.setLogLevel(level)
 
 
 def get_log_level():
-    return tftpy.log.level
+    return TFTPY.log.level
 
 
 def get_core_info_payload(payload_str):
@@ -27,7 +26,7 @@ def get_core_info_payload(payload_str):
     addr    = x[0] & 0xfffffffa
     size    = x[1]
     typenum = x[2]
-    return {'rw' : rw, 'addr' : addr, 'size' : size, 'typenum' : typenum}
+    return {'rw': rw, 'addr': addr, 'size': size, 'typenum': typenum}
 
 
 def decode_csl_pl(csl):
@@ -74,7 +73,14 @@ class TapcpTransport(Transport):
         :param host: IP Address of the targeted Board
         :return: none
         """
+        try:
+            import tftpy
+            global TFTPY
+            TFTPY = tftpy
+        except ImportError:
+            raise ImportError('You need to install tftpy to use TapcpTransport')
         Transport.__init__(self, **kwargs)
+        set_log_level(logging.ERROR)
         self.t = tftpy.TftpClient(kwargs['host'], 69)
         self._logger = LOGGER
         self.timeout = kwargs.get('timeout', 3)
@@ -86,7 +92,12 @@ class TapcpTransport(Transport):
         :param host_ip:
         :return:
         """
-        board = TapcpTransport(host=host_ip, timeout=0.1)
+        try:
+            board = TapcpTransport(host=host_ip, timeout=0.1)
+        except ImportError:
+            LOGGER.error('tftpy is not installed, do not know if %s is a Tapcp'
+                         'client or not' % str(host_ip))
+            return False
         # Temporarily turn off logging so if tftp doesn't respond
         # there's no error. Remember the existing log level so that
         # it can be re-set afterwards if tftp connects ok.
