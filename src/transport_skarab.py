@@ -1514,6 +1514,8 @@ class SkarabTransport(Transport):
             # Problem
             errmsg = 'Failed to Analyse File successfully'
             LOGGER.error(errmsg)
+            # Remove temp bin-file wherever possible
+            os.remove(binname)
             raise sd.SkarabInvalidBitstream(errmsg)
         # else: Continue
 
@@ -1522,6 +1524,8 @@ class SkarabTransport(Transport):
             # Problem
             errmsg = 'Failed to Erase Flash Memory Blocks'
             LOGGER.error(errmsg)
+            # Remove temp bin-file wherever possible
+            os.remove(binname)
             raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
@@ -1530,6 +1534,8 @@ class SkarabTransport(Transport):
             # Problem
             errmsg = 'Failed to Program Flash Memory Blocks'
             LOGGER.error(errmsg)
+            # Remove temp bin-file wherever possible
+            os.remove(binname)
             raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
@@ -1540,8 +1546,12 @@ class SkarabTransport(Transport):
                 # Problem
                 errmsg = 'Failed to Program Flash Memory Blocks'
                 LOGGER.error(errmsg)
+                # Remove temp bin-file wherever possible
+                os.remove(binname)
                 raise sd.SkarabProgrammingError(errmsg)
             # else: Continue
+        # Remove temp bin-file wherever possible
+        os.remove(binname)
         return True
 
     def read_spi_page(self, spi_address, num_bytes):
