@@ -97,7 +97,10 @@ class TapcpTransport(Transport):
         try:
             self.t.upload('/progdev', buf, timeout=self.timeout)
         except:
-            pass # the progdev command kills the host, so things will start erroring
+            # the progdev command kills the host, so things will start erroring
+            # TODO: verify programming actually worked!
+            # sleep to allow the board to re-dhcp and come back to life
+            time.sleep(10)
 
     def prog_user_image(self):
         """ (Re)Program the FPGA with the file already on flash """
