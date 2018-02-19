@@ -332,9 +332,9 @@ class TapcpTransport(Transport):
         :param use_bulk: Does nothing. Kept for API compatibility
         :return: binary data string
         """
-        buf = StringIO()
         for retry in range(self.retries - 1):
             try:
+                buf = StringIO()
                 self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
                 return buf.getvalue()
             except:
@@ -342,6 +342,7 @@ class TapcpTransport(Transport):
                 # server to timeout and restart the whole transaction.
                 time.sleep(self.server_timeout)
                 LOGGER.warning('Tftp error on read -- retrying. %.3f' % time.time())
+        buf = StringIO()
         self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
         return buf.getvalue()
 
@@ -357,9 +358,9 @@ class TapcpTransport(Transport):
         assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
-        buf = StringIO(data)
         for retry in range(self.retries - 1):
             try:
+                buf = StringIO(data)
                 self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
                 return
             except:
@@ -367,6 +368,7 @@ class TapcpTransport(Transport):
                 # server to timeout and restart the whole transaction.
                 time.sleep(self.server_timeout)
                 LOGGER.warning('Tftp error on write -- retrying')
+        buf = StringIO(data)
         self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
 
     def deprogram(self):
