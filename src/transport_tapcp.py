@@ -212,52 +212,76 @@ class TapcpTransport(Transport):
     def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True):
         USER_FLASH_LOC = 0x800000
         sector_size = 0x10000
+        # Flash writes can take a long time, due to ~1s erase cycle
+        # So set the timeout high. We'll return it to normal at the end
+        old_timeout = self.timeout
+        self._logger.debug("Old timeout was %f. Setting new timeout to 1.5s" % old_timeout)
+        self.timeout = 1.5
         if(filename.endswith('.fpg')):
+            self._logger.info("Programming with an .fpg file. Checking if it is already in flash")
             header, prog, md5 = self._extract_bitstream(filename)
+            self._logger.debug("Reading meta-data from flash")
             meta_inflash = self.get_metadata()
             if ((meta_inflash is not None) and (meta_inflash['md5sum'] == md5)):
-                print('File already on flash!')
+                self._logger.info("Bitstream is already on flash.")
+                self._logger.debug("Returning timeout to %f" % old_timeout)
+                self.timeout = old_timeout
+                self._logger.info("Booting from existing user image.")
                 self.progdev(int(meta_inflash['prog_bitstream_start']))
             else:
+                self._logger.info("Bitstream is not in flash. Writing new bitstream.")
+                self._logger.debug("Generating new header information")
                 HEAD_LOC, PROG_LOC = self._update_metadata(filename,len(header),len(prog),md5)
                 payload = header + prog
-                # Write the flash a chunk at a time. Each chunk includes an erase
-                # cycle, so can take ~1s to complete.
-                # So set the timeout high
-                old_timeout = self.timeout
-                self.timeout = 1.5
                 complete_blocks = len(payload) // sector_size
                 trailing_bytes = len(payload) % sector_size
                 for i in range(complete_blocks):
+                    self._logger.debug("block %d of %d: writing %d bytes:" % (i+1, complete_blocks, len(payload[i*sector_size : (i+1)*sector_size])))
                     self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=HEAD_LOC+i*sector_size)
+                    readback = self.read('/flash', len(payload[i*sector_size : (i+1)*sector_size]), offset=HEAD_LOC+i*sector_size)
+                    if payload[i*sector_size : (i+1)*sector_size] != readback:
+                        raise RuntimeError("Readback of flash failed!")
                 # Write the not-complete last sector (if any)
                 if trailing_bytes:
+                    self._logger.debug("writing trailing %d bytes" % trailing_bytes)
                     last_offset = complete_blocks * sector_size
                     self.blindwrite('/flash', payload[last_offset :], offset=HEAD_LOC+last_offset)
-                # return timeout to what it used to be
+                    readback = self.read('/flash', len(payload[last_offset :]), offset=HEAD_LOC+last_offset)
+                    if payload[last_offset :] != readback:
+                        raise RuntimeError("Readback of flash failed!")
+
+                self._logger.debug("Returning timeout to %f" % old_timeout)
                 self.timeout = old_timeout
                 # Program from new flash image!
+                self._logger.info("Booting from new bitstream")
                 self.progdev(PROG_LOC)
 
         else:
+            self._logger.info("Programming something which isn't an .fpg file.")
+            self._logger.debug("Reading file %s" % filename)
             with open(filename,'r') as fh:
                 payload = fh.read()
-            # Write the flash a chunk at a time. Each chunk includes an erase
-            # cycle, so can take ~1s to complete.
-            # So set the timeout high
-            old_timeout = self.timeout
-            self.timeout = 1.5
             complete_blocks = len(payload) // sector_size
             trailing_bytes = len(payload) % sector_size
             for i in range(complete_blocks):
+                self._logger.debug("block %d of %d: writing %d bytes:" % (i+1, complete_blocks, len(payload[i*sector_size : (i+1)*sector_size])))
                 self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=USER_FLASH_LOC+i*sector_size)
+                readback = self.read('/flash', len(payload[i*sector_size : (i+1)*sector_size]), offset=USER_FLASH_LOC+i*sector_size)
+                if payload[i*sector_size : (i+1)*sector_size] != readback:
+                    raise RuntimeError("Readback of flash failed!")
+
             # Write the not-complete last sector (if any)
             if trailing_bytes:
+                self._logger.debug("writing trailing %d bytes" % trailing_bytes)
                 last_offset = complete_blocks * sector_size
                 self.blindwrite('/flash', payload[last_offset :], offset=USER_FLASH_LOC+last_offset)
-            # return timeout to what it used to be
+                readback = self.read('/flash', len(payload[last_offset :]), offset=USER_FLASH_LOC+last_offset)
+                if payload[last_offset :] != readback:
+                    raise RuntimeError("Readback of flash failed!")
+            self._logger.debug("Returning timeout to %f" % old_timeout)
             self.timeout = old_timeout
             # Program from new flash image!
+            self._logger.info("Booting from new bitstream")
             self.progdev(USER_FLASH_LOC)
 
     def _program_new_golden_image(self, imagefile):
