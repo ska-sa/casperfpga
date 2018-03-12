@@ -2315,6 +2315,48 @@ class SkarabTransport(Transport):
             led_mask = led_mask | sd.FRONT_PANEL_STATUS_LED7
         self.write_board_reg(sd.C_WR_FRONT_PANEL_STAT_LED_ADDR, led_mask)
 
+    def control_front_panel_leds_write(self, dsp_override=True):
+        """
+        Neatly packaged command that switches control of FrontPanelStatus LEDs
+        between DSP and BSP control
+        - Controlled via BSP by default
+        :param dsp_override: Boolean - 1/0 - True/False
+        :return: Boolean - 1/0 - True/False
+        """
+
+        # Easiest to just write the value, then check it
+        result = self.write_board_reg(sd.C_WR_DSP_OVERRIDE_ADDR, dsp_override)
+
+        if result.packet['reg_data_low'] != dsp_override:
+            # Problem
+            errmsg = 'Failed to switch control of FrontPanel LEDs...'
+            LOGGER.error(errmsg)
+            raise SkarabWriteFailed(errmsg)
+
+        # else: Success
+        led_controller = 'DSP Design' if dsp_override else 'Board Support Package'
+        debugmsg = 'Successfully changed control of FrontPanel LEDs to {}...'.format(led_controller)
+        LOGGER.debug(debugmsg)
+        print(debugmsg)
+        return True
+
+    def control_front_panel_leds_read(self):
+        """
+        Neatly packaged command that checks who is controlling FrontPanelStatus LEDs
+        - Controlled via BSP by default
+        :return:
+        """
+        result = self.read_board_reg(sd.C_RD_DSP_OVERRIDE_ADDR)
+
+        if result:
+            # Returned 1
+            debugmsg = 'DSP Design is controlling FrontPanel LEDs...'
+        else:
+            debugmsg = 'Board Support Package is controlling FrontPanel LEDs...'
+
+        LOGGER.debug(debugmsg)
+        print(debugmsg)
+
     def _prepare_sdram_ram_for_programming(self):
         """
         Prepares the sdram for programming with FPGA image
