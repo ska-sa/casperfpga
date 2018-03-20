@@ -2363,6 +2363,31 @@ class SkarabTransport(Transport):
             raise SkarabSdramError(errmsg)
         LOGGER.info('%s: Rebooting from SDRAM.'%self.host)
 
+    def write_hmc_i2c(self, interface, slave_address, write_address, write_data,
+                     format_print=False,
+                     timeout=None,
+                     retries=None):
+
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        #hmc addresses are 24/32bit, pack them as 4 Bytes (32 bits)
+        #write_address = struct.pack('!I', write_address)
+        unpacked2 = struct.unpack('!4B', struct.pack('!I', write_address))
+        write_address = ''.join([struct.pack('!H', x) for x in unpacked2])
+        unpacked3 = struct.unpack('!4B', struct.pack('!I', write_data))
+        write_data = ''.join([struct.pack('!H', x) for x in unpacked3])
+        request = sd.WriteHMCI2CReq(interface, slave_address, write_address, write_data)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to HMC I2C write request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['write_success']:
+            errmsg = 'HMC I2C write failed!'
+            raise SkarabWriteFailed(errmsg)
+        return response.packet['write_success']
+
+
     def read_hmc_i2c(self, interface, slave_address, read_address,
                      format_print=False,
                      timeout=None, 

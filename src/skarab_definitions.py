@@ -119,6 +119,7 @@ MULTICAST_REQUEST = 0x002B
 DEBUG_LOOPBACK_TEST = 0x002D
 QSFP_RESET_AND_PROG = 0x002F
 READ_HMC_I2C = 0x0031
+WRITE_HMC_I2C = 0x0033
 
 # SKA SA Defined Command ID's
 GET_SENSOR_DATA = 0x0043
@@ -126,6 +127,7 @@ SET_FAN_SPEED = 0x0045
 BIG_READ_WISHBONE = 0x0047
 BIG_WRITE_WISHBONE = 0x0049
 SDRAM_PROGRAM_WISHBONE = 0x0051
+
 
 # FOR VIRTEX FLASH RECONFIG
 DEFAULT_START_ADDRESS = 0x3000000
@@ -1270,6 +1272,7 @@ class ReadHMCI2CReq(Command):
         self.packet['read_address'] = read_address
 
 
+
 class ReadHMCI2CResp(Response):
     def __init__(self, command_id, seq_num, interface_id, slave_address,
                  read_address, read_bytes, read_success, padding):
@@ -1288,6 +1291,39 @@ class ReadHMCI2CResp(Response):
         unpacked_data[4:8] = [slave_address]
         # note the indices change after the first replacement!
         unpacked_data[5:9] = [read_bytes]
+        return unpacked_data
+
+class WriteHMCI2CReq(Command):
+    def __init__(self, interface_id, slave_address,
+                 write_address, write_data):
+        super(WriteHMCI2CReq, self).__init__(WRITE_HMC_I2C)
+        self.expect_response = True
+        self.response = WriteHMCI2CResp
+        self.num_words = 15
+        self.pad_words = 2
+        self.packet['id'] = interface_id
+        self.packet['slave_address'] = slave_address
+        self.packet['write_address'] = write_address
+        self.packet['write_data'] = write_data
+
+class WriteHMCI2CResp(Response):
+    def __init__(self, command_id, seq_num, interface_id, slave_address,
+                 write_address, write_data, write_success, padding):
+        super(WriteHMCI2CResp, self).__init__(command_id, seq_num)
+        self.packet['id'] = interface_id
+        self.packet['slave_address'] = slave_address
+        self.packet['write_address'] = write_address
+        self.packet['write_data'] = write_data
+        self.packet['write_success'] = write_success
+        self.packet['padding'] = padding
+
+    @staticmethod
+    def unpack_process(unpacked_data):
+        slave_address = unpacked_data[4:8]
+        write_bytes = unpacked_data[8:12]
+        unpacked_data[4:8] = [slave_address]
+        # note the indices change after the first replacement!
+        unpacked_data[5:9] = [write_bytes]
         return unpacked_data
 
 
