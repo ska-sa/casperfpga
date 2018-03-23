@@ -369,7 +369,7 @@ class TapcpTransport(Transport):
                 # server to timeout and restart the whole transaction.
                 time.sleep(self.server_timeout)
                 LOGGER.info('Tftp error on write -- retrying')
-        LOGGER.warning('Several Tftp errors on write-- final retry. %.3f')
+        LOGGER.warning('Several Tftp errors on write-- final retry.')
         buf = StringIO(data)
         self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
 
