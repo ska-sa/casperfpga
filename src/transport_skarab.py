@@ -2475,6 +2475,10 @@ class SkarabTransport(Transport):
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
 
+        def hmc_die_temp(hmc_mez):
+            self.write_hmc_i2c(hmc_mez, sd.HMC_I2C_Address, sd.HMC_Temp_Write_Register, sd.HMC_Temp_Write_Command)
+            die_temp = self.read_hmc_i2c(hmc_mez, sd.HMC_I2C_Address, sd.HMC_Die_temp_Register)
+            return die_temp
 
         def sign_extend(value, bits):
             """
@@ -2694,8 +2698,18 @@ class SkarabTransport(Transport):
             parse_currents(recvd_sensor_data_values)
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
-            return self.sensor_data
-        return False
+        else:
+            raise SkarabInvalidResponse('Error reading board temperatures')
+
+        try:
+            for hmc in sd.HMC_MEZ:
+                key = 'hmc_{}_die_temp'.format(hmc - 1)
+                self.sensor_data[key] = (hmc_die_temp(hmc), 'degC')
+
+        except:
+            raise SkarabInvalidResponse('Error reading HMC Die Temperatures')
+
+        return self.sensor_data
 
     def set_fan_speed(self, fan_page, pwm_setting,
                       timeout=None, 

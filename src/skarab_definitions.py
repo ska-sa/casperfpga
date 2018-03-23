@@ -200,6 +200,16 @@ PLUS3V3AUX_ADC_PAGE = 22
 
 ALL_PAGES_PAGE = 255
 
+# HMC Temperature registers
+
+HMC_Temp_Write_Register = 0x2b0004
+HMC_Temp_Write_Command = 0x8000000a
+HMC_Die_temp_Register = 0x2b0000
+HMC_Top_DRAM_temp_Register = 0x2b0001
+HMC_Bottom_DRAM_temp_Register = 0x2b0002
+HMC_I2C_Address = 0x10
+HMC_MEZ = [1,2,3]
+
 # MAX31785 FAN CONTROLLER PMBUS COMMANDS
 PAGE_CMD = 0x00
 CLEAR_FAULTS_CMD = 0x03
