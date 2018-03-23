@@ -341,8 +341,8 @@ class TapcpTransport(Transport):
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
                 time.sleep(self.server_timeout)
-                LOGGER.info('Tftp error on read -- retrying. %.3f')
-        LOGGER.warning('Several Tftp errors on read -- final retry. %.3f')
+                LOGGER.info('Tftp error on read -- retrying.')
+        LOGGER.warning('Several Tftp errors on read -- final retry.')
         buf = StringIO()
         self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
         return buf.getvalue()
