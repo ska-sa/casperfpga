@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class IMUSimple:
 
 
-    def __init__(self,bus,mpuaddr=0x69,akaddr=0x0c):
+    def __init__(self,bus,mpuaddr=0x69,akaddr=None):
         """ IMUSimple IMU usage demo
 
             bus = i2c.I2C_IPGPIO(2,3,15000)
@@ -18,11 +18,17 @@ class IMUSimple:
         """
 
         self.mpu = MPU9250(bus,mpuaddr)
-        self.ak = AK8963(bus,akaddr)
+        if akaddr!=None:
+            # Enable aux i2c - AK8963
+            self.setWord('BYPASS_EN',0x1)
+            self.ak = AK8963(bus,akaddr)
+        else:
+            self.ak=None
 
-    def init(self):
-        self.mpu.init()
-        self.ak.init()
+    def init(self,gyro=True,accel=True):
+        self.mpu.init(lowpower=True)
+        if self.ak!=None:
+            self.ak.init()
 
     @property
     def accel(self):
@@ -273,10 +279,8 @@ class MPU9250:
 
         if self.whoami() is not self.WHOAMI:
             logger.error("MPU9250 at address {} is not ready!".format(addr))
-        # Enable aux i2c - AK8963
-        self.setWord('BYPASS_EN',0x1)
 
-    def init(self,gyro=True,accel=True):
+    def init(self,gyro=True,accel=True,lowpower=False):
         """ Initialise MPU9250
         """
 
@@ -285,7 +289,44 @@ class MPU9250:
         self.setWord('pwr_mgmt_1',0x00)
         # Wait MEMS oscilator to stablize
         time.sleep(0.1)
-        self.setWord('pwr_mgmt_1',0x01)
+
+        if lowpower==True:
+            # Enter into accelerometer only low power mode
+            rid,mask=self._getMask(self.DICT,'CLKSEL')
+            val = self._set(0x0, 1, mask)
+            rid,mask=self._getMask(self.DICT,'CYCLE')
+            val = self._set(val, 1, mask)
+            # PD_PTAT is, I believe, the legendary 'TEMP_DIS' bit
+            # in MPU-9250 Register Map datasheet
+            rid,mask=self._getMask(self.DICT,'PD_PTAT')
+            val = self._set(val, 1, mask)
+            self.write(rid,val)
+
+            # Set Accelerometer sample rate at low power mode
+            # Lposc_clksel  Output Frequency (Hz)
+            # 0     0.24
+            # 1     0.49
+            # 2     0.98
+            # 3     1.95
+            # 4     3.91
+            # 5     7.81
+            # 6     15.63
+            # 7     31.25
+            # 8     62.50
+            # 9     125
+            # 10        250
+            # 11        500
+            # 12-15     RESERVED
+
+            rid,mask=self._getMask(self.DICT,'lposc_clksel')
+            val = self._set(val, 8, mask)
+            self.write(rid,val)
+
+            # Enable accel and gyro
+            accel=True
+            gryo=False
+        else:
+            self.setWord('pwr_mgmt_1',val)
 
         # Enable accel and gyro
         rid,mask=self._getMask(self.DICT,'DIS_XA')
@@ -306,10 +347,9 @@ class MPU9250:
         self.setWord('SMPLRT_DIV',0x0)
         self.setWord('gyro_config',0X0)
         self.setWord('accel_config',0X0)
+        # Must set ACCEL_FCHOICE to 0 if in low-power mode
         self.setWord('accel_config2',0X0)
 
-        # Enable Aux I2C - AK8963
-        self.setWord('int_pin_cfg',0x2)
         # Disable interrupt
         self.setWord('int_enable',0x0)
 
@@ -909,7 +949,6 @@ class AK8963:
     DICT[0x12] = {  'asaz':0xff<<0,}
 
     WHOAMI=0x48
-    MPU9250=0x68
 
     adj=np.asarray([0,0,0])
 
