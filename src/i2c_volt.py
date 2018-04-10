@@ -68,6 +68,24 @@ class LTC2990():
         self.addr=addr
 
     def init(self,fmt='celsius',repeat=False,mode1=3,mode0=7):
+        """ Initialise LTC2990
+
+        mode0   Description
+        #0  V1, V2, TR2(Default)
+        #1  V1-V2, TR2
+        #2  V1-V2, V3, V4
+        #3  TR1, V3, V4
+        #4  TR1, V3-V4
+        #5  TR1, TR2
+        #6  V1-V2, V3-V4
+        #7  V1, V2, V3, V4
+
+        mode1   Description
+        #0  Internal Temperature Only (Default)
+        #1  TR1, V1 or V1-V2 Only per Mode[2:0]
+        #2  TR2, V3 or V3-V4 Only per Mode[2:0]
+        #3  All Measurements per Mode[2:0]
+        """
 
         if fmt not in ['celsius','kelvin']:
             raise ValueError("Invalid parameter")
@@ -140,6 +158,21 @@ class LTC2990():
         return data
 
     def readVolt(self,name):
+        """ Read Voltage
+
+        Please switch to corresponding modes using init() before measuring voltage.
+        Possible options are:
+            vcc
+            v1
+            v2
+            v3
+            v4
+            v1-v2
+            v3-v4
+
+            E.g.
+            readVolt('v1-v2')
+        """
         name = name.lower()
         if name not in self.MODE0[self.mode0]+['vcc']:
             raise ValueError("Invalid parameter")

@@ -42,7 +42,9 @@ class Si7051():
         self.addr = addr
         self._setResolution(resolution)
         if not self._isVDDOK():
-            raise Exception('VDD has a problem')
+            msg = 'VDD has a problem'
+            logger.error(msg)
+            raise Exception(msg)
 
     def read(self,reg=None,length=1):
         return self.itf.read(self.addr, reg, length)
@@ -86,10 +88,14 @@ class Si7051():
         14 bit
         """
         if not isinstance(resolution,int):
-            raise ValueError('Resolution must be an integer')
+            msg = 'Resolution must be an integer'
+            logger.error(msg)
+            raise ValueError(msg)
             return
         if resolution < self.resBase or resolution > self.resTop:
-            raise ValueError('Resolution must be between %d and %d'%(self.resBase,self.resTop))
+            msg = 'Resolution must be between %d and %d'%(self.resBase,self.resTop)
+            logger.error(msg)
+            raise ValueError(msg)
             return
         _config = self.resList[resolution - self.resBase]
 

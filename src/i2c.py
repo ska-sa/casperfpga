@@ -1,4 +1,4 @@
-import time,logging
+import time,logging,collections
 
 PRERlo = 0
 PRERhi = 1
@@ -27,35 +27,83 @@ logger = logging.getLogger(__name__)
 class I2C:
 
     def __init__(self,fpga,controller_name):
+        """ I2C module for I2C yellow block
+
+        fpga: casperfpga.CasperFpga instance
+        controller_name: The name of the I2C yellow block
+        """
+
         self.fpga = fpga
         self.controller_name = controller_name
                 self.enable_core()
 
-    def clockSpeed(self, desiredSpeed, inputSpeed = 100):
+    def setClock(self, target, reference=100):
+        """ Set I2C bus clock
+
+        The I2C module uses a divider to generate its clock from a reference
+        clock, e.g. a system clock at 100 MHz. The acutally generated I2C clock
+        speed might be slightly different from the target clock speed specified.
+        Reference clock speed in MHz and target clock speed in kHz
+
+        E.g.
+            setClock(10,100)    # Set I2C bus clock speed to 10 kHz,
+                        # given a system clock of 100 MHz
+
         """
-        Input speed in MHz and desired speed in kHz
-        """
-        preScale = int((inputSpeed*1e3/(5*desiredSpeed))-1)
-        #Clear EN bit in the control register before writing to prescale register
+        preScale = int((reference*1e3/(5*target))-1)
+        # Clear EN bit in the control register before writing to prescale register
         self.disable_core()
-        #Write the preScale factor to the Prescale Register's low bit 
-        self.fpga.write_int(self.controller_name, (preScale >> 0) & 0xff, offset = PRERlo, blindwrite=True)
-        #Write the preScale factor to the Prescale Register's high bit 
-        self.fpga.write_int(self.controller_name, (preScale >> 8) & 0xff, offset = PRERhi, blindwrite=True)
-        #Re-enable core
+        # Write the preScale factor to the Prescale Register's low bit
+        self.fpga.write_int(self.controller_name, (preScale >> 0) & 0xff, word_offset=PRERlo, blindwrite=True)
+        # Write the preScale factor to the Prescale Register's high bit
+        self.fpga.write_int(self.controller_name, (preScale >> 8) & 0xff, word_offset=PRERhi, blindwrite=True)
+        # Re-enable core
         self.enable_core()
-    def readClockSpeed(self):
-        lowBit = self.fpga.read_int(self.controller_name, offset = PRERlo)
-        highBit = self.fpga.read_int(self.controller_name, offset = PRERhi)
-        return (highBit << 8) + lowBit
+
+    def getClock(self, reference=None):
+        """ Get I2C clock speed
+
+        If the reference clock speed is not provided, this method returns the preScale,
+        which equals to:
+
+            preScale = int((reference*1e3/(5*target))-1)
+
+        where target is the desired I2C clock speed in kHz. Reference clock speed is in MHz.
+
+        E.g.
+            getClock()      # Returns the value of the divider
+            getClock(100)       # Returns the I2C clock speed given a reference
+                        # clock speed at 100 MHz
+        """
+
+        lowBit = self.fpga.read_int(self.controller_name, word_offset=PRERlo)
+        highBit = self.fpga.read_int(self.controller_name, word_offset=PRERhi)
+        preScale = (highBit << 8) + lowBit
+
+        if reference==None:
+            return preScale
+        else:
+            return reference*200./(preScale+1) + ' MHz'
+
+
     def getStatus(self):
-        status = self.fpga.read_int(self.controller_name, offset = statusReg)
+        """ Get current status of the I2C module
+
+        The status is kept in a dict structure, items of which include:
+
+            ACK      Acknowledge from Slave
+            BUSY     Busy i2c bus
+            ARB      Lost Arbitration
+            TIP      Transfer in Progress
+            INT      Interrupt Pending
+        """
+        status = self.fpga.read_int(self.controller_name, word_offset=statusReg)
         statusDict = {
-            "ACK"  : {"val" : (status >> 7) & 1, "desc" :'Acknowledge from Slave',},
-            "BUSY" : {"val" : (status >> 6) & 1, "desc" : 'Busy i2c bus'},
-            "ARB"  : {"val" : (status >> 5) & 1, "desc" :'Lost Arbitration'},
-            "TIP"  : {"val" : (status >> 1) & 1, "desc" :'Transfer in Progress'},
-            "INT"  : {"val" : (status >> 0) & 1, "desc" : 'Interrupt Pending'},
+            "ACK"  : (status >> 7) & 1,
+            "BUSY" : (status >> 6) & 1,
+            "ARB"  : (status >> 5) & 1,
+            "TIP"  : (status >> 1) & 1,
+            "INT"  : (status >> 0) & 1,
             }
         return statusDict
 
@@ -65,7 +113,7 @@ class I2C:
         Set the interrupt bit to 0 (disabled).
         """
         I2C_ENABLE_OFFSET = 7
-        self.fpga.write_int(self.controller_name, 1<<I2C_ENABLE_OFFSET, offset=controlReg)
+        self.fpga.write_int(self.controller_name, 1<<I2C_ENABLE_OFFSET, word_offset=controlReg, blindwrite=True)
 
     def disable_core(self):
         """
@@ -73,87 +121,171 @@ class I2C:
         Set the interrupt bit to 0 (disabled).
         """
         I2C_ENABLE_OFFSET = 7
-        self.fpga.write_int(self.controller_name, 0<<I2C_ENABLE_OFFSET, offset=controlReg)
+        self.fpga.write_int(self.controller_name, 0<<I2C_ENABLE_OFFSET, word_offset=controlReg, blindwrite=True)
 
     def _itf_write(self,addr,data):
-        self.fpga.write_int(self.controller_name, data, True, addr)
+        self.fpga.write_int(self.controller_name, data, word_offset=addr, blindwrite=True)
 
     def _itf_read(self,addr):
-        return self.fpga.read_int(self.controller_name, addr)
+        return self.fpga.read_int(self.controller_name, word_offset=addr)
 
     def _write(self,addr,data):
-        """
-        addr: 8-bit integer
-        data: an integer or a list of 8-bit integers
+        """ I2C write primitive
+
+        I2C writes arbitary number of bytes to a slave device, It carries out
+        the following steps:
+        1. Send start
+        2. Send address and R/W bit low (expecting an ack from the slave)
+        3. Send one or more bytes (expecting an ack after sending each byte)
+        4. Send stop
+
+        addr: 7-bit integer, address of the slave device
+        data: a byte or a list of bytes to write
+
+        E.g.
+            _write(0x20,0xff)   # Write 0xff to a slave at address 0x20
+            _write(0x20,range(10))  # Write [0..9] to a slave at address 0x20
                 """
+
         self._itf_write(transmitReg,    (addr<<1)|WRITE_BIT)
         self._itf_write(commandReg, CMD_START|CMD_WRITE)
-        while (self.getStatus()["TIP"]["val"]):
+        while (self.getStatus()["TIP"]):
             time.sleep(.01)
         if isinstance(data,int):
             data = [data]
         for d in data:
             self._itf_write(transmitReg,    d)
             self._itf_write(commandReg, CMD_WRITE)
-            while (self.getStatus()["TIP"]["val"]):
+            while (self.getStatus()["TIP"]):
                 time.sleep(.01)
         self._itf_write(commandReg, CMD_STOP)
 
-    def _read(self,addr,length):
-        """
-        addr: 8-bit integer
-        length: the number of bytes needs to be read
+    def _read(self,addr,length=1):
+        """ I2C read primitive
+
+        I2C reads arbitary number of bytes from a slave device. It carries out
+        the following steps:
+        1. Send start
+        2. Send address and R/W bit high (expecting an ack from the slave)
+        3. Optionally receive one or more bytes (send an ack after receiving each byte)
+        4. Receive the last byte (send a nack after receiving the last byte)
+        5. Send stop
+
+        addr: 7-bit integer, address of the slave device
+        length: non-negative integer, the number of bytes to read
+        The return is a byte when length==1, or a list of bytes otherwise
+
+        E.g.
+            _read(0x20) # Return one byte from a slave at 0x20
+            _read(0x20,10)  # Return 10 bytes from a slave at 0x20
                 """
+
         data = []
         self._itf_write(transmitReg,    (addr<<1)|READ_BIT)
         self._itf_write(commandReg, CMD_START|CMD_WRITE)
-        while (self.getStatus()["TIP"]["val"]):
+        while (self.getStatus()["TIP"]):
             time.sleep(.001)
-        for i in range(length):
-            # The command below also gives an ACK signal from master to slave
-            # because CMD_ACK is actually 0
+        for i in range(length-1):
+            # The command below also gives an ACK signal from master
+            # to slave because CMD_ACK is actually 0
             self._itf_write(commandReg, CMD_READ)
             ret = self._itf_read(receiveReg)
             data.append(ret)
-            while (self.getStatus()["TIP"]["val"]):
+            while (self.getStatus()["TIP"]):
                 time.sleep(.01)
         # The last read ends with a NACK (not acknowledge) signal and a STOP
         # from master to slave
         self._itf_write(commandReg, CMD_READ|CMD_NACK|CMD_STOP)
         ret = self._itf_read(receiveReg)
         data.append(ret)
-        while (self.getStatus()["TIP"]["val"]):
+        while (self.getStatus()["TIP"]):
             time.sleep(.001)
         if length==1:
             return data[0]
         else:
             return data
 
-    def read(self,addr, cmd, length):
-        if not isinstance(cmd, int) or cmd!=None:
+    def read(self,addr, cmd=None, length=1):
+        """ I2C read
+
+        Read arbitary number of bytes from an internal address of a slave device.
+        Some I2C datasheets refer to internal address as command (cmd) as well.
+
+        addr: 7-bit integer, address of the slave device
+        cmd: a byte of a list of bytes, the internal address of the slave device
+        length: non-negative integer, the number of bytes to read
+        The return is a byte when length==1, or a list of bytes otherwise.
+
+        E.g.
+            read(0x40)  # Read a byte from the slave device at 0x40, without
+                    # specifying an internal address
+            read(0x40,0xe3) # Read a byte from the internal address 0xe3 of the slave
+                    # at 0x40
+            read(0x40,length=3)
+                    # Read 3 bytes from the slave at 0x40 without specifying
+                    # an internal address
+            read(0x40,[0xfa,0x0f],4)
+                    # Read 4 bytes from the internal address [0xfa,0x0f]
+                    # of the slave at 0x40
+
+        """
+
+        if not isinstance(cmd, int) and cmd!=None and not isinstance(cmd, list):
             raise ValueError("Invalid parameter")
-
-        if cmd==None:
-            return self._read(length)
-        else:
-            self._write(addr,cmd)
-            return self._read(length)
-
-
-    def write(self,addr,cmd=None, data=[]):
-        if not isinstance(cmd, int) or cmd!=None:
-            raise ValueError("Invalid parameter")
-        if isinstance(data,list):
-            if len(data)==0:
+        elif isinstance(cmd, list):
+            if not all(isinstance(c,int) for c in cmd) or cmd==[]:
                 raise ValueError("Invalid parameter")
-
         if cmd==None:
-            self._write(addr,cmd)
-        elif isinstance(data, list): 
-            self._write(addr,[cmd]+data)
+            return self._read(addr,length)
         else:
-            self._write(addr,[cmd,data])
+            self._write(addr,cmd)
+            return self._read(addr,length)
 
+    def write(self,addr,cmd=None, data=None):
+        """ I2C write
+
+        Write arbitary number of bytes to an internal address of a slave device.
+        Some I2C datasheets refer to internal address as command (cmd) as well.
+
+        addr: 7-bit integer, address of the slave device
+        cmd: a byte of a list of bytes, the internal address of the slave device
+        data: a byte of a list of bytes to write
+
+        E.g.
+            write(0x40,0x1)     # Write 0x1 to slave device at 0x40
+            write(0x40,0x1,0x2) # Write 0x2 to the internal address 0x1 of the
+                        # slave device at address 0x40
+            write(0x40,data=0x2)    # Write 0x2 to the slave at 0x40, without specifying
+                        # an internal address
+            write(0x40,[0x1,0x2],[0x3,0x4])
+                        # Write [0x3,0x4] to the internal address [0x1,0x2]
+                        # of the slave at 0x40
+        """
+
+        if not isinstance(cmd, int) and cmd!=None and not isinstance(cmd,list):
+            raise ValueError("Invalid parameter")
+        elif isinstance(cmd, list):
+            if not all(isinstance(c,int) for c in cmd) or cmd==[]:
+                raise ValueError("Invalid parameter")
+        elif isinstance(cmd, int):
+            cmd = [cmd]
+
+        if not isinstance(data, int) and data!=None and not isinstance(data,list):
+            raise ValueError("Invalid parameter")
+        elif isinstance(data, list):
+            if not all(isinstance(d,int) for d in data) or data==[]:
+                raise ValueError("Invalid parameter")
+        elif isinstance(data, int):
+            data = [data]
+
+        if cmd==None and data!=None:
+            self._write(addr,data)
+        elif cmd!=None and data==None:
+            self._write(addr,cmd)
+        elif cmd!=None and data!=None:
+            self._write(addr,cmd+data)
+        else:
+            raise ValueError("Invalid parameter")
 
 class I2C_SMBUS:
 
@@ -203,6 +335,17 @@ class I2C_SMBUS:
 class I2C_PIGPIO:
 
     def __init__(self,sda,scl,baud):
+        """ PIGPIO based I2C
+
+        I2C module powered by PIGPIO library.
+
+        sda: The gpio number of sda pin.
+        scl: The gpio number of scl pin
+        baud: The baud rate of the I2C bus
+
+        Be noticed that gpio number is different from pin number!
+        """
+
         import pigpio
         self.pi = pigpio.pi()
         self.sda = sda
@@ -220,6 +363,25 @@ class I2C_PIGPIO:
         self.pi.bb_i2c_close(self.sda)
 
     def _read(self, addr, length=1):
+        """ I2C read primitive
+
+        I2C reads arbitary number of bytes from a slave device. It carries out
+        the following steps:
+        1. Send start
+        2. Send address and R/W bit high (expecting an ack from the slave)
+        3. Optionally receive one or more bytes (send an ack after receiving each byte)
+        4. Receive the last byte (send a nack after receiving the last byte)
+        5. Send stop
+
+        addr: 7-bit integer, address of the slave device
+        length: non-negative integer, the number of bytes to read
+        The return is a byte when length==1, or a list of bytes otherwise
+
+        E.g.
+            _read(0x20) # Return one byte from a slave at 0x20
+            _read(0x20,10)  # Return 10 bytes from a slave at 0x20
+                """
+
         if length < 1:
             raise ValueError("Invalid parameter")
         cmd = [4, addr, 2, 6, length, 3, 0]
@@ -239,6 +401,23 @@ class I2C_PIGPIO:
             return list(ret[1])
 
     def _write(self, addr, data):
+        """ I2C write primitive
+
+        I2C writes arbitary number of bytes to a slave device, It carries out
+        the following steps:
+        1. Send start
+        2. Send address and R/W bit low (expecting an ack from the slave)
+        3. Send one or more bytes (expecting an ack after sending each byte)
+        4. Send stop
+
+        addr: 7-bit integer, address of the slave device
+        data: a byte or a list of bytes to write
+
+        E.g.
+            _write(0x20,0xff)   # Write 0xff to a slave at address 0x20
+            _write(0x20,range(10))  # Write [0..9] to a slave at address 0x20
+                """
+
         if isinstance(data,list):
             cmd = [4, addr, 2, 7, len(data)] + data + [3, 0]
         elif isinstance(data,int):
@@ -257,6 +436,35 @@ class I2C_PIGPIO:
             raise Exception(pigpio.error_text(ret[0]))
 
     def read(self, addr, cmd=None, length=1):
+        """ I2C read
+
+        Read arbitary number of bytes from an internal address of a slave device.
+        Some I2C datasheets refer to internal address as command (cmd) as well.
+
+        addr: 7-bit integer, address of the slave device
+        cmd: a byte of a list of bytes, the internal address of the slave device
+        length: non-negative integer, the number of bytes to read
+        The return is a byte when length==1, or a list of bytes otherwise.
+
+        E.g.
+            read(0x40)  # Read a byte from the slave device at 0x40, without
+                    # specifying an internal address
+            read(0x40,0xe3) # Read a byte from the internal address 0xe3 of the slave
+                    # at 0x40
+            read(0x40,length=3)
+                    # Read 3 bytes from the slave at 0x40 without specifying
+                    # an internal address
+            read(0x40,[0xfa,0x0f],4)
+                    # Read 4 bytes from the internal address [0xfa,0x0f]
+                    # of the slave at 0x40
+        """
+
+        if not isinstance(cmd, int) and cmd!=None and not isinstance(cmd, list):
+            raise ValueError("Invalid parameter")
+        elif isinstance(cmd, list):
+            if not all(isinstance(c,int) for c in cmd) or cmd==[]:
+                raise ValueError("Invalid parameter")
+
         if cmd!=None:
             self._write(addr,cmd)
 
@@ -274,20 +482,47 @@ class I2C_PIGPIO:
             return data
 
     def write(self, addr, cmd=None, data=None):
+        """ I2C write
 
-        if cmd==None and data==None:
+        Write arbitary number of bytes to an internal address of a slave device.
+        Some I2C datasheets refer to internal address as command (cmd) as well.
+
+        addr: 7-bit integer, address of the slave device
+        cmd: a byte of a list of bytes, the internal address of the slave device
+        data: a byte of a list of bytes to write
+
+        E.g.
+            write(0x40,0x1)     # Write 0x1 to slave device at 0x40
+            write(0x40,0x1,0x2) # Write 0x2 to the internal address 0x1 of the
+                        # slave device at address 0x40
+            write(0x40,data=0x2)    # Write 0x2 to the slave at 0x40, without specifying
+                        # an internal address
+            write(0x40,[0x1,0x2],[0x3,0x4])
+                        # Write [0x3,0x4] to the internal address [0x1,0x2]
+                        # of the slave at 0x40
+        """
+
+        if not isinstance(cmd, int) and cmd!=None and not isinstance(cmd,list):
             raise ValueError("Invalid parameter")
+        elif isinstance(cmd, list):
+            if not all(isinstance(c,int) for c in cmd) or cmd==[]:
+                raise ValueError("Invalid parameter")
+        elif isinstance(cmd, int):
+            cmd = [cmd]
 
-        value = []
+        if not isinstance(data, int) and data!=None and not isinstance(data,list):
+            raise ValueError("Invalid parameter")
+        elif isinstance(data, list):
+            if not all(isinstance(d,int) for d in data) or data==[]:
+                raise ValueError("Invalid parameter")
+        elif isinstance(data, int):
+            data = [data]
 
-        if isinstance(cmd,list):
-            value += cmd
-        elif isinstance(cmd,int):
-            value.append(cmd)
-
-        if isinstance(data,list):
-            value += data
-        elif isinstance(data,int):
-            value.append(data)
-
-        self._write(addr,value)
+        if cmd==None and data!=None:
+            self._write(addr,data)
+        elif cmd!=None and data==None:
+            self._write(addr,cmd)
+        elif cmd!=None and data!=None:
+            self._write(addr,cmd+data)
+        else:
+            raise ValueError("Invalid parameter")

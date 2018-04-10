@@ -1,7 +1,7 @@
 import time,logging,numpy as np,struct,sys
 import random
-from transforms3d.quaternions import *
-from transforms3d.euler import *
+#from transforms3d.quaternions import *
+#from transforms3d.euler import *
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +9,14 @@ class IMUSimple:
 
 
     def __init__(self,bus,mpuaddr=0x69,akaddr=0x0c):
+        """ IMUSimple IMU usage demo
+
+            bus = i2c.I2C_IPGPIO(2,3,15000)
+            imu = i2c_motion.IMUSimple(bus,0x69,0x0c)
+            imu.init()
+            print(imu.pose)
+        """
+
         self.mpu = MPU9250(bus,mpuaddr)
         self.ak = AK8963(bus,akaddr)
 
@@ -36,22 +44,6 @@ class IMUSimple:
         from numpy.linalg import norm
 
         acc = np.asarray(self.accel)
-#       mag = np.asarray(self.mag)
-#
-#       a0 = [0,0,norm(acc)]
-#       na = np.cross(acc,a0)
-#       ta = np.arccos(np.dot(acc,a0)/norm(acc)/norm(a0))
-#       qa = axangle2quat(na,ta)
-#
-#       m = mag/norm(mag)
-#
-#       ea = quat2euler(qa)
-#
-#       roll = ea[0]
-#       pitch = ea[1]
-#       yaw = np.arctan2(m[2]*np.sin(ea[0])-m[1]*np.cos(ea[0]),m[0]*np.cos(ea[1])+m[1]*np.sin(ea[0])*np.sin(ea[1])+m[2]*np.sin(ea[1])*np.cos(ea[0]))
-#
-#       return roll,pitch,yaw
 
         a0 = [0,0,norm(acc)]
         na = np.cross(a0,acc)
@@ -60,8 +52,6 @@ class IMUSimple:
         ph = np.arctan2(acc[0],acc[1])
 
         return ta*180/np.pi,ph*180/np.pi
-        
-
 
 class MPU9250:
     """ 9-axis MotionTracking device that combines a 3-axis gyroscope, 3-axis accelerometer, 3-axis magnetometer and a Digital Motion Processor (DMP) all in a small 3x3x1mm package available as a pin-compatible upgrade from the MPU-6515 
@@ -287,6 +277,8 @@ class MPU9250:
         self.setWord('BYPASS_EN',0x1)
 
     def init(self,gyro=True,accel=True):
+        """ Initialise MPU9250
+        """
 
         self.reset()
 
@@ -370,7 +362,24 @@ class MPU9250:
         self.setWord('H_RESET',0x1)
         time.sleep(0.1)
 
-    def setAccelSamplingRate(self,bandwidth=None,delay=None,fs=None):
+    def setAccelSamplingRate(self,conf):
+        """ Accelerometer sampling rate
+
+        parameter conf is in range(9)
+
+        num bandwidth (Hz)  delay (ms)  fs (Hz)
+        #0  1130,       0.75,       4000
+        #1  460,        1.94,       1000
+        #2  184,        5.8,        1000
+        #3  92,     7.8,        1000
+        #4  41,     11.8,       1000
+        #5  20,     19.8,       1000
+        #6  10,     35.7,       1000
+        #7  5,      66.96,      1000
+        #8  460,        1.94,       1000
+
+        """
+
         vals=[  [1130,  0.75,   4000],
             [460,   1.94,   1000],
             [184,   5.8,    1000],
@@ -391,32 +400,35 @@ class MPU9250:
             [1,6],
             [1,7],]
 
-        r = vals
+        if conf not in range(9):
+            raise ValueError("Invalid parameter")
 
-        if bandwidth != None:
-            r = [l for l in vals if bandwidth == l[0]]
-            if r == []:
-                raise ValueError("Invalid parameter")
-
-        if delay != None:
-            r = [l for l in r if delay == l[1]]
-            if r == []:
-                raise ValueError("Invalid parameter")
-
-        if fs != None:
-            r = [l for l in r if fs == l[2]]
-            if r == []:
-                raise ValueError("Invalid parameter")
-
-        config = param[vals.index(r[0])]
+        config = param[conf]
+        r = vals[conf]
 
         self.setWord('ACCEL_FCHOICE', config[0])
         self.setWord('A_DLPFCFG', config[1])
-        r = r[0]
 
-        logger.info("MPU9250 Accel sampling bandwidth={}, delay={}, fs={}".format(r[0],r[1],r[2]))
+        logger.info("MPU9250 Accel sampling bandwidth={} Hz, delay={} ms, fs={} Hz".format(r[0],r[1],r[2]))
         
-    def setGyroSamplingRate(self,bandwidth=None,delay=None,fs=None):
+    def setGyroSamplingRate(self,conf):
+        """ Gyroscope sampling rate
+
+        parameter conf is in range(10)
+
+        num bandwidth (Hz)  delay (ms)  fs (Hz)
+        #0  8800,       0.064,      32000
+        #1  3600,       0.11,       32000
+        #2  250,        0.97,       8000
+        #3  184,        2.9,        1000
+        #4  92,     3.9,        1000
+        #5  41,     5.9,        1000
+        #6  20,     9.9,        1000
+        #7  10,     17.85,      1000
+        #8  5,      33.48,      1000
+                #9  3600,       0.17,       8000
+        """
+
         vals=[  [8800,  0.064,  32000],
             [3600,  0.11,   32000],
             [250,   0.97,   8000 ],
@@ -439,30 +451,16 @@ class MPU9250:
             [3,6],
             [3,7],]
 
-        r = vals
+        if conf not in range(10):
+            raise ValueError("Invalid parameter")
 
-        if bandwidth != None:
-            r = [l for l in vals if bandwidth == l[0]]
-            if r == []:
-                raise ValueError("Invalid parameter")
-
-        if delay != None:
-            r = [l for l in r if delay == l[1]]
-            if r == []:
-                raise ValueError("Invalid parameter")
-
-        if fs != None:
-            r = [l for l in r if fs == l[2]]
-            if r == []:
-                raise ValueError("Invalid parameter")
-
-        config = param[vals.index(r[0])]
-        r = r[0]
+        config = param[conf]
+        r = vals[conf]
 
         self.setWord('FCHOICE_B', config[0] ^ 0b11)
         self.setWord('DLPF_CFG', config[1])
 
-        logger.info("MPU9250 Gyro sampling bandwidth={}, delay={}, fs={}".format(r[0],r[1],r[2]))
+        logger.info("MPU9250 Gyro sampling bandwidth={} Hz, delay={} ms, fs={} Hz".format(r[0],r[1],r[2]))
 
     def setFIFO(self,accel=False,temp=False,gyro=False,slv0=False,slv1=False,slv2=False,slv3=False):
 
@@ -561,6 +559,8 @@ class MPU9250:
             return coe*data
 
     def readFIFOCount(self):
+        """ Read the number of data available in the FIFO
+        """
 
         rid, mask = self._getMask(self.DICT, 'FIFO_CNT_H')
         data = self.read(rid,2)
@@ -599,6 +599,11 @@ class MPU9250:
                 
 
     def sortFIFOData(self,types,data=None):
+        """ Sort a serial of data into categories according to given types
+
+            E.g.
+            sortFIFOData({'accel':True,'gyro':True},[0,0,16383,0,0,0])
+        """
 
         TYPES = ['accel','temp','gyro','slv0','slv1','slv2','slv3']
 
@@ -662,8 +667,7 @@ class MPU9250:
             return results
 
     def _readFIFO2File(self,handle,length=None,wait=0.001,verbose=True):
-        """ read FIFO
-
+        """ Redirect FIFO into a file
         """
         rid, mask = self._getMask(self.DICT, 'fifo_r_w')
 
@@ -696,8 +700,7 @@ class MPU9250:
                 print(str(percent[0])+'%')
 
     def _readFIFO2MEM(self,length=None,wait=0.001,verbose=True):
-        """ read FIFO
-
+        """ read FIFO into memory
         """
         rid, mask = self._getMask(self.DICT, 'fifo_r_w')
         data = []
@@ -778,19 +781,6 @@ class MPU9250:
         for i in range(len(goffs)):
             self.write(rid+i,goffs[i])
 
-#   def setGyroOffs(self,raw_average,FS_SEL=None):
-#       if FS_SEL==None:
-#           FS_SEL=self.getWord('GYRO_FS_SEL')
-#       offs = [int(num * 2.**FS_SEL / -4) for num in raw_average]
-#       offs = [struct.unpack('>H',struct.pack('>h',num))[0] for num in offs]
-#       goffs = np.zeros(6,dtype=int)
-#       goffs[0::2] = [int(off >> 8) for off in offs]
-#       goffs[1::2] = [int(off & 0xff) for off in offs]
-#       
-#       rid,mask=self._getMask(self.DICT,'X_OFFS_USR_H')
-#       for i in range(len(goffs)):
-#           self.write(rid+i,goffs[i])
-
 #   def selftest(self, gyroscale=250,accelscale=2):
 #
 #       self.setWord('SMPLRT_DIV', 0)
@@ -848,12 +838,14 @@ class MPU9250:
 
 
     def calibrate(self,WRITE_OFFSET_REG=True):
+        """ Not working
+        """
 
         self.init(gyro=True,accel=True)
 
         # Actual sampling rate = 1000 / (1+9) = 100 Hz
-        self.setGyroSamplingRate(bandwidth=41,fs=1000)
-        self.setAccelSamplingRate(bandwidth=41,fs=1000)
+        self.setGyroSamplingRate(5)
+        self.setAccelSamplingRate(4)
         self.setWord('SMPLRT_DIV',0x9)
 
         self.gyro_scale=0
@@ -935,6 +927,8 @@ class AK8963:
             logger.error("AK893 at address {} is not ready!".format(addr))
 
     def init(self):
+        """ Initialise AKB8963
+        """
         self.reset()
         self.adj = self.getAdjustment()
         if self.selftest():
@@ -1074,6 +1068,12 @@ class AK8963:
             return data * 0.15
 
 def signed(data,bitwidth):
+    """ Convert an unsigned data into a 32-bit signed data
+
+        E.g.
+        signed(0xfff,12) # it's -1
+        signed(0xff,12) # it's 255
+    """
     if isinstance(data,int):
         data &= (0b1<<bitwidth)-1
         if data & (0b1<<(bitwidth-1)) != 0:
@@ -1086,4 +1086,3 @@ def signed(data,bitwidth):
         return data
     else:
         raise ValueError("Invalid parameter")
-
