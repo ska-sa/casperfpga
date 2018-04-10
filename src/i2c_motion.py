@@ -20,7 +20,7 @@ class IMUSimple:
         self.mpu = MPU9250(bus,mpuaddr)
         if akaddr!=None:
             # Enable aux i2c - AK8963
-            self.setWord('BYPASS_EN',0x1)
+            self.mpu.setWord('BYPASS_EN',0x1)
             self.ak = AK8963(bus,akaddr)
         else:
             self.ak=None
@@ -44,8 +44,6 @@ class IMUSimple:
 
     @property
     def pose(self):
-    ''' return theta and phi in degree
-    '''
 
         from numpy.linalg import norm
 
@@ -1097,7 +1095,7 @@ class AK8963:
         data = (data[1::2] << 8) | data[0::2]
 
         if self.getWord('HOFL'):
-            logger.warn('AK8963 overflown!')
+            logger.warning('AK8963 overflown!')
 
         data = signed(data,bitwidth)
 

@@ -88,12 +88,16 @@ class LTC2990():
         """
 
         if fmt not in ['celsius','kelvin']:
+            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if repeat not in [False,True]:
+            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if mode1 not in range(4):
+            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if mode0 not in range(8):
+            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
         self.fmt = 0 if fmt == 'celsius' else 1
@@ -140,11 +144,13 @@ class LTC2990():
 
         self.setWord('TRIGGER',0xff)
         cnt=0
-        while not self.getWord(name+'READY'):
+        while self.getStatus('BUSY'):
             cnt+=1
             time.sleep(0.01)
-            if cnt>100:
-                raise RuntimeError("Read temp failed!")
+            if cnt>10:
+                msg = "Voltage sensor at address {} failed to read its temperature!".format(hex(self.addr))
+                logger.warning(msg)
+                return float('nan')
         msb = self.getWord(name+'MSB')
         lsb = self.getWord(name+'LSB')
 
@@ -175,6 +181,7 @@ class LTC2990():
         """
         name = name.lower()
         if name not in self.MODE0[self.mode0]+['vcc']:
+            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
         if name != 'vcc':
@@ -185,17 +192,18 @@ class LTC2990():
 
         self.setWord('TRIGGER',0xff)
         cnt=0
-        while not self.getWord(reg+'READY'):
+        while self.getStatus('BUSY'):
             cnt+=1
             time.sleep(0.01)
-            if cnt>100:
-                raise RuntimeError("Read volt failed!")
+            if cnt>10:
+                msg = "Voltage sensor at address {} failed to read {}!".format(hex(self.addr),name)
+                logger.warning(msg)
+                return float('nan')
         msb = self.getWord(reg+'MSB')
         lsb = self.getWord(reg+'LSB')
 
         value = self._get(msb,self.MSB['VOLT']['DATA']) << 8 | lsb
-        value = value & 0x7fff | value & 0x4000 << 1
-        value = struct.unpack('>h',struct.pack('>H',value))[0]
+        value = -(value ^ 0x7fff) - 1 if value & 0x4000 else value
 
         if name in ['vcc']:
             data = value * self.CSINGLEENDED + self.VCCBIAS
@@ -209,6 +217,7 @@ class LTC2990():
     def getStatus(self,name=None):
 
         if name not in self.DICT[0].keys() + [None]:
+            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
         data = self.read(0x0)
@@ -225,6 +234,7 @@ class LTC2990():
             rval = self.read(rid)
             return {name: self._get(rval,mask) for name, mask in self.DICT[rid].items()}
         else:
+            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
     def getWord(self,name):
