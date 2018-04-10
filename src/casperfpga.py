@@ -77,7 +77,8 @@ class CasperFpga(object):
 
         # Setup logger to be propagated through transports
         self.logger = logging.getLogger(self.host)
-        self.logger.setLevel(logging.ERROR)
+        # Setting log level to INFO to log initial connection message
+        self.logger.setLevel(logging.INFO)
 
         log_fifo_length = 1000
         stream_handler = CasperStreamHandler(self.host, log_fifo_length)
@@ -96,17 +97,18 @@ class CasperFpga(object):
         self.logger.addHandler(file_handler)
 
         # Making additions to test altering stdout and stderr
-        sys.stderr = self.logger
+        # sys.stderr = self.logger
         # - Testing independent logger entity for stdout
-        temp_logger = logging.getLogger('STDOUT')
-        temp_logger.setLevel(logging.INFO)
-        temp_logger.addHandler(stream_handler)
-        temp_logger.addHandler(file_handler)
-        sys.stdout = temp_logger
+        # temp_logger = logging.getLogger('STDOUT')
+        # temp_logger.setLevel(logging.INFO)
+        # temp_logger.addHandler(stream_handler)
+        # temp_logger.addHandler(file_handler)
+        # sys.stdout = temp_logger
 
-        if self.logger.isEnabledFor(logging.ERROR):
-            new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
-            self.logger.log(logging.INFO, new_connection_msg)
+        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+        self.logger.info(new_connection_msg)
+        # Set log level to ERROR
+        self.logger.setLevel(logging.ERROR)
 
         # define a custom log level between DEBUG and INFO
         # PDEBUG = 15
