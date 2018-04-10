@@ -422,6 +422,15 @@ fan_speed_ranges = {
     'fpga_fan_pwm': (100, 0)
 }
 
+logger_level_dict = {
+    50: 'CRITICAL',
+    40: 'ERROR',
+    30: 'WARNING',
+    20: 'INFO',
+    10: 'DEBUG',
+    0: 'NOTSET'
+}
+
 # 88E1111 GBE DEFINES
 GBE_88E1111_I2C_DEVICE_ADDRESS = 0x58  # Without read/write bit
 
