@@ -3,10 +3,9 @@ import numpy as np
 import struct,math
 import logging
 
-logging.getLogger(__name__).addHandler(logging.NullHandler())
+logger = logging.getLogger(__name__)
 
 class HMCAD1511(WishBoneDevice):
-	""" Control HMCAD1511 via wb_adc16_controller """
 
 	# HMCAD1511 does not provide any way of register readback for
 	# either diagnosis or status checking. If you find something
@@ -36,7 +35,7 @@ class HMCAD1511(WishBoneDevice):
 	# Register address
 
 	DICT = [None] * (0x56+1)
-	
+
 	DICT[0x00] = {	'rst' : 0b1 << 0,}
 	DICT[0x0f] = {	'sleep4_ch' : 0b1111 << 0,
 			'sleep2_ch' : 0b11 << 4,
@@ -69,7 +68,7 @@ class HMCAD1511(WishBoneDevice):
 	DICT[0x30] = {	'jitter_ctrl' : 0b11111111 << 0, }
 	DICT[0x31] = {	'channel_num' : 0b111 << 0,
 			'clk_divide' : 0b11 << 8, }
-	DICT[0x33] = {	'coarse_gain_cfg' : 0b1 << 0,
+	DICT[0x33] = {	'cgain_cfg' : 0b1 << 0,
 			'fine_gain_en' : 0b1 << 1, }
 	DICT[0x34] = {	'fgain_branch1' : 0b1111111 << 0,
 			'fgain_branch2' : 0b1111111 << 8, }
@@ -97,51 +96,91 @@ class HMCAD1511(WishBoneDevice):
 	DICT[0x55] = {	'fs_cntrl' : 0b111111 << 0, }
 	DICT[0x56] = {	'startup_ctrl' : 0b111 << 0, }
 
+	CGAIN_DICT_0 = { 0	: 0b0000,
+			 1	: 0b0001,
+			 2	: 0b0010,
+			 3	: 0b0011,
+			 4	: 0b0100,
+			 5	: 0b0101,
+			 6	: 0b0110,
+			 7	: 0b0111,
+			 8	: 0b0000,
+			 9	: 0b0001,
+			 10	: 0b0010,
+			 11	: 0b0011,
+			 12	: 0b1100,}
+	CGAIN_DICT_1 = { 1	: 0b0000,
+			 1.25	: 0b0001,
+			 2	: 0b0010,
+			 2.5	: 0b0011,
+			 4	: 0b0100,
+			 5	: 0b0101,
+			 8	: 0b0110,
+			 10	: 0b0111,
+			 12.5	: 0b1000,
+			 16	: 0b1001,
+			 20	: 0b1010,
+			 25	: 0b1011,
+			 32	: 0b1100,
+			 50	: 0b1101,}
 
-	CGAIN_DICT_0 = {'0b0000' : 0,
-			'0b0001' : 1,
-			'0b0010' : 2,
-			'0b0011' : 3,
-			'0b0100' : 4,
-			'0b0101' : 5,
-			'0b0110' : 6,
-			'0b0111' : 7,
-			'0b0000' : 8,
-			'0b0001' : 9,
-			'0b0010' : 10,
-			'0b0011' : 11,
-			'0b1100' : 12,}
-	CGAIN_DICT_1 = {'0b0000' : 1,
-			'0b0001' : 1.25,
-			'0b0010' : 2,
-			'0b0011' : 2.5,
-			'0b0100' : 4,
-			'0b0101' : 5,
-			'0b0110' : 8,
-			'0b0111' : 10,
-			'0b1000' : 12.5,
-			'0b1001' : 16,
-			'0b1010' : 20,
-			'0b1011' : 25,
-			'0b1100' : 32,
-			'0b1101' : 50,}
+	def __init__(self, interface, controller_name, cs=0xff):
+		""" HMCAD1511 High Speed Multi-Mode 8-Bit 1 GSPS A/D Converter
 
-	def __init__(self, interface, controller_name, csn=0xff):
+		interface: an instance of casperfpga.CasperFpga
+		controller_name: the name of the adc16_interface
+		cs: Set cs to 0xff if you want all ADC chips share the same configuartion. Or
+		if you want to config them separately (e.g. calibrating interleaving adc gain
+		error for each ADC chip), set cs to 0b1, 0b10, 0b100, 0b1000... for different
+		HMCAD1511 python objects
+
+		Here is an example of configuring a register.
+		E.g.
+			# Make an instance of adc
+			adc = HMCAD1511(interface,'adc16_interface')
+
+			# Select the 2nd and 3rd ADCs, but unselect the 1st ADC.
+			# cs stands for chip select. The last bit of cs is for the 1st ADC
+			adc.cs = 0b110
+
+			# Target fields you want to configure. They belong to one register
+			# Please refer to HMCAD1511 datasheet for more details
+			# en_lvds_term        LVDS buffers
+			# term_lclk<2:0>     LCLKN and LCLKP buffers
+			# term_frame<2:0>  FCLKN and FCLKP buffers
+			# term_dat<2:0>     output data buffers
+
+			# Get the register address and masks
+			rid, mask = adc._getMask('en_lvds_term')
+			val = adc._set(0x0, 0b1, mask)
+			rid, mask = adc._getMask('term_lclk')
+			val = adc._set(val, 0b011, mask)        # 0b11 corresponds to 94ohm
+			rid, mask = adc._getMask('term_frame')
+			val = adc._set(val, 0b011, mask)
+			rid, mask = adc._getMask('term_dat')
+			val = adc._set(val, 0b011, mask)
+
+			# write value into the register
+			adc.write(val, rid)
+
+		Please find more examples of of usage in adc.HMCAD1511.init() or snapadc.py
+		"""
+
 		super(HMCAD1511, self).__init__(interface, controller_name)
 
-		# Set csn to 0xff if you want all ADC chips share the same
-		# configuartion. Or if you want to config them separately
-		# (e.g. calibrating interleaving adc gain error for each
-		# ADC chip), set csn to 0b1, 0b10, 0b100, 0b1000... for
-		# different HMCAD1511 python objects
-		if not isinstance(csn,int):
+		if not isinstance(cs,int):
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
-		self.csn = csn & 0xff
+		self.cs = cs & 0xff
 
 	# Put some initialization here rather than in __init__ so that instantiate
 	# an HMCAD1511 object wouldn't reset/interrupt the running ADCs.
 	def init(self,numChannel=4,clkDivide=1,lowClkFreq=False):
 		""" Reset and initialize ADCs
+
+		Please see adc.HMCAD1511.setOperatingMode() for more explanations
+		of the parameters
+
 		"""
 
 		self.reset()
@@ -154,19 +193,19 @@ class HMCAD1511(WishBoneDevice):
 	def _bitCtrl(self, state, sda=0):	
 		# state: 0 - idle, 1 - start, 2 - transmit, 3 - stop
 		if state == self.STATE_3WIRE_START:
-			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.csn
+			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.cs
 			self._write(cmd, self.A_WB_W_3WIRE)
 		elif state == self.STATE_3WIRE_TRANS:
-			cmd = (0 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.csn
+			cmd = (0 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.cs
 			self._write(cmd, self.A_WB_W_3WIRE)
-			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.csn
+			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.cs
 			self._write(cmd, self.A_WB_W_3WIRE)
 		elif state == self.STATE_3WIRE_STOP:
 			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | 0x00
 			self._write(cmd, self.A_WB_W_3WIRE)
 
 	def _wordCtrl(self, data, length=24):
-		# wishbone data[9:0] <==> SCL, SDA, csn[7:0]
+		# wishbone data[9:0] <==> SCL, SDA, cs[7:0]
 		self._bitCtrl(state=self.STATE_3WIRE_START)
 		for i in range(length):
 			bit = (data >> (length-i-1)) & 1
@@ -178,7 +217,7 @@ class HMCAD1511(WishBoneDevice):
 		addr = addr & 0xff
 		addr_data = (addr << 16) | data
 		self._wordCtrl(addr_data)
-		
+
 	def _set(self, d1, d2, mask=None):
 		# Update some bits of d1 with d2, while keep other bits unchanged
 		if mask:
@@ -195,11 +234,12 @@ class HMCAD1511(WishBoneDevice):
 				rid = self.DICT.index(d)
 				return rid, d.get(name)
 		if rid == None:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 
 	def test(self, mode='off', _bits_custom1=None, _bits_custom2=None):
 		""" Test ADC LVDS
-		
+
 		Set LVDS test patterns
 		 E.g.	test('off')
 		 	test('en_ramp')					Ramp pattern 0-255
@@ -216,6 +256,7 @@ class HMCAD1511(WishBoneDevice):
 			self.write(self._set(0x0, 0b100, mask), rid)
 		elif mode == 'dual_custom_pat':
 			if not isinstance(_bits_custom1, int) or not isinstance(_bits_custom2, int):
+			    logger.error("Invalid parameter")
 				raise ValueError("Invalid parameter")
 			rid, mask = self._getMask('pat_deskew')
 			self.write(self._set(0x0, 0b00, mask), rid)
@@ -227,6 +268,7 @@ class HMCAD1511(WishBoneDevice):
 			self.write(self._set(0x0, 0b010, mask), rid)
 		elif mode == 'single_custom_pat':
 			if not isinstance(_bits_custom1, int):
+			    logger.error("Invalid parameter")
 				raise ValueError("Invalid parameter")
 			rid, mask = self._getMask('pat_deskew')
 			self.write(self._set(0x0, 0b00, mask), rid)
@@ -250,14 +292,95 @@ class HMCAD1511(WishBoneDevice):
 			rid, mask = self._getMask('pat_deskew')
 			self.write(self._set(0x0, 0b00, mask), rid)
 		else:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 
 	# fine gain (x, not dB)
 	FGAIN = 2**-8, 2**-9, 2**-10, 2**-11, 2**-12, 2**-13
 
-	def fGain(self, gains):
+	# For details please see table 23, 24 and 25 in HMCAD1511 datasheet
+	FGAIN_ORDER = { 4:[0,1,2,3,4,5,6,7],
+			2:[0,2,1,3,4,6,5,7],
+			1:[0,2,5,7,3,1,6,4]}
+
+	# For details please see table 14 in HMCAD1511 datasheet
+	CGAIN_ORDER = {	4:[[0,1],[2,3],[4,5],[6,7]],
+			2:[[0,1,2,3],[4,5,6,7]],
+			1:[[0,1,2,3,4,5,6,7]]}
+
+	def cGain(self, gains, cgain_cfg=False, fgain_cfg=False):
+		""" Set the coarse gain of the ADC channels
+
+		Coarse gain control (parameters in dB). Input gain must be a list of
+		integers. Coarse gain range for HMCAD1511: 0dB ~ 12dB
+		E.g.
+			cGain([1,5,9,12])		# Quad channel mode in dB step
+			cGain([32,50],cgain_cfg=True)	# Dual channel mode in x step
+			cGain([10],fgain_cfg=True)	# Single channel mode in dB
+							# step, with fine gain enabled
+
+		Coarse gain options when by default cgain_cfg=False:
+			0 dB, 1 dB, 2 dB, 3 dB, 4 dB, 5 dB, 6 dB,
+			7 dB, 8 dB, 9 dB, 10 dB, 11 dB and 12 dB
+		Coarse gain options when cgain_cfg=True:
+			1x, 1.25x, 2x, 2.5x, 4x, 5x, 8x,
+			10x, 12.5x, 16x, 20x, 25x, 32x, 50x
+		"""
+
+		if not isinstance(gains, list):
+			logger.error("Invalid parameter")
+			raise ValueError("Invalid parameter")
+		if len(gains) not in [1,2,4]:
+			logger.error("Invalid parameter")
+			raise ValueError("Invalid parameter")
+		if not all(isinstance(e, (int,float)) and e>=0 for e in gains):
+			logger.error("Invalid parameter")
+			raise ValueError("Invalid parameter")
+		if cgain_cfg==False:
+			if not all(e in self.CGAIN_DICT_0.keys() for e in gains):
+			    logger.error("Invalid parameter")
+				raise ValueError("Invalid parameter")
+		else:
+			if not all(e in self.CGAIN_DICT_1.keys() for e in gains):
+			    logger.error("Invalid parameter")
+				raise ValueError("Invalid parameter")
+
+		# By default, coarse gain in dB step, fine gain disabled
+		rid, mask = self._getMask('cgain_cfg')
+		val = self._set(0x0, cgain_cfg, mask)
+		rid, mask = self._getMask('fine_gain_en')
+		val = self._set(val, fgain_cfg, mask)
+		self.write(val, rid)
+
+		if cgain_cfg==False:
+			vals = [self.CGAIN_DICT_0[gain] for gain in gains]
+		else:
+			vals = [self.CGAIN_DICT_1[gain] for gain in gains]
+
+		if len(vals)==4:
+			rid, mask = self._getMask('cgain4_ch1')
+			val = self._set(0x0, vals[0], mask)
+			rid, mask = self._getMask('cgain4_ch2')
+			val = self._set(val, vals[1], mask)
+			rid, mask = self._getMask('cgain4_ch3')
+			val = self._set(val, vals[2], mask)
+			rid, mask = self._getMask('cgain4_ch4')
+			val = self._set(val, vals[3], mask)
+			self.write(val, rid)
+		elif len(vals)==2:
+			rid, mask = self._getMask('cgain2_ch1')
+			val = self._set(0x0, vals[0], mask)
+			rid, mask = self._getMask('cgain2_ch1')
+			val = self._set(val, vals[1], mask)
+			self.write(val, rid)
+		else:
+			rid, mask = self._getMask('cgain1_ch1')
+			val = self._set(0x0, vals[0], mask)
+			self.write(val, rid)
+
+	def fGain(self, gains, numChannel=1):
 		""" Set the fine gain of the 8 ADC cores
-	
+
 		Fine gain control (parameters in dB), input gain rounded towards 0 dB
 		Fine gain range for HMCAD1511: -0.0670dB ~ 0.0665dB
 		E.g.
@@ -265,19 +388,25 @@ class HMCAD1511(WishBoneDevice):
 		"""
 
 		if not isinstance(gains, list):
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 		if not all(isinstance(e, float) for e in gains):
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 		if not len(gains) == 8:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 		maxdB = 20*math.log(1+sum(self.FGAIN),10)
 		mindB = 20*math.log(1-sum(self.FGAIN),10)
 		if not all(e > maxdB for e in gains):
+			logger.error("Invalid parameter")
 			raise ValueError("Fine gain cannot be bigger than %d dB" % maxdB)
 		if not all(e < mindB for e in gains):
+			logger.error("Invalid parameter")
 			raise ValueError("Fine gain cannot be smaller than %d dB" % mindB)
 
 		cfgs = [self._calFGainCfg(g) for g in gains]
+		cfgs = [cfgs[i] for i in self.FGAIN_ORDER[numChannel]]
 
 		rid, mask = self._getMask('fgain_branch1')
 		val = self._set(0x0, cfgs[0], mask)
@@ -302,7 +431,7 @@ class HMCAD1511(WishBoneDevice):
 		rid, mask = self._getMask('fgain_branch8')
 		val = self._set(val, cfgs[7], mask)
 		self.write(val, rid)
-		
+
 	def _calFGainCfg(self, gain):
 		x = np.float32(1+abs((10**(gain/20.))-1))
 		unpacked = struct.unpack('!I',struct.pack('!f',x))[0]
@@ -310,10 +439,10 @@ class HMCAD1511(WishBoneDevice):
 		if gain < 0:
 			cfg = cfg + (1 << 6)
 		return cfg
-		
+
 	def setOperatingMode(self, numChannel, clkDivide=1, lowClkFreq=False):
 		""" Set interleaving mode and clock divide factor
-		
+
 		Available Interleaving mode
 		numChannel=1	--	8 ADC cores per channel
 		numChannel=2	--	4 ADC cores per channel
@@ -332,8 +461,10 @@ class HMCAD1511(WishBoneDevice):
 		"""
 
 		if not numChannel in [1,2,4]:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 		if not clkDivide in [1,2,4,8]:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 
 		self.powerDown()
@@ -354,17 +485,20 @@ class HMCAD1511(WishBoneDevice):
 		""" Reshape and return ADC data
 		"""
 		if numChannel not in [1,2,4]:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 		if not isinstance(data,np.ndarray):
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 		if data.ndim != 2 or data.shape[1]!=8:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
-		
+
 		data = data.reshape(-1,numChannel,8/numChannel)
 		data = np.einsum("ijk->jik", data)
 		data = data.reshape(numChannel,-1)
 		data = np.einsum("ij->ji", data)
-		
+
 		return data
 
 
@@ -378,6 +512,7 @@ class HMCAD1511(WishBoneDevice):
 
 		opts = [1, 2, 3, 4]
 		if not all(i in opts for i in inputs):
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 
 		rid, mask = self._getMask('inp_sel_adc1')
@@ -411,15 +546,17 @@ class HMCAD1511(WishBoneDevice):
 		self.write(val, rid)
 
 class HMCAD1520(HMCAD1511):
-	""" Control HMCAD1520 via wb_adc16_controller
+	""" HMCAD1520 High Speed Multi-Mode 8/12/14-Bit 1000/640/105 MSPS A/D Converter
+
+	Please see docstring of HMCAD1511 for brief description
 	"""
 
-	def __init__(self, interface, controller_name, csn=0xff):
-		super(HMCAD1520, self).__init__(interface, controller_name, csn)
+	def __init__(self, interface, controller_name, cs=0xff):
+		super(HMCAD1520, self).__init__(interface, controller_name, cs)
 
 		self.DICT[0x26] = {	'bits_custom1' : 0xffff << 0, }
 		self.DICT[0x27] = {	'bits_custom2' : 0xffff << 0, }
-		self.DICT[0x31] = {	'channel_num' : 0b111 << 0,
+		self.DICT[0x31] = {	'high_speed_mode' : 0b111 << 0,
 					'precision_mode' : 0b1 << 3,
 					'clk_divide' : 0b11 << 8, }
 		self.DICT[0x53] = {	'low_clk_freq' : 0b1 << 3,
@@ -442,14 +579,15 @@ class HMCAD1520(HMCAD1511):
 		""" Set operating mode and clock divide factor
 
 		Available operating mode
-		numChannel=1
-		numChannel=2
-		numChannel=4
+		numChannel=1	Single channel 12-bit
+		numChannel=2	Dual channel 12-bit
+		numChannel=4	Quad channel 12-bit
+		numChannel=0	Quad channel 14-bit (not supported yet)
 
 		Available resolutions:
 		resolution=8
 		resolution=12
-		resolution=14
+		resolution=14 (not supported yet)
 
 		Availale clock divide factors: 1, 2, 4, and 8
 
@@ -465,13 +603,17 @@ class HMCAD1520(HMCAD1511):
 			setOperatingMode(4, 1, False, 14)       # 4 channels, 14-bit resolution, 16-bit width. (Currently not supported)
 		"""
 
-		if numChannel not in [1,2,4]:
+		if numChannel not in [0,1,2,4]:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 		if clkDivide not in [1,2,4,8]:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 		if lowClkFreq not in [True,False]:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 		if resolution not in [8,12,14]:
+			logger.error("Invalid parameter")
 			raise ValueError("Invalid parameter")
 
 		self.powerDown()
@@ -489,7 +631,7 @@ class HMCAD1520(HMCAD1511):
 		val = self._set(val, lowClkFreq, mask)
 		self.write(val, rid)
 
-		rid, mask = self._getMask('channel_num')
+		rid, mask = self._getMask('high_speed_mode')
 		val = self._set(0x0, numChannel, mask)
 		rid, mask = self._getMask('precision_mode')
 		val = self._set(val, resolution==14, mask)
