@@ -35,7 +35,7 @@ class I2C:
 
         self.fpga = fpga
         self.controller_name = controller_name
-                self.enable_core()
+        self.enable_core()
 
     def setClock(self, target, reference=100):
         """ Set I2C bus clock
