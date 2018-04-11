@@ -12,7 +12,7 @@ __author__ = 'jackh'
 __date__ = 'June 2017'
 
 LOGGER = logging.getLogger(__name__)
-tftpy.setLogLevel(logging.ERROR)
+tftpy.setLogLevel(logging.CRITICAL)
 
 def set_log_level(level):
     tftpy.setLogLevel(level)
@@ -76,9 +76,9 @@ class TapcpTransport(Transport):
 
         self.t = tftpy.TftpClient(kwargs['host'], 69)
         self._logger = LOGGER
-        self.timeout = kwargs.get('timeout', 1.2) # long enough to account for Flash erases
-        self.server_timeout = 4 # Microblaze timeout period
-        self.retries = kwargs.get('retries', 8)
+        self.timeout = kwargs.get('timeout', 0.025) # 1/4 the timeout of the MB
+        self.server_timeout = 0.1 # Microblaze timeout period. So that if a command fails we can wait for the microblaze to terminate the connection before retrying
+        self.retries = kwargs.get('retries', 8) # These are retries of a complete transaction (each of which has it's ofw TFTP retries).
 
     def listdev(self):
         buf = StringIO()
@@ -97,7 +97,10 @@ class TapcpTransport(Transport):
         try:
             self.t.upload('/progdev', buf, timeout=self.timeout)
         except:
-            pass # the progdev command kills the host, so things will start erroring
+            # the progdev command kills the host, so things will start erroring
+            # TODO: verify programming actually worked!
+            # sleep to allow the board to re-dhcp and come back to life
+            time.sleep(10)
 
     def prog_user_image(self):
         """ (Re)Program the FPGA with the file already on flash """
@@ -148,11 +151,25 @@ class TapcpTransport(Transport):
         """
         Read meta data from user_flash_loc on the fpga flash drive
         """
-        USER_FLASH_LOC = 0x800000
-        meta = ''; offset=0
+        USER_FLASH_LOC  = 0x800000
+        READ_CHUNK_SIZE = 1024     # size of flash chunks to read
+        MAX_SEARCH      = 128*1024 # give up if we get this far
+        meta   = ''
+        offset = 0
+        # We want to find the end of the metadata, marked by the
+        # string end. But, to save lots of short tftp commands
+        # read data from flash 1kB at a time and search that
+        page_offset = 0
         while (meta.find('?end')==-1):
-            meta += self.read('/flash',4,offset=USER_FLASH_LOC+offset)
-            offset += 4
+            meta_page = self.read('/flash', READ_CHUNK_SIZE, offset=USER_FLASH_LOC + page_offset)
+            page_offset += READ_CHUNK_SIZE
+            if page_offset > MAX_SEARCH:
+                return None
+            for i in range(READ_CHUNK_SIZE/4):
+                meta += meta_page[4*i:4*(i+1)]
+                offset += 4
+                if (meta.find('?end')!=-1):
+                    break
         
         metadict = {};        
         for _ in meta.split('?'):
@@ -195,21 +212,107 @@ class TapcpTransport(Transport):
     def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True):
         USER_FLASH_LOC = 0x800000
         sector_size = 0x10000
+        # Flash writes can take a long time, due to ~1s erase cycle
+        # So set the timeout high. We'll return it to normal at the end
+        old_timeout = self.timeout
+        self._logger.debug("Old timeout was %f. Setting new timeout to 1.5s" % old_timeout)
+        self.timeout = 1.5
         if(filename.endswith('.fpg')):
+            self._logger.info("Programming with an .fpg file. Checking if it is already in flash")
             header, prog, md5 = self._extract_bitstream(filename)
+            self._logger.debug("Reading meta-data from flash")
             meta_inflash = self.get_metadata()
-            if (meta_inflash['md5sum'] == md5):
-                print('File already on flash!')
+            if ((meta_inflash is not None) and (meta_inflash['md5sum'] == md5)):
+                self._logger.info("Bitstream is already on flash.")
+                self._logger.debug("Returning timeout to %f" % old_timeout)
+                self.timeout = old_timeout
+                self._logger.info("Booting from existing user image.")
                 self.progdev(int(meta_inflash['prog_bitstream_start']))
             else:
+                self._logger.info("Bitstream is not in flash. Writing new bitstream.")
+                self._logger.debug("Generating new header information")
                 HEAD_LOC, PROG_LOC = self._update_metadata(filename,len(header),len(prog),md5)
-                self.blindwrite('/flash',header+prog, offset= HEAD_LOC)
+                payload = header + prog
+                complete_blocks = len(payload) // sector_size
+                trailing_bytes = len(payload) % sector_size
+                for i in range(complete_blocks):
+                    self._logger.debug("block %d of %d: writing %d bytes:" % (i+1, complete_blocks, len(payload[i*sector_size : (i+1)*sector_size])))
+                    self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=HEAD_LOC+i*sector_size)
+                    readback = self.read('/flash', len(payload[i*sector_size : (i+1)*sector_size]), offset=HEAD_LOC+i*sector_size)
+                    if payload[i*sector_size : (i+1)*sector_size] != readback:
+                        raise RuntimeError("Readback of flash failed!")
+                # Write the not-complete last sector (if any)
+                if trailing_bytes:
+                    self._logger.debug("writing trailing %d bytes" % trailing_bytes)
+                    last_offset = complete_blocks * sector_size
+                    self.blindwrite('/flash', payload[last_offset :], offset=HEAD_LOC+last_offset)
+                    readback = self.read('/flash', len(payload[last_offset :]), offset=HEAD_LOC+last_offset)
+                    if payload[last_offset :] != readback:
+                        raise RuntimeError("Readback of flash failed!")
+
+                self._logger.debug("Returning timeout to %f" % old_timeout)
+                self.timeout = old_timeout
+                # Program from new flash image!
+                self._logger.info("Booting from new bitstream")
                 self.progdev(PROG_LOC)
 
         else:
+            self._logger.info("Programming something which isn't an .fpg file.")
+            self._logger.debug("Reading file %s" % filename)
             with open(filename,'r') as fh:
-                self.blindwrite('/flash', fh.read(), offset=USER_FLASH_LOC)
+                payload = fh.read()
+            complete_blocks = len(payload) // sector_size
+            trailing_bytes = len(payload) % sector_size
+            for i in range(complete_blocks):
+                self._logger.debug("block %d of %d: writing %d bytes:" % (i+1, complete_blocks, len(payload[i*sector_size : (i+1)*sector_size])))
+                self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=USER_FLASH_LOC+i*sector_size)
+                readback = self.read('/flash', len(payload[i*sector_size : (i+1)*sector_size]), offset=USER_FLASH_LOC+i*sector_size)
+                if payload[i*sector_size : (i+1)*sector_size] != readback:
+                    raise RuntimeError("Readback of flash failed!")
+
+            # Write the not-complete last sector (if any)
+            if trailing_bytes:
+                self._logger.debug("writing trailing %d bytes" % trailing_bytes)
+                last_offset = complete_blocks * sector_size
+                self.blindwrite('/flash', payload[last_offset :], offset=USER_FLASH_LOC+last_offset)
+                readback = self.read('/flash', len(payload[last_offset :]), offset=USER_FLASH_LOC+last_offset)
+                if payload[last_offset :] != readback:
+                    raise RuntimeError("Readback of flash failed!")
+            self._logger.debug("Returning timeout to %f" % old_timeout)
+            self.timeout = old_timeout
+            # Program from new flash image!
+            self._logger.info("Booting from new bitstream")
             self.progdev(USER_FLASH_LOC)
+
+    def _program_new_golden_image(self, imagefile):
+        """
+        Program a new golden image (i.e., the image stored at the
+        start of the flash.
+        Beware: If this command fails, and you reboot your
+        board, chances are it will require JTAG intervention
+        to being back to life!
+        :param imagefile: A .bin file containing a golden image
+        """
+        sector_size = 0x10000
+        with open(imagefile,'r') as fh:
+            payload = fh.read()
+        # Write the flash a chunk at a time. Each chunk includes an erase
+        # cycle, so can take ~1s to complete.
+        # So set the timeout high
+        old_timeout = self.timeout
+        self.timeout = 1.5
+        complete_blocks = len(payload) // sector_size
+        trailing_bytes = len(payload) % sector_size
+        for i in range(complete_blocks):
+            print "Writing block %d of %d" % (i+1, complete_blocks)
+            self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=i*sector_size)
+        # Write the not-complete last sector (if any)
+        if trailing_bytes:
+            print "Writing trailing %d bytes" % trailing_bytes
+            last_offset = complete_blocks * sector_size
+            self.blindwrite('/flash', payload[last_offset :], offset=last_offset)
+        # return timeout to what it used to be
+        self.timeout = old_timeout
     
 
     def _get_device_address(self, device_name):
@@ -229,16 +332,18 @@ class TapcpTransport(Transport):
         :param use_bulk: Does nothing. Kept for API compatibility
         :return: binary data string
         """
-        buf = StringIO()
         for retry in range(self.retries - 1):
             try:
-                self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.server_timeout)
+                buf = StringIO()
+                self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
                 return buf.getvalue()
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
                 time.sleep(self.server_timeout)
-                LOGGER.warning('Tftp error on read -- retrying. %.3f' % time.time())
+                LOGGER.info('Tftp error on read -- retrying.')
+        LOGGER.warning('Several Tftp errors on read -- final retry.')
+        buf = StringIO()
         self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
         return buf.getvalue()
 
@@ -254,16 +359,18 @@ class TapcpTransport(Transport):
         assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
-        buf = StringIO(data)
         for retry in range(self.retries - 1):
             try:
+                buf = StringIO(data)
                 self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
                 return
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
                 time.sleep(self.server_timeout)
-                LOGGER.warning('Tftp error on write -- retrying')
+                LOGGER.info('Tftp error on write -- retrying')
+        LOGGER.warning('Several Tftp errors on write-- final retry.')
+        buf = StringIO(data)
         self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
 
     def deprogram(self):
