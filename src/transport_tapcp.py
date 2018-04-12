@@ -86,6 +86,9 @@ class TapcpTransport(Transport):
             self.logger = kwargs['logger']
         except KeyError:
             self.logger = logging.getLogger(__name__)
+
+        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+        self.logger.info(new_connection_msg)
         self.timeout = kwargs.get('timeout', 3)
 
     @staticmethod

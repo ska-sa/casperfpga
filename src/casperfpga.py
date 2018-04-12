@@ -15,7 +15,7 @@ from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
 from transport_dummy import DummyTransport
-from CasperLogHandlers import CasperStreamHandler, CasperFileHandler
+from CasperLogHandlers import CasperStreamHandler, CasperRedirectLogger
 
 import os
 import sys
@@ -83,32 +83,26 @@ class CasperFpga(object):
         log_fifo_length = 1000
         stream_handler = CasperStreamHandler(self.host, log_fifo_length)
         stream_handler.clear_log()
-        # casperfpga_formatter = LogFormatter(self.host, __name__, self.logger.level)
-        # casperfpga_formatter_str = '%(asctime)s || %(name)s - %(levelname)s - %(message)s'
-        formatted_string = '%(asctime)s | %(levelname)s | %(name)s - %(filename)s:%(lineno)s - %(message)s'
-        casperfpga_formatter = logging.Formatter(formatted_string)
-        # stream_handler.setFormatter(casperfpga_formatter)
+
         self.logger.addHandler(stream_handler)
 
-        # Need to test the FileHandler
-        log_filename = '/tmp/casperfpga_{}.log'.format(self.host)
-        file_handler = logging.FileHandler(log_filename, mode='a')
-        file_handler.setFormatter(casperfpga_formatter)
-        self.logger.addHandler(file_handler)
-
-        # Making additions to test altering stdout and stderr
-        # sys.stderr = self.logger
-        # - Testing independent logger entity for stdout
-        # temp_logger = logging.getLogger('STDOUT')
-        # temp_logger.setLevel(logging.INFO)
-        # temp_logger.addHandler(stream_handler)
-        # temp_logger.addHandler(file_handler)
-        # sys.stdout = temp_logger
-
-        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
-        self.logger.info(new_connection_msg)
-        # Set log level to ERROR
-        self.logger.setLevel(logging.ERROR)
+        # region -- Making additions to test altering stdout and stderr --
+        # stdout_logger = logging.getLogger('STDOUT')
+        # temp_stream_handler = logging.StreamHandler().setLevel(logging.INFO)
+        #
+        # formatted_string = '%(name)s| %(asctime)s | %(levelname)s - %(message)s'
+        # temp_formatter = logging.Formatter(formatted_string)
+        # temp_stream_handler.setFormatter(temp_formatter)
+        # stdout_logger.addHandler(temp_stream_handler)
+        #
+        # redirect_logger = CasperRedirectLogger(logger=stdout_logger, log_level=logging.INFO)
+        # sys.stdout = redirect_logger
+        #
+        # stderr_logger = logging.getLogger('STDERR')
+        # stderr_logger.addHandler()
+        # redirect_logger = CasperRedirectLogger(logger=stderr_logger, log_level=logging.ERROR)
+        # sys.stderr = redirect_logger
+        # endregion
 
         # define a custom log level between DEBUG and INFO
         # PDEBUG = 15
@@ -141,6 +135,76 @@ class CasperFpga(object):
 
         self._reset_device_info()
         self.logger.debug('%s: now a CasperFpga' % self.host)
+
+        # Set log level to ERROR
+        self.logger.setLevel(logging.ERROR)
+
+    # ** Not ready to be implemented! **
+    # def configure_logger(self, log_level=logging.DEBUG, filename=None, file_directory=None):
+    #     """
+    #     Method to configure the logger instantiated as part of the casperfpga entity
+    #     - log_level=logging.DEBUG, stream_handler=None, file_handler=None
+    #     :param log_level:
+    #     :param filename:
+    #     :param file_directory:
+    #     :param string_format:
+    #     :return:
+    #     """
+    #
+    #     # We're trying to accommodate for a host of paramater specifications
+    #     # - But they must all be key-word args
+    #
+    #     # First, see
+    #     # Need to test the FileHandler
+    #     log_filename = '/tmp/casperfpga_{}.log'.format(self.host)
+    #     file_handler = logging.FileHandler(log_filename, mode='a')
+    #     formatted_string = '%(asctime)s | %(levelname)s | %(name)s - %(filename)s:%(lineno)s - %(message)s'
+    #     casperfpga_formatter = logging.Formatter(formatted_string)
+    #     file_handler.setFormatter(casperfpga_formatter)
+    #     self.logger.addHandler(file_handler)
+    #
+    #     return True
+
+    def configure_file_logging(self, filename=None, file_dir=None):
+        """
+        Method to configure logging to file using the casperfpga logging entity
+        :param filename: Optional parameter - must be in the format of filename.log
+                                            - Will default to casperfpga_{hostname}.log
+        :param file_dir: Optional parameter - must be
+        :return:
+        """
+        if filename:
+            # Has user spec'd file directory as well?
+            if file_dir:
+                # First check if the directory exists
+                if os.path.isdir(file_dir):
+                    log_filename = file_dir + filename
+                else:
+                    errmsg = '{} is not a valid directory'.format(file_dir)
+                    self.logger.error(errmsg)
+                    raise ValueError(errmsg)
+            else:
+                # Store it in /tmp/
+                log_filename = '/tmp/{}'.format(filename)
+        else:
+            log_filename = '/tmp/casperfpga_{}.log'.format(self.host)
+
+        file_handler = logging.FileHandler(log_filename, mode='a')
+        formatted_string = '%(asctime)s | %(levelname)s | %(name)s - %(filename)s:%(lineno)s - %(message)s'
+        casperfpga_formatter = logging.Formatter(formatted_string)
+        file_handler.setFormatter(casperfpga_formatter)
+        self.logger.addHandler(file_handler)
+
+        self.logger.info('Successfully enabled logging to file at {}'.format(log_filename))
+        return True
+
+    def disable_file_logging(self):
+        """
+        For completeness
+        :return:
+        """
+        try:
+            self.logger.removeHandler(self.logger)
 
     def choose_transport(self, host_ip):
         """

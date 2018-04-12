@@ -100,6 +100,13 @@ class SkarabTransport(Transport):
         Transport.__init__(self, **kwargs)
 
         try:
+            self.logger = kwargs['logger']
+        except KeyError:
+            self.logger = logging.getLogger(__name__)
+
+        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+        self.logger.info(new_connection_msg)
+        try:
             self.parent = kwargs['parent_fpga']
         except KeyError:
             errmsg = 'parent_fpga argument not supplied when creating skarab'
@@ -117,10 +124,7 @@ class SkarabTransport(Transport):
             self.blocking = kwargs['blocking']
         except KeyError:
             self.blocking = True
-        try:
-            self.logger = kwargs['logger']
-        except KeyError:
-            self.logger = logging.getLogger(__name__)
+
         # sequence number for control packets
         self._seq_num = None
         self.reset_seq_num()

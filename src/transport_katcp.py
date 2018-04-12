@@ -90,6 +90,9 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         except KeyError:
             self.logger = logging.getLogger(__name__)
 
+        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+        self.logger.info(new_connection_msg)
+
         katcp.CallbackClient.__init__(
             self, self.host, port, tb_limit=20,
             timeout=timeout, logger=self.logger, auto_reconnect=True)
