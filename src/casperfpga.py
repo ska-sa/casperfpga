@@ -198,14 +198,6 @@ class CasperFpga(object):
         self.logger.info('Successfully enabled logging to file at {}'.format(log_filename))
         return True
 
-    def disable_file_logging(self):
-        """
-        For completeness
-        :return:
-        """
-        try:
-            self.logger.removeHandler(self.logger)
-
     def choose_transport(self, host_ip):
         """
         Test whether a given host is a katcp client or a skarab
