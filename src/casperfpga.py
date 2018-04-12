@@ -81,8 +81,12 @@ def choose_transport(host_ip):
             # it can be re-set afterwards if tftp connects ok.
             log_level = get_log_level()
             set_log_level(logging.CRITICAL)
+            # Same for the log level of TapcpTransport
+            taploglevel = board._logger.level
+            board._logger.setLevel(logging.ERROR)
             if board.is_connected():
                 set_log_level(log_level)
+                board._logger.setLevel(taploglevel)
                 LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
                 return TapcpTransport
         LOGGER.debug('%s seems to be a ROACH' % host_ip)
