@@ -341,8 +341,8 @@ class TapcpTransport(Transport):
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
                 time.sleep(self.server_timeout)
-                LOGGER.info('Tftp error on read -- retrying.')
-        LOGGER.warning('Several Tftp errors on read -- final retry.')
+                self._logger.info('Tftp error on read -- retrying.')
+        self._logger.warning('Several Tftp errors on read -- final retry.')
         buf = StringIO()
         self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
         return buf.getvalue()
@@ -368,8 +368,8 @@ class TapcpTransport(Transport):
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
                 time.sleep(self.server_timeout)
-                LOGGER.info('Tftp error on write -- retrying')
-        LOGGER.warning('Several Tftp errors on write-- final retry.')
+                self._logger.info('Tftp error on write -- retrying')
+        self._logger.warning('Several Tftp errors on write-- final retry.')
         buf = StringIO(data)
         self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
 
@@ -381,7 +381,7 @@ class TapcpTransport(Transport):
         """
         # trigger reboot of FPGA
         self.progdev(0)
-        LOGGER.info('%s: deprogrammed okay' % self.host)
+        self._logger.info('%s: deprogrammed okay' % self.host)
 
     def write_wishbone(self, wb_address, data):
         """
