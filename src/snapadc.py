@@ -65,7 +65,7 @@ class SNAPADC(object):
         if resolution not in [8,12,14,None]:
             logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
-        self.curDelay = [[defaultDelayTap]*len(self.laneList)]*len(self.adcList)
+        self.curDelay = [[0]*len(self.laneList)]*len(self.adcList)
 
         if ref is not None:
             self.lmx = LMX2581(interface,'lmx_ctrl', fosc=ref)

@@ -275,8 +275,11 @@ class MPU9250:
         self.itf = itf
         self.addr = addr
 
+        # This is an effective way of detecting connectivity of I2C bus
         if self.whoami() is not self.WHOAMI:
-            logger.error("MPU9250 at address {} is not ready!".format(addr))
+            msg = "MPU9250 at address {} is not ready!".format(addr)
+            logger.error(msg)
+            raise IOError(msg)
 
     def init(self,gyro=True,accel=True,lowpower=False):
         """ Initialise MPU9250
