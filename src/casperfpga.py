@@ -72,19 +72,21 @@ class CasperFpga(object):
                 pass
         self.host, self.bitstream = get_hostname(**kwargs)
 
+        # Need to check if any logger-based parameters have been spec'd
+        try:
+            self.logger = kwargs['logger']
+        except KeyError:
+            # Damn
+            self.logger = logging.getLogger(self.host)
+
         # some transports, e.g. Skarab, need to know their parent
         kwargs['parent_fpga'] = self
 
         # Setup logger to be propagated through transports
-        self.logger = logging.getLogger(self.host)
-        # Setting log level to INFO to log initial connection message
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(logging.NOTSET)
 
-        log_fifo_length = 1000
-        stream_handler = CasperStreamHandler(self.host, log_fifo_length)
-        stream_handler.clear_log()
-
-        self.logger.addHandler(stream_handler)
+        # Logging to stream by default, for now
+        result = self.configure_stream_logging()
 
         # region -- Making additions to test altering stdout and stderr --
         # stdout_logger = logging.getLogger('STDOUT')
@@ -139,7 +141,7 @@ class CasperFpga(object):
         # Set log level to ERROR
         self.logger.setLevel(logging.ERROR)
 
-    # ** Not ready to be implemented! **
+    # region ** Not ready to be implemented! **
     # def configure_logger(self, log_level=logging.DEBUG, filename=None, file_directory=None):
     #     """
     #     Method to configure the logger instantiated as part of the casperfpga entity
@@ -164,6 +166,46 @@ class CasperFpga(object):
     #     self.logger.addHandler(file_handler)
     #
     #     return True
+    # endregion
+
+    def configure_stream_logging(self, stream_name=None, log_level='ERROR'):
+        """
+        Method to configure logging to stream using the casperfpga logging entity
+        - i.e.
+        :param stream_name: Optional - will use hostname by default
+        :param log_level: Optional - will ERROR by default
+        :return:
+        """
+        # Check if a log-handler with the specified name already exists
+        if stream_name is None:
+            # Use the hostname given
+            stream_name = self.host
+        # else: Do all the checks
+
+        handlers = self.logger.handlers
+        for handler in handlers:
+            # Check if there is already a StreamHandler with this name
+            if hasattr(handler, 'baseFilename'):
+                # It's a FileHandler, not a StreamHandler
+                continue
+            else:
+                # StreamHandler (I hope)
+                if handler.name.upper() == stream_name.upper():
+                    # Problem
+                    raise ValueError('Cannot have multiple StreamHandlers '
+                                     'with the same name')
+        # If it makes it out here, stream_name specified is fine
+
+        # Setting log level to INFO to log initial connection message
+        stream_handler = CasperStreamHandler(name=stream_name)
+        self.logger.addHandler(stream_handler)
+
+        # Using this method which does initial checks on log_level specified
+        self.set_log_level(log_level)
+        debugmsg = 'Successfully created StreamHandler {}'.format(stream_name)
+        self.logger.info(debugmsg)
+
+        return True
 
     def configure_file_logging(self, filename=None, file_dir=None):
         """

@@ -43,26 +43,36 @@ class CasperStreamHandler(logging.Handler):
         :param max_len: How many log messages to store in the FIFO
         :return:
         """
-
         # logging.Handler.__init__(self)
         super(CasperStreamHandler, self).__init__()
 
-        if len(args) > 0:
-            try:
-                kwargs['hostname'] = args[0]
-                kwargs['max_len'] = args[1]
-            except IndexError:
-                pass
-
-        self._host = kwargs['hostname']
-
-        # max_len_fifo = get_kwarg('max_len', kwargs)
-        if kwargs['max_len']:
+        try:
+            self.name = kwargs['name']
+        except KeyError:
+            # hostname is the logger.name anyway
+            self.name = None
+        try:
             self._max_len = kwargs['max_len']
-        else:
+        except KeyError:
             self._max_len = 1000
 
         self._records = []
+
+    def set_name(self, name):
+        """
+
+        :param name:
+        :return:
+        """
+        self.name = name
+        return True
+
+    def get_name(self):
+        """
+
+        :return:
+        """
+        return self.name
 
     def emit(self, message):
         """
@@ -100,9 +110,6 @@ class CasperStreamHandler(logging.Handler):
         """
 
         formatted_datetime = str(datetime.datetime.now())
-        # formatted_string = '{} || {} - {} - {}'.format(formatted_datetime, record.name, 'temp', 'temp')
-        # formatted_string = '{} | {} | {} - {}:{} - {}'.format(formatted_datetime, record.levelname, self._host,
-        #                                                       record.filename, str(record.lineno), record.msg)
         formatted_string = '{} - {} | {} | {}:{} - {}'.format(record.name, formatted_datetime, record.levelname,
                                                               record.filename, str(record.lineno), record.msg)
 
