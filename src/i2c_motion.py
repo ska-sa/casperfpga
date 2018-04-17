@@ -8,13 +8,27 @@ logger = logging.getLogger(__name__)
 class IMUSimple:
 
 
-    def __init__(self,bus,mpuaddr=0x69,akaddr=None):
+    def __init__(self,bus,mpuaddr=0x69,akaddr=None,**kwargs):
         """ IMUSimple IMU usage demo
 
             bus = i2c.I2C_IPGPIO(2,3,15000)
             imu = i2c_motion.IMUSimple(bus,0x69,0x0c)
             imu.init()
             print(imu.pose)
+
+            Default orientation:
+                x+ east
+                y+ north
+                z+ upward
+                IMU chip pin 1 in 4th quadrant
+                IMU chip top side upwards
+
+
+            provide other orientations in the following format
+            imu = IMUSimple(bus,0x69, orient =
+                       [[1,0,0],    # new x+ in old coordinate system
+                        [0,1,0],    # new y+ in old coordinate system
+                        [0,0,1]])   # new z+ in old coordinate system
         """
 
         self.mpu = MPU9250(bus,mpuaddr)
@@ -25,6 +39,22 @@ class IMUSimple:
         else:
             self.ak=None
 
+        orient = kwargs.get('orient',[[1,0,0],[0,1,0],[0,0,1]])
+        self.rotmax = self.calcRotationMatrix(orient)
+
+    def calcRotationMatrix(dst):
+        #src = np.asarray([[1,0,0],[0,1,0],[0,0,1]])
+        dst = np.asarray(dst)/np.linalg.norm(dst)
+        if  np.dot(dst[0],dst[1])!=0 or
+            np.dot(dst[0],dst[2])!=0 or
+            np.dot(dst[1],dst[2])!=0:
+            msg = 'Invalid parameter!'
+            logger.error(msg)
+            raise ValueError(msg)
+        # src * R = dst
+        # if src is an I matrix, then R == dst
+        return dst
+
     def init(self,gyro=True,accel=True):
         self.mpu.init(lowpower=True)
         if self.ak!=None:
@@ -32,7 +62,8 @@ class IMUSimple:
 
     @property
     def accel(self):
-        return self.mpu.accel
+        acc = np.asarray(self.mpu.accel)
+        return acc * self.rotmax
 
     @property
     def gyro(self):
