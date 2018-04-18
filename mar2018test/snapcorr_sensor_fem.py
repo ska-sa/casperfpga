@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
 
-    p = argparse.ArgumentParser(description='Test FEM module',epilog='E.g.\npython snapcorr_sensor_fem.py 10.1.0.23 --gpio\npython snapcorr_sensor_fem.py 10.1.0.23 --gpio 0xff\npython snapcorr_sensor_fem.py 10.1.0.23 --rom\npython snapcorr_sensor_fem.py 10.1.0.23 --rom "Hello world!" \npython snapcorr_sensor_fem.py 10.1.0.23 --volt\npython snapcorr_sensor_fem.py 10.1.0.23 --temp\npython snapcorr_sensor_fem.py 10.1.0.23 --bar\npython snapcorr_sensor_fem.py 10.1.0.23 --imu\n',formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(description='Test FEM module',epilog='E.g.\npython snapcorr_sensor_fem.py 10.1.0.23 --gpio\npython snapcorr_sensor_fem.py 10.1.0.23 --gpio 0xff\npython snapcorr_sensor_fem.py 10.1.0.23 --rom\npython snapcorr_sensor_fem.py 10.1.0.23 --rom "Hello world!" \npython snapcorr_sensor_fem.py 10.1.0.23 --volt\npython snapcorr_sensor_fem.py 10.1.0.23 --temp\npython snapcorr_sensor_fem.py 10.1.0.23 --bar\npython snapcorr_sensor_fem.py 10.1.0.23 --imu\npython snapcorr_sensor_fem.py 10.1.0.23 --switch\npython snapcorr_sensor_fem.py 10.1.0.23 --switch noise\n',formatter_class=argparse.RawDescriptionHelpFormatter)
 
     p.add_argument('snap', type=str, metavar="SNAP_IP_OR_HOSTNAME")
 #   p.add_argument('--average', dest='avg', type=int,default=2,
@@ -26,8 +26,11 @@ if __name__ == "__main__":
     p.add_argument('--temp',action='store_true', default=False,help='Print temperature and ID.')
     p.add_argument('--volt',action='store_true', default=False, help='Print voltimeter.')
     p.add_argument('--bar',nargs='*',metavar=('AVERAGE','INTERVAL'), help='Print air pressure, temperature and height, averaging over multiple measurements.')
-    p.add_argument('--gpio',nargs='*',metavar=('VALUE'), help='Test GPIO. Leave parameter empty to read gpio. Add value to write gpio.')
     p.add_argument('--imu',action='store_true', default=False,help='Print FEM pose')
+    #p.add_argument('--gpio',nargs='*',metavar=('VALUE'), help='Test GPIO. Leave parameter empty to read gpio. Add value to write gpio.')
+    g=p.add_mutually_exclusive_group()
+    g.add_argument('--gpio',nargs='*',metavar=('VALUE'), help='Test GPIO. Leave parameter empty to read gpio. Add value to write gpio.')
+    g.add_argument('--switch',nargs='*',metavar=('MODE'), choices=['antenna','noise','load'], help='Switch FEM input to antenna, noise source or 50 ohm load. Choices are load, antenna, and noise.')
     args = p.parse_args()
 
     #      0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
@@ -60,15 +63,16 @@ if __name__ == "__main__":
         bus.setClock(int(args.i2c[1]),int(args.i2c[2]))
 
     try:
-        imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR)
+        imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[0,1,0],[1,0,0]])
     except IOError as e:
         print('FEM is not reachable!')
         raise
 
     if args.imu:
-        imu.init(gyro=False,accel=True)
+        imu.init()
         theta,phi = imu.pose
         print('IMU theta: {}, phi: {}'.format(theta,phi))
+        imu.mpu.powerOff()
     
     if args.temp:
         temp = i2c_temp.Si7051(bus,TEMP_ADDR)
@@ -76,6 +80,18 @@ if __name__ == "__main__":
         sn=temp.sn()
         print('Temperature: {}, serial number: {}'.format(t,sn))
 
+    if args.switch!=None:
+        smode = {'load':0b110,'antenna':0b000,'noise':0b111}
+        gpio=i2c_gpio.PCF8574(bus,GPIO_FEM_ADDR)
+        if len(args.switch)>0:
+            key = args.switch[0]
+            val = smode[key]
+            print('write value {:#05b} to GPIO. ({} mode)'.format(val, key))
+            gpio.write(val)
+        else:
+            val=gpio.read()
+            key = smode.keys()[smode.values().index(val&0b111)]
+            print('read GPIO value: {:#05b}. ({} mode)'.format(val&0b111,key))
     elif args.gpio!=None:
         gpio=i2c_gpio.PCF8574(bus,GPIO_FEM_ADDR)
         if len(args.gpio)>0:
@@ -100,12 +116,6 @@ if __name__ == "__main__":
         else:
             text = rom.readString()
             print('read EEPROM test: {}'.format(text))
-
-    if args.imu:
-        imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR)
-        imu.init(gyro=False,accel=True)
-        theta,phi = imu.pose
-        print('IMU theta: {}, phi: {}'.format(theta,phi))
 
     if args.bar!=None:
         if len(args.bar)>0:

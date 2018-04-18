@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class IMUSimple:
 
 
-    def __init__(self,bus,mpuaddr=0x69,akaddr=None,**kwargs):
+    def __init__(self,bus,mpuaddr=0x69,akaddr=None,orient=[[1,0,0],[0,1,0],[0,0,1]]):
         """ IMUSimple IMU usage demo
 
             bus = i2c.I2C_IPGPIO(2,3,15000)
@@ -39,15 +39,12 @@ class IMUSimple:
         else:
             self.ak=None
 
-        orient = kwargs.get('orient',[[1,0,0],[0,1,0],[0,0,1]])
         self.rotmax = self.calcRotationMatrix(orient)
 
-    def calcRotationMatrix(dst):
+    def calcRotationMatrix(self,dst):
         #src = np.asarray([[1,0,0],[0,1,0],[0,0,1]])
-        dst = np.asarray(dst)/np.linalg.norm(dst)
-        if  np.dot(dst[0],dst[1])!=0 or
-            np.dot(dst[0],dst[2])!=0 or
-            np.dot(dst[1],dst[2])!=0:
+        dst = np.asarray(dst)/np.abs(np.linalg.det(dst))
+        if  np.dot(dst[0],dst[1])!=0 or np.dot(dst[0],dst[2])!=0 or np.dot(dst[1],dst[2])!=0:
             msg = 'Invalid parameter!'
             logger.error(msg)
             raise ValueError(msg)
@@ -55,15 +52,16 @@ class IMUSimple:
         # if src is an I matrix, then R == dst
         return dst
 
-    def init(self,gyro=True,accel=True):
-        self.mpu.init(lowpower=True)
+    def init(self):
+        self.mpu.init(accel=True,gyro=False)
+        #self.mpu.init(lowpower=True)
         if self.ak!=None:
             self.ak.init()
 
     @property
     def accel(self):
         acc = np.asarray(self.mpu.accel)
-        return acc * self.rotmax
+        return np.dot(acc, self.rotmax)
 
     @property
     def gyro(self):
@@ -322,12 +320,15 @@ class MPU9250:
         # Wait MEMS oscilator to stablize
         time.sleep(0.1)
 
+        # low power mode is problematic at the moment
         if lowpower==True:
             # Enter into accelerometer only low power mode
             rid,mask=self._getMask(self.DICT,'CLKSEL')
             val = self._set(0x0, 1, mask)
             rid,mask=self._getMask(self.DICT,'CYCLE')
             val = self._set(val, 1, mask)
+            rid,mask=self._getMask(self.DICT,'SLEEP')
+            val = self._set(val, 0, mask)
             # PD_PTAT is, I believe, the legendary 'TEMP_DIS' bit
             # in MPU-9250 Register Map datasheet
             rid,mask=self._getMask(self.DICT,'PD_PTAT')
@@ -350,17 +351,17 @@ class MPU9250:
             # 11        500
             # 12-15     RESERVED
 
-            rid,mask=self._getMask(self.DICT,'lposc_clksel')
+            rid,mask=self._getMask(self.DICT,'LPOSC_CLKSEL')
             val = self._set(val, 8, mask)
             self.write(rid,val)
 
-            # Enable accel and gyro
+            # Enable accel and disable gyro
             accel=True
-            gryo=False
+            gyro=False
         else:
-            self.setWord('pwr_mgmt_1',val)
+            self.setWord('pwr_mgmt_1',0x0)
 
-        # Enable accel and gyro
+        # Enable accel and gyro (PWR_MGMT_2)
         rid,mask=self._getMask(self.DICT,'DIS_XA')
         val = self._set(0x0,not accel,mask)
         rid,mask=self._getMask(self.DICT,'DIS_YA')
@@ -373,14 +374,17 @@ class MPU9250:
         val = self._set(val,not gyro,mask)
         rid,mask=self._getMask(self.DICT,'DIS_ZG')
         val = self._set(val,not gyro,mask)
-        self.setWord('pwr_mgmt_2',val)
+        self.write(rid,val)
 
         self.setWord('config',0x0)
         self.setWord('SMPLRT_DIV',0x0)
         self.setWord('gyro_config',0X0)
         self.setWord('accel_config',0X0)
-        # Must set ACCEL_FCHOICE to 0 if in low-power mode
-        self.setWord('accel_config2',0X0)
+
+        # Must set ACCEL_FCHOICE to 0 if in low-power mode (accel_config2)
+        rid,mask=self._getMask(self.DICT,'ACCEL_FCHOICE_B')
+        val = self._set(0x0,lowpower,mask)
+        self.write(rid,val)
 
         # Disable interrupt
         self.setWord('int_enable',0x0)
@@ -388,6 +392,8 @@ class MPU9250:
         self.gyro_scale=0
         self.accel_scale=0
 
+    def powerOff(self):
+        self.setWord('pwr_mgmt_2',0xff)
 
     def whoami(self):
         rid, mask = self._getMask(self.DICT, 'WHOAMI')
