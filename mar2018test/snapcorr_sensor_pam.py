@@ -21,7 +21,7 @@ def gpio2db(val):
 
 if __name__ == "__main__":
 
-	p = argparse.ArgumentParser(description='Test PAM module',epilog='E.g.\npython snapcorr_sensor_pam.py 10.1.0.23 --gpio\npython snapcorr_sensor_pam.py 10.1.0.23 --gpio 0xff\npython snapcorr_sensor_pam.py 10.1.0.23 --rom\npython snapcorr_sensor_pam.py 10.1.0.23 --rom "Hello world!" \npython snapcorr_sensor_pam.py 10.1.0.23 --volt\npython snapcorr_sensor_pam.py 10.1.0.23 --id\n',formatter_class=argparse.RawDescriptionHelpFormatter)
+	p = argparse.ArgumentParser(description='Test PAM module',epilog='E.g.\npython snapcorr_sensor_pam.py 10.1.0.23 --atten\npython snapcorr_sensor_pam.py 10.1.0.23 --atten 7 13\npython snapcorr_sensor_pam.py 10.1.0.23 --gpio\npython snapcorr_sensor_pam.py 10.1.0.23 --gpio 0xff\npython snapcorr_sensor_pam.py 10.1.0.23 --rom\npython snapcorr_sensor_pam.py 10.1.0.23 --rom "Hello world!" \npython snapcorr_sensor_pam.py 10.1.0.23 --volt\npython snapcorr_sensor_pam.py 10.1.0.23 --id\n',formatter_class=argparse.RawDescriptionHelpFormatter)
 
 	p.add_argument('snap', type=str, metavar="SNAP_IP_OR_HOSTNAME")
 #	p.add_argument('--average', dest='avg', type=int,default=2,
@@ -81,7 +81,7 @@ if __name__ == "__main__":
 		if len(args.atten)>0:
 			ve=int(args.atten[0])
 			vn=int(args.atten[1])
-			print('Set {}dB,{}dB to East,North Attenuator'.format(ve,vn))
+			print('Set {}dB to East attenuator, {}dB to North attenuator'.format(ve,vn))
 			gpio.write(db2gpio(ve,vn))
 		else:
 			val=gpio.read()
