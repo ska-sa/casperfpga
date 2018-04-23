@@ -192,8 +192,10 @@ class CasperFpga(object):
                 # StreamHandler (I hope)
                 if handler.name.upper() == stream_name.upper():
                     # Problem
-                    raise ValueError('Cannot have multiple StreamHandlers '
-                                     'with the same name')
+                    self.logger.warning('StreamHandler {} already exists'.format(stream_name))
+                    return False
+                    #raise ValueError('Cannot have multiple StreamHandlers '
+                    #                 'with the same name')
         # If it makes it out here, stream_name specified is fine
 
         # Setting log level to INFO to log initial connection message
