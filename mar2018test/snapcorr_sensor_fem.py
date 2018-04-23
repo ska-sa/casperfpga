@@ -81,7 +81,7 @@ if __name__ == "__main__":
         print('Temperature: {}, serial number: {}'.format(t,sn))
 
     if args.switch!=None:
-        smode = {'load':0b110,'antenna':0b000,'noise':0b111}
+        smode = {'load':0b000,'antenna':0b110,'noise':0b001}
         gpio=i2c_gpio.PCF8574(bus,GPIO_FEM_ADDR)
         if len(args.switch)>0:
             key = args.switch[0]
