@@ -21,7 +21,17 @@ def gpio2db(val):
 
 if __name__ == "__main__":
 
-	p = argparse.ArgumentParser(description='Test PAM module',epilog='E.g.\npython snapcorr_sensor_pam.py 10.1.0.23 --atten\npython snapcorr_sensor_pam.py 10.1.0.23 --atten 7 13\npython snapcorr_sensor_pam.py 10.1.0.23 --gpio\npython snapcorr_sensor_pam.py 10.1.0.23 --gpio 0xff\npython snapcorr_sensor_pam.py 10.1.0.23 --rom\npython snapcorr_sensor_pam.py 10.1.0.23 --rom "Hello world!" \npython snapcorr_sensor_pam.py 10.1.0.23 --volt\npython snapcorr_sensor_pam.py 10.1.0.23 --id\n',formatter_class=argparse.RawDescriptionHelpFormatter)
+	p = argparse.ArgumentParser(description='Test PAM module',
+epilog="""E.g.
+python snapcorr_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --atten
+python snapcorr_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --atten 7 13
+python snapcorr_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --gpio
+python snapcorr_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --gpio 0xff
+python snapcorr_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --rom
+python snapcorr_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --rom 'Hello world!'
+python snapcorr_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --volt
+python snapcorr_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --id""",
+formatter_class=argparse.RawDescriptionHelpFormatter)
 
 	p.add_argument('snap', type=str, metavar="SNAP_IP_OR_HOSTNAME")
 #	p.add_argument('--average', dest='avg', type=int,default=2,
@@ -32,7 +42,7 @@ if __name__ == "__main__":
 #                help='Print sensor measurements and time costs.')
 #	p.add_argument('--period',dest='period',type=int, default=-1,
 #                help='Set the period of sampling in second. -1 to run endlessly. Default is -1.')
-	p.add_argument('--i2c', dest='i2c', nargs=3, metavar=('I2C_NAME','I2C_BAUD_RATE','REFERENCE_CLOCK'), default=['i2c',10,100],
+	p.add_argument('--i2c', dest='i2c', nargs=3, metavar=('I2C_NAME','I2C_BAUD_RATE','REFERENCE_CLOCK'), default=['i2c_ant1',10,100],
                 help='Specify the name of the i2c bus. Initialise I2C devices if baud rate and reference clock are provided.')
 	p.add_argument('--rom',nargs='*',metavar=('TEXT'), help='Test EEPROM. Leave parameter empty to read ROM. Add text to write ROM.')
 	p.add_argument('--id',action='store_true', default=False,help='Print ID.')
