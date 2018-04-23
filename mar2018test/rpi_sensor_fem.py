@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
 
     p = argparse.ArgumentParser(description='Test FEM module. Use this script when RPI directly connects to Full Control Breakout board for HERA.',
-epilog="""E.g.
+epilog="""Install pigpio first on your raspberry pi, run sudo pigpiod and try following commands:
 python rpi_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --gpio
 python rpi_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --gpio 0xff
 python rpi_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --rom
@@ -69,12 +69,10 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
     ANT3_I2C_GPIO_SDA_PIN = 16
     ANT3_I2C_GPIO_SCL_PIN = 26
 
-    i2cpinmap = [   [ANT1_I2C_GPIO_SDA_PIN,ANT1_I2C_GPIO_SCL_PIN],
-                    [ANT2_I2C_GPIO_SDA_PIN,ANT2_I2C_GPIO_SCL_PIN],
-                    [ANT3_I2C_GPIO_SDA_PIN,ANT3_I2C_GPIO_SCL_PIN]]
-
     # RPI I2C interface
-    i2cmap = {'i2c_ant1':0,'i2c_ant2':1,'i2c_ant3':2}
+    i2cmap = {  'i2c_ant1':[ANT1_I2C_GPIO_SDA_PIN,ANT1_I2C_GPIO_SCL_PIN],
+                'i2c_ant2':[ANT2_I2C_GPIO_SDA_PIN,ANT2_I2C_GPIO_SCL_PIN],
+                'i2c_ant3':[ANT3_I2C_GPIO_SDA_PIN,ANT3_I2C_GPIO_SCL_PIN]}
     assert args.i2c[0] in i2cmap.keys()
     bus=i2c.I2C_PIGPIO(i2cmap[args.i2c[0]][0],i2cmap[args.i2c[0]][1],I2C_BAUD_RATE)
 
@@ -186,12 +184,12 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
             else:
                 val=int(args.phase[0])&0b111111
             print('Write {:#08b} to phase switch register. Here are the results:'.format(val))
-            pi.write(ANT1_PHS_X,val&0b100000>>5)
-            pi.write(ANT1_PHS_Y,val&0b010000>>4)
-            pi.write(ANT2_PHS_X,val&0b001000>>3)
-            pi.write(ANT2_PHS_Y,val&0b000100>>2)
-            pi.write(ANT3_PHS_X,val&0b000010>>1)
-            pi.write(ANT3_PHS_Y,val&0b000001>>0)
+            pi.write(ANT1_PHS_X,(val&0b100000)>>5)
+            pi.write(ANT1_PHS_Y,(val&0b010000)>>4)
+            pi.write(ANT2_PHS_X,(val&0b001000)>>3)
+            pi.write(ANT2_PHS_Y,(val&0b000100)>>2)
+            pi.write(ANT3_PHS_X,(val&0b000010)>>1)
+            pi.write(ANT3_PHS_Y,(val&0b000001)>>0)
 
         # Read phase switch register
         val = 0b0 | (pi.read(ANT1_PHS_X)<<5)
@@ -201,9 +199,9 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
         val = val | (pi.read(ANT3_PHS_X)<<1)
         val = val | (pi.read(ANT3_PHS_Y)<<0)
 
-        phsmap = {  'i2c_ant1':[0b1<<5,0b1<<4],
-                    'i2c_ant2':[0b1<<3,0b1<<2],
-                    'i2c_ant3':[0b1<<1,0b1<<0]}
+        phsmap = {  'i2c_ant1':[5,4],
+                    'i2c_ant2':[3,2],
+                    'i2c_ant3':[1,0]}
 
         for key,offs in phsmap.iteritems():
-            print('{},\tX:{},\tY:{}'.format(key,val&offs[0],val&offs[1]))
+            print('{},\tX:{},\tY:{}'.format(key,(val>>offs[0])&0b1,(val>>offs[1])&0b1))

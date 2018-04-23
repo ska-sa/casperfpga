@@ -20,8 +20,8 @@ def gpio2db(val):
 
 if __name__ == "__main__":
 
-    p = argparse.ArgumentParser(description='Test PAM module. Use this script when RPI directly connects to Full Control Breakout board for HERA',
-epilog="""E.g.
+    p = argparse.ArgumentParser(description='Test PAM module. Use this script when RPI directly connects to Full Control Breakout board for HERA.',
+epilog="""Install pigpio first on your raspberry pi, run sudo pigpiod and try following commands:
 python rpi_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --atten
 python rpi_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --atten 7 13
 python rpi_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --gpio
@@ -73,17 +73,12 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
     ANT3_I2C_GPIO_SDA_PIN = 16
     ANT3_I2C_GPIO_SCL_PIN = 26
 
-    i2cpinmap = [   [ANT1_I2C_GPIO_SDA_PIN,ANT1_I2C_GPIO_SCL_PIN],
-                    [ANT2_I2C_GPIO_SDA_PIN,ANT2_I2C_GPIO_SCL_PIN],
-                    [ANT3_I2C_GPIO_SDA_PIN,ANT3_I2C_GPIO_SCL_PIN]]
-
     # RPI I2C interface
-    i2cmap = {'i2c_ant1':0,'i2c_ant2':1,'i2c_ant3':2}
+    i2cmap = {  'i2c_ant1':[ANT1_I2C_GPIO_SDA_PIN,ANT1_I2C_GPIO_SCL_PIN],
+                'i2c_ant2':[ANT2_I2C_GPIO_SDA_PIN,ANT2_I2C_GPIO_SCL_PIN],
+                'i2c_ant3':[ANT3_I2C_GPIO_SDA_PIN,ANT3_I2C_GPIO_SCL_PIN]}
     assert args.i2c[0] in i2cmap.keys()
     bus=i2c.I2C_PIGPIO(i2cmap[args.i2c[0]][0],i2cmap[args.i2c[0]][1],I2C_BAUD_RATE)
-
-    if len(args.i2c)>1:
-        assert args.i2c[0] in i2cmap.keys()
 
     if args.id:
         sn=i2c_sn.DS28CM00(bus,SN_ADDR)
