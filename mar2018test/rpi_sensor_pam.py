@@ -20,8 +20,8 @@ def gpio2db(val):
 
 if __name__ == "__main__":
 
-    p = argparse.ArgumentParser(description='Test PAM module. Use this script when RPI directly connects to Full Control Breakout board for HERA.',
-epilog="""Install pigpio first on your raspberry pi, run sudo pigpiod and try following commands:
+    p = argparse.ArgumentParser(description='Test PAM module. Use this script when RPI directly connects to Full Control Breakout board for HERA. Before trying this script, please install pigpio first on your raspberry pi and run sudo pigpiod.',
+epilog="""Examples:
 python rpi_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --atten
 python rpi_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --atten 7 13
 python rpi_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --gpio

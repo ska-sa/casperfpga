@@ -2,14 +2,14 @@
 
 from __future__ import print_function
 from casperfpga import i2c_volt,i2c_bar,i2c_eeprom,i2c_motion,i2c_sn,i2c_temp,i2c_gpio,i2c
-import numpy as np,time,logging,struct,random,sys,time,argparse,pigpio
+import numpy as np,time,logging,struct,random,sys,argparse
 
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
 
-    p = argparse.ArgumentParser(description='Test FEM module. Use this script when RPI directly connects to Full Control Breakout board for HERA.',
-epilog="""Install pigpio first on your raspberry pi, run sudo pigpiod and try following commands:
+    p = argparse.ArgumentParser(description='Test FEM module. Use this script when RPI directly connects to Full Control Breakout board for HERA. Before trying this script, please install pigpio and run sudo pigpiod.',
+epilog="""Examples:
 python rpi_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --gpio
 python rpi_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --gpio 0xff
 python rpi_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --rom
@@ -36,7 +36,7 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
     g=p.add_mutually_exclusive_group()
     g.add_argument('--gpio',nargs='*',metavar=('VALUE'), help='Test GPIO. Leave parameter empty to read gpio. Add value to write gpio.')
     g.add_argument('--switch',nargs='*',metavar=('MODE'), choices=['antenna','noise','load'], help='Switch FEM input to antenna, noise source or 50 ohm load. Choices are load, antenna, and noise.')
-    g.add_argument('--phase',nargs='*',metavar=('DIRECTION','VALUE'), help='Get/set phase switches. Use 6-bit number to set phase switches. i2c_ant1_phs_x at offset 5, i2c_ant3_phs_y at offset 0.')
+    p.add_argument('--phase',nargs='*',metavar=('DIRECTION','VALUE'), help='Get/set phase switches. Use 6-bit number to set phase switches. i2c_ant1_phs_x at offset 5, i2c_ant3_phs_y at offset 0. You can set the phase switches of the antenna 2 and 3 together even if you pass --i2c with i2c_ant1.')
     args = p.parse_args()
 
     #      0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
@@ -173,6 +173,7 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
         ANT2_PHS_Y = 19
         ANT3_PHS_X = 20
         ANT3_PHS_Y = 21
+        import pigpio
         pi = pigpio.pi()
 
         # Write phase swtich register
