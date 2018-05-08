@@ -9,7 +9,7 @@ import socket
 import struct
 import contextlib
 
-from CasperLogHandlers import CasperStreamHandler
+from CasperLogHandlers import CasperConsoleHandler
 
 from transport import Transport
 from utils import create_meta_dictionary, get_hostname, get_kwarg

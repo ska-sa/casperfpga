@@ -15,7 +15,8 @@ from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
 from transport_dummy import DummyTransport
-from CasperLogHandlers import CasperStreamHandler, CasperRedirectLogger
+# from CasperLogHandlers import CasperConsoleHandler, CasperRedirectLogger
+import CasperLogHandlers
 
 import os
 import sys
@@ -86,7 +87,7 @@ class CasperFpga(object):
         self.logger.setLevel(logging.NOTSET)
 
         # Logging to stream by default, for now
-        result = self.configure_stream_logging()
+        # result = self.configure_stream_logging()
 
         # region -- Making additions to test altering stdout and stderr --
         # stdout_logger = logging.getLogger('STDOUT')
@@ -194,12 +195,12 @@ class CasperFpga(object):
                     # Problem
                     self.logger.warning('StreamHandler {} already exists'.format(stream_name))
                     return False
-                    #raise ValueError('Cannot have multiple StreamHandlers '
+                    # raise ValueError('Cannot have multiple StreamHandlers '
                     #                 'with the same name')
         # If it makes it out here, stream_name specified is fine
 
         # Setting log level to INFO to log initial connection message
-        stream_handler = CasperStreamHandler(name=stream_name)
+        stream_handler = CasperLogHandlers.CasperConsoleHandler(name=stream_name)
         self.logger.addHandler(stream_handler)
 
         # Using this method which does initial checks on log_level specified
@@ -214,7 +215,7 @@ class CasperFpga(object):
         Method to configure logging to file using the casperfpga logging entity
         :param filename: Optional parameter - must be in the format of filename.log
                                             - Will default to casperfpga_{hostname}.log
-        :param file_dir: Optional parameter - must be
+        :param file_dir: Optional parameter - must be a valid path
         :return:
         """
         if filename:
