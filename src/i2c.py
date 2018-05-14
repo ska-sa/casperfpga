@@ -35,7 +35,7 @@ class I2C:
 
         self.fpga = fpga
         self.controller_name = controller_name
-                self.enable_core()
+        self.enable_core()
 
     def setClock(self, target, reference=100):
         """ Set I2C bus clock
@@ -125,6 +125,9 @@ class I2C:
 
     def _itf_write(self,addr,data):
         self.fpga.write_int(self.controller_name, data, word_offset=addr, blindwrite=True)
+        if addr == commandReg:
+            while (self.getStatus()["TIP"]):
+                time.sleep(.001)
 
     def _itf_read(self,addr):
         return self.fpga.read_int(self.controller_name, word_offset=addr)
@@ -149,15 +152,11 @@ class I2C:
 
         self._itf_write(transmitReg,    (addr<<1)|WRITE_BIT)
         self._itf_write(commandReg, CMD_START|CMD_WRITE)
-        while (self.getStatus()["TIP"]):
-            time.sleep(.01)
         if isinstance(data,int):
             data = [data]
         for d in data:
             self._itf_write(transmitReg,    d)
             self._itf_write(commandReg, CMD_WRITE)
-            while (self.getStatus()["TIP"]):
-                time.sleep(.01)
         self._itf_write(commandReg, CMD_STOP)
 
     def _read(self,addr,length=1):
@@ -183,23 +182,17 @@ class I2C:
         data = []
         self._itf_write(transmitReg,    (addr<<1)|READ_BIT)
         self._itf_write(commandReg, CMD_START|CMD_WRITE)
-        while (self.getStatus()["TIP"]):
-            time.sleep(.001)
         for i in range(length-1):
             # The command below also gives an ACK signal from master
             # to slave because CMD_ACK is actually 0
             self._itf_write(commandReg, CMD_READ)
             ret = self._itf_read(receiveReg)
             data.append(ret)
-            while (self.getStatus()["TIP"]):
-                time.sleep(.01)
         # The last read ends with a NACK (not acknowledge) signal and a STOP
         # from master to slave
         self._itf_write(commandReg, CMD_READ|CMD_NACK|CMD_STOP)
         ret = self._itf_read(receiveReg)
         data.append(ret)
-        while (self.getStatus()["TIP"]):
-            time.sleep(.001)
         if length==1:
             return data[0]
         else:

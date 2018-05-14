@@ -87,12 +87,12 @@ class MS5611_01B:
             off2=0
             sens2=0
             if rawtemp < 2000:
-                t2 = dt**2/(1<<31)
-                off2 = 5 * (rawtemp-2000)**2 / 2
-                sens2 = 5 * (rawtemp-2000)**2 / 4
+                t2 = (dt**2.)/(1<<31)
+                off2 = 5 * ((rawtemp-2000.)**2) / 2
+                sens2 = 5 * ((rawtemp-2000.)**2) / 4
             if rawtemp < -1500:
-                off2 = off2 + 7 * (rawtemp+1500)**2
-                sens2 = sens2 + 11 * (rawtemp+1500)**2 / 2
+                off2 = off2 + 7 * ((rawtemp+1500.)**2)
+                sens2 = sens2 + 11 * ((rawtemp+1500.)**2) / 2
 
             rawtemp=rawtemp-t2
             off=off-off2
