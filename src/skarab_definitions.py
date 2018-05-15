@@ -639,7 +639,7 @@ class WriteI2CReq(Command):
         self.expect_response = True
         self.response = WriteI2CResp
         self.num_words = 39
-        self.pad_words = 1
+        self.pad_words = 0
         self.packet['id'] = i2c_interface_id
         self.packet['slave_address'] = slave_address
         self.packet['num_bytes'] = num_bytes
@@ -648,19 +648,19 @@ class WriteI2CReq(Command):
 
 class WriteI2CResp(Response):
     def __init__(self, command_id, seq_num, i2c_interface_id, slave_address,
-                 num_bytes, write_bytes, write_success, padding):
+                 num_bytes, write_bytes, write_success):
         super(WriteI2CResp, self).__init__(command_id, seq_num)
         self.packet['id'] = i2c_interface_id
         self.packet['slave_address'] = slave_address
         self.packet['num_bytes'] = num_bytes
         self.packet['write_bytes'] = write_bytes
         self.packet['write_success'] = write_success
-        self.packet['padding'] = padding
+        #self.packet['padding'] = padding
 
     @staticmethod
     def unpack_process(unpacked_data):
-        write_bytes = unpacked_data[5:37]
-        unpacked_data[5:37] = [write_bytes]
+        write_bytes = unpacked_data[5:38]
+        unpacked_data[5:38] = [write_bytes]
         return unpacked_data
 
 

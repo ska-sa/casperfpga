@@ -1072,7 +1072,9 @@ class SkarabTransport(Transport):
     def write_i2c(self, interface, slave_address, *bytes_to_write):
         """
         Perform i2c write on a selected i2c interface.
-        Up to 32 bytes can be written in a single i2c transaction
+        Up to 33 bytes can be written in a single i2c transaction
+        (33 bytes of data allowed since the fan controller i2c
+         writes require a command byte plus 32 bytes of data)
         :param interface: identifier for i2c interface:
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
@@ -1080,14 +1082,15 @@ class SkarabTransport(Transport):
                           3 - Mezzanine 2 i2c
                           4 - Mezzanine 3 i2c
         :param slave_address: i2c address of slave to write to
-        :param bytes_to_write: 32 bytes of data to write (to be packed as
+        :param bytes_to_write: 33 bytes of data to write (to be packed as
         16-bit word each), list of bytes
         :return: response object
         """
+        MAX_I2C_WRITE_BYTES = 33
         num_bytes = len(bytes_to_write)
-        if num_bytes > 32:
+        if num_bytes > MAX_I2C_WRITE_BYTES:
             self.logger.error(
-                'Maximum of 32 bytes can be written in a single transaction')
+                'Maximum of %s bytes can be written in a single transaction', str(MAX_I2C_WRITE_BYTES))
             return False
 
         # each byte to be written must be packaged as a 16 bit value
@@ -1100,8 +1103,8 @@ class SkarabTransport(Transport):
             packed_bytes += pack(byte)
 
         # pad the number of bytes to write to 32 bytes
-        if num_bytes < 32:
-            packed_bytes += (32 - num_bytes) * '\x00\x00'
+        if num_bytes < MAX_I2C_WRITE_BYTES:
+            packed_bytes += (MAX_I2C_WRITE_BYTES - num_bytes) * '\x00\x00'
 
         # create payload packet structure
         request = sd.WriteI2CReq(interface, slave_address,
