@@ -1,6 +1,7 @@
 import logging
 import termcolors
 import datetime
+import os
 
 # from utils import get_kwarg
 
@@ -349,6 +350,86 @@ class CasperFileHandler(logging.Handler):
 
 # region -- Logger-related methods ---
 
+def configure_console_logging(logger_entity, console_handler_name=None):
+    """
+    Method to configure logging to console using the casperfpga logging entity
+    - A similar method exists in casperfpga
+    :param logger_entity: Logging entity to create and add the ConsoleHandler to
+    :param console_handler_name: Optional - will use logger_entity.name by default
+    :return:
+    """
+    # Check if a log-handler with the specified name already exists
+    if console_handler_name is None:
+        # Use the name of the logger specified
+        if logger_entity.name is None or logger_entity.name is '':
+            # Problem!
+            errmsg = 'Cannot have a logger without a name!'
+            LOGGER.error(errmsg)
+            return False
+        # else: Continue
+        console_handler_name = logger_entity.name
+    # else: Do all the checks
+
+    handlers = logger_entity.handlers
+    for handler in handlers:
+        # Check if there is already a StreamHandler with this name
+        if hasattr(handler, 'baseFilename'):
+            # It's a FileHandler, not a StreamHandler
+            continue
+        else:
+            # StreamHandler (I hope)
+            if handler.name.upper() == console_handler_name.upper():
+                # Problem
+                LOGGER.warning('ConsoleHandler {} already exists'.format(console_handler_name))
+                return False
+                # raise ValueError('Cannot have multiple StreamHandlers '
+                #                 'with the same name')
+    # If it makes it out here, stream_name specified is fine
+
+    console_handler = CasperConsoleHandler(name=console_handler_name)
+    logger_entity.addHandler(console_handler)
+
+    debugmsg = 'Successfully created ConsoleHandler {}'.format(console_handler_name)
+    LOGGER.debug(debugmsg)
+
+    return True
+
+
+def configure_file_logging(logging_entity, filename=None, file_dir=None):
+    """
+    Method to configure logging to file using the casperfpga logging entity
+    :param logging_entity: Logging entity to create and add the FileHandler to
+    :param filename: Optional parameter - must be in the format of filename.log
+                                        - Will default to casperfpga_{hostname}.log
+    :param file_dir: Optional parameter - must be a valid path
+    :return:
+    """
+    if filename:
+        # Has user spec'd file directory as well?
+        if file_dir:
+            # First check if the directory exists
+            if os.path.isdir(file_dir):
+                log_filename = file_dir + filename
+            else:
+                errmsg = '{} is not a valid directory'.format(file_dir)
+                LOGGER.error(errmsg)
+                raise ValueError(errmsg)
+        else:
+            # Store it in /tmp/
+            log_filename = '/tmp/{}'.format(filename)
+    else:
+        log_filename = '/tmp/casperfpga_{}.log'.format(logging_entity.name)
+
+    file_handler = logging.FileHandler(log_filename, mode='a')
+    formatted_string = '%(asctime)s | %(levelname)s | %(name)s - %(filename)s:%(lineno)s - %(message)s'
+    casperfpga_formatter = logging.Formatter(formatted_string)
+    file_handler.setFormatter(casperfpga_formatter)
+    logging_entity.addHandler(file_handler)
+
+    LOGGER.info('Successfully enabled logging to file at {}'.format(log_filename))
+    return True
+
+
 def get_logger_group(logger_dict=None, group_name=None):
     """
     Method to fetch all logger entities that match the group_name specified
@@ -463,7 +544,34 @@ def _add_handler_to_logger(logger, log_handler):
     return True
 
 
-def find_log_handler_by_name(log_handler_name, logger_dict=None):
+def remove_handler_from_loggers(logger_dict, log_handler):
+    """
+    Remove log_handler from logger_dict, should a logger in the group
+    have said log_handler.
+    :param logger_dict: Dictionary of logger objects
+    :param log_handler: Actual log-handler entity?
+    :return:
+    """
+
+    if len(logger_dict) < 1:
+        # Problem
+        errmsg = 'Logger group specified must contain at least one logger'
+        LOGGER.error(errmsg)
+
+    for logger_key, logger_value in logger_dict.items():
+        if type(logger_value) is not logging.Logger:
+            # Don't need it
+            continue
+        elif not _remove_handler_from_logger(logger_value, log_handler.name):
+            # Problem
+            errmsg = 'Failed to remove handler-{} from logger-{}'.format(logger_key, log_handler) # name)
+            LOGGER.error(errmsg)
+            return False
+
+    return True
+
+
+def get_log_handler_by_name(log_handler_name, logger_dict=None):
     """
 
     :param log_handler_name:
@@ -490,38 +598,13 @@ def find_log_handler_by_name(log_handler_name, logger_dict=None):
                     return handler
 
 
-def remove_handler_from_loggers(logger_dict, log_handler):
+def _remove_handler_from_logger(logger, log_handler_name):
     """
-    Remove log_handler from logger_dict, should a logger in the group
-    have said log_handler.
-    :param logger_dict: Dictionary of logger objects
-    :param log_handler: Actual log-handler entity?
+    Removes handler from logging entity
+    - Just easier to do it by name, rather than type
     :return:
     """
-
-    if len(logger_dict) < 1:
-        # Problem
-        errmsg = 'Logger group specified must contain at least one logger'
-        LOGGER.error(errmsg)
-
-    for logger_key, logger_value in logger_dict.items():
-        if type(logger_value) is not logging.Logger:
-            # Don't need it
-            continue
-        elif not remove_handler_from_logger(logger_value, log_handler):
-            # Problem
-            errmsg = 'Failed to remove handler-{} from logger-{}'.format(logger_key, log_handler_name)
-            LOGGER.error(errmsg)
-            return False
-
-    return True
-
-
-def remove_handler_from_logger(logger, log_handler_name):
-    """
-
-    :return:
-    """
+    # Because we can't act on the list we need to scroll through
     log_handlers = logger.handlers
 
     for handler in log_handlers:
