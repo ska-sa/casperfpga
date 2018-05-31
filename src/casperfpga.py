@@ -15,11 +15,9 @@ from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
 from transport_dummy import DummyTransport
-# from CasperLogHandlers import CasperConsoleHandler, CasperRedirectLogger
-import CasperLogHandlers
 
-import os
-import sys
+from CasperLogHandlers import configure_console_logging, configure_file_logging
+
 
 # known CASPER memory-accessible devices and their associated
 # classes and containers
@@ -141,6 +139,10 @@ class CasperFpga(object):
 
         # Set log level to ERROR
         self.logger.setLevel(logging.ERROR)
+
+        # Just to test
+        self.configure_console_logging = configure_console_logging
+        self.configure_file_logging = configure_file_logging
 
     # region ** Not ready to be implemented! **
     # def configure_logger(self, log_level=logging.DEBUG, filename=None, file_directory=None):
