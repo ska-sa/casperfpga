@@ -2506,7 +2506,6 @@ class SkarabTransport(Transport):
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
 
-
         def sign_extend(value, bits):
             """
             Performs 2's compliment sign extension
@@ -2532,6 +2531,37 @@ class SkarabTransport(Transport):
             value = int(value)
             value = float(value)
             return round(value / 100.0, 2)
+
+        def mezzanine_temperature_check_qsfp(value):
+            """
+            Checks the returned QSFP mezzanine temperatures and handles them
+            accordingly.
+            :param value: value returned from the temperature sensor
+            :return: correct mezzanine temperature value
+            """
+            # scale the measured voltage
+            temp = ((value / 1000.0) + 2.34) / 4.0
+            temp = ((temp - 0.76) / 0.0025) + 25.0
+
+            # convert to temperature
+            return round(temp, 2)
+
+        def mezzanine_temperature_check_hmc(value):
+            """
+            Checks the returned HMC mezzanine temperatures and handles them
+            accordingly.
+            :param value: value returned from the temperature sensor
+            :return: correct mezzanine temperature value
+            """
+            # scale the measured voltage
+            temp = value
+            temp = -1.0 * ((5.506 - math.sqrt(30.316036 + 0.00704 * (870.6
+                                                                     -
+                                                                     temp)))
+                           / 0.00352) + 30.0
+
+            # convert to temperature
+            return round(temp, 2)
 
         def voltage_current_monitor_temperature_check(value):
             """
@@ -2701,6 +2731,19 @@ class SkarabTransport(Transport):
                                                                    temperature,
                                                                    inlet_ref))
 
+        def parse_mezzanine_temperatures(raw_sensor_data):
+            for key, value in sd.sensor_list.items():
+                inlet_ref = temperature_value_check(
+                    raw_sensor_data[sd.sensor_list['inlet_temperature_degC']])
+
+                if 'mezzanine' in key:
+                    if key == 'mezzanine_site_3_temperature_degC':
+                        temperature = mezzanine_temperature_check_qsfp(raw_sensor_data[value])
+                    else:
+                        temperature = mezzanine_temperature_check_hmc(raw_sensor_data[value])
+
+                    self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref))
+
         def parse_voltages(raw_sensor_data):
             for key, value in sd.sensor_list.items():
                 if '_voltage' in key:
@@ -2725,6 +2768,7 @@ class SkarabTransport(Transport):
             parse_currents(recvd_sensor_data_values)
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
+            parse_mezzanine_temperatures(recvd_sensor_data_values)
             return self.sensor_data
         return False
 

@@ -315,7 +315,7 @@ current_scaling = {
     str(P1V2_MGTAVTT_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.002)
 }
 
-# dictionary holding all sensor infomation
+# dictionary holding all sensor information
 # comprised of sensor name and key; key = index of sensor data in rolled
 # up sensor response from SKARAB
 sensor_list = {
@@ -359,7 +359,11 @@ sensor_list = {
     '+1V8_MGTVCCAUX_current': 79,
     '+1V0_MGTAVCC_current': 82,
     '+1V2_MGTAVTT_current': 85,
-    '+3V3_config_current': 88
+    '+3V3_config_current': 88,
+    'mezzanine_site_0_temperature_degC': 91,
+    'mezzanine_site_1_temperature_degC': 92,
+    'mezzanine_site_2_temperature_degC': 93,
+    'mezzanine_site_3_temperature_degC': 94
 }
 
 # sensor thresholds
@@ -404,7 +408,11 @@ temperature_ranges = {
     'fpga_temperature_degC': (30, -10),
     'fan_controller_temperature_degC': (10, -10),
     'voltage_monitor_temperature_degC': (10, -10),
-    'current_monitor_temperature_degC': (10, -10)
+    'current_monitor_temperature_degC': (10, -10),
+    'mezzanine_site_0_temperature_degC': (0.0, 0.0),
+    'mezzanine_site_1_temperature_degC': (0.0, 0.0),
+    'mezzanine_site_2_temperature_degC': (0.0, 0.0),
+    'mezzanine_site_3_temperature_degC': (0.0, 0.0)
 }
 
 # fan_rpm: (rating, max, min)
@@ -738,7 +746,7 @@ class GetSensorDataReq(Command):
         super(GetSensorDataReq, self).__init__(GET_SENSOR_DATA)
         self.expect_response = True
         self.response = GetSensorDataResp
-        self.num_words = 95
+        self.num_words = 99
         self.pad_words = 2
 
 
@@ -750,8 +758,8 @@ class GetSensorDataResp(Response):
 
     @staticmethod
     def unpack_process(unpacked_data):
-        read_bytes = unpacked_data[2:93]
-        unpacked_data[2:93] = [read_bytes]
+        read_bytes = unpacked_data[2:97]
+        unpacked_data[2:97] = [read_bytes]
         return unpacked_data
 
 
