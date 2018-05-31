@@ -129,9 +129,9 @@ class CasperConsoleHandler(logging.Handler):
         """
 
         formatted_datetime = str(datetime.datetime.now())
-        formatted_string = '{name} - {0} | {levelname} | {filename}:{lineno} -' \
-                           ' {msg}'.format(formatted_datetime, **record)
-
+        formatted_string = '{} - {} | {} | {}:{} - {}'.format(record.name, formatted_datetime, record.levelname,
+                                                              record.filename, str(record.lineno), record.msg)
+        
         return formatted_string
 
     def clear_log(self):
@@ -264,10 +264,8 @@ class CasperFileHandler(logging.Handler):
         """
 
         formatted_datetime = str(datetime.datetime.now())
-        # formatted_string = '{} - {} | {} | {}:{} - {}'.format(record.name, formatted_datetime, record.levelname,
-        #                                                       record.filename, str(record.lineno), record.msg)
-        formatted_string = '{name} - {0} | {levelname} | {filename}:{lineno} -' \
-                           ' {msg}'.format(formatted_datetime, **record)
+        formatted_string = '{} - {} | {} | {}:{} - {}'.format(record.name, formatted_datetime, record.levelname,
+                                                              record.filename, str(record.lineno), record.msg)
 
         return formatted_string
 
