@@ -250,3 +250,205 @@ class LTC2990():
             data = self.read(rid)
             data = self._set(data,value,mask)
             self.write(rid,data)
+
+
+class INA219():
+    """ INA219 Zero-Drift, Bidirectional Current/Power Monitor With I2C Interface """
+
+    DICT = dict()
+
+    DICT[0x00] = {  'configuration' : 0xffff << 0,
+            'RST' : 0b1 << 15,
+            'BRNG' : 0b1 << 13,
+            'PG' : 0b11 << 11,
+            'BADC' : 0b1111 << 7,
+            'SADC' : 0b1111 << 3,
+            'MODE' : 0b111 << 0,}
+
+    DICT[0x01] = {  'shuntvoltage' : 0xffff << 0,}
+    DICT[0x02] = {  'busvoltage' : 0xffff << 0,
+            'BD' : 0b1111111111111 << 3,
+            'CNVR' : 0b1 << 1,
+            'OVF' : 0b1 << 0, }
+    DICT[0x03] = {  'power' : 0xffff << 0,}
+    DICT[0x04] = {  'current' : 0xffff << 0,}
+    DICT[0x05] = {  'calibration' : 0xffff << 0,}
+
+    BRNG = {16:0,
+            32:1,}
+
+    PG = {  40:0b00,
+            80:0b01,
+            160:0b10,
+            320:0b11,}
+
+    ADC = { '9b'  : 0b0000,
+            '10b' : 0b0001,
+            '11b' : 0b0010,
+            '12b' : 0b0011,
+            1 : 0b1000,
+            2 : 0b1001,
+            4 : 0b1010,
+            8 : 0b1011,
+            16 : 0b1100,
+            32 : 0b1101,
+            64 : 0b1110,
+            128 : 0b1111, }
+
+    def __init__(self, itf, addr=0x45):
+        self.itf=itf
+        self.addr=addr
+
+    def init(self,brng=16,pg=320,badc=128,sadc=128,mode=0b011):
+        """ Initialise INA219
+
+    Mode, available options:
+        MODE3   MODE2   MODE1   MODE
+        0       0       0       Power-down
+        0       0       1       Shunt voltage, triggered
+        0       1       0       Bus voltage, triggered
+        0       1       1       Shunt and bus, triggered
+        1       0       0       ADC off (disabled)
+        1       0       1       Shunt voltage, continuous
+        1       1       0       Bus voltage, continuous
+        1       1       1       Shunt and bus, continuous
+
+    BRNG, Bus voltage range, available options:
+        16,32
+
+    PG, for choosing the full scale range. Available options:
+        40, 80, 160, 320,
+
+    ADC, for bus voltage as well as shunt voltage measurement.
+        Available options:
+        Do one sample of the following resolution
+        '9b', '10b', '11b', '12b',
+        or do 12bit resolution and average over the following number of samples:
+        1, 2, 4, 8, 16, 32, 64, 128,
+
+        """
+
+        if brng not in self.BRNG:
+            logger.error('Invalid parameter')
+            raise ValueError("Invalid parameter")
+        if pg not in self.PG:
+            logger.error('Invalid parameter')
+            raise ValueError("Invalid parameter")
+        if badc not in self.ADC:
+            logger.error('Invalid parameter')
+            raise ValueError("Invalid parameter")
+        if sadc not in self.ADC:
+            logger.error('Invalid parameter')
+            raise ValueError("Invalid parameter")
+        if mode not in range(8):
+            logger.error('Invalid parameter')
+            raise ValueError("Invalid parameter")
+
+        rid, mask = self._getMask(self.DICT, 'BRNG')
+        val = self._set(0x0, self.BRNG[brng], mask)
+        rid, mask = self._getMask(self.DICT, 'PG')
+        val = self._set(val, self.PG[pg], mask)
+        rid, mask = self._getMask(self.DICT, 'BADC')
+        val = self._set(val, self.ADC[badc], mask)
+        rid, mask = self._getMask(self.DICT, 'SADC')
+        val = self._set(val, self.ADC[sadc], mask)
+        rid, mask = self._getMask(self.DICT, 'MODE')
+        val = self._set(val, mode, mask)
+
+        self.write(rid, val)
+
+    def _set(self, d1, d2, mask=None):
+        # Update some bits of d1 with d2, while keep other bits unchanged
+        if mask:
+            d1 = d1 & ~mask
+            d2 = d2 * (mask & -mask)
+        return d1 | d2
+
+    def _get(self, data, mask):
+        data = data & mask
+        return data / (mask & -mask)
+
+    def _getMask(self, dicts, name):
+        for rid in dicts:
+            if name in dicts[rid]:
+                return rid, dicts[rid][name]
+        return None,None
+
+    def write(self,reg=None,data=None):
+        self.itf.write(self.addr,reg,[data>>8,data&0xff])
+
+    def read(self,reg=None,length=2):
+        msb, lsb = self.itf.read(self.addr,reg,length)
+        return (msb << 8) | lsb
+
+    def readVolt(self,name):
+        """ Read Voltage
+
+        Please switch to corresponding modes using init() before measuring voltage.
+        Possible options are:
+            'shunt'
+            'bus'
+
+            E.g.
+            readVolt('shunt')
+        """
+        name = name.lower()
+        if name not in ['shunt','bus']:
+            logger.error('Invalid parameter')
+            raise ValueError("Invalid parameter")
+
+        # trigger
+        conf = self.getWord('configuration')
+        self.setWord('configuration',conf)
+
+        # check availability
+	cnt=0
+        while not self.getStatus('CNVR'):
+            cnt+=1
+            time.sleep(0.01)
+            if cnt>10:
+                msg = "Voltage sensor at address {} reading timeout!".format(hex(self.addr))
+                logger.warning(msg)
+                return float('nan')
+
+        # read and interpret
+        if name == 'shunt':
+            val = self.getWord('shuntvoltage')
+            val = -1 * (~val + 1) if val & 0x8000 else val
+            return val * 10.e-6
+
+        else: # name == 'bus':
+            val = self.getWord('BD')
+            return val * 4.e-3
+
+    def getStatus(self,name='CNVR'):
+
+        if name not in ['CNVR','OVF']:
+            logger.error('Invalid parameter')
+            raise ValueError("Invalid parameter")
+
+        return self.getWord(name)
+
+    def getRegister(self,rid=None):
+        if rid==None:
+            return dict([(regId,self.getRegister(regId)) for regId in self.DICT])
+        elif rid in self.DICT:
+            rval = self.read(rid)
+            return {name: self._get(rval,mask) for name, mask in self.DICT[rid].items()}
+        else:
+            logger.error('Invalid parameter')
+            raise ValueError("Invalid parameter")
+
+    def getWord(self,name):
+        rid, mask = self._getMask(self.DICT, name)
+        return self._get(self.read(rid),mask)
+        
+    def setWord(self,name,value):
+        rid, mask = self._getMask(self.DICT, name)
+        if mask == 0xffff:
+            data = self._set(0x0,value,mask)
+            self.write(reg=rid,data=data)
+        else:
+            data = self.read(rid)
+            data = self._set(data,value,mask)
+            self.write(reg=rid, data=data)
