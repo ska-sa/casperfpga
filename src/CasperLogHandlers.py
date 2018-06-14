@@ -129,7 +129,7 @@ class CasperConsoleHandler(logging.Handler):
         """
 
         formatted_datetime = str(datetime.datetime.now())
-        formatted_string = '{} - {} | {} | {}:{} - {}'.format(record.name, formatted_datetime, record.levelname,
+        formatted_string = '{} {} {} {}:{} - {}'.format(formatted_datetime, record.levelname, record.name
                                                               record.filename, str(record.lineno), record.msg)
         
         return formatted_string
