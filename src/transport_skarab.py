@@ -152,7 +152,7 @@ class SkarabTransport(Transport):
                     sd.ETHERNET_CONTROL_PORT_ADDRESS, '& connected'))
             else:
                 self.logger.error('Error connecting to %s: port%s' %
-                                  sd.ETHERNET_CONTROL_PORT_ADDRESS)
+                         (self.host,sd.ETHERNET_CONTROL_PORT_ADDRESS)
 
         # self.image_chunks, self.local_checksum = None, None
         # TODO - add the one_gbe
