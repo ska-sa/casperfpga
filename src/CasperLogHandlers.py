@@ -127,9 +127,8 @@ class CasperConsoleHandler(logging.Handler):
         :param record: Log message as a string, of type logging.LogRecord
         :return: Formatted message
         """
-
-        formatted_datetime = str(datetime.datetime.now())
-        formatted_string = '{} - {} | {} | {}:{} - {}'.format(record.name, formatted_datetime, record.levelname,
+        formatted_datetime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
+        formatted_string = '{} {} {} {}:{} - {}'.format(formatted_datetime, record.levelname, record.name,
                                                               record.filename, str(record.lineno), record.msg)
         
         return formatted_string

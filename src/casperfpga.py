@@ -54,6 +54,10 @@ CASPER_OTHER_DEVICES = {
 }
 
 
+class UnknownTransportError(Exception):
+    pass
+
+
 class CasperFpga(object):
     """
     A FPGA host board that has a CASPER design running on it. Or will soon have.
@@ -187,15 +191,17 @@ class CasperFpga(object):
             elif TapcpTransport.test_host_type(host_ip):
                 self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
                 return TapcpTransport
-            else:
-                self.logger.debug('%s seems to be a ROACH' % host_ip)
+            elif KatcpTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be ROACH' % host_ip)
                 return KatcpTransport
+            else:
+                raise UnknownTransportError('Possible that host '
+                                            'does not follow one of the defined casperfpga transport protocols')
         except socket.gaierror:
             raise RuntimeError('Address/host %s makes no sense to '
                                'the OS?' % host_ip)
         except Exception as e:
-            raise RuntimeError('Could not connect to %s: %s' % (
-                host_ip, e.message))
+            raise RuntimeError('Could not connect to host %s: %s' % (host_ip, e.message))
 
     def connect(self, timeout=None):
         return self.transport.connect(timeout)
