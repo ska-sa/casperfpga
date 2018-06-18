@@ -21,6 +21,9 @@ if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
     setattr(katcp.CallbackClient, 'MAX_MSG_SIZE',
             katcp.CallbackClient.MAX_MSG_SIZE * 10)
 
+if hasattr(katcp.CallbackClient, 'MAX_WRITE_BUFFER_SIZE'):
+    setattr(katcp.CallbackClient, 'MAX_WRITE_BUFFER_SIZE',
+            katcp.CallbackClient.MAX_WRITE_BUFFER_SIZE * 10)
 
 class KatcpConnectionError(Exception):
     pass
