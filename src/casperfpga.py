@@ -15,22 +15,11 @@ from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
 from transport_dummy import DummyTransport
+# from CasperLogHandlers import CasperConsoleHandler, CasperRedirectLogger
+import CasperLogHandlers
 
-
-LOGGER = logging.getLogger(__name__)
-
-# define a custom log level between DEBUG and INFO
-PDEBUG = 15
-logging.addLevelName(PDEBUG, "PDEBUG")
-
-
-def pdebug(self, message, *args, **kwargs):
-    if self.isEnabledFor(PDEBUG):
-        self.log(PDEBUG, message, *args, **kwargs)
-
-
-logging.Logger.pdebug = pdebug
-
+import os
+import sys
 
 # known CASPER memory-accessible devices and their associated
 # classes and containers
@@ -67,33 +56,6 @@ CASPER_OTHER_DEVICES = {
 }
 
 
-def choose_transport(host_ip):
-    """
-    Test whether a given host is a katcp client or a skarab
-    :param host_ip:
-    :return:
-    """
-    LOGGER.debug('Trying to figure out what kind of device %s is' % host_ip)
-    if host_ip.startswith('CasperDummy'):
-        return DummyTransport
-    try:
-        if SkarabTransport.test_host_type(host_ip):
-            LOGGER.debug('%s seems to be a SKARAB' % host_ip)
-            return SkarabTransport
-        elif TapcpTransport.test_host_type(host_ip):
-            LOGGER.debug('%s seems to be a TapcpTransport' % host_ip)
-            return TapcpTransport
-        else:
-            LOGGER.debug('%s seems to be a ROACH' % host_ip)
-            return KatcpTransport
-    except socket.gaierror:
-        raise RuntimeError('Address/host %s makes no sense to '
-                           'the OS?' % host_ip)
-    except Exception as e:
-        raise RuntimeError('Could not connect to %s: %s' % (
-            host_ip, e.message))
-
-
 class CasperFpga(object):
     """
     A FPGA host board that has a CASPER design running on it. Or will soon have.
@@ -111,15 +73,54 @@ class CasperFpga(object):
                 pass
         self.host, self.bitstream = get_hostname(**kwargs)
 
+        # Need to check if any logger-based parameters have been spec'd
+        try:
+            self.logger = kwargs['logger']
+        except KeyError:
+            # Damn
+            self.logger = logging.getLogger(self.host)
+
         # some transports, e.g. Skarab, need to know their parent
         kwargs['parent_fpga'] = self
+
+        # Setup logger to be propagated through transports
+        self.logger.setLevel(logging.NOTSET)
+
+        # Logging to stream by default, for now
+        # result = self.configure_stream_logging()
+
+        # region -- Making additions to test altering stdout and stderr --
+        # stdout_logger = logging.getLogger('STDOUT')
+        # temp_stream_handler = logging.StreamHandler().setLevel(logging.INFO)
+        #
+        # formatted_string = '%(name)s| %(asctime)s | %(levelname)s - %(message)s'
+        # temp_formatter = logging.Formatter(formatted_string)
+        # temp_stream_handler.setFormatter(temp_formatter)
+        # stdout_logger.addHandler(temp_stream_handler)
+        #
+        # redirect_logger = CasperRedirectLogger(logger=stdout_logger, log_level=logging.INFO)
+        # sys.stdout = redirect_logger
+        #
+        # stderr_logger = logging.getLogger('STDERR')
+        # stderr_logger.addHandler()
+        # redirect_logger = CasperRedirectLogger(logger=stderr_logger, log_level=logging.ERROR)
+        # sys.stderr = redirect_logger
+        # endregion
+
+        # define a custom log level between DEBUG and INFO
+        # PDEBUG = 15
+        # logging.addLevelName(PDEBUG, "PDEBUG")
+        #
+        # self.logger.pdebug = pdebug
+
+        kwargs['logger'] = self.logger
 
         # was the transport specified?
         transport = get_kwarg('transport', kwargs)
         if transport:
             self.transport = transport(**kwargs)
         else:
-            transport_class = choose_transport(self.host)
+            transport_class = self.choose_transport(self.host)
             self.transport = transport_class(**kwargs)
 
         # this is just for code introspection
@@ -136,13 +137,144 @@ class CasperFpga(object):
         # /just for introspection
 
         self._reset_device_info()
-        LOGGER.debug('%s: now a CasperFpga' % self.host)
+        self.logger.debug('%s: now a CasperFpga' % self.host)
+
+        # Set log level to ERROR
+        self.logger.setLevel(logging.ERROR)
+
+    # region ** Not ready to be implemented! **
+    # def configure_logger(self, log_level=logging.DEBUG, filename=None, file_directory=None):
+    #     """
+    #     Method to configure the logger instantiated as part of the casperfpga entity
+    #     - log_level=logging.DEBUG, stream_handler=None, file_handler=None
+    #     :param log_level:
+    #     :param filename:
+    #     :param file_directory:
+    #     :param string_format:
+    #     :return:
+    #     """
+    #
+    #     # We're trying to accommodate for a host of paramater specifications
+    #     # - But they must all be key-word args
+    #
+    #     # First, see
+    #     # Need to test the FileHandler
+    #     log_filename = '/tmp/casperfpga_{}.log'.format(self.host)
+    #     file_handler = logging.FileHandler(log_filename, mode='a')
+    #     formatted_string = '%(asctime)s | %(levelname)s | %(name)s - %(filename)s:%(lineno)s - %(message)s'
+    #     casperfpga_formatter = logging.Formatter(formatted_string)
+    #     file_handler.setFormatter(casperfpga_formatter)
+    #     self.logger.addHandler(file_handler)
+    #
+    #     return True
+    # endregion
+
+    def choose_transport(self, host_ip):
+        """
+        Test whether a given host is a katcp client or a skarab
+        :param host_ip:
+        :return:
+        """
+        self.logger.debug('Trying to figure out what kind of device %s is' % host_ip)
+        if host_ip.startswith('CasperDummy'):
+            return DummyTransport
+        try:
+            if SkarabTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be a SKARAB' % host_ip)
+                return SkarabTransport
+            elif TapcpTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
+                return TapcpTransport
+            else:
+                self.logger.debug('%s seems to be a ROACH' % host_ip)
+                return KatcpTransport
+        except socket.gaierror:
+            raise RuntimeError('Address/host %s makes no sense to '
+                               'the OS?' % host_ip)
+        except Exception as e:
+            raise RuntimeError('Could not connect to %s: %s' % (
+                host_ip, e.message))
 
     def connect(self, timeout=None):
         return self.transport.connect(timeout)
 
     def disconnect(self):
         return self.transport.disconnect()
+
+    # def pdebug(self, message, *args, **kwargs):
+    #     if self.isEnabledFor(PDEBUG):
+    #         self.log(PDEBUG, message, *args, **kwargs)
+
+    def set_log_level(self, log_level='DEBUG'):
+        """
+        Generic function to carry out a sanity check on the logging_level
+        used to setup the logger
+        :param log_level: String input defining the logging_level:
+                             Level      | Numeric Value
+                             --------------------------
+                             CRITICAL   | 50
+                             ERROR      | 40
+                             WARNING    | 30
+                             INFO       | 20
+                             DEBUG      | 10
+                             NOTSET     | 0
+        :return:
+        """
+        log_level_numeric = getattr(logging, log_level.upper(), None)
+        if not isinstance(log_level_numeric, int):
+            raise ValueError('Invalid Log Level: %s' % log_level)
+        # else: Continue
+        self.logger.setLevel(log_level_numeric)
+        infomsg = 'Log level successfully updated to: {}'.format(log_level.upper())
+        self.logger.info(infomsg)
+        return True
+
+    # def enable_logging(self, logging_level, interactive_mode=True):
+    #     """
+    #     New method added to test logger functionality across transport layers
+    #     - Need to add handlers for both Stream AND File
+    #     :param logging_level: String input defining the logging_level:
+    #                          Level      | Numeric Value
+    #                          --------------------------
+    #                          CRITICAL   | 50
+    #                          ERROR      | 40
+    #                          WARNING    | 30
+    #                          INFO       | 20
+    #                          DEBUG      | 10
+    #                          NOTSET     | 0
+    #     :param interactive_mode: Boolean Flag used to dictate whether to display debug info
+    #                              to screen - i.e. When run from ipython vs python script
+    #     :return: Boolean - True/False - 1/0
+    #     """
+    #
+    #     logging_level_numeric = getattr(logging, logging_level.upper(), None)
+    #     if not isinstance(logging_level_numeric, int):
+    #         raise ValueError('Invalid Log Level: %s' % logging_level)
+    #     # else: Continue
+    #     # logging.basicConfig(level=logging_level_numeric)
+    #
+    #     # Need to set the formatter, regardless of Logging Mode (Stream and/or File)
+    #     # - DateTime | name | host_name | Debug_level | message
+    #     format_str = '%(asctime)s | %(name)s | {} | %(levelname)s | %(message)s'.format(self.host)
+    #     # format_str = '%(asctime)s | %(name)s | %(levelname)s | %(message)s'
+    #     formatter = logging.Formatter(format_str)
+    #
+    #     if interactive_mode:
+    #         # Create Console Handler
+    #         console_handler = logging.StreamHandler()
+    #         console_handler.setLevel(level=logging_level_numeric)
+    #         console_handler.setFormatter(formatter)
+    #         self.logger.addHandler(console_handler)
+    #
+    #     # Log to file by default... for now
+    #     log_filename = '/tmp/process_{}.log'.format(str(os.getpid()))
+    #     file_handler = logging.FileHandler(log_filename)
+    #     file_handler.setLevel(level=logging_level_numeric)
+    #     file_handler.setFormatter(formatter)
+    #     self.logger.addHandler(file_handler)
+    #
+    #     self.logger.debug('Logging enabled...')
+    #     return True
 
     def read(self, device_name, size, offset=0, **kwargs):
         return self.transport.read(device_name, size, offset, **kwargs)
@@ -277,8 +409,8 @@ class CasperFpga(object):
 
         dram_indirect_page_size = (64*1024*1024)
         # read_chunk_size = (1024*1024)
-        LOGGER.debug('%s: reading a total of %8i bytes from offset %8i...' %
-                     (self.host, size, offset))
+        self.logger.debug('Reading a total of %8i bytes from offset %8i...' %
+                         (size, offset))
         while n_reads < size:
             dram_page = (offset + n_reads) / dram_indirect_page_size
             local_offset = (offset + n_reads) % dram_indirect_page_size
@@ -293,9 +425,9 @@ class CasperFpga(object):
             local_data = self.dram_bulkread('dram_memory',
                                             local_reads, local_offset)
             data.append(local_data)
-            LOGGER.debug('%s: reading %8i bytes from indirect '
-                         'address %4i at local offset %8i... done.' %
-                         (self.host, local_reads, dram_page, local_offset))
+            self.logger.debug('Reading %8i bytes from indirect '
+                              'address %4i at local offset %8i... done.' %
+                              (local_reads, dram_page, local_offset))
             n_reads += local_reads
         return ''.join(data)
 
@@ -316,8 +448,8 @@ class CasperFpga(object):
 
         dram_indirect_page_size = (64*1024*1024)
         write_chunk_size = (1024*512)
-        LOGGER.debug('%s: writing a total of %8i bytes from offset %8i...' %
-                     (self.host, size, offset))
+        self.logger.debug('Writing a total of %8i bytes from offset %8i...' %
+                         (size, offset))
 
         while n_writes < size:
             dram_page = (offset+n_writes)/dram_indirect_page_size
@@ -325,9 +457,9 @@ class CasperFpga(object):
             local_writes = min(write_chunk_size, size - n_writes,
                                dram_indirect_page_size -
                                (offset % dram_indirect_page_size))
-            LOGGER.debug('%s: writing %8i bytes from indirect address %4i '
-                         'at local offset %8i...' % (
-                            self.host, local_writes, dram_page, local_offset))
+            self.logger.debug('Writing %8i bytes from indirect address %4i '
+                              'at local offset %8i...' % (
+                               local_writes, dram_page, local_offset))
             if last_dram_page != dram_page:
                 self.write_int('dram_controller', dram_page)
                 last_dram_page = dram_page
@@ -351,11 +483,11 @@ class CasperFpga(object):
             # it's not in the first word
             unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
             unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
-            err_str = '%s: verification of write to %s at offset %d failed. ' \
+            err_str = 'Verification of write to %s at offset %d failed. ' \
                       'Wrote 0x%08x... but got back 0x%08x.' % (
-                        self.host, device_name, offset,
+                        device_name, offset,
                         unpacked_wrdata, unpacked_rddata)
-            LOGGER.error(err_str)
+            self.logger.error(err_str)
             raise ValueError(err_str)
 
     def read_int(self, device_name, word_offset=0):
@@ -396,7 +528,7 @@ class CasperFpga(object):
         try:
             data = struct.pack('>i' if integer < 0 else '>I', integer)
         except Exception as ve:
-            LOGGER.error('Writing integer %i failed with error: %s' % (
+            self.logger.error('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
             raise ValueError('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
@@ -404,10 +536,9 @@ class CasperFpga(object):
             self.blindwrite(device_name, data, word_offset*4)
         else:
             self.write(device_name, data, word_offset*4)
-        LOGGER.debug('%s: write_int %8x to register %s at word offset %d '
-                     'okay%s.' % (self.host, integer, device_name,
-                                  word_offset,
-                                  ' (blind)' if blindwrite else ''))
+        self.logger.debug('Write_int %8x to register %s at word offset %d '
+                          'okay%s.' % (integer, device_name, word_offset,
+                          ' (blind)' if blindwrite else ''))
 
     # def get_rcs(self, rcs_block_name='rcs'):
     #     """
@@ -560,7 +691,7 @@ class CasperFpga(object):
         try:
             self.system_info.update(device_dict['77777'])
         except KeyError:
-            LOGGER.warn('%s: no sys info key in design info!' % self.host)
+            self.logger.warn('No sys info key in design info!')
         # and RCS information if included
         for device_name in device_dict:
             if device_name.startswith('77777_git'):

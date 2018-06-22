@@ -29,6 +29,7 @@ C_RD_ETH_IF_LINK_UP_ADDR = 0xC
 C_RD_MEZZANINE_STAT_ADDR = 0x10
 C_RD_USB_STAT_ADDR = 0x14
 C_RD_SOC_VERSION_ADDR = 0x18
+C_RD_DSP_OVERRIDE_ADDR = 0x34
 C_RD_THROUGHPUT_COUNTER = 0x58
 C_RD_NUM_PACKETS_CHECKED_0 = 0x5C
 C_RD_NUM_PACKETS_CHECKED_1 = 0x60
@@ -44,6 +45,7 @@ C_WR_ETH_IF_CTL_ADDR = 0xC
 C_WR_MEZZANINE_CTL_ADDR = 0x10
 C_WR_FRONT_PANEL_STAT_LED_ADDR = 0x14
 C_WR_BRD_CTL_STAT_1_ADDR = 0x18
+C_WR_DSP_OVERRIDE_ADDR = 0x34
 C_WR_RAMP_SOURCE_DESTINATION_IP_3_ADDR = 0x58
 C_WR_RAMP_CHECKER_SOURCE_IP_3_ADDR = 0x5C
 C_WR_RAMP_SOURCE_DESTINATION_IP_2_ADDR = 0x60
@@ -325,7 +327,7 @@ current_scaling = {
     str(P1V2_MGTAVTT_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.002)
 }
 
-# dictionary holding all sensor infomation
+# dictionary holding all sensor information
 # comprised of sensor name and key; key = index of sensor data in rolled
 # up sensor response from SKARAB
 sensor_list = {
@@ -369,7 +371,11 @@ sensor_list = {
     '+1V8_MGTVCCAUX_current': 79,
     '+1V0_MGTAVCC_current': 82,
     '+1V2_MGTAVTT_current': 85,
-    '+3V3_config_current': 88
+    '+3V3_config_current': 88,
+    'mezzanine_site_0_temperature_degC': 91,
+    'mezzanine_site_1_temperature_degC': 92,
+    'mezzanine_site_2_temperature_degC': 93,
+    'mezzanine_site_3_temperature_degC': 94
 }
 
 # sensor thresholds
@@ -414,7 +420,11 @@ temperature_ranges = {
     'fpga_temperature_degC': (30, -10),
     'fan_controller_temperature_degC': (10, -10),
     'voltage_monitor_temperature_degC': (10, -10),
-    'current_monitor_temperature_degC': (10, -10)
+    'current_monitor_temperature_degC': (10, -10),
+    'mezzanine_site_0_temperature_degC': (0.0, 0.0),
+    'mezzanine_site_1_temperature_degC': (0.0, 0.0),
+    'mezzanine_site_2_temperature_degC': (0.0, 0.0),
+    'mezzanine_site_3_temperature_degC': (0.0, 0.0)
 }
 
 # fan_rpm: (rating, max, min)
@@ -430,6 +440,15 @@ fan_speed_ranges = {
     'left_back_fan_pwm': (100, 0),
     'right_back_fan_pwm': (100, 0),
     'fpga_fan_pwm': (100, 0)
+}
+
+logger_level_dict = {
+    50: 'CRITICAL',
+    40: 'ERROR',
+    30: 'WARNING',
+    20: 'INFO',
+    10: 'DEBUG',
+    0: 'NOTSET'
 }
 
 # 88E1111 GBE DEFINES
@@ -739,7 +758,7 @@ class GetSensorDataReq(Command):
         super(GetSensorDataReq, self).__init__(GET_SENSOR_DATA)
         self.expect_response = True
         self.response = GetSensorDataResp
-        self.num_words = 95
+        self.num_words = 99
         self.pad_words = 2
 
 
@@ -751,8 +770,8 @@ class GetSensorDataResp(Response):
 
     @staticmethod
     def unpack_process(unpacked_data):
-        read_bytes = unpacked_data[2:93]
-        unpacked_data[2:93] = [read_bytes]
+        read_bytes = unpacked_data[2:97]
+        unpacked_data[2:97] = [read_bytes]
         return unpacked_data
 
 
