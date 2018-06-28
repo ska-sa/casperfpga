@@ -127,7 +127,7 @@ class I2C:
         self.fpga.write_int(self.controller_name, data, word_offset=addr, blindwrite=True)
         if addr == commandReg:
             while (self.getStatus()["TIP"]):
-                time.sleep(.001)
+                time.sleep(.1)
 
     def _itf_read(self,addr):
         return self.fpga.read_int(self.controller_name, word_offset=addr)
