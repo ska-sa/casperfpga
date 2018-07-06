@@ -130,17 +130,22 @@ class SkarabTransport(Transport):
         self.reset_seq_num()
 
         # create tuple for ethernet control packet address
-        self.skarab_eth_ctrl_port = (
+        self.skarab_eth_ctrl_addr = (
             self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS)
 
         # create tuple for fabric packet address
-        self.skarab_fpga_port = (self.host, sd.ETHERNET_FABRIC_PORT_ADDRESS)
+        self.skarab_fpga_addr = (self.host, sd.ETHERNET_FABRIC_PORT_ADDRESS)
 
         # flag for keeping track of SDRAM state
         self._sdram_programmed = False
 
         # dict for sensor data, empty at initialization
         self.sensor_data = {}
+
+        # create, and connect to, a socket for the skarab object
+        self._skarab_control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._skarab_control_sock.connect(self.skarab_eth_ctrl_addr)
+        self._skarab_control_sock.setblocking(0)
 
         # self.logger = logging.getLogger(__name__)
         # self.logger.info('Creating instance of self.logger...')
@@ -720,8 +725,10 @@ class SkarabTransport(Transport):
         :param retries
         :return:
         """
-        if timeout is None: timeout=self.timeout
-        if retries is None: retries=self.retries
+        if timeout is None:
+            timeout = self.timeout
+        if retries is None:
+            retries = self.retries
 
         with Lock():
             if self._seq_num >= 0xffff:
@@ -729,12 +736,11 @@ class SkarabTransport(Transport):
             else:
                 self._seq_num += 1
             return self._send_packet(
-                request_object, self._seq_num, port=self.skarab_eth_ctrl_port,
+                request_object, self._seq_num, addr=self.skarab_eth_ctrl_addr,
                 timeout=timeout, retries=retries, hostname=self.host
             )
 
-    #@staticmethod
-    def _send_packet(self, request_object, sequence_number, port,
+    def _send_packet(self, request_object, sequence_number, addr,
                      timeout=sd.CONTROL_RESPONSE_TIMEOUT,
                      retries=sd.CONTROL_RESPONSE_RETRIES,
                      hostname='<unknown_host>'):
@@ -744,7 +750,7 @@ class SkarabTransport(Transport):
         Retransmits request packet if response not received
 
         :param request_object: object containing the data to send to SKARAB
-        :param port: port to connect to
+        :param addr: hostname and port of SKARAB
         :param timeout: how long to wait for a response before bailing
         :param retries: how many times to retransmit a request
         :return: response: returns response object or 'None' if no
@@ -758,24 +764,23 @@ class SkarabTransport(Transport):
             self.logger.debug('{}: retransmit attempts: {}'.format(
                 hostname, retransmit_count))
             try:
-                with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as sock:
-                    sock.setblocking(0)
-                    self.logger.debug('{}: sending pkt({}, {}) to port {}.'.format(
-                        hostname, request_object.packet['command_type'],
-                        request_object.packet['seq_num'], port))
-                    sock.sendto(request_payload, port)
-                    if not request_object.expect_response:
-                        self.logger.debug(
-                            '{}: no response expected for seq {}, '
-                            'returning'.format(hostname, sequence_number))
-                        return None
-                    # get a required response
-                    rx_packet = None
-                    while rx_packet is None:
-                        rx_packet = self.receive_packet(
-                            request_object, sequence_number, sock,
-                            timeout, hostname)
-                    return rx_packet
+                self.logger.debug('{}: sending pkt({}, {}) to port {}.'.format(
+                    hostname, request_object.packet['command_type'],
+                    request_object.packet['seq_num'], addr))
+                self._skarab_control_sock.send(request_payload)
+                if not request_object.expect_response:
+                    self.logger.debug(
+                        '{}: no response expected for seq {}, '
+                        'returning'.format(hostname, sequence_number))
+                    return None
+                # get a required response
+                rx_packet = None
+                while rx_packet is None:
+                    # here we want to receive a packet from the socket
+                    # we pass the socket to the receive_packet function
+                    rx_packet = self._receive_packet(
+                        request_object, sequence_number, timeout, hostname)
+                return rx_packet
             except SkarabResponseNotReceivedError:
                 # retransmit the packet
                 pass
@@ -792,14 +797,12 @@ class SkarabTransport(Transport):
         self.logger.debug(errmsg)
         raise SkarabSendPacketError(errmsg)
 
-    #@staticmethod
-    def receive_packet(self, request_object, sequence_number,
-                       skarab_socket, timeout, hostname):
+    def _receive_packet(self, request_object, sequence_number,
+                        timeout, hostname):
         """
         Receive a response to a packet.
         :param request_object:
         :param sequence_number:
-        :param skarab_socket:
         :param timeout:
         :param hostname:
         :return: The response object, or None
@@ -807,10 +810,10 @@ class SkarabTransport(Transport):
         self.logger.debug('%s: reading response to sequence id %i.' % (
             hostname, sequence_number))
         # wait for response until timeout
-        data_ready = select.select([skarab_socket], [], [], timeout)
+        data_ready = select.select([self._skarab_control_sock], [], [], timeout)
         # if we have a response, process it
         if data_ready[0]:
-            data = skarab_socket.recvfrom(4096)
+            data = self._skarab_control_sock.recvfrom(4096)
             response_payload, address = data
 
             self.logger.debug('%s: response from %s = %s' % (
@@ -881,6 +884,7 @@ class SkarabTransport(Transport):
                          hostname, sequence_number, sequence_number + 1)
             self.logger.debug(errmsg)
             raise SkarabResponseNotReceivedError(errmsg)
+
 
     # low level access functions
 
