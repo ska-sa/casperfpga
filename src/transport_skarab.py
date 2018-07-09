@@ -146,6 +146,7 @@ class SkarabTransport(Transport):
         self._skarab_control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._skarab_control_sock.connect(self.skarab_eth_ctrl_addr)
         self._skarab_control_sock.setblocking(0)
+        self._lock=Lock()
 
         # self.logger = logging.getLogger(__name__)
         # self.logger.info('Creating instance of self.logger...')
@@ -756,7 +757,7 @@ class SkarabTransport(Transport):
         :return: response: returns response object or 'None' if no
             response received.
         """
-
+        self._lock.acquire()
         # create the payload and send it
         request_payload = request_object.create_payload(sequence_number)
         retransmit_count = 0
@@ -772,6 +773,7 @@ class SkarabTransport(Transport):
                     self.logger.debug(
                         '{}: no response expected for seq {}, '
                         'returning'.format(hostname, sequence_number))
+                    self._lock.release()
                     return None
                 # get a required response
                 rx_packet = None
@@ -780,6 +782,7 @@ class SkarabTransport(Transport):
                     # we pass the socket to the receive_packet function
                     rx_packet = self._receive_packet(
                         request_object, sequence_number, timeout, hostname)
+                self._lock.release()
                 return rx_packet
             except SkarabResponseNotReceivedError:
                 # retransmit the packet
@@ -790,9 +793,11 @@ class SkarabTransport(Transport):
                 # wait to receive incoming responses
                 time.sleep(1)
                 # self.clear_recv_buffer(skarab_socket)
+                self._lock.release()
                 self.logger.info('{}: cleared recv buffer.'.format(hostname))
                 raise KeyboardInterrupt
             retransmit_count += 1
+        self._lock.release()
         errmsg = '{}: retransmit count exceeded. Giving up.'.format(hostname)
         self.logger.debug(errmsg)
         raise SkarabSendPacketError(errmsg)
