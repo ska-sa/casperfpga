@@ -2804,15 +2804,18 @@ class SkarabTransport(Transport):
             parse_mezzanine_temperatures(recvd_sensor_data_values)
             
             try:
+                print "HMC dict: {}".format(sd.HMC_MEZ)
                 for hmc in sd.HMC_MEZ:
+                    print "current HMC: {}".format(hmc)
                     key = 'hmc_{}_die_temp'.format(hmc - 1)
                     self.sensor_data[key] = (hmc_die_temp(hmc), 'degC')
-                    return self.sensor_data
+
+                return self.sensor_data
 
             except:
                 raise SkarabInvalidResponse('Error reading HMC Die Temperatures')
         else:
-            raise SkarabInvalideResponse('Error reading board temperatures')
+            raise SkarabInvalidResponse('Error reading board temperatures')
             return False
 
     def set_fan_speed(self, fan_page, pwm_setting,
