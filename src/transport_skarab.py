@@ -2804,9 +2804,7 @@ class SkarabTransport(Transport):
             parse_mezzanine_temperatures(recvd_sensor_data_values)
             
             try:
-                print "HMC dict: {}".format(sd.HMC_MEZ)
                 for hmc in sd.HMC_MEZ:
-                    print "current HMC: {}".format(hmc)
                     key = 'hmc_{}_die_temp'.format(hmc - 1)
                     self.sensor_data[key] = (hmc_die_temp(hmc), 'degC')
 
