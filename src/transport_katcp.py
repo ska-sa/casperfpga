@@ -21,6 +21,13 @@ if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
     setattr(katcp.CallbackClient, 'MAX_MSG_SIZE',
             katcp.CallbackClient.MAX_MSG_SIZE * 10)
 
+if hasattr(katcp.CallbackClient, 'MAX_WRITE_BUFFER_SIZE'):
+    setattr(katcp.CallbackClient, 'MAX_WRITE_BUFFER_SIZE',
+            katcp.CallbackClient.MAX_WRITE_BUFFER_SIZE * 10)
+
+class KatcpConnectionError(Exception):
+    pass
+
 
 class KatcpRequestError(RuntimeError):
     """An error occurred processing a KATCP request."""
@@ -101,6 +108,28 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self._timeout = timeout
         self.connect()
         self.logger.info('%s: port(%s) created and connected.' % (self.host, port))
+
+    @staticmethod
+    def test_host_type(host_ip, timeout=5):
+        """
+        Is this host_ip assigned to a Katcp board?
+        :param host_ip:
+        :param timeout:
+        :return:
+        """
+        try:
+            board = katcp.CallbackClient(host=host_ip, port=7147, timeout=timeout, auto_reconnect=False)
+            board.setDaemon(True)
+            board.start()
+
+            connected = board.wait_connected(timeout)
+            if not connected:
+                board.stop()
+                return False
+            else:
+                return True
+        except Exception:
+            return False
 
     def sendfile(self, filename, targethost, port, result_queue, timeout=2):
         """

@@ -15,11 +15,9 @@ from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
 from transport_dummy import DummyTransport
-# from CasperLogHandlers import CasperConsoleHandler, CasperRedirectLogger
-import CasperLogHandlers
 
-import os
-import sys
+from CasperLogHandlers import configure_console_logging, configure_file_logging
+
 
 # known CASPER memory-accessible devices and their associated
 # classes and containers
@@ -54,6 +52,10 @@ CASPER_OTHER_DEVICES = {
     'xps:xsg':                      'xps',
     'xps:katadc':                   'katadc',
 }
+
+
+class UnknownTransportError(Exception):
+    pass
 
 
 class CasperFpga(object):
@@ -142,6 +144,10 @@ class CasperFpga(object):
         # Set log level to ERROR
         self.logger.setLevel(logging.ERROR)
 
+        # Just to test
+        self.configure_console_logging = configure_console_logging
+        self.configure_file_logging = configure_file_logging
+
     # region ** Not ready to be implemented! **
     # def configure_logger(self, log_level=logging.DEBUG, filename=None, file_directory=None):
     #     """
@@ -185,15 +191,17 @@ class CasperFpga(object):
             elif TapcpTransport.test_host_type(host_ip):
                 self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
                 return TapcpTransport
-            else:
-                self.logger.debug('%s seems to be a ROACH' % host_ip)
+            elif KatcpTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be ROACH' % host_ip)
                 return KatcpTransport
+            else:
+                raise UnknownTransportError('Possible that host '
+                                            'does not follow one of the defined casperfpga transport protocols')
         except socket.gaierror:
             raise RuntimeError('Address/host %s makes no sense to '
                                'the OS?' % host_ip)
         except Exception as e:
-            raise RuntimeError('Could not connect to %s: %s' % (
-                host_ip, e.message))
+            raise RuntimeError('Could not connect to host %s: %s' % (host_ip, e.message))
 
     def connect(self, timeout=None):
         return self.transport.connect(timeout)

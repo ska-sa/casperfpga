@@ -237,7 +237,7 @@ class FortyGbe(Gbe):
         LOGGER.error('Retrieving ARP buffers not yet implemented.')
         return None
 
-    def multicast_receive(self, ip_str, group_size):
+    def multicast_receive(self, ip_str, group_size, port=7148):
         """
         Send a request to KATCP to have this tap instance send a multicast
         group join request.
@@ -245,12 +245,15 @@ class FortyGbe(Gbe):
         mcast IP address.
         :param group_size: An integer for how many mcast addresses from
         base to respond to.
+        :param port: The UDP port on which you want to receive. Note 
+        that only one port is possible per interface (ie it's global
+        and will override any other port you may have configured).
         :return:
         """
         ip = IpAddress(ip_str)
         mask = IpAddress('255.255.255.%i' % (256 - group_size))
         self.parent.transport.multicast_receive(self.name, ip, mask)
-        self.set_port(7148)
+        self.set_port(port)
 
     def print_gbe_core_details(self, arp=False, cpu=False, refresh=True):
         """
