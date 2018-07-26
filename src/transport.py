@@ -1,3 +1,6 @@
+from utils import get_hostname
+
+
 class Transport(object):
     """
     The actual network transport of data for a CasperFpga object.
@@ -7,9 +10,8 @@ class Transport(object):
         
         :param host: 
         """
-        self.host = kwargs['host']
-        self.memory_devices = {}
-        self.gbes = []
+        self.host, self.bitstream = get_hostname(**kwargs)
+        self.memory_devices = None
         self.prog_info = {'last_uploaded': '', 'last_programmed': '',
                           'system_name': ''}
 
@@ -25,6 +27,13 @@ class Transport(object):
         """
         Is the FPGA programmed and running?
         :return: True or False
+        """
+        raise NotImplementedError
+
+    def is_connected(self):
+        """
+
+        :return:
         """
         raise NotImplementedError
 
@@ -90,7 +99,7 @@ class Transport(object):
         pass
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
-                                  wait_complete=True):
+                                  wait_complete=True, skip_verification=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: the file to upload
@@ -98,6 +107,7 @@ class Transport(object):
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return
         after upload if False
+        :param skip_verification: don't verify the image after uploading it
         :return:
         """
         raise NotImplementedError
@@ -116,6 +126,13 @@ class Transport(object):
         :return:
         """
         raise NotImplementedError
+
+    def get_system_information_from_transport(self):
+        """
+
+        :return:
+        """
+        return self.bitstream, None
 
     def post_get_system_information(self):
         """

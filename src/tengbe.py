@@ -1,15 +1,14 @@
 import logging
 import struct
 
-from utils import check_changing_status
-
 from memory import Memory
 from network import Mac, IpAddress
+from gbe import Gbe
 
 LOGGER = logging.getLogger(__name__)
 
 
-class TenGbe(Memory):
+class TenGbe(Memory, Gbe):
     """
     To do with the CASPER ten GBE yellow block implemented on FPGAs,
     and interfaced-to via KATCP memory reads/writes.
@@ -24,103 +23,15 @@ class TenGbe(Memory):
         :param device_info:
         :return:
         """
-        self.mac, self.ip_address, self.port = None, None, None
-        super(TenGbe, self).__init__(name=name, width_bits=32, address=address,
-                                     length_bytes=length_bytes)
-        self.parent = parent
-        self.fullname = self.parent.host + ':' + self.name
-        self.block_info = device_info
-        if device_info is not None:
-            fabric_ip = device_info['fab_ip']
-            if fabric_ip.find('(2^24) + ') != -1:
-                device_info['fab_ip'] = (fabric_ip.replace('*(2^24) + ', '.')
-                                         .replace('*(2^16) + ', '.')
-                                         .replace('*(2^8) + ', '.')
-                                         .replace('*(2^0)', ''))
-            fabric_mac = device_info['fab_mac']
-            if fabric_mac.find('hex2dec') != -1:
-                fabric_mac = fabric_mac.replace('hex2dec(\'', '')
-                fabric_mac = fabric_mac.replace('\')', '')
-                device_info['fab_mac'] = (
-                    fabric_mac[0:2] + ':' + fabric_mac[2:4] + ':' +
-                    fabric_mac[4:6] + ':' + fabric_mac[6:8] + ':' +
-                    fabric_mac[8:10] + ':' + fabric_mac[10:])
-            mac = device_info['fab_mac']
-            ip_address = device_info['fab_ip']
-            port = device_info['fab_udp']
-            if mac is None or ip_address is None or port is None:
-                raise ValueError('%s: 10Gbe interface must '
-                                 'have mac, ip and port.' % self.fullname)
-            self.setup(mac, ip_address, port)
-        self.core_details = None
-        self.snaps = {'tx': None, 'rx': None}
-        self.registers = {'tx': [], 'rx': []}
-        self.multicast_subscriptions = []
-        # TODO
-        # if self.parent.is_connected():
-        #     self._check()
-
-    @classmethod
-    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
-        """
-        Process device info and the memory map to get all necessary info 
-        and return a TenGbe instance.
-        :param parent: the parent device, normally an FPGA instance
-        :param device_name: the unique device name
-        :param device_info: information about this device
-        :param memorymap_dict: a dictionary containing the device memory map
-        :return: a TenGbe object
-        """
-        address, length_bytes = -1, -1
-        for mem_name in memorymap_dict.keys():
-            if mem_name == device_name:
-                address = memorymap_dict[mem_name]['address']
-                length_bytes = memorymap_dict[mem_name]['bytes']
-                break
-        if address == -1 or length_bytes == -1:
-            raise RuntimeError('Could not find address or length '
-                               'for TenGbe %s' % device_name)
-        return cls(parent, device_name, address, length_bytes, device_info)
-
-    def __repr__(self):
-        return '%s:%s' % (self.__class__.__name__, self.name)
-
-    def __str__(self):
-        """
-        String representation of this 10Gbe interface.
-        """
-        return '%s: MAC(%s) IP(%s) Port(%s)' % (
-            self.name, str(self.mac), str(self.ip_address), str(self.port))
-
-    def setup(self, mac, ipaddress, port):
-        """
-        Set up the MAC, IP and port for this interface
-        :param mac: 
-        :param ipaddress: 
-        :param port: 
-        :return: 
-        """
-        self.mac = Mac(mac)
-        self.ip_address = IpAddress(ipaddress)
-        self.port = port if isinstance(port, int) else int(port)
+        Memory.__init__(self, name, 32, address, length_bytes)
+        Gbe.__init__(self, parent, name, address, length_bytes, device_info)
 
     def post_create_update(self, raw_device_info):
         """
         Update the device with information not available at creation.
         :param raw_device_info: info about this block that may be useful
         """
-        self.registers = {'tx': [], 'rx': []}
-        for register in self.parent.registers:
-            if register.name.find(self.name + '_') == 0:
-                name = register.name.replace(self.name + '_', '')
-                if name[0:2] == 'tx' and name.find('txs_') == -1:
-                    self.registers['tx'].append(register.name)
-                elif name[0:2] == 'rx' and name.find('rxs_') == -1:
-                    self.registers['rx'].append(register.name)
-                else:
-                    if not (name.find('txs_') == 0 or name.find('rxs_') == 0):
-                        LOGGER.warn('%s: odd register name %s under tengbe '
-                                    'block' % (self.fullname, register.name))
+        super(TenGbe, self).post_create_update(raw_device_info)
         self.snaps = {'tx': None, 'rx': None}
         for snapshot in self.parent.snapshots:
             if snapshot.name.find(self.name + '_') == 0:
@@ -135,106 +46,19 @@ class TenGbe(Memory):
                     LOGGER.error(errmsg)
                     raise RuntimeError(errmsg)
 
-    def _check(self):
-        """
-        Does this device exist on the parent and it is accessible?
-        """
-        self.parent.read(self.name, 1)
-
     def read_txsnap(self):
         """
         Read the TX snapshot embedded in this TenGBE yellow block
         :return: 
         """
-        tmp = self.parent.memory_devices[self.name + '_txs_ss'].read(timeout=10)
-        return tmp['data']
+        return self.snaps['tx'].read(timeout=10)['data']
 
     def read_rxsnap(self):
         """
         Read the RX snapshot embedded in this TenGBE yellow block
         :return: 
         """
-        tmp = self.parent.memory_devices[self.name + '_rxs_ss'].read(timeout=10)
-        return tmp['data']
-
-    def read_rx_counters(self):
-        """
-        Read all RX counters embedded in this TenGBE yellow block
-        """
-        results = {}
-        for reg in self.registers['rx']:
-            results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
-        return results
-
-    def read_tx_counters(self):
-        """
-        Read all TX counters embedded in this TenGBE yellow block
-        """
-        results = {}
-        for reg in self.registers['tx']:
-            results[reg] = self.parent.memory_devices[reg].read()['data']['reg']
-        return results
-
-    def read_counters(self):
-        """
-        Read all the counters embedded in this TenGBE yellow block
-        """
-        results = {}
-        for direction in ['tx', 'rx']:
-            for reg in self.registers[direction]:
-                tmp = self.parent.memory_devices[reg].read()
-                results[reg] = tmp['data']['reg']
-        return results
-
-    def rx_okay(self, wait_time=0.2, checks=10):
-        """
-        Is this gbe core receiving okay?
-        i.e. _rxctr incrementing and _rxerrctr not incrementing
-        :param wait_time: seconds to wait between checks
-        :param checks: times to run check
-        :return: True/False
-        """
-        if checks < 2:
-            raise RuntimeError('Cannot check less often than twice?')
-        fields = {
-            # name, required, True=same|False=different
-            self.name + '_rxctr': (True, False),
-            self.name + '_rxfullctr': (False, True),
-            self.name + '_rxofctr': (False, True),
-            self.name + '_rxerrctr': (True, True),
-            self.name + '_rxvldctr': (False, False),
-        }
-        result, message = check_changing_status(fields, self.read_rx_counters,
-                                                wait_time, checks)
-        if not result:
-            LOGGER.error('%s: %s' % (self.fullname, message))
-            return False
-        return True
-
-    def tx_okay(self, wait_time=0.2, checks=10):
-        """
-        Is this gbe core transmitting okay?
-        i.e. _txctr incrementing and _txerrctr not incrementing
-        :param wait_time: seconds to wait between checks
-        :param checks: times to run check
-        :return: True/False
-        """
-        if checks < 2:
-            raise RuntimeError('Cannot check less often than twice?')
-        fields = {
-            # name, required, True=same|False=different
-            self.name + '_txctr': (True, False),
-            self.name + '_txfullctr': (False, True),
-            self.name + '_txofctr': (False, True),
-            self.name + '_txerrctr': (False, True),
-            self.name + '_txvldctr': (False, False),
-        }
-        result, message = check_changing_status(fields, self.read_tx_counters,
-                                                wait_time, checks)
-        if not result:
-            LOGGER.error('%s: %s' % (self.fullname, message))
-            return False
-        return True
+        return self.snaps['rx'].read(timeout=10)['data']
 
     # def fabric_start(self):
     #    """
@@ -290,7 +114,7 @@ class TenGbe(Memory):
             raise RuntimeError('%s: failure re-enabling ARP.' % self.name)
         # it looks like the command completed without error, so
         # update the basic core details
-        self.get_10gbe_core_details()
+        self.get_gbe_core_details()
 
     def tap_start(self, restart=False):
         """
@@ -434,9 +258,14 @@ class TenGbe(Memory):
                                                     IpAddress.str2ip(ip_str)))
 
     def _fabric_enable_disable(self, target_val):
+        """
+
+        :param target_val:
+        :return:
+        """
         # 0x20 or (0x20 / 4)? What was the /4 for?
-        word_bytes = list(struct.unpack('>4B',
-                                        self.parent.read(self.name, 4, 0x20)))
+        word_bytes = list(
+            struct.unpack('>4B', self.parent.read(self.name, 4, 0x20)))
         if word_bytes[1] == target_val:
             return
         word_bytes[1] = target_val
@@ -477,7 +306,7 @@ class TenGbe(Memory):
         write_val(1)
         write_val(0)
 
-    def get_10gbe_core_details(self, read_arp=False, read_cpu=False):
+    def get_gbe_core_details(self, read_arp=False, read_cpu=False):
         """
         Get 10GbE core details.
         assemble struct for header stuff...
@@ -499,7 +328,7 @@ class TenGbe(Memory):
         0x2b    :    TX_diff_ctrl
         0x30 - 0x33: Multicast IP RX base address
         0x34 - 0x37: Multicast IP mask
-        0x38 - 0x3b: Multicast subnet mask
+        0x38 - 0x3b: Subnet mask
         0x1000  :    CPU TX buffer
         0x2000  :    CPU RX buffer
         0x3000  :    ARP tables start
@@ -542,6 +371,8 @@ class TenGbe(Memory):
             'ip_prefix': '%i.%i.%i.' % (data[0x10], data[0x11], data[0x12]),
             'ip': IpAddress('%i.%i.%i.%i' % (data[0x10], data[0x11], 
                                              data[0x12], data[0x13])),
+            'subnet_mask': IpAddress('%i.%i.%i.%i' % (
+                              data[0x38], data[0x39], data[0x3a], data[0x3b])),
             'mac': Mac('%i:%i:%i:%i:%i:%i' % (data[0x02], data[0x03],
                                               data[0x04], data[0x05],
                                               data[0x06], data[0x07])),
@@ -559,8 +390,6 @@ class TenGbe(Memory):
                 data[0x30], data[0x31], data[0x32], data[0x33])),
                           'ip_mask': IpAddress('%i.%i.%i.%i' % (
                               data[0x34], data[0x35], data[0x36], data[0x37])),
-                          'subnet_mask': IpAddress('%i.%i.%i.%i' % (
-                              data[0x38], data[0x39], data[0x3a], data[0x3b])),
                           'rx_ips': []}
         }
         possible_addresses = [int(returnval['multicast']['base_ip'])]
@@ -622,107 +451,6 @@ class TenGbe(Memory):
                 tmp.append(port_dump[8192 + (8 * ctr) + ctr2])
             returnval['cpu_rx'][ctr * 8] = tmp
         return returnval
-
-    def print_10gbe_core_details(self, arp=False, cpu=False, refresh=True):
-        """
-        Prints 10GbE core details.
-        :param arp: boolean, include the ARP table
-        :param cpu: boolean, include the CPU packet buffers
-        :param refresh: read the 10gbe details first
-        """
-        if refresh or (self.core_details is None):
-            self.get_10gbe_core_details(arp, cpu)
-        details = self.core_details
-        print('------------------------')
-        print('%s configuration:' % self.fullname)
-        print('MAC: ', Mac.mac2str(int(details['mac'])))
-        print('Gateway: ', details['gateway_ip'])
-        print('IP: ', details['ip'])
-        print('Fabric port: ',)
-        print('%5d' % details['fabric_port'])
-        print('Fabric interface is currently: %s' %
-              'Enabled' if details['fabric_en'] else 'Disabled')
-        print('XAUI Status: ', details['xaui_status'])
-        for ctr in range(0, 4):
-            print('\tlane sync %i:  %i' % (ctr, details['xaui_lane_sync'][ctr]))
-        print('\tChannel bond: %i' % details['xaui_chan_bond'])
-        print('XAUI PHY config: ')
-        print('\tRX_eq_mix: %2X' % details['xaui_phy']['rx_eq_mix'])
-        print('\tRX_eq_pol: %2X' % details['xaui_phy']['rx_eq_pol'])
-        print('\tTX_pre-emph: %2X' % details['xaui_phy']['tx_preemph'])
-        print('\tTX_diff_ctrl: %2X' % details['xaui_phy']['tx_swing'])
-        print('Multicast:')
-        for k in details['multicast']:
-            print('\t%s: %s' % (k, details['multicast'][k]))
-        if arp:
-            self.print_arp_details(refresh=refresh, only_hits=True)
-        if cpu:
-            self.print_cpu_details(refresh=refresh)
-
-    def print_arp_details(self, refresh=False, only_hits=False):
-        """
-        Print nicely formatted ARP info.
-        :param refresh:
-        :param only_hits:
-        :return:
-        """
-        details = self.core_details
-        if details is None:
-            refresh = True
-        elif 'arp' not in details.keys():
-            refresh = True
-        if refresh:
-            self.get_10gbe_core_details(read_arp=True)
-        print('ARP Table: ')
-        for ip_address in range(256):
-            all_fs = True
-            if only_hits:
-                for mac in range(0, 6):
-                    if details['arp'][ip_address][mac] != 255:
-                        all_fs = False
-                        break
-            printmac = True
-            if only_hits and all_fs:
-                printmac = False
-            if printmac:
-                print('IP: %s%3d: MAC:' % (details['ip_prefix'], ip_address),)
-                for mac in range(0, 6):
-                    print('%02X' % details['arp'][ip_address][mac],)
-                print('')
-
-    def print_cpu_details(self, refresh=False):
-        """
-        Print nicely formatted CPU details info.
-        :param refresh:
-        :return:
-        """
-        details = self.core_details
-        if details is None:
-            refresh = True
-        elif 'cpu_rx' not in details.keys():
-            refresh = True
-        if refresh:
-            self.get_10gbe_core_details(read_cpu=True)
-        print('CPU TX Interface (at offset 4096 bytes):')
-        print('Byte offset: Contents (Hex)')
-        for key, value in details['cpu_tx'].iteritems():
-            print('%04i:    ' % key,)
-            for val in value:
-                print('%02x' % val,)
-            print('')
-        print('------------------------')
-
-        print('CPU RX Interface (at offset 8192bytes):')
-        print('CPU packet RX buffer unacknowledged data: %i' %
-              details['cpu_rx_buf_unack_data'])
-        print('Byte offset: Contents (Hex)')
-        for key, value in details['cpu_rx'].iteritems():
-            print('%04i:    ' % key,)
-            for val in value:
-                print('%02x' % val,)
-            print('')
-        print('------------------------')
-
 
     def set_arp_table(self, macs):
         """Set the ARP table with a list of MAC addresses. The list, `macs`,

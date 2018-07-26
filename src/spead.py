@@ -162,21 +162,31 @@ class SpeadPacket(object):
         (headers, hdr_pkt_len_bytes) = SpeadPacket.decode_headers(
             data, expected_version, expected_flavour, expected_hdrs)
         main_header = headers[0x0000]
-        pktdata = []
+        pktdata = []  # this is 64-bit words, which is admittedly a bit arb
         pktlen = 0
         for ctr in range(main_header['num_headers']+1, len(data)):
             pktdata.append(data[ctr])
             pktlen += 1
+        pktlen_bytes = pktlen * 8
         if (expected_length is not None) and (pktlen != expected_length):
             raise SpeadPacket.SpeadPacketError(
-                'Packet is not the expected length, expected(%i) '
-                'packet(%i)' % (expected_length, pktlen))
-        if pktlen*8 != hdr_pkt_len_bytes:
+                'Packet is not the expected length, given_expected(%i bytes) '
+                'packet(%i bytes)' % (expected_length * 8, pktlen_bytes))
+        # the data may be too long here. think 64-bit packets into 256-bit
+        # interface.
+        if pktlen_bytes > hdr_pkt_len_bytes:
+            # too much data in heap, chop it off
+            hdr_pkt_len_64 = hdr_pkt_len_bytes / 8
+            pktdata = pktdata[:hdr_pkt_len_64]
+            LOGGER.warn('Packet seemed to have more data in it than the SPEAD'
+                        'headers describe: pkt(%i bytes) header(%i bytes)' % (
+                            pktlen_bytes, hdr_pkt_len_bytes))
+        elif pktlen_bytes < hdr_pkt_len_bytes:
             raise SpeadPacket.SpeadPacketError(
-                'Packet is not the same length as indicated in the SPEAD '
-                'header: hdr(%i) packet(%i)\nCheck the magic header, number '
-                'of headers and '
-                'headers 2 and 4.' % (hdr_pkt_len_bytes, pktlen*8))
+                'Packet contains less data than indicated in the SPEAD '
+                'header: hdr(%i bytes) packet(%i bytes)\nCheck the magic '
+                'header, number of headers and headers 2 and 4.' % (
+                    hdr_pkt_len_bytes, pktlen_bytes))
         obj = cls(headers, pktdata)
         return obj
 
@@ -184,22 +194,23 @@ class SpeadPacket(object):
         """
         Get a list of the string representation of this packet.
         """
-        rv = []
+        rv = ['header 0x0000: version(%i) flavour(%s) num_headers(%i)' % (
+            self.headers[0]['version'], self.headers[0]['flavour'],
+            self.headers[0]['num_headers'])]
         for hdr_id, hdr_value in self.headers.items():
             if hdr_id == 0x0000:
-                rv.append('header 0x0000: version(%i) flavour(%s) '
-                          'num_headers(%i)' % (self.headers[0]['version'],
-                                               self.headers[0]['flavour'],
-                                               self.headers[0]['num_headers']))
+                continue
+            if hex_nums:
+                rv.append('header 0x%04x: 0x%x' % (hdr_id, hdr_value))
             else:
-                if hex_nums:
-                    rv.append('header 0x%04x: 0x%x' % (hdr_id, hdr_value))
-                else:
-                    rv.append('header 0x%04x: %i' % (hdr_id, hdr_value))
+                rv.append('header 0x%04x: %i' % (hdr_id, hdr_value))
         if headers_only:
             return rv
         for dataword in self.data:
-            rv.append('%i' % dataword)
+            if hex_nums:
+                rv.append('0x%016x' % dataword)
+            else:
+                rv.append('%i' % dataword)
         return rv
 
     def print_packet(self, headers_only=False, hex_nums=False):

@@ -7,9 +7,10 @@ import Queue
 import random
 import socket
 import struct
+import contextlib
 
 from transport import Transport
-from utils import create_meta_dictionary
+from utils import create_meta_dictionary, get_hostname, get_kwarg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,26 +43,26 @@ def sendfile(filename, targethost, port, result_queue, timeout=2):
     :param timeout:
     :return:
     """
-    upload_socket = socket.socket()
-    stime = time.time()
-    connected = False
-    while (not connected) and (time.time() - stime < timeout):
+    with contextlib.closing(socket.socket()) as upload_socket:
+        stime = time.time()
+        connected = False
+        while (not connected) and (time.time() - stime < timeout):
+            try:
+                upload_socket.connect((targethost, port))
+                connected = True
+            except socket.error:
+                time.sleep(0.1)
+        if not connected:
+            result_queue.put('Could not connect to upload port.')
         try:
-            upload_socket.connect((targethost, port))
-            connected = True
-        except:
-            time.sleep(0.1)
-    if not connected:
-        result_queue.put('Could not connect to upload port.')
-    try:
-        upload_socket.send(open(filename).read())
-    except:
-        result_queue.put('Could not send file to upload port.')
-    else:
-        result_queue.put('')
-    finally:
-        LOGGER.info('%s: upload thread complete at %.3f' %
-                    (targethost, time.time()))
+            upload_socket.send(open(filename).read())
+            result_queue.put('')
+        except Exception as e:
+            result_queue.put('Could not send file to upload port(%i): '
+                             '%s' % (port, e.message))
+        finally:
+            LOGGER.info('%s: upload thread complete at %.3f' %
+                        (targethost, time.time()))
 
 
 class KatcpTransport(Transport, katcp.CallbackClient):
@@ -77,23 +78,20 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param connect:
         :return:
         """
-        try:
-            port = kwargs['port']
-        except KeyError:
-            port = 7147
-        try:
-            timeout = kwargs['timeout']
-        except KeyError:
-            timeout = 10
-        katcp.CallbackClient.__init__(
-            self, kwargs['host'], port, tb_limit=20,
-            timeout=timeout, logger=LOGGER, auto_reconnect=True)
+        port = get_kwarg('port', kwargs, 7147)
+        timeout = get_kwarg('timeout', kwargs, 10)
         Transport.__init__(self, **kwargs)
+        katcp.CallbackClient.__init__(
+            self, self.host, port, tb_limit=20,
+            timeout=timeout, logger=LOGGER, auto_reconnect=True)
         self.system_info = {}
         self.unhandled_inform_handler = None
         self._timeout = timeout
         self.connect()
         LOGGER.info('%s: port(%s) created and connected.' % (self.host, port))
+
+    def is_connected(self):
+        return katcp.CallbackClient.is_connected(self)
 
     def connect(self, timeout=None):
         """
@@ -295,7 +293,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
         Uses much faster bulkread katcp command which returns data in pages
-        using informs rather than one read reply, which has significant 
+        using informs rather than one read reply, which has significant
         buffering overhead on the ROACH.
         :param device_name: name of the memory device from which to read
         :param size: how many bytes to read
@@ -310,12 +308,12 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def program(self, filename=None):
         """
         Program the FPGA with the specified binary file.
-        :param filename: name of file to program, can vary depending on 
+        :param filename: name of file to program, can vary depending on
             the formats supported by the device. e.g. fpg, bof, bin
         :return:
         """
-        #raise DeprecationWarning('This does not seem to be used anymore.'
-        #                         'Use upload_to_ram_and_program')
+        # raise DeprecationWarning('This does not seem to be used anymore.'
+        #                          'Use upload_to_ram_and_program')
         # TODO - The logic here is for broken TCPBORPHSERVER, needs fixing
         if 'program_filename' in self.system_info.keys():
             if filename is None:
@@ -393,7 +391,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def _unsubscribe_all_taps(self):
         """
         Remove all multicast subscriptions before deprogramming the ROACH
-        :return: 
+        :return:
         """
         reply, informs = self.katcprequest(name='tap-info', require_ok=True)
         taps = [inform.arguments[0] for inform in informs]
@@ -417,7 +415,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                      require_ok=True)
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
-                                  wait_complete=True):
+                                  wait_complete=True,
+                                  skip_verification=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: the file to upload
@@ -425,6 +424,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return
         after upload if False
+        :param skip_verification: do not verify the uploaded file before reboot
         :return:
         """
         LOGGER.info('%s: uploading %s, programming when done' % (
@@ -687,20 +687,19 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def get_system_information_from_transport(self):
         """
-        
-        :return: 
+
+        :return:
         """
         if not self.is_running():
-            raise RuntimeError('This can only be run on a running device '
-                               'when no file is given.')
+            return self.bitstream, None
         device_dict = self._read_design_info_from_host()
         memorymap_dict = self._read_coreinfo_from_host()
-        return None, (device_dict, memorymap_dict)
+        return self.bitstream, (device_dict, memorymap_dict)
 
     def unhandled_inform(self, msg):
         """
         Overloaded from CallbackClient
-        What do we do with unhandled KATCP inform messages that 
+        What do we do with unhandled KATCP inform messages that
         this device receives?
         Pass it onto the registered function, if it's not None
         """
@@ -709,8 +708,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def check_phy_counter(self):
         """
-        
-        :return: 
+
+        :return:
         """
         request_args = ((0, 0), (0, 1), (1, 0), (1, 1))
         for arg in request_args:

@@ -12,10 +12,13 @@ def clean_fields(parent_name, parent_type, field_str):
     :return:
     """
     _fstr = field_str.replace('[', '').replace(']', '')
-    _fstr = _fstr.strip().replace(', ', ',').replace('  ', ' ')
+    _fstr = _fstr.strip().replace(', ', ',')
+    while _fstr.find('  ') > -1:
+        _fstr = _fstr.replace('  ', ' ')
     if (_fstr.find(' ') > -1) and (_fstr.find(',') > -1):
         LOGGER.error('Parameter string %s contains spaces and commas '
                      'as delimiters. This is confusing.' % field_str)
+        _fstr = _fstr.replace(',', ' ')
     if _fstr.find(' ') > -1:
         _flist = _fstr.split(' ')
     else:

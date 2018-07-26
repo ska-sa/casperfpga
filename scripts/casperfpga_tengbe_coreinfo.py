@@ -15,8 +15,10 @@ from casperfpga import utils
 from casperfpga.casperfpga import CasperFpga
 try:
     import corr2
+    import os
 except ImportError:
     corr2 = None
+    os = None
 
 parser = argparse.ArgumentParser(
     description='Display TenGBE interface information '
@@ -51,35 +53,35 @@ if args.log_level != '':
         raise RuntimeError('No such log level: %s' % log_level)
 
 # create the devices and connect to them
-if corr2 is not None:
-    import os
-    if 'CORR2INI' in os.environ.keys() and args.hosts == '':
-        args.hosts = os.environ['CORR2INI']
-    hosts = corr2.utils.parse_hosts(args.hosts)
+if args.hosts.strip() == '':
+    if corr2 is None or 'CORR2INI' not in os.environ.keys():
+        raise RuntimeError('No hosts given and no corr2 config found. '
+                           'No hosts.')
+    fpgas = corr2.utils.script_get_fpgas(args)
 else:
     hosts = args.hosts.strip().replace(' ', '').split(',')
-if len(hosts) == 0:
-    raise RuntimeError('No good carrying on without hosts.')
-fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
-utils.threaded_fpga_function(fpgas, 10, 'test_connection')
-utils.threaded_fpga_function(fpgas, 15, 'get_system_information')
+    if len(hosts) == 0:
+        raise RuntimeError('No good carrying on without hosts.')
+    fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
+    utils.threaded_fpga_function(fpgas, 15, ('get_system_information', [], {}))
+
 for fpga in fpgas:
-    numgbes = len(fpga.tengbes)
+    numgbes = len(fpga.gbes)
     if numgbes < 1:
-        raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
-    print('%s: found %i 10gbe core%s.' % (
-        fpga.host, numgbes, '' if numgbes == 1 else 's'))
+        raise RuntimeWarning('Host %s has no gbe cores', fpga.host)
+    print('%s: found %i gbe core%s: %s' % (
+        fpga.host, numgbes, '' if numgbes == 1 else 's', fpga.gbes.keys()))
 
 for fpga in fpgas:
     if args.core == 'all':
-        cores = fpga.tengbes.names()
+        cores = fpga.gbes.names()
     else:
         cores = [args.core]
     print(50*'#')
     print('%s:' % fpga.host)
     print(50*'#')
     for core in cores:
-        fpga.tengbes[core].print_10gbe_core_details(
+        fpga.gbes[core].print_gbe_core_details(
             arp=args.arp, cpu=args.cpu, refresh=True)
 
 # handle exits cleanly
