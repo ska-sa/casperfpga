@@ -19,6 +19,13 @@ def gpio2db(val):
 	ae = int(val_str[4:8],2)
 	return ae,an
 
+def dc2dbm(val):
+	assert val>=0 and val<=3.3
+	slope = 27.31294863
+	intercept = -55.15991678
+	res = val * slope + intercept
+	return res
+
 if __name__ == "__main__":
 
 	p = argparse.ArgumentParser(description='Test PAM module',
@@ -71,6 +78,7 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
 	ROM_PAM_ADDR = 0x52
 	TEMP_ADDR = 0x40
 	SN_ADDR = 0x50
+	INA_ADDR = 0x45
 	GPIO_PAM_ADDR = 0x21
 	GPIO_FEM_ADDR = 0x20
 	
@@ -127,12 +135,17 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
 	if args.volt:
 		volt=i2c_volt.LTC2990(bus,VOLT_PAM_ADDR)
 		volt.init(mode0=2,mode1=3)
-		res = 0.33
-		vdiff=volt.readVolt('v1-v2')
 		vp1=volt.readVolt('v3')
 		vp2=volt.readVolt('v4')
-		print('v1-v2 voltage diff: {}, current: {}'.format(vdiff,vdiff/res))
-		print('East voltage: {}'.format(vp1))
-		print('North voltage: {}'.format(vp2))
+		print('East voltage: {} V, power level: {} dBm'.format(vp1,dc2dbm(vp1)))
+		print('North voltage: {} V, power level: {} dBm'.format(vp2,dc2dbm(vp2)))
+
 		# full scale 909mA
+		ina=i2c_volt.INA219(bus,INA_ADDR)
+		ina.init()
+		vshunt = ina.readVolt('shunt')
+		vbus = ina.readVolt('bus')
+		res = 0.1
+		print('Shunt voltage: {} V, bus voltage: {} V'.format(vshunt,vbus))
+		print('Current: {} A'.format(vshunt/res))
 
