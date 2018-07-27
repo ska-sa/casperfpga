@@ -422,6 +422,15 @@ fan_speed_ranges = {
     'fpga_fan_pwm': (100, 0)
 }
 
+logger_level_dict = {
+    50: 'CRITICAL',
+    40: 'ERROR',
+    30: 'WARNING',
+    20: 'INFO',
+    10: 'DEBUG',
+    0: 'NOTSET'
+}
+
 # 88E1111 GBE DEFINES
 GBE_88E1111_I2C_DEVICE_ADDRESS = 0x58  # Without read/write bit
 
@@ -441,9 +450,16 @@ class SkarabProgrammingError(ValueError):
     pass
 
 
-# command packet structure
 class Command(object):
+    """
+    The Command Packet structure for SKARAB communications
+    """
     def __init__(self, command_id, seq_num=None):
+        """
+        A command will always have the following parameters/properties
+        :param command_id: Integer value
+        :param seq_num:  Integer value
+        """
         self.packet = odict({
             'command_type': command_id,
             'seq_num': seq_num,
@@ -454,7 +470,7 @@ class Command(object):
     def create_payload(self, seq_num):
         """
         Create payload for sending via UDP Packet to SKARAB
-        :return:
+        :return: string representation of data
         """
         self.packet['seq_num'] = seq_num
         payload = ''

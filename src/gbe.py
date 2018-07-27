@@ -3,8 +3,6 @@ import logging
 from network import Mac, IpAddress
 from utils import check_changing_status, CheckCounter
 
-LOGGER = logging.getLogger(__name__)
-
 
 class Gbe(object):
     """
@@ -12,7 +10,7 @@ class Gbe(object):
     """
     def __init__(self, parent, name, address, length_bytes, device_info=None):
         """
-
+        Most of initialised from_device_info in child classes
         :param parent:
         :param name:
         :param device_info:
@@ -63,15 +61,18 @@ class Gbe(object):
 
     def __str__(self):
         """
-        String representation of this 10Gbe interface.
+        String representation of this GbE interface.
         """
         return '%s: MAC(%s) IP(%s) Port(%s)' % (
             self.name, str(self.mac), str(self.ip_address), str(self.port))
 
     def process_device_info(self, device_info):
         """
-
-        :param device_info:
+        Process device info to setup GbE object
+        :param device_info: Dictionary including:
+                            - IP Address
+                            - Mac Address
+                            - Port number
         :return:
         """
         if device_info is None:
@@ -101,9 +102,9 @@ class Gbe(object):
     def setup(self, mac, ipaddress, port):
         """
         Set up the MAC, IP and port for this interface
-        :param mac:
-        :param ipaddress:
-        :param port:
+        :param mac: String or Integer input
+        :param ipaddress: String or Integer input
+        :param port: String or Integer input
         :return:
         """
         self.mac = Mac(mac)
@@ -125,7 +126,7 @@ class Gbe(object):
                     self.registers['rx'].append(register.name)
                 else:
                     if not (name.find('txs_') == 0 or name.find('rxs_') == 0):
-                        LOGGER.warn('%s: odd register name %s under Gbe '
+                        self.parent.logger.warn('%s: odd register name %s under Gbe '
                                     'block' % (self.fullname, register.name))
 
     def _check(self):
@@ -198,7 +199,7 @@ class Gbe(object):
         result, message = check_changing_status(
             fields, self.read_rx_counters, wait_time, checks)
         if not result:
-            LOGGER.error('%s: %s' % (self.fullname, message))
+            self.parent.logger.error('%s: %s' % (self.fullname, message))
             return False
         return True
 
@@ -222,7 +223,7 @@ class Gbe(object):
         result, message = check_changing_status(
             fields, self.read_tx_counters, wait_time, checks)
         if not result:
-            LOGGER.error('%s: %s' % (self.fullname, message))
+            self.parent.logger.error('%s: %s' % (self.fullname, message))
             return False
         return True
 

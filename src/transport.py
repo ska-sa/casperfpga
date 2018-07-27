@@ -7,7 +7,7 @@ class Transport(object):
     """
     def __init__(self, **kwargs):
         """
-        
+        Initialise the CasperFpga object
         :param host: 
         """
         self.host, self.bitstream = get_hostname(**kwargs)
@@ -40,6 +40,8 @@ class Transport(object):
     def test_connection(self):
         """
         Write to and read from the scratchpad to test the connection to the FPGA
+        - i.e. Is the casper FPGA connected?
+        :return: Boolean - True/False - Success/Fail
         """
         return self.is_connected()
 
@@ -102,6 +104,7 @@ class Transport(object):
                                   wait_complete=True, skip_verification=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
+        - Implemented in the child
         :param filename: the file to upload
         :param port: the port to use on the rx end, -1 means a random port
         :param timeout: how long to wait, seconds

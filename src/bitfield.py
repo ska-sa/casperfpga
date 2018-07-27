@@ -38,6 +38,13 @@ class Bitfield(object):
     Describes a chunk of memory that consists of a number of Fields.
     """
     def __init__(self, name, width_bits, fields=None):
+        """
+
+        :param name: String name of the device
+        :param width_bits: Integer Bit-width of the Bitfield
+        :param fields: Integer number of fields - default to None
+        :return: <nothing>
+        """
         self.name = name
         self.width_bits = width_bits
         self._fields = {}
@@ -83,12 +90,13 @@ class Bitfield(object):
     def field_names(self):
         return self._fields.keys()
 
-    def field_get_by_name(self, fieldname):
+    def field_get_by_name(self, field_name):
         """
         Get a field from this bitfield by its name.
+        :param field_name: String - name of field to search for
         """
         try:
-            return self._fields[fieldname]
+            return self._fields[field_name]
         except KeyError:
             return None
 
@@ -96,11 +104,11 @@ class Bitfield(object):
         """
         Get a string of all the field names.
         """
-        fieldstring = ''
+        field_string = ''
         for field in self._fields.itervalues():
-            fieldstring += '%s, ' % field
-        fieldstring = fieldstring[0:-2]
-        return fieldstring
+            field_string += '%s, ' % field
+        field_string = field_string[0:-2]
+        return field_string
 
     def __str__(self):
         """
@@ -115,30 +123,32 @@ class Field(object):
     """
     A Field object is a number of bits somewhere in a Bitfield object.
     """
-    def __init__(self, name, numtype, width_bits, binary_pt, lsb_offset):
+    def __init__(self, name, num_type, width_bits, binary_pt, lsb_offset):
         """
         Initialise a Field object.
         :param name: The name of the field
-        :param numtype: A numerical description of the type:
-                        0 is unsigned, 1 is signed 2's comp and 2 is boolean
-        :param width: The width of the field, in bits
+        :param num_type: A numerical description of the type:
+                         - 0 is unsigned
+                         - 1 is signed 2's comp
+                         - 2 is boolean
+        :param width_bits: The width of the field, in bits
         :param binary_pt: The binary point position, in bits
         :param lsb_offset: The offset in the memory field, in bits:
                            -1 means it hasn't been set yet.
-        :return:
+        :return: <nothing>
         """
-        if not isinstance(numtype, int):
+        if not isinstance(num_type, int):
             raise TypeError('Type must be an integer.')
         assert name.strip() != '', 'Cannot have a Field with empty name?!'
         self.name = name
-        self.numtype = numtype
+        self.num_type = num_type
         self.width_bits = width_bits
         self.binary_pt = binary_pt
         self.offset = lsb_offset
 
     def __str__(self):
-        return '%s(%i,%i,%i,%i)' % (self.name, self.offset, self.width_bits,
-                                    self.binary_pt, self.numtype)
+        return '{}({}, {}, {}, {})'.format(self.name, self.offset, self.width_bits,
+                                           self.binary_pt, self.num_type)
 
     def __repr__(self):
         return str(self)

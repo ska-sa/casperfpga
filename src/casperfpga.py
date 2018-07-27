@@ -16,20 +16,7 @@ from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
 from transport_dummy import DummyTransport
 
-
-LOGGER = logging.getLogger(__name__)
-
-# define a custom log level between DEBUG and INFO
-PDEBUG = 15
-logging.addLevelName(PDEBUG, "PDEBUG")
-
-
-def pdebug(self, message, *args, **kwargs):
-    if self.isEnabledFor(PDEBUG):
-        self.log(PDEBUG, message, *args, **kwargs)
-
-
-logging.Logger.pdebug = pdebug
+from CasperLogHandlers import configure_console_logging, configure_file_logging
 
 
 # known CASPER memory-accessible devices and their associated
@@ -67,31 +54,8 @@ CASPER_OTHER_DEVICES = {
 }
 
 
-def choose_transport(host_ip):
-    """
-    Test whether a given host is a katcp client or a skarab
-    :param host_ip:
-    :return:
-    """
-    LOGGER.debug('Trying to figure out what kind of device %s is' % host_ip)
-    if host_ip.startswith('CasperDummy'):
-        return DummyTransport
-    try:
-        if SkarabTransport.test_host_type(host_ip):
-            LOGGER.debug('%s seems to be a SKARAB' % host_ip)
-            return SkarabTransport
-        elif TapcpTransport.test_host_type(host_ip):
-            LOGGER.debug('%s seems to be a TapcpTransport' % host_ip)
-            return TapcpTransport
-        else:
-            LOGGER.debug('%s seems to be a ROACH' % host_ip)
-            return KatcpTransport
-    except socket.gaierror:
-        raise RuntimeError('Address/host %s makes no sense to '
-                           'the OS?' % host_ip)
-    except Exception as e:
-        raise RuntimeError('Could not connect to %s: %s' % (
-            host_ip, e.message))
+class UnknownTransportError(Exception):
+    pass
 
 
 class CasperFpga(object):
@@ -100,8 +64,8 @@ class CasperFpga(object):
     """
     def __init__(self, *args, **kwargs):
         """
-        :param host: the hostname of this CasperFpga
-        :return:
+        :param args[0] - host: the hostname of this CasperFpga
+        :return: <nothing>
         """
         if len(args) > 0:
             try:
@@ -111,15 +75,33 @@ class CasperFpga(object):
                 pass
         self.host, self.bitstream = get_hostname(**kwargs)
 
+        # Need to check if any logger-based parameters have been spec'd
+        try:
+            self.logger = kwargs['logger']
+        except KeyError:
+            # Damn
+            self.logger = logging.getLogger(self.host)
+
         # some transports, e.g. Skarab, need to know their parent
         kwargs['parent_fpga'] = self
+
+        # Setup logger to be propagated through transports
+        self.logger.setLevel(logging.NOTSET)
+
+        # define a custom log level between DEBUG and INFO
+        # PDEBUG = 15
+        # logging.addLevelName(PDEBUG, "PDEBUG")
+        #
+        # self.logger.pdebug = pdebug
+
+        kwargs['logger'] = self.logger
 
         # was the transport specified?
         transport = get_kwarg('transport', kwargs)
         if transport:
             self.transport = transport(**kwargs)
         else:
-            transport_class = choose_transport(self.host)
+            transport_class = self.choose_transport(self.host)
             self.transport = transport_class(**kwargs)
 
         # this is just for code introspection
@@ -136,15 +118,95 @@ class CasperFpga(object):
         # /just for introspection
 
         self._reset_device_info()
-        LOGGER.debug('%s: now a CasperFpga' % self.host)
+        self.logger.debug('%s: now a CasperFpga' % self.host)
+
+        # Set log level to ERROR
+        self.logger.setLevel(logging.ERROR)
+
+        # Just to test
+        self.configure_console_logging = configure_console_logging
+        self.configure_file_logging = configure_file_logging
+
+    def choose_transport(self, host_ip):
+        """
+        Test whether a given host is a katcp client or a skarab
+        :param host_ip:
+        :return:
+        """
+        self.logger.debug('Trying to figure out what kind of device %s is' % host_ip)
+        if host_ip.startswith('CasperDummy'):
+            return DummyTransport
+        try:
+            if SkarabTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be a SKARAB' % host_ip)
+                return SkarabTransport
+            elif TapcpTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
+                return TapcpTransport
+            elif KatcpTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be ROACH' % host_ip)
+                return KatcpTransport
+            else:
+                raise UnknownTransportError('Possible that host '
+                                            'does not follow one of the defined casperfpga transport protocols')
+        except socket.gaierror:
+            raise RuntimeError('Address/host %s makes no sense to '
+                               'the OS?' % host_ip)
+        except Exception as e:
+            raise RuntimeError('Could not connect to host %s: %s' % (host_ip, e.message))
 
     def connect(self, timeout=None):
+        """
+        Attempt to connect to a CASPER Hardware Target
+        :param timeout: Integer value in seconds
+        :return:
+        """
         return self.transport.connect(timeout)
 
     def disconnect(self):
+        """
+        Attempt to disconnect from a CASPER Hardware Target
+        :return:
+        """
         return self.transport.disconnect()
 
+    # def pdebug(self, message, *args, **kwargs):
+    #     if self.isEnabledFor(PDEBUG):
+    #         self.log(PDEBUG, message, *args, **kwargs)
+
+    def set_log_level(self, log_level='DEBUG'):
+        """
+        Generic function to carry out a sanity check on the logging_level
+        used to setup the logger
+        :param log_level: String input defining the logging_level:
+                             Level      | Numeric Value
+                             --------------------------
+                             CRITICAL   | 50
+                             ERROR      | 40
+                             WARNING    | 30
+                             INFO       | 20
+                             DEBUG      | 10
+                             NOTSET     | 0
+        :return:
+        """
+        log_level_numeric = getattr(logging, log_level.upper(), None)
+        if not isinstance(log_level_numeric, int):
+            raise ValueError('Invalid Log Level: %s' % log_level)
+        # else: Continue
+        self.logger.setLevel(log_level_numeric)
+        infomsg = 'Log level successfully updated to: {}'.format(log_level.upper())
+        self.logger.info(infomsg)
+        return True
+
     def read(self, device_name, size, offset=0, **kwargs):
+        """
+        Read size-bytes of binary data with carriage-return escape-sequenced.
+        :param device_name: name of memory device from which to read
+        :param size: how many bytes to read
+        :param offset: start at this offset, offset in bytes
+        :param kwargs:
+        :return:
+        """
         return self.transport.read(device_name, size, offset, **kwargs)
 
     def blindwrite(self, device_name, data, offset=0, **kwargs):
@@ -171,30 +233,23 @@ class CasperFpga(object):
 
     def set_igmp_version(self, version):
         """
-        
-        :param version: 
-        :return: 
+        Sets version of IGMP multicast protocol to use
+        - This method is only available to katcp-objects
+        :param version: IGMP protocol version, 0 for kernel default, 1, 2 or 3
+        :return:
         """
         return self.transport.set_igmp_version(version)
 
-    def upload_to_ram_and_program(self, filename=None, image_chunks=None,
-                                  wait_complete=True):
+    def upload_to_ram_and_program(self, filename=None, wait_complete=True):
         """
         Upload an FPG file to RAM and then program the FPGA.
-        :param filename: the file to upload; if not specified,
-            either use object's image_chunks, or else bitstream.
-        :param image_chunks: a pointer to the image chunks to use:
-            (chunks, checksum)
+        :param filename: the file to upload
         :param wait_complete: do not wait for this operation, just return
         after upload
         :return: True or False
         """
         if filename is not None:
             self.bitstream = filename
-        elif image_chunks is not None:
-            raise DeprecationWarning('Using image chunks is deprecated since'
-                                     'progska came along.')
-            self.transport.image_chunks = image_chunks
         else:
             filename = self.bitstream
         rv = self.transport.upload_to_ram_and_program(
@@ -277,8 +332,8 @@ class CasperFpga(object):
 
         dram_indirect_page_size = (64*1024*1024)
         # read_chunk_size = (1024*1024)
-        LOGGER.debug('%s: reading a total of %8i bytes from offset %8i...' %
-                     (self.host, size, offset))
+        self.logger.debug('Reading a total of %8i bytes from offset %8i...' %
+                         (size, offset))
         while n_reads < size:
             dram_page = (offset + n_reads) / dram_indirect_page_size
             local_offset = (offset + n_reads) % dram_indirect_page_size
@@ -293,9 +348,9 @@ class CasperFpga(object):
             local_data = self.dram_bulkread('dram_memory',
                                             local_reads, local_offset)
             data.append(local_data)
-            LOGGER.debug('%s: reading %8i bytes from indirect '
-                         'address %4i at local offset %8i... done.' %
-                         (self.host, local_reads, dram_page, local_offset))
+            self.logger.debug('Reading %8i bytes from indirect '
+                              'address %4i at local offset %8i... done.' %
+                              (local_reads, dram_page, local_offset))
             n_reads += local_reads
         return ''.join(data)
 
@@ -316,8 +371,8 @@ class CasperFpga(object):
 
         dram_indirect_page_size = (64*1024*1024)
         write_chunk_size = (1024*512)
-        LOGGER.debug('%s: writing a total of %8i bytes from offset %8i...' %
-                     (self.host, size, offset))
+        self.logger.debug('Writing a total of %8i bytes from offset %8i...' %
+                         (size, offset))
 
         while n_writes < size:
             dram_page = (offset+n_writes)/dram_indirect_page_size
@@ -325,9 +380,9 @@ class CasperFpga(object):
             local_writes = min(write_chunk_size, size - n_writes,
                                dram_indirect_page_size -
                                (offset % dram_indirect_page_size))
-            LOGGER.debug('%s: writing %8i bytes from indirect address %4i '
-                         'at local offset %8i...' % (
-                            self.host, local_writes, dram_page, local_offset))
+            self.logger.debug('Writing %8i bytes from indirect address %4i '
+                              'at local offset %8i...' % (
+                               local_writes, dram_page, local_offset))
             if last_dram_page != dram_page:
                 self.write_int('dram_controller', dram_page)
                 last_dram_page = dram_page
@@ -351,11 +406,11 @@ class CasperFpga(object):
             # it's not in the first word
             unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
             unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
-            err_str = '%s: verification of write to %s at offset %d failed. ' \
+            err_str = 'Verification of write to %s at offset %d failed. ' \
                       'Wrote 0x%08x... but got back 0x%08x.' % (
-                        self.host, device_name, offset,
+                        device_name, offset,
                         unpacked_wrdata, unpacked_rddata)
-            LOGGER.error(err_str)
+            self.logger.error(err_str)
             raise ValueError(err_str)
 
     def read_int(self, device_name, word_offset=0):
@@ -396,7 +451,7 @@ class CasperFpga(object):
         try:
             data = struct.pack('>i' if integer < 0 else '>I', integer)
         except Exception as ve:
-            LOGGER.error('Writing integer %i failed with error: %s' % (
+            self.logger.error('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
             raise ValueError('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
@@ -404,50 +459,9 @@ class CasperFpga(object):
             self.blindwrite(device_name, data, word_offset*4)
         else:
             self.write(device_name, data, word_offset*4)
-        LOGGER.debug('%s: write_int %8x to register %s at word offset %d '
-                     'okay%s.' % (self.host, integer, device_name,
-                                  word_offset,
-                                  ' (blind)' if blindwrite else ''))
-
-    # def get_rcs(self, rcs_block_name='rcs'):
-    #     """
-    #     Retrieves and decodes a revision control block.
-    #     """
-    #     raise NotImplementedError
-    #     rv = {'user': self.read_uint(rcs_block_name + '_user')}
-    #     app = self.read_uint(rcs_block_name+'_app')
-    #     lib = self.read_uint(rcs_block_name+'_lib')
-    #     if lib & (1 << 31):
-    #         rv['compile_timestamp'] = lib & ((2 ** 31)-1)
-    #     else:
-    #         if lib & (1 << 30):
-    #             # type is svn
-    #             rv['lib_rcs_type'] = 'svn'
-    #         else:
-    #             # type is git
-    #             rv['lib_rcs_type'] = 'git'
-    #         if lib & (1 << 28):
-    #             # dirty bit
-    #             rv['lib_dirty'] = True
-    #         else:
-    #             rv['lib_dirty'] = False
-    #         rv['lib_rev'] = lib & ((2 ** 28)-1)
-    #     if app & (1 << 31):
-    #         rv['app_last_modified'] = app & ((2 ** 31)-1)
-    #     else:
-    #         if app & (1 << 30):
-    #             # type is svn
-    #             rv['app_rcs_type'] = 'svn'
-    #         else:
-    #             # type is git
-    #             rv['app_rcs_type'] = 'git'
-    #         if app & (1 << 28):
-    #             # dirty bit
-    #             rv['app_dirty'] = True
-    #         else:
-    #             rv['lib_dirty'] = False
-    #         rv['app_rev'] = app & ((2 ** 28)-1)
-    #     return rv
+        self.logger.debug('Write_int %8x to register %s at word offset %d '
+                          'okay%s.' % (integer, device_name, word_offset,
+                          ' (blind)' if blindwrite else ''))
 
     def _create_memory_devices(self, device_dict, memorymap_dict):
         """
@@ -516,6 +530,8 @@ class CasperFpga(object):
     def device_names_by_container(self, container_name):
         """
         Return a list of devices in a certain container.
+        :param container_name: String to search for in containers in memory_devices
+        :return: List of strings matching the description
         """
         return [devname for devname, container
                 in self.memory_devices.iteritems()
@@ -560,7 +576,7 @@ class CasperFpga(object):
         try:
             self.system_info.update(device_dict['77777'])
         except KeyError:
-            LOGGER.warn('%s: no sys info key in design info!' % self.host)
+            self.logger.warn('No sys info key in design info!')
         # and RCS information if included
         for device_name in device_dict:
             if device_name.startswith('77777_git'):
@@ -576,6 +592,7 @@ class CasperFpga(object):
     def estimate_fpga_clock(self):
         """
         Get the estimated clock of the running FPGA, in Mhz.
+        :return: Float - FPGA Clock speed in MHz
         """
         firstpass = self.read_uint('sys_clkcounter')
         time.sleep(2.0)
@@ -587,10 +604,10 @@ class CasperFpga(object):
     def check_tx_raw(self, wait_time=0.2, checks=10):
         """
         Check to see whether this host is transmitting packets without
-        error on all its GBE interfaces.
+        error on all its GbE interfaces.
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
-        :return:
+        :return: Boolean - True/False - Success/Fail
         """
         for gbecore in self.gbes:
             if not gbecore.tx_okay(wait_time=wait_time, checks=checks):
@@ -600,7 +617,7 @@ class CasperFpga(object):
     def check_rx_raw(self, wait_time=0.2, checks=10):
         """
         Check to see whether this host is receiving packets without
-        error on all its GBE interfaces.
+        error on all its GbE interfaces.
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
         :return:
@@ -625,7 +642,7 @@ class CasperFpga(object):
 
     def get_version_info(self):
         """
-        :return: 
+        :return: List
         """
         if 'git' not in self.rcs_info:
             return []

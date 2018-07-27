@@ -9,8 +9,6 @@ from transport import Transport
 __author__ = 'jackh'
 __date__ = 'June 2017'
 
-LOGGER = logging.getLogger(__name__)
-tftpy.setLogLevel(logging.CRITICAL)
 TFTPY = None
 
 def set_log_level(level):
@@ -78,13 +76,20 @@ class TapcpTransport(Transport):
             import tftpy
             global TFTPY
             TFTPY = tftpy
+            TFTPY.setLogLevel(logging.CRITICAL)
         except ImportError:
             raise ImportError('You need to install tftpy to use TapcpTransport')
         Transport.__init__(self, **kwargs)
         set_log_level(logging.ERROR)
         self.t = tftpy.TftpClient(kwargs['host'], 69)
-        self._logger = LOGGER
-        self.timeout = kwargs.get('timeout', 0.025) # 1/4 the timeout of the MB
+	try:
+            self.logger = kwargs['logger']
+        except KeyError:
+            self.logger = logging.getLogger(__name__)
+
+        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+        self.logger.info(new_connection_msg)
+        self.timeout = kwargs.get('timeout', 3)
         self.server_timeout = 0.1 # Microblaze timeout period. So that if a command fails we can wait for the microblaze to terminate the connection before retrying
         self.retries = kwargs.get('retries', 8) # These are retries of a complete transaction (each of which has it's ofw TFTP retries).
 
@@ -122,8 +127,8 @@ class TapcpTransport(Transport):
         try:
             board = TapcpTransport(host=host_ip, timeout=0.1)
         except ImportError:
-            LOGGER.error('tftpy is not installed, do not know if %s is a Tapcp'
-                         'client or not' % str(host_ip))
+            # LOGGER.error('tftpy is not installed, do not know if %s is a Tapcp'
+            #              'client or not' % str(host_ip))
             return False
         # Temporarily turn off logging so if tftp doesn't respond
         # there's no error. Remember the existing log level so that
@@ -132,7 +137,7 @@ class TapcpTransport(Transport):
         set_log_level(logging.CRITICAL)
         if board.is_connected():
             set_log_level(log_level)
-            LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
+            # LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
             return True
         return False
 
@@ -187,7 +192,6 @@ class TapcpTransport(Transport):
         """
         Extract the header and program bitstream from the input file provided.
         """
-
         with open(filename, 'r') as fh:
             fpg = fh.read()
 
@@ -370,7 +374,6 @@ class TapcpTransport(Transport):
         # return timeout to what it used to be
         self.timeout = old_timeout
     
-
     def _get_device_address(self, device_name):
         """
         
@@ -437,7 +440,7 @@ class TapcpTransport(Transport):
         """
         # trigger reboot of FPGA
         self.progdev(0)
-        LOGGER.info('%s: deprogrammed okay' % self.host)
+        self.logger.info('Skarab deprogrammed okay')
 
     def write_wishbone(self, wb_address, data):
         """

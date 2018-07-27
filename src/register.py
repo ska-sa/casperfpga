@@ -189,7 +189,7 @@ class Register(Memory):
 
     def write_single(self, value):
         """
-
+        Write single value.
         :param value:
         :return:
         """
