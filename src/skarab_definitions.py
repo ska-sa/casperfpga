@@ -450,9 +450,16 @@ class SkarabProgrammingError(ValueError):
     pass
 
 
-# command packet structure
 class Command(object):
+    """
+    The Command Packet structure for SKARAB communications
+    """
     def __init__(self, command_id, seq_num=None):
+        """
+        A command will always have the following parameters/properties
+        :param command_id: Integer value
+        :param seq_num:  Integer value
+        """
         self.packet = odict({
             'command_type': command_id,
             'seq_num': seq_num,
@@ -463,7 +470,7 @@ class Command(object):
     def create_payload(self, seq_num):
         """
         Create payload for sending via UDP Packet to SKARAB
-        :return:
+        :return: string representation of data
         """
         self.packet['seq_num'] = seq_num
         payload = ''

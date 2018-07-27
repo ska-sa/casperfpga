@@ -64,8 +64,8 @@ class CasperFpga(object):
     """
     def __init__(self, *args, **kwargs):
         """
-        :param host: the hostname of this CasperFpga
-        :return:
+        :param args[0] - host: the hostname of this CasperFpga
+        :return: <nothing>
         """
         if len(args) > 0:
             try:
@@ -87,27 +87,6 @@ class CasperFpga(object):
 
         # Setup logger to be propagated through transports
         self.logger.setLevel(logging.NOTSET)
-
-        # Logging to stream by default, for now
-        # result = self.configure_stream_logging()
-
-        # region -- Making additions to test altering stdout and stderr --
-        # stdout_logger = logging.getLogger('STDOUT')
-        # temp_stream_handler = logging.StreamHandler().setLevel(logging.INFO)
-        #
-        # formatted_string = '%(name)s| %(asctime)s | %(levelname)s - %(message)s'
-        # temp_formatter = logging.Formatter(formatted_string)
-        # temp_stream_handler.setFormatter(temp_formatter)
-        # stdout_logger.addHandler(temp_stream_handler)
-        #
-        # redirect_logger = CasperRedirectLogger(logger=stdout_logger, log_level=logging.INFO)
-        # sys.stdout = redirect_logger
-        #
-        # stderr_logger = logging.getLogger('STDERR')
-        # stderr_logger.addHandler()
-        # redirect_logger = CasperRedirectLogger(logger=stderr_logger, log_level=logging.ERROR)
-        # sys.stderr = redirect_logger
-        # endregion
 
         # define a custom log level between DEBUG and INFO
         # PDEBUG = 15
@@ -148,33 +127,6 @@ class CasperFpga(object):
         self.configure_console_logging = configure_console_logging
         self.configure_file_logging = configure_file_logging
 
-    # region ** Not ready to be implemented! **
-    # def configure_logger(self, log_level=logging.DEBUG, filename=None, file_directory=None):
-    #     """
-    #     Method to configure the logger instantiated as part of the casperfpga entity
-    #     - log_level=logging.DEBUG, stream_handler=None, file_handler=None
-    #     :param log_level:
-    #     :param filename:
-    #     :param file_directory:
-    #     :param string_format:
-    #     :return:
-    #     """
-    #
-    #     # We're trying to accommodate for a host of paramater specifications
-    #     # - But they must all be key-word args
-    #
-    #     # First, see
-    #     # Need to test the FileHandler
-    #     log_filename = '/tmp/casperfpga_{}.log'.format(self.host)
-    #     file_handler = logging.FileHandler(log_filename, mode='a')
-    #     formatted_string = '%(asctime)s | %(levelname)s | %(name)s - %(filename)s:%(lineno)s - %(message)s'
-    #     casperfpga_formatter = logging.Formatter(formatted_string)
-    #     file_handler.setFormatter(casperfpga_formatter)
-    #     self.logger.addHandler(file_handler)
-    #
-    #     return True
-    # endregion
-
     def choose_transport(self, host_ip):
         """
         Test whether a given host is a katcp client or a skarab
@@ -204,9 +156,18 @@ class CasperFpga(object):
             raise RuntimeError('Could not connect to host %s: %s' % (host_ip, e.message))
 
     def connect(self, timeout=None):
+        """
+        Attempt to connect to a CASPER Hardware Target
+        :param timeout: Integer value in seconds
+        :return:
+        """
         return self.transport.connect(timeout)
 
     def disconnect(self):
+        """
+        Attempt to disconnect from a CASPER Hardware Target
+        :return:
+        """
         return self.transport.disconnect()
 
     # def pdebug(self, message, *args, **kwargs):
@@ -237,54 +198,15 @@ class CasperFpga(object):
         self.logger.info(infomsg)
         return True
 
-    # def enable_logging(self, logging_level, interactive_mode=True):
-    #     """
-    #     New method added to test logger functionality across transport layers
-    #     - Need to add handlers for both Stream AND File
-    #     :param logging_level: String input defining the logging_level:
-    #                          Level      | Numeric Value
-    #                          --------------------------
-    #                          CRITICAL   | 50
-    #                          ERROR      | 40
-    #                          WARNING    | 30
-    #                          INFO       | 20
-    #                          DEBUG      | 10
-    #                          NOTSET     | 0
-    #     :param interactive_mode: Boolean Flag used to dictate whether to display debug info
-    #                              to screen - i.e. When run from ipython vs python script
-    #     :return: Boolean - True/False - 1/0
-    #     """
-    #
-    #     logging_level_numeric = getattr(logging, logging_level.upper(), None)
-    #     if not isinstance(logging_level_numeric, int):
-    #         raise ValueError('Invalid Log Level: %s' % logging_level)
-    #     # else: Continue
-    #     # logging.basicConfig(level=logging_level_numeric)
-    #
-    #     # Need to set the formatter, regardless of Logging Mode (Stream and/or File)
-    #     # - DateTime | name | host_name | Debug_level | message
-    #     format_str = '%(asctime)s | %(name)s | {} | %(levelname)s | %(message)s'.format(self.host)
-    #     # format_str = '%(asctime)s | %(name)s | %(levelname)s | %(message)s'
-    #     formatter = logging.Formatter(format_str)
-    #
-    #     if interactive_mode:
-    #         # Create Console Handler
-    #         console_handler = logging.StreamHandler()
-    #         console_handler.setLevel(level=logging_level_numeric)
-    #         console_handler.setFormatter(formatter)
-    #         self.logger.addHandler(console_handler)
-    #
-    #     # Log to file by default... for now
-    #     log_filename = '/tmp/process_{}.log'.format(str(os.getpid()))
-    #     file_handler = logging.FileHandler(log_filename)
-    #     file_handler.setLevel(level=logging_level_numeric)
-    #     file_handler.setFormatter(formatter)
-    #     self.logger.addHandler(file_handler)
-    #
-    #     self.logger.debug('Logging enabled...')
-    #     return True
-
     def read(self, device_name, size, offset=0, **kwargs):
+        """
+        Read size-bytes of binary data with carriage-return escape-sequenced.
+        :param device_name: name of memory device from which to read
+        :param size: how many bytes to read
+        :param offset: start at this offset, offset in bytes
+        :param kwargs:
+        :return:
+        """
         return self.transport.read(device_name, size, offset, **kwargs)
 
     def blindwrite(self, device_name, data, offset=0, **kwargs):
@@ -311,30 +233,23 @@ class CasperFpga(object):
 
     def set_igmp_version(self, version):
         """
-        
-        :param version: 
-        :return: 
+        Sets version of IGMP multicast protocol to use
+        - This method is only available to katcp-objects
+        :param version: IGMP protocol version, 0 for kernel default, 1, 2 or 3
+        :return:
         """
         return self.transport.set_igmp_version(version)
 
-    def upload_to_ram_and_program(self, filename=None, image_chunks=None,
-                                  wait_complete=True):
+    def upload_to_ram_and_program(self, filename=None, wait_complete=True):
         """
         Upload an FPG file to RAM and then program the FPGA.
-        :param filename: the file to upload; if not specified,
-            either use object's image_chunks, or else bitstream.
-        :param image_chunks: a pointer to the image chunks to use:
-            (chunks, checksum)
+        :param filename: the file to upload
         :param wait_complete: do not wait for this operation, just return
         after upload
         :return: True or False
         """
         if filename is not None:
             self.bitstream = filename
-        elif image_chunks is not None:
-            raise DeprecationWarning('Using image chunks is deprecated since'
-                                     'progska came along.')
-            self.transport.image_chunks = image_chunks
         else:
             filename = self.bitstream
         rv = self.transport.upload_to_ram_and_program(
@@ -548,46 +463,6 @@ class CasperFpga(object):
                           'okay%s.' % (integer, device_name, word_offset,
                           ' (blind)' if blindwrite else ''))
 
-    # def get_rcs(self, rcs_block_name='rcs'):
-    #     """
-    #     Retrieves and decodes a revision control block.
-    #     """
-    #     raise NotImplementedError
-    #     rv = {'user': self.read_uint(rcs_block_name + '_user')}
-    #     app = self.read_uint(rcs_block_name+'_app')
-    #     lib = self.read_uint(rcs_block_name+'_lib')
-    #     if lib & (1 << 31):
-    #         rv['compile_timestamp'] = lib & ((2 ** 31)-1)
-    #     else:
-    #         if lib & (1 << 30):
-    #             # type is svn
-    #             rv['lib_rcs_type'] = 'svn'
-    #         else:
-    #             # type is git
-    #             rv['lib_rcs_type'] = 'git'
-    #         if lib & (1 << 28):
-    #             # dirty bit
-    #             rv['lib_dirty'] = True
-    #         else:
-    #             rv['lib_dirty'] = False
-    #         rv['lib_rev'] = lib & ((2 ** 28)-1)
-    #     if app & (1 << 31):
-    #         rv['app_last_modified'] = app & ((2 ** 31)-1)
-    #     else:
-    #         if app & (1 << 30):
-    #             # type is svn
-    #             rv['app_rcs_type'] = 'svn'
-    #         else:
-    #             # type is git
-    #             rv['app_rcs_type'] = 'git'
-    #         if app & (1 << 28):
-    #             # dirty bit
-    #             rv['app_dirty'] = True
-    #         else:
-    #             rv['lib_dirty'] = False
-    #         rv['app_rev'] = app & ((2 ** 28)-1)
-    #     return rv
-
     def _create_memory_devices(self, device_dict, memorymap_dict):
         """
         Create memory devices from dictionaries of design information.
@@ -655,6 +530,8 @@ class CasperFpga(object):
     def device_names_by_container(self, container_name):
         """
         Return a list of devices in a certain container.
+        :param container_name: String to search for in containers in memory_devices
+        :return: List of strings matching the description
         """
         return [devname for devname, container
                 in self.memory_devices.iteritems()
@@ -715,6 +592,7 @@ class CasperFpga(object):
     def estimate_fpga_clock(self):
         """
         Get the estimated clock of the running FPGA, in Mhz.
+        :return: Float - FPGA Clock speed in MHz
         """
         firstpass = self.read_uint('sys_clkcounter')
         time.sleep(2.0)
@@ -726,10 +604,10 @@ class CasperFpga(object):
     def check_tx_raw(self, wait_time=0.2, checks=10):
         """
         Check to see whether this host is transmitting packets without
-        error on all its GBE interfaces.
+        error on all its GbE interfaces.
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
-        :return:
+        :return: Boolean - True/False - Success/Fail
         """
         for gbecore in self.gbes:
             if not gbecore.tx_okay(wait_time=wait_time, checks=checks):
@@ -739,7 +617,7 @@ class CasperFpga(object):
     def check_rx_raw(self, wait_time=0.2, checks=10):
         """
         Check to see whether this host is receiving packets without
-        error on all its GBE interfaces.
+        error on all its GbE interfaces.
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
         :return:
@@ -764,7 +642,7 @@ class CasperFpga(object):
 
     def get_version_info(self):
         """
-        :return: 
+        :return: List
         """
         if 'git' not in self.rcs_info:
             return []

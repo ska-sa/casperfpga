@@ -16,11 +16,11 @@ class TenGbe(Memory, Gbe):
     def __init__(self, parent, name, address, length_bytes, device_info=None):
         """
 
-        :param parent:
-        :param name:
+        :param parent: Parent object who owns this TenGbe instance
+        :param name: Unique name of the instance
         :param address:
         :param length_bytes:
-        :param device_info:
+        :param device_info: Information about this device
         :return:
         """
         Memory.__init__(self, name, 32, address, length_bytes)

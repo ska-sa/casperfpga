@@ -4,8 +4,6 @@ import time
 from network import IpAddress, Mac
 from gbe import Gbe
 
-LOGGER = logging.getLogger(__name__)
-
 
 class FortyGbe(Gbe):
     """
@@ -15,17 +13,19 @@ class FortyGbe(Gbe):
     def __init__(self, parent, name, address=0x50000, length_bytes=0x4000,
                  device_info=None, position=None):
         """
-
-        :param parent:
-        :param name:
-        :param position:
-        :param address:
-        :param length_bytes:
-        :param device_info:
+        Implements the Gbe class. This is normally initialised from_device_info.
+        :param parent: The parent object, normally a CasperFpga instance
+        :param name: The name of the device
+        :param position: Optional - defaulted to None
+        :param address: Integer - Optional - defaulted to 0x50000
+        :param length_bytes: Integer - Optional - defaulted to 0x4000
+        :param device_info: Information about the device
+        :return: <nothing>
         """
         super(FortyGbe, self).__init__(
             parent, name, address, length_bytes, device_info)
         self.position = position
+        self.logger = parent.logger
 
     def post_create_update(self, raw_device_info):
         """
@@ -40,7 +40,7 @@ class FortyGbe(Gbe):
             if name in snapnames:
                 if (self.name + '_%sxs1_ss' % txrx not in snapnames) or \
                         (self.name + '_%sxs2_ss' % txrx not in snapnames):
-                    LOGGER.error('%sX snapshots misconfigured: %s' % (
+                    self.logger.error('%sX snapshots misconfigured: %s' % (
                         txrx.upper(), snapnames))
                 else:
                     self.snaps['%sx' % txrx] = [
@@ -94,7 +94,7 @@ class FortyGbe(Gbe):
         self._wbone_wr(self.address + 0x20, en_port_new)
         if self._wbone_rd(self.address + 0x20) != en_port_new:
             errmsg = 'Error enabling 40gbe port'
-            LOGGER.error(errmsg)
+            self.logger.error(errmsg)
             raise ValueError(errmsg)
 
     def fabric_disable(self):
@@ -109,7 +109,7 @@ class FortyGbe(Gbe):
         self._wbone_wr(self.address + 0x20, old_port)
         if self._wbone_rd(self.address + 0x20) != old_port:
             errmsg = 'Error disabling 40gbe port'
-            LOGGER.error(errmsg)
+            self.logger.error(errmsg)
             raise ValueError(errmsg)
 
     def get_mac(self):
@@ -152,7 +152,7 @@ class FortyGbe(Gbe):
         self._wbone_wr(self.address + 0x20, en_port_new)
         if self._wbone_rd(self.address + 0x20) != en_port_new:
             errmsg = 'Error setting 40gbe port to 0x%04x' % port
-            LOGGER.error(errmsg)
+            self.logger.error(errmsg)
             raise ValueError(errmsg)
         self.port = port
 
@@ -221,7 +221,7 @@ class FortyGbe(Gbe):
             returnval['arp'] = self.get_arp_details()
         if read_cpu:
             # returnval.update(self.get_cpu_details(gbedata))
-            LOGGER.warn('Retrieving CPU packet buffers not yet implemented.')
+            self.logger.warn('Retrieving CPU packet buffers not yet implemented.')
         self.mac = returnval['mac']
         self.ip_address = returnval['ip']
         self.port = returnval['fabric_port']
@@ -234,7 +234,7 @@ class FortyGbe(Gbe):
             if not supplied, fetch from hardware.
         """
         # TODO
-        LOGGER.error('Retrieving ARP buffers not yet implemented.')
+        self.logger.error('Retrieving ARP buffers not yet implemented.')
         return None
 
     def multicast_receive(self, ip_str, group_size, port=7148):
@@ -288,7 +288,7 @@ class FortyGbe(Gbe):
         :param only_hits:
         :return:
         """
-        LOGGER.warn("Retrieving ARP details not yet implemented.")
+        self.logger.warn("Retrieving ARP details not yet implemented.")
         raise NotImplementedError
 
     def get_stats(self):

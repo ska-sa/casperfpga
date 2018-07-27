@@ -5,8 +5,12 @@ import logging
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
+
 class HMCAD1511(WishBoneDevice):
-	""" Control HMCAD1511 via wb_adc16_controller """
+	"""
+	Control HMCAD1511 via wb_adc16_controller
+	- This is an ADC IC on the SNAP Hardware Platform
+	"""
 
 	# HMCAD1511 does not provide any way of register readback for
 	# either diagnosis or status checking. If you find something
@@ -141,7 +145,19 @@ class HMCAD1511(WishBoneDevice):
 	# Put some initialization here rather than in __init__ so that instantiate
 	# an HMCAD1511 object wouldn't reset/interrupt the running ADCs.
 	def init(self,numChannel=4,clkDivide=1,lowClkFreq=False):
-		""" Reset and initialize ADCs
+		"""
+		Reset and initialize ADCs
+		:param numChannel: Integer - Number of channels for the ADC
+						   - numChannel=1	--	8 ADC cores per channel
+						   - numChannel=2	--	4 ADC cores per channel
+						   - numChannel=4	--	2 ADC cores per channel
+		:param clkDivide: Integer - Clock divide parameter 
+						  - Availale clock divide factors: 1, 2, 4, and 8
+		:param lowClkFreq: Boolean - Activate lowClkFreq when
+						  -  Single channel  Fs < 240 MHz
+							 Dual channel    Fs < 120 MHz
+							 Quad channel    Fs < 60 MHz
+		:return: None
 		"""
 
 		self.reset()
@@ -151,7 +167,7 @@ class HMCAD1511(WishBoneDevice):
 		self.powerUp()
 		self.selectInput([1,2,3,4])
 
-	def _bitCtrl(self, state, sda=0):	
+	def _bitCtrl(self, state, sda=0):
 		# state: 0 - idle, 1 - start, 2 - transmit, 3 - stop
 		if state == self.STATE_3WIRE_START:
 			cmd = (1 * self.M_ADC_SCL) | (sda * self.M_ADC_SDA) | self.csn
@@ -174,6 +190,12 @@ class HMCAD1511(WishBoneDevice):
 		self._bitCtrl(state=self.STATE_3WIRE_STOP)
 
 	def write(self, data, addr):
+		"""
+		Write 32-bit data to a 16-bit address
+		:param data: 32-bit integer data
+		:param addr: 16-bit integer address
+		:return: None
+		"""
 		data = data & 0xffff
 		addr = addr & 0xff
 		addr_data = (addr << 16) | data
@@ -198,7 +220,8 @@ class HMCAD1511(WishBoneDevice):
 			raise ValueError("Invalid parameter")
 
 	def test(self, mode='off', _bits_custom1=None, _bits_custom2=None):
-		""" Test ADC LVDS
+		"""
+		Test ADC LVDS
 		
 		Set LVDS test patterns
 		 E.g.	test('off')
@@ -256,7 +279,8 @@ class HMCAD1511(WishBoneDevice):
 	FGAIN = 2**-8, 2**-9, 2**-10, 2**-11, 2**-12, 2**-13
 
 	def fGain(self, gains):
-		""" Set the fine gain of the 8 ADC cores
+		"""
+		Set the fine gain of the 8 ADC cores
 	
 		Fine gain control (parameters in dB), input gain rounded towards 0 dB
 		Fine gain range for HMCAD1511: -0.0670dB ~ 0.0665dB
@@ -312,7 +336,8 @@ class HMCAD1511(WishBoneDevice):
 		return cfg
 		
 	def setOperatingMode(self, numChannel, clkDivide=1, lowClkFreq=False):
-		""" Set interleaving mode and clock divide factor
+		"""
+		Set interleaving mode and clock divide factor
 		
 		Available Interleaving mode
 		numChannel=1	--	8 ADC cores per channel
@@ -351,7 +376,8 @@ class HMCAD1511(WishBoneDevice):
 		self.powerUp()
 
 	def interleave(self, data, numChannel):
-		""" Reshape and return ADC data
+		"""
+		Reshape and return ADC data
 		"""
 		if numChannel not in [1,2,4]:
 			raise ValueError("Invalid parameter")
@@ -369,7 +395,8 @@ class HMCAD1511(WishBoneDevice):
 
 
 	def selectInput(self, inputs):
-		""" Input select
+		"""
+		Input select
 
 		E.g.
 		 	selectInput([1,2,3,4])	(in four channel mode)
@@ -411,7 +438,9 @@ class HMCAD1511(WishBoneDevice):
 		self.write(val, rid)
 
 class HMCAD1520(HMCAD1511):
-	""" Control HMCAD1520 via wb_adc16_controller
+	"""
+	Control HMCAD1520 via wb_adc16_controller
+	- This ADC inherits functionality from hte HMCAD1511 class implementation
 	"""
 
 	def __init__(self, interface, controller_name, csn=0xff):
@@ -428,7 +457,8 @@ class HMCAD1520(HMCAD1511):
 					'lvds_delay' : 0b1 << 5, }
 
 	def init(self,numChannel=4,clkDivide=1,lowClkFreq=False,resolution=12):
-		""" Reset and initialize ADCs
+		"""
+		Reset and initialize ADCs
 		"""
 
 		self.reset()
@@ -439,7 +469,8 @@ class HMCAD1520(HMCAD1511):
 		self.selectInput([1,2,3,4])
 
 	def setOperatingMode(self, numChannel, clkDivide=1, lowClkFreq=False, resolution=12):
-		""" Set operating mode and clock divide factor
+		"""
+		Set operating mode and clock divide factor
 
 		Available operating mode
 		numChannel=1

@@ -3,6 +3,9 @@ from distutils.core import setup, Extension
 import glob
 import sysconfig
 
+with open("README.md", "r") as readme:
+    long_description = readme.read().split('\n')[2]
+
 # extra_compile_args = sysconfig.get_config_var('CFLAGS').split()
 extra_compile_args = ['-O2', '-Wall']
 progska_extension = Extension(
@@ -18,10 +21,10 @@ setuptools.setup(
     name='casperfpga',
     author='P.Prozesky',
     author_email='paulp@ska.ac.za',
-    url='http://pypi.python.org/pypi/casperfpga',
+    url='https://pypi.org/pypa/casperfpga',
     license='LICENSE.txt',
     description='Talk to CASPER fpga devices using katcp or dcp.',
-    long_description=open('README.txt').read(),
+    long_description=long_description,
     install_requires=[
         'katcp',
         'numpy',
@@ -37,6 +40,10 @@ setuptools.setup(
     setup_requires=['katversion'],
     use_katversion=True,
     ext_modules=[progska_extension],
+    classifiers=[
+        "Programming Language :: Python :: 2.7.x",
+        "Operating System :: Limited by MATLAB and Xilinx Support",
+    ]
 )
 
 # end

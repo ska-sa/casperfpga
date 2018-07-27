@@ -19,7 +19,7 @@ class Snap(Memory):
                                    address=address, length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
-        self.field_add(bitfield.Field(name='data', numtype=0,
+        self.field_add(bitfield.Field(name='data', num_type=0,
                                       width_bits=self.width_bits,
                                       binary_pt=0, lsb_offset=0))
         self.control_registers = {
@@ -120,14 +120,16 @@ class Snap(Memory):
         # construct the fields and add them to this BitField
         for ctr, name in enumerate(fields['names']):
             field = bitfield.Field(name=name,
-                                   numtype=fields['types'][ctr],
+                                   num_type=fields['types'][ctr],
                                    width_bits=fields['widths'][ctr],
                                    binary_pt=fields['bps'][ctr],
                                    lsb_offset=-1)
             self.field_add(field, auto_offset=True)
 
     def _link_control_registers(self, raw_device_info):
-        """Link available registers to this snapshot block's control registers.
+        """
+        Link available registers to this snapshot block's control registers.
+        :param raw_device_info: Information about the device in raw form
         """
         for controlreg in self.control_registers.values():
             try:
@@ -167,6 +169,10 @@ class Snap(Memory):
             circular_capture=False):
         """
         Arm the snapshot block.
+        :param man_trig: Boolean
+        :param man_valid: Boolean
+        :param offset: Integer
+        :param circular_capture: Boolean
         """
         ctrl_reg = self.control_registers['control']['register']
         if offset >= 0:

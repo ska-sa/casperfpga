@@ -9,12 +9,9 @@ import socket
 import struct
 import contextlib
 
-from CasperLogHandlers import CasperConsoleHandler
-
 from transport import Transport
 from utils import create_meta_dictionary, get_hostname, get_kwarg
 
-# LOGGER = logging.getLogger(__name__)
 
 # monkey-patch the maximum katcp message size
 if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
@@ -25,20 +22,23 @@ if hasattr(katcp.CallbackClient, 'MAX_WRITE_BUFFER_SIZE'):
     setattr(katcp.CallbackClient, 'MAX_WRITE_BUFFER_SIZE',
             katcp.CallbackClient.MAX_WRITE_BUFFER_SIZE * 10)
 
+
 class KatcpConnectionError(Exception):
     pass
 
 
 class KatcpRequestError(RuntimeError):
     """An error occurred processing a KATCP request."""
+    pass
 
 
 class KatcpRequestInvalid(RuntimeError):
     """An invalid KATCP request was made."""
-
+    pass
 
 class KatcpRequestFail(RuntimeError):
     """A valid KATCP request failed."""
+    pass
 
 # Moved to inside the KatcpTransport class to make use of the logger passed through from casperfpga.py
 # def sendfile(filename, targethost, port, result_queue, timeout=2):
@@ -113,8 +113,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def test_host_type(host_ip, timeout=5):
         """
         Is this host_ip assigned to a Katcp board?
-        :param host_ip:
-        :param timeout:
+        :param host_ip: as a String
+        :param timeout: as an Integer
         :return:
         """
         try:
@@ -161,27 +161,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                  '%s' % (port, e.message))
             finally:
                 self.logger.info('%s: upload thread complete at %.3f' %
-                            (targethost, time.time()))
-
-    # New method added to test logger functionality
-    @staticmethod
-    def enable_logging(logging_level):
-        """
-        New method added to test logger functionality across transport layers
-        :param logging_level: String input defining the logging_level:
-                             Level      | Numeric Value
-                             --------------------------
-                             CRITICAL   | 50
-                             ERROR      | 40
-                             WARNING    | 30
-                             INFO       | 20
-                             DEBUG      | 10
-                             NOTSET     | 0
-
-        :return: Nothing, right now - Focusing on transport_skarab
-        """
-        print(logging_level)
-        return NotImplementedError
+                                (targethost, time.time()))
 
     def is_connected(self):
         return katcp.CallbackClient.is_connected(self)
@@ -355,7 +335,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def read(self, device_name, size, offset=0):
         """
-        Return size_bytes of binary data with carriage-return escape-sequenced.
+        Read size-bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset
@@ -384,7 +364,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def bulkread(self, device_name, size, offset=0):
         """
-        Return size_bytes of binary data with carriage-return escape-sequenced.
+        Read size-bytes of binary data with carriage-return escape-sequenced.
         Uses much faster bulkread katcp command which returns data in pages
         using informs rather than one read reply, which has significant
         buffering overhead on the ROACH.

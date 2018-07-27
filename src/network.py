@@ -4,7 +4,7 @@ import socket
 
 class Mac(object):
     """
-    A MAC address.
+    A MAC address. Can either be initialised with a IP-string or 32-bit integer.
     """
 
     @staticmethod

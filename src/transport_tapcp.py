@@ -7,7 +7,6 @@ from transport import Transport
 __author__ = 'jackh'
 __date__ = 'June 2017'
 
-# LOGGER = logging.getLogger(__name__)
 
 TFTPY = None
 
@@ -146,12 +145,11 @@ class TapcpTransport(Transport):
         except:
             return False        
 
-    def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True):
+    def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True, skip_verification=False):
         USER_FLASH_LOC = 0x800000
         with open(filename, 'r') as fh:
             self.blindwrite('/flash', fh.read(), offset=USER_FLASH_LOC)
         self.progdev(USER_FLASH_LOC)
-
 
     def _get_device_address(self, device_name):
         """
