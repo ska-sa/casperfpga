@@ -17,6 +17,7 @@ from transport_skarab import SkarabTransport
 from transport_dummy import DummyTransport
 
 from CasperLogHandlers import configure_console_logging, configure_file_logging
+from CasperLogHandlers import getLogger
 
 
 # known CASPER memory-accessible devices and their associated
@@ -76,11 +77,18 @@ class CasperFpga(object):
         self.host, self.bitstream = get_hostname(**kwargs)
 
         # Need to check if any logger-based parameters have been spec'd
+        self.getLogger = getLogger
+
         try:
             self.logger = kwargs['logger']
         except KeyError:
             # Damn
-            self.logger = logging.getLogger(self.host)
+            # self.logger = logging.getLogger(self.host)
+            result, self.logger = self.getLogger(name=self.host)
+            if not result:
+                # Problem
+                errmsg = 'Problem creating logger for {}'.format(self.host)
+                raise ValueError(errmsg)
 
         # some transports, e.g. Skarab, need to know their parent
         kwargs['parent_fpga'] = self

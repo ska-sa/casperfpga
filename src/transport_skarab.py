@@ -15,6 +15,7 @@ import skarab_fileops as skfops
 from transport import Transport
 from network import IpAddress
 
+
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
 
@@ -201,8 +202,8 @@ class SkarabTransport(Transport):
 
     def is_running(self):
         """
-        Is the FPGA programmed and running?
-        :return: Boolean - True/False - Succes/Fail
+        Is the FPGA programmed and running a toolflow image?
+        :return: True or False
         """
         [golden_img, multiboot, version] = self.get_virtex7_firmware_version()
         if golden_img == 0 and multiboot == 0:

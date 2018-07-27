@@ -3,73 +3,118 @@ import termcolors
 import datetime
 import os
 
-# from utils import get_kwarg
-
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
+
 stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.DEBUG)
+# stream_handler.setLevel(logging.ERROR)
+log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+stream_handler.setFormatter(log_formatter)
 LOGGER.addHandler(stream_handler)
+LOGGER.setLevel(logging.ERROR)
 
 
-def get_all_loggers():
+# region -- Custom getLogger commands --
+
+def getLogger(*args, **kwargs):
     """
-    Packaging a logging library function call, for testing
-    :return: dictionary of logging objects
+    Custom method allowing us to add default handlers to a logger
+    :param logger_name: Mandatory, logger needs to have a name!
+    :param log_level: All Instrument-level entities log at logging.DEBUG
+                    - All Board-level entities log at logging.ERROR
+    :return: Tuple - Boolean Success/Fail, True/False
+                   - Logger entity with ConsoleHandler added as default
     """
-    return logging.Logger.manager.loggerDict
+    try:
+        logger_name = kwargs['name']
+    except KeyError:
+        # warningmsg = 'Cannot instantiate a logger without a name!'
+        # LOGGER.warning(warningmsg)
+        # return False, None
+        logger_name = 'testLogger'
+    try:
+        log_level = kwargs['log_level']
+    except KeyError:
+        log_level = logging.ERROR
+
+    logger = logging.getLogger(logger_name)
+
+    if logger.handlers:
+        # logger has handlers already... ?
+        # logger.setLevel(log_level)
+        return False, logger
+    else:
+        console_handler = CasperConsoleHandler(name=logger_name)
+        logger.addHandler(console_handler)
+
+    logger.setLevel(log_level)
+    return True, logger
 
 
-def check_logging_level(logging_level):
+def getNewLogger(*args, **kwargs):
     """
-    Generic function to carry out a sanity check on the logging_level
-    used to setup the logger
-    :param logging_level: String input defining the logging_level:
-                             Level      | Numeric Value
-                             --------------------------
-                             CRITICAL   | 50
-                             ERROR      | 40
-                             WARNING    | 30
-                             INFO       | 20
-                             DEBUG      | 10
-                             NOTSET     | 0
+    Custom method allowing us to add default handlers to a logger
+    :return: Tuple - Boolean Success/Fail, True/False
+                   - Logger entity with FileHandler added as default
+    """
+    try:
+        logger_name = kwargs['name']
+    except KeyError:
+        logger_name = 'testLogger'
+    try:
+        log_level = kwargs['log_level']
+    except KeyError:
+        log_level = logging.DEBUG
 
-    :return: Tuple - (Success/Fail, None/logging_level)
-    """
-    logging_level_numeric = getattr(logging, logging_level, None)
-    if not isinstance(logging_level_numeric, int):
-        # errmsg = 'Invalid Log Level: {}'.format(logging_level)
-        # LOGGER.error(errmsg)
-        return False, None
-    # else: Continue
-    return True, logging_level_numeric
+    logger = logging.getLogger(logger_name)
+
+    if logger.handlers:
+        # We can remove them
+        # - If we instantiate a logger with the same name
+        #   it will still maintain 'object ID'
+        # logger.handlers = []
+
+        # Yes, isinstance(handler, logging.HandlerType),
+        # but it isn't working as expected
+        logger.handlers = [handler for handler in logger.handlers if type(handler) != logging.StreamHandler]
+
+    # Now add the FileHandler
+    filename = '{}.log'.format(logger_name)
+    file_handler = logging.FileHandler(filename)
+    formatted_datetime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
+    formatted_string = '%(name)s - ' + formatted_datetime + ' - %(levelname)s ' \
+                        '| %(filename)s:%(lineno)d - %(msg)s'
+    file_handler.setFormatter(logging.Formatter(formatted_string))
+    logger.addHandler(file_handler)
+    logger.setLevel(log_level)
+
+    return True, logger
+
+# endregion
 
 
 # region -- CasperConsoleHandler --
 
 class CasperConsoleHandler(logging.Handler):
     """
-    Stream Log Handler for casperfpga messages
+    Stream Log Handler for casperfpga records
     - Trying a custom logger before incorporating into corr2
     - This inherits from the logging.Handler - Stream or File
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, name, *args, **kwargs):
         """
         New method added to test logger functionality across transport layers
         - Need to add handlers for both Stream AND File
-        :param stream_name: Name of the StreamHandler - string
-        :param max_len: How many log messages to store in the FIFO
+        :param name: Name of the StreamHandler - string
+        :param max_len: How many log records to store in the FIFO
         :return:
         """
         # logging.Handler.__init__(self)
-        super(CasperConsoleHandler, self).__init__()
+        super(CasperConsoleHandler, self).__init__(*args, **kwargs)
 
-        try:
-            self.name = kwargs['name']
-        except KeyError:
-            # hostname is the logger.name anyway
-            self.name = None
+        # This always needs to be present
+        self.name = name
+
         try:
             self._max_len = kwargs['max_len']
         except KeyError:
@@ -77,59 +122,41 @@ class CasperConsoleHandler(logging.Handler):
 
         self._records = []
 
-    def set_name(self, name):
+    def emit(self, record):
         """
-
-        :param name:
-        :return:
-        """
-        self.name = name
-        return True
-
-    def get_name(self):
-        """
-
-        :return:
-        """
-        return self.name
-
-    def emit(self, message):
-        """
-        Handle a log message
-        :param message: Log message as a string
+        Handle a log record
+        :param record: Log record as a string
         :return: True/False - Success/Fail
         """
         if len(self._records) >= self._max_len:
             self._records.pop(0)
 
-        self._records.append(message)
+        self._records.append(record)
 
-        if message.exc_info:
-            print termcolors.colorize('%s: %s Exception: ' % (message.name, message.msg), message.exc_info[0:-1],
+        if record.exc_info:
+            print termcolors.colorize('%s: %s Exception: ' % (record.name, record.msg), record.exc_info[0:-1],
                                       fg='red')
         else:
-            # console_text = '{} | {}:{} - {}'.format(message.levelname, message.filename, str(message.lineno),
-            #                                        message.msg)
-            console_text = self.format(message)
-            if message.levelno == logging.DEBUG:
+            console_text = self.format(record)
+            if record.levelno == logging.DEBUG:
                 print termcolors.colorize(console_text, fg='white')
-            elif (message.levelno > logging.DEBUG) and (message.levelno < logging.WARNING):
+            elif (record.levelno > logging.DEBUG) and (record.levelno < logging.WARNING):
                 print termcolors.colorize(console_text, fg='green')
-            elif (message.levelno >= logging.WARNING) and (message.levelno < logging.ERROR):
+            elif (record.levelno >= logging.WARNING) and (record.levelno < logging.ERROR):
                 print termcolors.colorize(console_text, fg='yellow')
-            elif message.levelno >= logging.ERROR:
+            elif record.levelno >= logging.ERROR:
                 print termcolors.colorize(console_text, fg='red')
             else:
-                print '%s: %s' % (message.name, message.msg)
+                print '%s: %s' % (record.name, record.msg)
 
     def format(self, record):
         """
-        :param record: Log message as a string, of type logging.LogRecord
-        :return: Formatted message
+        :param record: Log record as a string, of type logging.LogRecord
+        :return: Formatted record
         """
         formatted_datetime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
         formatted_string = '{} {} {} {}:{} - {}'.format(formatted_datetime, record.levelname, record.name,
-                                                              record.filename, str(record.lineno), record.msg)
+                                                        record.filename, str(record.lineno), record.msg)
         
         return formatted_string
 
@@ -212,7 +239,7 @@ def configure_console_logging(logger_entity, console_handler_name=None):
             LOGGER.error(errmsg)
             return False
         # else: Continue
-        console_handler_name = logger_entity.name
+        console_handler_name = '{}_console'.format(logger_entity.name)
     # else: Do all the checks
 
     handlers = logger_entity.handlers
@@ -225,7 +252,7 @@ def configure_console_logging(logger_entity, console_handler_name=None):
             # StreamHandler (I hope)
             if handler.name.upper() == console_handler_name.upper():
                 # Problem
-                LOGGER.warning('ConsoleHandler {} already exists'.format(console_handler_name))
+                # LOGGER.warning('ConsoleHandler {} already exists'.format(console_handler_name))
                 return False
                 # raise ValueError('Cannot have multiple StreamHandlers '
                 #                 'with the same name')
