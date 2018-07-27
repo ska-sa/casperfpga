@@ -19,7 +19,7 @@ class Snap(Memory):
                                    address=address, length_bytes=length_bytes)
         self.parent = parent
         self.block_info = device_info
-        self.field_add(bitfield.Field(name='data', num_type=0,
+        self.field_add(bitfield.Field(name='data', numtype=0,
                                       width_bits=self.width_bits,
                                       binary_pt=0, lsb_offset=0))
         self.control_registers = {
@@ -120,7 +120,7 @@ class Snap(Memory):
         # construct the fields and add them to this BitField
         for ctr, name in enumerate(fields['names']):
             field = bitfield.Field(name=name,
-                                   num_type=fields['types'][ctr],
+                                   numtype=fields['types'][ctr],
                                    width_bits=fields['widths'][ctr],
                                    binary_pt=fields['bps'][ctr],
                                    lsb_offset=-1)

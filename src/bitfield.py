@@ -123,11 +123,11 @@ class Field(object):
     """
     A Field object is a number of bits somewhere in a Bitfield object.
     """
-    def __init__(self, name, num_type, width_bits, binary_pt, lsb_offset):
+    def __init__(self, name, numtype, width_bits, binary_pt, lsb_offset):
         """
         Initialise a Field object.
         :param name: The name of the field
-        :param num_type: A numerical description of the type:
+        :param numtype: A numerical description of the type:
                          - 0 is unsigned
                          - 1 is signed 2's comp
                          - 2 is boolean
@@ -137,18 +137,18 @@ class Field(object):
                            -1 means it hasn't been set yet.
         :return: <nothing>
         """
-        if not isinstance(num_type, int):
+        if not isinstance(numtype, int):
             raise TypeError('Type must be an integer.')
         assert name.strip() != '', 'Cannot have a Field with empty name?!'
         self.name = name
-        self.num_type = num_type
+        self.numtype = numtype
         self.width_bits = width_bits
         self.binary_pt = binary_pt
         self.offset = lsb_offset
 
     def __str__(self):
         return '{}({}, {}, {}, {})'.format(self.name, self.offset, self.width_bits,
-                                           self.binary_pt, self.num_type)
+                                           self.binary_pt, self.numtype)
 
     def __repr__(self):
         return str(self)
