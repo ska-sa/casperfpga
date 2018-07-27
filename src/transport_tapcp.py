@@ -112,6 +112,30 @@ class TapcpTransport(Transport):
             return True
         return False
 
+    @staticmethod
+    def test_host_type(host_ip):
+        """
+        Is this host_ip assigned to a Tapcp board?
+        :param host_ip:
+        :return:
+        """
+        try:
+            board = TapcpTransport(host=host_ip, timeout=0.1)
+        except ImportError:
+            LOGGER.error('tftpy is not installed, do not know if %s is a Tapcp'
+                         'client or not' % str(host_ip))
+            return False
+        # Temporarily turn off logging so if tftp doesn't respond
+        # there's no error. Remember the existing log level so that
+        # it can be re-set afterwards if tftp connects ok.
+        log_level = get_log_level()
+        set_log_level(logging.CRITICAL)
+        if board.is_connected():
+            set_log_level(log_level)
+            LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
+            return True
+        return False
+
     def listdev(self):
         buf = StringIO()
         self.t.download('/listdev', buf, timeout=self.timeout)
