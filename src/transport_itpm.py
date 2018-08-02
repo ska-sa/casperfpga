@@ -50,14 +50,17 @@ class ItpmTransport(Transport):
     def is_running(self):
         """
         Is the FPGA programmed and running?
-        :return: True or False
+        Always returns True!!
+
+        :return: True
         """
         return True
 
     def is_connected(self):
         """
+        Always returns True!!
 
-        :return:
+        :return: True
         """
         return True
 
@@ -92,42 +95,59 @@ class ItpmTransport(Transport):
 
     def read(self, device_name, size, offset=0):
         """
-        
-        :param device_name: 
-        :param size: 
-        :param offset: 
-        :return: 
+        Read `size` bytes from register `device_name`.
+        Start reading from `offset` bytes from `device_name`'s base address.
+        Return the read data as a big-endian binary string.
+        NB: Will only work with size a multiple of 4 bytes.
+
+        :param device_name: Name of device to be read
+        :type device_name: String
+        :param size: Number of bytes to read
+        :type size: Integer
+        :param offset: Offset from which to begin read, in bytes
+        :type offset: Integer
+
+        :return: Big-endian binary string
         """
+        assert size % 4 == 0
+
+        size32 = size >> 2
+
         addr = self._get_device_address(device_name) + offset
         self.logger.info('Reading {0} Locations from Address: 0x{1:08X}'.format(size, addr))
-        rd_data = self.itpm.rd32(addr, size)
-        print "Read Data..."
-        print rd_data
-        return rd_data
+        # Read the data as a list of integers.
+        if size32 == 1:
+            rd_data = [self.itpm.rd32(addr, size32)]
+        else:
+            rd_data = self.itpm.rd32(addr, size32)
+        # Convert to binary string, because that's what the Transport class demands
+        rd_data_str = struct.pack('>%dL' % size32, *rd_data)
+        return rd_data_str
 
     def blindwrite(self, device_name, data, offset=0):
         """
+        Write binary data to `device_name`, starting at `offset` bytes from `device_name`'s base address..
+        NB: Will only work with data a multiple of 4 bytes in size.
+        NB: Will only work with offset a multiple of 4 bytes.
         
-        :param device_name: 
-        :param data: 
-        :param offset: 
-        :return: 
-        """
-        wr_data = array.array('I')
-        addr = self._get_device_address(device_name) + offset
-        if isinstance(data, list):
-            print "Write Data is List"
-            wr_list = data
-        elif isinstance(data, array.array):
-            print "Write Data is Array"
-            wr_list = data
-        else:
-            print "Write Data is Not a List or Array"
-            wr_data = struct.unpack('>I', data)
-            wr_list = [k for k in wr_data]
+        :param device_name: Name of device to be read
+        :type device_name: String
+        :param data: Data to write
+        :type data: Big-endian binary string
+        :param offset: Offset from which to begin write, in bytes
+        :type offset: Integer
 
-        print "Writing Data..."
-        print wr_list
+        :return: None
+        """
+
+        assert len(data) % 4 == 0
+
+        size32 = len(data) >> 2
+
+        addr = self._get_device_address(device_name) + offset
+        # Convert the data to write to a list, because that's what the itpm package wants
+        wr_list = list(struct.unpack('>%dL' % size32, data))
+
         self.logger.info('Data to Write: {}'.format(wr_list))
         self.logger.info('Writing Data to Address: 0x{0:08X}'.format(addr))
         self.itpm.wr32(addr, wr_list)
