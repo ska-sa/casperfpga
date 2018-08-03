@@ -14,13 +14,17 @@ class FortyGbe(Gbe):
                  device_info=None, position=None):
         """
         Implements the Gbe class. This is normally initialised from_device_info.
+
         :param parent: The parent object, normally a CasperFpga instance
         :param name: The name of the device
-        :param position: Optional - defaulted to None
-        :param address: Integer - Optional - defaulted to 0x50000
-        :param length_bytes: Integer - Optional - defaulted to 0x4000
+        :param position: defaulted to None
+        :type position: Optional
+        :param address: defaulted to 0x50000
+        :type address: Optional Integer
+        :param length_bytes: defaulted to 0x4000
+        :type length_bytes: Optional 
+        :type length_bytes: Optional Integer
         :param device_info: Information about the device
-        :return: <nothing>
         """
         super(FortyGbe, self).__init__(
             parent, name, address, length_bytes, device_info)
@@ -30,6 +34,7 @@ class FortyGbe(Gbe):
     def post_create_update(self, raw_device_info):
         """
         Update the device with information not available at creation.
+
         :param raw_device_info: info about this block that may be useful
         """
         super(FortyGbe, self).post_create_update(raw_device_info)
@@ -54,6 +59,7 @@ class FortyGbe(Gbe):
         """
         Process device info and the memory map to get all necessary info 
         and return a TenGbe instance.
+
         :param parent: the parent device, normally an FPGA instance
         :param device_name: the unique device name
         :param device_info: information about this device
@@ -69,7 +75,6 @@ class FortyGbe(Gbe):
         """
 
         :param addr: 
-        :return: 
         """
         return self.parent.transport.read_wishbone(addr)
 
@@ -78,14 +83,12 @@ class FortyGbe(Gbe):
 
         :param addr: 
         :param val: 
-        :return: 
         """
         return self.parent.transport.write_wishbone(addr, val)
 
     def fabric_enable(self):
         """
         Enables 40G core.
-        :return: 
         """
         en_port = self._wbone_rd(self.address + 0x20)
         if en_port >> 16 == 1:
@@ -100,7 +103,6 @@ class FortyGbe(Gbe):
     def fabric_disable(self):
         """
         Disables 40G core.
-        :return: 
         """
         en_port = self._wbone_rd(self.address + 0x20)
         if en_port >> 16 == 0:
@@ -115,6 +117,7 @@ class FortyGbe(Gbe):
     def get_mac(self):
         """
         Retrieve core's configured MAC address from HW.
+
         :return: Mac object
         """
         details = self.get_gbe_core_details()
@@ -123,6 +126,7 @@ class FortyGbe(Gbe):
     def get_ip(self):
         """
         Retrieve core's IP address from HW.
+
         :return: IpAddress object
         """
         ip = self._wbone_rd(self.address + 0x10)
@@ -142,8 +146,7 @@ class FortyGbe(Gbe):
     def set_port(self, port):
         """
 
-        :param port: 
-        :return: 
+        :param port:
         """
         en_port = self._wbone_rd(self.address + 0x20)
         if en_port & (2 ** 16 - 1) == port:
@@ -160,7 +163,6 @@ class FortyGbe(Gbe):
         """
         Get the details of the ethernet core from the device memory map. 
         Updates local variables as well.
-        :return: 
         """
         gbebase = self.address
         gbedata = []
@@ -230,8 +232,10 @@ class FortyGbe(Gbe):
     def get_arp_details(self, port_dump=None):
         """
         Get ARP details from this interface.
-        :param port_dump: list - A list of raw bytes from interface memory;
+
+        :param port_dump: A list of raw bytes from interface memory;
             if not supplied, fetch from hardware.
+        :type port_dump: list
         """
         # TODO
         self.logger.error('Retrieving ARP buffers not yet implemented.')
@@ -241,14 +245,14 @@ class FortyGbe(Gbe):
         """
         Send a request to KATCP to have this tap instance send a multicast
         group join request.
+
         :param ip_str: A dotted decimal string representation of the base
-        mcast IP address.
+            mcast IP address.
         :param group_size: An integer for how many mcast addresses from
-        base to respond to.
+            base to respond to.
         :param port: The UDP port on which you want to receive. Note 
-        that only one port is possible per interface (ie it's global
-        and will override any other port you may have configured).
-        :return:
+            that only one port is possible per interface (ie it's global
+            and will override any other port you may have configured).
         """
         ip = IpAddress(ip_str)
         mask = IpAddress('255.255.255.%i' % (256 - group_size))
@@ -286,7 +290,6 @@ class FortyGbe(Gbe):
         Print nicely formatted ARP info.
         :param refresh:
         :param only_hits:
-        :return:
         """
         self.logger.warn("Retrieving ARP details not yet implemented.")
         raise NotImplementedError
@@ -295,7 +298,6 @@ class FortyGbe(Gbe):
         """
         Retrieves some statistics for this core.
         Needs to have the debug registers compiled-in to the core at 32b.
-        :return:
         """
         rv = {}
         first = self.read_counters()
@@ -377,7 +379,6 @@ class FortyGbe(Gbe):
     def read_txsnap(self):
         """
         Read the TX snapshot embedded in this GbE yellow block
-        :return:
         """
         d = self.snaps['tx'][0].read()['data']
         d1 = self.snaps['tx'][1].read(arm=False)['data']
@@ -387,7 +388,6 @@ class FortyGbe(Gbe):
     def read_rxsnap(self):
         """
         Read the RX snapshot embedded in this GbE yellow block
-        :return:
         """
         d = self.snaps['rx'][0].read()['data']
         d1 = self.snaps['rx'][1].read(arm=False)['data']

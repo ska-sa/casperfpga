@@ -61,13 +61,18 @@ class MS5611_01B:
         return (n_rem ^ 0x0)
 
     def readPress(self,rawtemp=None,dt=None,osr=4096):
-        """ Return air pressure
+        """ 
+        Return air pressure
 
-            E.g.
+        .. code-block:: python
+
             readPress()     # return raw data with osr=4096
             readPress(2007,2366)    # return return compensated data with osr=4096
 
-            To get rawtemp and dt:
+        To get rawtemp and dt:
+        
+        .. code-block:: python
+
             rawtemp, dt = readTemp(raw=True)
         """
         if osr not in self.OSR_PRESS:
@@ -102,9 +107,11 @@ class MS5611_01B:
         return data/100.
 
     def readTemp(self,raw=False,osr=4096):
-        """ Return the temperature
+        """ 
+        Return the temperature
 
-            E.g.
+        .. code-block:: python
+
             readTemp()      # return the temperature
             readTemp(raw=True)  # return the raw temperature data together with dt
         """
@@ -125,18 +132,27 @@ class MS5611_01B:
             return data,dt
 
     def toAltitude(self,bar,temp,P0=1013.25):
-        """ Convert air pressure and temperature to altitude
+        """ 
+        Convert air pressure and temperature to altitude
+        
+        * bar is air pressure, temp is temperature
+        * P0 is air presure at sea level
 
-        bar is air pressure, temp is temperature
-        P0 is air presure at sea level
+        .. code-block:: python
 
-            E.g.
             toAltitude(1000.09,20.07)
 
-            To get raw temp:
-            rawtemp, dt = readTemp(raw=True)
-            To get bar:
-            bar = readPress(rawtemp, dt)
+        To get raw temp:
+
+        .. code-block:: python
+
+           rawtemp, dt = readTemp(raw=True)
+        
+        To get bar:
+        
+        .. code-block:: python
+
+           bar = readPress(rawtemp, dt)
         """
         return ((P0/bar)**(1/5.257)-1)*(temp+273.15)/0.0065
 

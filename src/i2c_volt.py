@@ -3,7 +3,9 @@ import time,numpy as np,logging,struct
 logger = logging.getLogger(__name__)
 
 class LTC2990():
-    """ Quad I2C Voltage, Current and Temperature Monitor """
+    """ 
+    Quad I2C Voltage, Current and Temperature Monitor 
+    """
 
     DICT = dict()
 
@@ -68,23 +70,40 @@ class LTC2990():
         self.addr=addr
 
     def init(self,fmt='celsius',repeat=False,mode1=3,mode0=7):
-        """ Initialise LTC2990
+        """ 
+        Initialise LTC2990
 
-        mode0   Description
-        #0  V1, V2, TR2(Default)
-        #1  V1-V2, TR2
-        #2  V1-V2, V3, V4
-        #3  TR1, V3, V4
-        #4  TR1, V3-V4
-        #5  TR1, TR2
-        #6  V1-V2, V3-V4
-        #7  V1, V2, V3, V4
+        +-------+----------------------+
+        | mode0 | Description          |
+        +-------+----------------------+
+        | 0     | V1, V2, TR2(Default) |
+        +-------+----------------------+
+        | 1     | V1-V2, TR2           |
+        +-------+----------------------+
+        | 2     | V1-V2, V3, V4        |
+        +-------+----------------------+
+        | 3     | TR1, V3, V4          |
+        +-------+----------------------+
+        | 4     | TR1, V3-V4           |
+        +-------+----------------------+
+        | 5     | TR1, TR2             |
+        +-------+----------------------+
+        | 6     | V1-V2, V3-V4         |
+        +-------+----------------------+
+        | 7     | V1, V2, V3, V4       |
+        +-------+----------------------+
 
-        mode1   Description
-        #0  Internal Temperature Only (Default)
-        #1  TR1, V1 or V1-V2 Only per Mode[2:0]
-        #2  TR2, V3 or V3-V4 Only per Mode[2:0]
-        #3  All Measurements per Mode[2:0]
+        +-------+-------------------------------------+
+        | mode1 | Description                         |
+        +-------+-------------------------------------+
+        | 0     | Internal Temperature Only (Default) |
+        +-------+-------------------------------------+
+        | 1     | TR1, V1 or V1-V2 Only per Mode[2:0] |
+        +-------+-------------------------------------+
+        | 2     | TR2, V3 or V3-V4 Only per Mode[2:0] |
+        +-------+-------------------------------------+
+        | 3     | All Measurements per Mode[2:0]      |
+        +-------+-------------------------------------+
         """
 
         if fmt not in ['celsius','kelvin']:
@@ -164,19 +183,23 @@ class LTC2990():
         return data
 
     def readVolt(self,name):
-        """ Read Voltage
+        """ 
+        Read Voltage
 
         Please switch to corresponding modes using init() before measuring voltage.
+        
         Possible options are:
-            vcc
-            v1
-            v2
-            v3
-            v4
-            v1-v2
-            v3-v4
 
-            E.g.
+        * vcc
+        * v1
+        * v2
+        * v3
+        * v4
+        * v1-v2
+        * v3-v4
+
+        .. code-block:: python
+
             readVolt('v1-v2')
         """
         name = name.lower()

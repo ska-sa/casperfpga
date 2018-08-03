@@ -63,6 +63,7 @@ def logl3(msg):
 def find_cal_area(a):
     """
     Given a vector of pass (1) and fail (-1), find contiguous chunks of 'pass'.
+
     :param a: Vector input (list?)
     :return: Tuple - (max_so_far, begin_index, end_index)
     """
@@ -92,14 +93,15 @@ class Qdr(Memory):
                  device_info, ctrlreg_address):
         """
         Make the QDR instance, given a parent, name and info from Simulink.
-        - Most often called from_device_info
+        
+        * Most often called from_device_info
+
         :param parent: Parent device who owns this Qdr
         :param name: A unique device name
         :param address: Address of the Qdr in memory
         :param length_bytes: Length of the Qdr in memory
         :param device_info: Information about this Qdr device
         :param ctrlreg_address:
-        :return: <nothing>
         """
         super(Qdr, self).__init__(name=name, width_bits=32,
                                   address=address, length_bytes=length_bytes)
@@ -136,6 +138,7 @@ class Qdr(Memory):
         """
         Process device info and the memory map to get all necessary info and
         return a Qdr instance.
+
         :param parent:
         :param device_name: the unique device name
         :param device_info: information about this device
@@ -164,8 +167,7 @@ class Qdr(Memory):
 
     def __repr__(self):
         """
-        Return a string representation of the Qdr Class
-        :return:
+        :return: a string representation of the Qdr Class
         """
         return '%s:%s' % (self.__class__.__name__, self.name)
 
@@ -181,9 +183,9 @@ class Qdr(Memory):
     def _control_mem_write(self, value, offset):
         """
         Write to this QDR's control memory on the parent's mem bus
+
         :param value:
         :param offset:
-        :return:
         """
         self.p_write_int(self.control_mem, value,
                          blindwrite=True, word_offset=offset)
@@ -191,14 +193,12 @@ class Qdr(Memory):
     def _disable_fabric(self):
         """
         Disable the fabric write to the QDR.
-        :return:
         """
         self._control_mem_write(1, 2)
 
     def _enable_fabric(self):
         """
         Enable the fabric write to the QDR.
-        :return:
         """
         self._control_mem_write(0, 2)
 
@@ -207,6 +207,7 @@ class Qdr(Memory):
         If input argument is True, add an extra cycle of latency to QDR
         input data. Useful for clock rates <~200.
         If false, remove any extra latency already applied.
+
         :param extra_lat:
         """
         self._control_mem_write(1 if extra_lat else 0, 9)
@@ -225,6 +226,7 @@ class Qdr(Memory):
     def _qdr_delay_clk_step(self, step):
         """
         Steps the output clock by 'step' amount.
+
         :param step:
         """
         if step == 0:
@@ -238,6 +240,7 @@ class Qdr(Memory):
     def _qdr_delay_inout_step(self, inout, bitmask, step):
         """
         Steps all bits in bitmask by 'step' number of taps.
+
         :param bitmask:
         :param step:
         """
@@ -261,6 +264,7 @@ class Qdr(Memory):
     def _qdr_delay_out_step(self, bitmask, step):
         """
         Steps all bits in bitmask by 'step' number of taps.
+
         :param bitmask:
         :param step:
         """
@@ -269,6 +273,7 @@ class Qdr(Memory):
     def _qdr_delay_in_step(self, bitmask, step):
         """
         Steps all bits in bitmask by 'step' number of taps.
+
         :param bitmask:
         :param step:
         :return:
@@ -278,7 +283,6 @@ class Qdr(Memory):
     def _qdr_delay_clk_get(self):
         """
         Gets the current value for the clk delay.
-        :return:
         """
         raw = self.p_read_uint(self.control_mem, word_offset=8)
         if (raw & 0x1f) != ((raw & (0x1f << 5)) >> 5):
@@ -289,10 +293,10 @@ class Qdr(Memory):
     def qdr_cal_check(self, step=-1, quickcheck=True):
         """
         Checks calibration on a qdr. Raises an exception if it failed.
+
         :param step: the current step
         :param quickcheck: if True, return after the first error, else process
         all test vectors before returning
-        :return:
         """
         patfail = 0
         for pattern in CAL_DATA:
@@ -396,7 +400,6 @@ class Qdr(Memory):
         :param out_delays:
         :param clk_delay:
         :param extra_clk:
-        :return:
         """
         assert len(in_delays) == QDR_WORD_WIDTH
         assert len(out_delays) == QDR_WORD_WIDTH
@@ -434,8 +437,8 @@ class Qdr(Memory):
         Calibrates a QDR controller, stepping input delays and (if that fails)
         output delays. Returns True if calibrated, raises a runtime
         exception if it doesn't.
+
         :param fail_hard:
-        :return:
         """
         cal = False
         failure_pattern = 0xffffffff
@@ -474,6 +477,7 @@ class Qdr(Memory):
     def qdr_check_cal_any_good(self, current_step, checkoffset=2**22):
         """
         Checks calibration on a qdr.
+
         :param current_step: what is the current output delay step
         :param checkoffset: where to write the test data
         :return: True if *any* of the bits were good
@@ -522,10 +526,10 @@ class Qdr(Memory):
         Step output delays until some of the bits reach their eye.
         Then step input delays
         Returns True if calibrated, raises a runtime exception if it doesn't.
+
         :param fail_hard: throw an exception on cal fail if True, else
-        return False
+            return False
         :param min_eye_width: What is the minimum eye width we'll accept?
-        :return:
         """
         def _find_out_delay(add_extra_latency=False):
             # reset all delays and set extra latency to zero.

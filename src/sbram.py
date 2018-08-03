@@ -27,6 +27,7 @@ class Sbram(Memory):
         """
         Process device info and the memory map to get all necessary info
         and return a Sbram instance.
+        
         :param parent: the CasperFpga that hosts this SBRAM
         :param device_name: the unique device name
         :param device_info: information about this device

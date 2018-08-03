@@ -61,7 +61,7 @@ class UnknownTransportError(Exception):
 
 class CasperFpga(object):
     """
-    A FPGA host board that has a CASPER design running on it. Or will soon have.
+    testA FPGA host board that has a CASPER design running on it. Or will soon have.
     """
     def __init__(self, *args, **kwargs):
         """
@@ -138,6 +138,7 @@ class CasperFpga(object):
     def choose_transport(self, host_ip):
         """
         Test whether a given host is a katcp client or a skarab
+
         :param host_ip:
         :return:
         """
@@ -166,6 +167,7 @@ class CasperFpga(object):
     def connect(self, timeout=None):
         """
         Attempt to connect to a CASPER Hardware Target
+
         :param timeout: Integer value in seconds
         :return:
         """
@@ -174,6 +176,7 @@ class CasperFpga(object):
     def disconnect(self):
         """
         Attempt to disconnect from a CASPER Hardware Target
+
         :return:
         """
         return self.transport.disconnect()
@@ -186,6 +189,7 @@ class CasperFpga(object):
         """
         Generic function to carry out a sanity check on the logging_level
         used to setup the logger
+
         :param log_level: String input defining the logging_level:
                              Level      | Numeric Value
                              --------------------------
@@ -209,6 +213,7 @@ class CasperFpga(object):
     def read(self, device_name, size, offset=0, **kwargs):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
+
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
@@ -553,7 +558,7 @@ class CasperFpga(object):
 
     def get_system_information(self, filename=None, fpg_info=None):
         """
-        Get information about the design running on the FPGA.
+        balhGet information about the design running on the FPGA.
         If filename is given, get it from file, otherwise query the 
             host via KATCP.
         :param filename: fpg filename

@@ -27,3 +27,6 @@
 
 # pycharm files
 .idea/
+
+# ignore docs build directory
+docs/_build/

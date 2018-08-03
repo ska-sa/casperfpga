@@ -9,7 +9,7 @@ logging.getLogger(__name__).addHandler(logging.NullHandler())
 class HMCAD1511(WishBoneDevice):
 	"""
 	Control HMCAD1511 via wb_adc16_controller
-	- This is an ADC IC on the SNAP Hardware Platform
+		This is an ADC IC on the SNAP Hardware Platform
 	"""
 
 	# HMCAD1511 does not provide any way of register readback for
@@ -38,7 +38,6 @@ class HMCAD1511(WishBoneDevice):
 	STATE_3WIRE_STOP = 3
 
 	# Register address
-
 	DICT = [None] * (0x56+1)
 	
 	DICT[0x00] = {	'rst' : 0b1 << 0,}
@@ -147,17 +146,23 @@ class HMCAD1511(WishBoneDevice):
 	def init(self,numChannel=4,clkDivide=1,lowClkFreq=False):
 		"""
 		Reset and initialize ADCs
-		:param numChannel: Integer - Number of channels for the ADC
-						   - numChannel=1	--	8 ADC cores per channel
-						   - numChannel=2	--	4 ADC cores per channel
-						   - numChannel=4	--	2 ADC cores per channel
-		:param clkDivide: Integer - Clock divide parameter 
-						  - Availale clock divide factors: 1, 2, 4, and 8
-		:param lowClkFreq: Boolean - Activate lowClkFreq when
-						  -  Single channel  Fs < 240 MHz
-							 Dual channel    Fs < 120 MHz
-							 Quad channel    Fs < 60 MHz
-		:return: None
+
+		:param numChannel: Number of channels for the ADC
+		
+						   * numChannel=1	--	8 ADC cores per channel
+						   * numChannel=2	--	4 ADC cores per channel
+						   * numChannel=4	--	2 ADC cores per channel
+		:type numChannel: Integer
+		:param clkDivide: Clock divide parameter 
+
+						  * Availalbe clock divide factors: 1, 2, 4, and 8
+		:type clkDivide: Integer
+		:param lowClkFreq: Activate lowClkFreq when
+
+						   * Single channel  Fs < 240 MHz
+						   * Dual channel    Fs < 120 MHz
+						   * Quad channel    Fs < 60 MHz
+		:type lowClkFreq: Boolean
 		"""
 
 		self.reset()
@@ -192,9 +197,9 @@ class HMCAD1511(WishBoneDevice):
 	def write(self, data, addr):
 		"""
 		Write 32-bit data to a 16-bit address
+
 		:param data: 32-bit integer data
 		:param addr: 16-bit integer address
-		:return: None
 		"""
 		data = data & 0xffff
 		addr = addr & 0xff
@@ -223,13 +228,16 @@ class HMCAD1511(WishBoneDevice):
 		"""
 		Test ADC LVDS
 		
-		Set LVDS test patterns
-		 E.g.	test('off')
-		 	test('en_ramp')					Ramp pattern 0-255
-		 	test('dual_custom_pat', 0xabcd, 0xdcba)	Alternate between two custom patterns
-		 	test('single_custom_pat', 0xaaaa)		Repeat a custom pattern
-		 	test('pat_deskew')				Deskew pattern (10101010)
-		 	test('pat_sync')				Sync pattern (11110000)
+		Set LVDS test patterns:
+	
+		.. code-block:: python
+
+			test('off')
+			test('en_ramp')					# Ramp pattern 0-255
+			test('dual_custom_pat', 0xabcd, 0xdcba)	# Alternate between two custom patterns
+			test('single_custom_pat', 0xaaaa)		# Repeat a custom pattern
+			test('pat_deskew')				# Deskew pattern (10101010)
+			test('pat_sync')				# Sync pattern (11110000)
 		"""
 
 		if mode == 'en_ramp':
@@ -284,7 +292,9 @@ class HMCAD1511(WishBoneDevice):
 	
 		Fine gain control (parameters in dB), input gain rounded towards 0 dB
 		Fine gain range for HMCAD1511: -0.0670dB ~ 0.0665dB
-		E.g.
+		
+		.. code-block:: python
+
 			fGain([-0.06, -0.04, -0.02, 0, 0, 0.02, 0.04, 0.06])
 		"""
 
@@ -339,19 +349,22 @@ class HMCAD1511(WishBoneDevice):
 		"""
 		Set interleaving mode and clock divide factor
 		
-		Available Interleaving mode
-		numChannel=1	--	8 ADC cores per channel
-		numChannel=2	--	4 ADC cores per channel
-		numChannel=4	--	2 ADC cores per channel
+		Available Interleaving mode:
 
-		Activate lowClkFreq when
-			Single channel  Fs < 240 MHz
-			Dual channel    Fs < 120 MHz
-			Quad channel    Fs < 60 MHz
+			* numChannel=1	--	8 ADC cores per channel
+			* numChannel=2	--	4 ADC cores per channel
+			* numChannel=4	--	2 ADC cores per channel
 
-		Availale clock divide factors: 1, 2, 4, and 8
+		Activate lowClkFreq when:
+			
+			* Single channel  Fs < 240 MHz
+			* Dual channel    Fs < 120 MHz
+			* Quad channel    Fs < 60 MHz
 
-		E.g.
+		Available clock divide factors: 1, 2, 4, and 8
+
+		.. code-block:: python
+
 			setOperatingMode(1)
 			setOperatingMode(4, 4)
 		"""
@@ -396,10 +409,11 @@ class HMCAD1511(WishBoneDevice):
 
 	def selectInput(self, inputs):
 		"""
-		Input select
+		Input select.
 
-		E.g.
-		 	selectInput([1,2,3,4])	(in four channel mode)
+		.. code-block:: python 
+
+			selectInput([1,2,3,4])	(in four channel mode)
 			selectInput([1,1,1,1])	(in one channel mode)
 		"""
 
@@ -440,7 +454,7 @@ class HMCAD1511(WishBoneDevice):
 class HMCAD1520(HMCAD1511):
 	"""
 	Control HMCAD1520 via wb_adc16_controller
-	- This ADC inherits functionality from hte HMCAD1511 class implementation
+		This ADC inherits functionality from hte HMCAD1511 class implementation
 	"""
 
 	def __init__(self, interface, controller_name, csn=0xff):
@@ -472,25 +486,29 @@ class HMCAD1520(HMCAD1511):
 		"""
 		Set operating mode and clock divide factor
 
-		Available operating mode
-		numChannel=1
-		numChannel=2
-		numChannel=4
+		Available operating mode:
+			
+			* numChannel=1
+			* numChannel=2
+			* numChannel=4
 
 		Available resolutions:
-		resolution=8
-		resolution=12
-		resolution=14
+			
+			* resolution=8
+			* resolution=12
+			* resolution=14
 
-		Availale clock divide factors: 1, 2, 4, and 8
+		Available clock divide factors: 1, 2, 4, and 8
 
-		Activate lowClkFreq when
-			High speed, single channel      Fs < 240 MHz
-			High speed, dual channel	Fs < 120 MHz
-			High speed, quad channel	Fs < 60 MHz
-			Precision mode			Fs < 30 MHz
+		Activate lowClkFreq when: 
+			
+			* High speed, single channel      Fs < 240 MHz
+			* High speed, dual channel	Fs < 120 MHz
+			* High speed, quad channel	Fs < 60 MHz
+			* Precision mode			Fs < 30 MHz
 
-		E.g.
+		.. code-block:: python
+
 			setOperatingMode(1, 4, False, 8)	# 1 channel, 8-bit resolution, 8-bit width
 			setOperatingMode(1, 4, False, 12)       # 1 channel, 12-bit resolution, 12-bit width
 			setOperatingMode(4, 1, False, 14)       # 4 channels, 14-bit resolution, 16-bit width. (Currently not supported)

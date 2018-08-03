@@ -3,33 +3,35 @@ import time,logging
 logger = logging.getLogger(__name__)
 
 class Si7051():
-    """ Si7051 I2C Temperature Sensors """
+    """ 
+    Si7051 I2C Temperature Sensors 
+    """
 
-    # Write and read user register for resolution config and VDD status checking
+    #:  Write and read user register for resolution config and VDD status checking
     cmdUserRegW = 0xe6
     cmdUserRegR = 0xe7
 
-    # Measure temperature
+    #: Measure temperature
     cmdMeasure = 0xe3 # Hold Master Mode
     cmdMeasureN = 0xf3 # No Hold Master Mode
 
-    # Read Serial Number
+    #: Read Serial Number
     cmdSNA = [0xfa,0x0f]
     cmdSNB = [0xfc,0xc9]
 
-    # Read Firmware Revision
+    #: Read Firmware Revision
     cmdFirmRev = [0x84,0xb8]
 
-    # CRC generator polynomial and initial value
+    #: CRC generator polynomial and initial value
     crcPoly = 0b100110001
     crcInitVal = 0
 
-    # Resolution related numbers
+    #: Resolution related numbers
     resBase = 11
     resTop = 14
     resD1Mask = 1 << 7
     resD0Mask = 1 << 0
-    #          11 bit,     12 bit,     13 bit,     14 bit
+    #:          11 bit,     12 bit,     13 bit,     14 bit
     resList = [0b00000000, 0b00000001, 0b10000000, 0b10000001]
 
     strFirmRev = {0xff:'Firmware version 1.0', 0x20:'Firmware version 2.0'}
@@ -82,10 +84,11 @@ class Si7051():
     def _setResolution(self,resolution):
         """
         Possible resolutions are:
-        11 bit
-        12 bit
-        13 bit
-        14 bit
+
+        * 11 bit
+        * 12 bit
+        * 13 bit
+        * 14 bit
         """
         if not isinstance(resolution,int):
             msg = 'Resolution must be an integer'
