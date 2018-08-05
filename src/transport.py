@@ -8,6 +8,7 @@ class Transport(object):
     def __init__(self, **kwargs):
         """
         Initialise the CasperFpga object
+
         :param host: 
         """
         self.host, self.bitstream = get_hostname(**kwargs)
@@ -18,14 +19,14 @@ class Transport(object):
     def connect(self, timeout=None):
         """
         
-        :param timeout: 
-        :return: 
+        :param timeout:
         """
         pass
 
     def is_running(self):
         """
         Is the FPGA programmed and running?
+
         :return: True or False
         """
         raise NotImplementedError
@@ -33,14 +34,14 @@ class Transport(object):
     def is_connected(self):
         """
 
-        :return:
         """
         raise NotImplementedError
 
     def test_connection(self):
         """
         Write to and read from the scratchpad to test the connection to the FPGA
-        - i.e. Is the casper FPGA connected?
+            i.e. Is the casper FPGA connected?
+
         :return: Boolean - True/False - Success/Fail
         """
         return self.is_connected()
@@ -48,6 +49,7 @@ class Transport(object):
     def ping(self):
         """
         Use the 'watchdog' request to ping the FPGA host.
+
         :return: True or False
         """
         raise NotImplementedError
@@ -55,7 +57,6 @@ class Transport(object):
     def disconnect(self):
         """
         
-        :return: 
         """
         pass
 
@@ -64,8 +65,7 @@ class Transport(object):
         
         :param device_name: 
         :param size: 
-        :param offset: 
-        :return: 
+        :param offset:
         """
         raise NotImplementedError
 
@@ -74,14 +74,14 @@ class Transport(object):
         
         :param device_name: 
         :param data: 
-        :param offset: 
-        :return: 
+        :param offset:
         """
         raise NotImplementedError
 
     def listdev(self):
         """
         Get a list of the memory bus items in this design.
+
         :return: a list of memory devices
         """
         return self.memory_devices.keys()
@@ -89,14 +89,12 @@ class Transport(object):
     def deprogram(self):
         """
         Deprogram the FPGA connected by this transport
-        :return: 
         """
         raise NotImplementedError
 
     def set_igmp_version(self, version):
         """
-        :param version
-        :return: 
+        :param version:
         """
         pass
 
@@ -104,14 +102,15 @@ class Transport(object):
                                   wait_complete=True, skip_verification=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
-        - Implemented in the child
+
+            - Implemented in the child
+
         :param filename: the file to upload
         :param port: the port to use on the rx end, -1 means a random port
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return
-        after upload if False
+            after upload if False
         :param skip_verification: don't verify the image after uploading it
-        :return:
         """
         raise NotImplementedError
 
@@ -119,28 +118,26 @@ class Transport(object):
                         timeout=30, wait_complete=True):
         """
         Upload the provided binary file to the flash filesystem.
+
         :param binary_file: filename of the binary file to upload
         :param port: host-side port, -1 means a random port will be used
         :param force_upload: upload the binary even if it already exists
-        on the host
+            on the host
         :param timeout: upload timeout, in seconds
         :param wait_complete: wait for the upload to complete, or just
-        kick it off
-        :return:
+            kick it off
         """
         raise NotImplementedError
 
     def get_system_information_from_transport(self):
         """
 
-        :return:
         """
         return self.bitstream, None
 
     def post_get_system_information(self):
         """
         Cleanup run after get_system_information
-        :return: 
         """
         pass
 

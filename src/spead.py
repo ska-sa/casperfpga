@@ -20,13 +20,13 @@ class SpeadPacket(object):
                                 required_numheaders=None):
         """
         Decode a 64-bit word as a SPEAD header.
+
         :param word64: A 64-bit word
         :param required_version: the specific SPEAD version required, an integer
         :param required_flavour:  the specific SPEAD flavour required as 
             a string, e.g. '64,48'
         :param required_numheaders: the number of headers (NOT incl. the 
             magic number) expected, an integer
-        :return:
         """
         magic_number = word64 >> 56
         spead_version = (word64 >> 48) & 0xff
@@ -71,6 +71,7 @@ class SpeadPacket(object):
     def find_spead_header(data64, expected_version=4, expected_flavour='64,48'):
         """
         Find a SPEAD header in the given list of 64-bit data
+
         :param data64: a list of data
         :param expected_version: the version wanted
         :param expected_flavour: the flavour wanted
@@ -88,6 +89,7 @@ class SpeadPacket(object):
     def decode_item_pointer(header64, id_bits, address_bits):
         """
         Decode a 64-bit header word in the id and data/pointer portions
+
         :param header64: the 64-bit word
         :param id_bits: how many bits are used for the ID
         :param address_bits: how many bits are used for the data/pointer
@@ -105,11 +107,11 @@ class SpeadPacket(object):
                        expected_flavour=None, expected_hdrs=None):
         """
         Decode the SPEAD headers given some packet data.
+
         :param data: a list of packet data
         :param expected_version: an explicit version, if required
         :param expected_flavour: an explicit flavour, if required
         :param expected_hdrs: explicit number of hdrs, if required
-        :return: 
         """
         main_header = SpeadPacket.decode_spead_magic_word(
             data[0], required_version=expected_version,
@@ -230,6 +232,7 @@ class SpeadProcessor(object):
                  packet_length=None, num_headers=None):
         """
         Create a SpeadProcessor
+        
         :param version
         :param flavour
         :param packet_length

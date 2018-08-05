@@ -15,8 +15,8 @@ LOGGER = logging.getLogger(__name__)
 def choose_processor(image_file):
     """
     Given a file, decide which ImageProcessor class to use
+
     :param image_file:
-    :return:
     """
     file_extension = os.path.splitext(image_file)[1]
     if file_extension == '.fpg':
@@ -44,9 +44,8 @@ class ImageProcessor(object):
         self.extract = extract_to_disk
 
     def make_bin(self):
-        """
-        Return the name of a produced .bin file
-        :return:
+        """ 
+        :return: name of a produced .bin file
         """
         raise NotImplementedError
 
@@ -67,8 +66,7 @@ class FpgProcessor(ImageProcessor):
     """
     def make_bin(self):
         """
-        Return the name of a produced .bin file
-        :return:
+        :return: the name of a produced .bin file
         """
         fpg_file = open(self.image_file, 'r')
         fpg_contents = fpg_file.read()
@@ -191,7 +189,6 @@ class BinProcessor(ImageProcessor):
     def make_bin(self):
         """
         Make a .bin file and return the name.
-        :return:
         """
         fptr = open(self.image_file, 'rb')
         bitstream = fptr.read()
@@ -226,6 +223,7 @@ class BinProcessor(ImageProcessor):
         Reorders the bytes in a given binary bitstream to make it compatible for
         programming the SKARAB. This function only handles the case where
         the two bytes making up a word need to be swapped.
+
         :param bitstream: binary bitstream to reorder
         :return: reordered_bitstream
         """
@@ -240,9 +238,9 @@ class BinProcessor(ImageProcessor):
 def upload_to_ram_progska(filename, fpga_list):
     """
     Use the progska C extension to upload an image to a list of skarabs
+
     :param filename: the fpg to upload
     :param fpga_list: a list of the CasperFpga objects
-    :return:
     """
     upload_start_time = time.time()
     binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
@@ -273,6 +271,7 @@ def check_ufp_bitstream(filename):
     Utility to check bitstream of .ufp file used to program/configure
     Spartan Flash.
     Also removes all escape characters, i.e. \r, \n
+
     :param filename: of the input .ufp file
     :return: tuple - (True/False, bitstream)
     """
@@ -296,8 +295,8 @@ def check_ufp_bitstream(filename):
 def analyse_ufp_bitstream(bitstream):
     """
     This method analyses the input .ufp file to determine the
-    number of pages to program,
-    and the number of sectors to erase
+    number of pages to program, and the number of sectors to erase
+
     :param bitstream: Input .ufp file to be written to the SPARTAN 3AN FPGA
     :return: Tuple - (num_pages, num_sectors)
     """
@@ -447,9 +446,10 @@ def analyse_file_virtex_flash(filename):
     """
     This method analyses the input .bin file to determine the number of
     words to program, and the number of blocks to erase
+
     :param filename: Input .bin to be written to the Virtex FPGA
     :return: Tuple - num_words (in file), num_memory_blocks (required to
-    hold this file)
+        hold this file)
     """
     # File contents are in bytes
     fptr = open(filename, 'rb')
@@ -547,8 +547,7 @@ def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
 
     :param fpgas:
     :param timeout:
-    :param upload_time
-    :return:
+    :param upload_time:
     """
     # now wait for the last one to come up
     # last_fpga = fpgas[-1]

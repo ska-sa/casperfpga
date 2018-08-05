@@ -508,6 +508,7 @@ class Qdr(Memory):
         use this as the start point for the input delay scan. This makes life
         a little simpler than letting the input and output delays of all bits
         be completely independent.
+        
         If no good bits are found, that's fine, we'll just leave the output
         delay set to the maximum allowed
         """

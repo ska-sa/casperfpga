@@ -21,7 +21,6 @@ class TenGbe(Memory, Gbe):
         :param address:
         :param length_bytes:
         :param device_info: Information about this device
-        :return:
         """
         Memory.__init__(self, name, 32, address, length_bytes)
         Gbe.__init__(self, parent, name, address, length_bytes, device_info)
@@ -29,6 +28,7 @@ class TenGbe(Memory, Gbe):
     def post_create_update(self, raw_device_info):
         """
         Update the device with information not available at creation.
+
         :param raw_device_info: info about this block that may be useful
         """
         super(TenGbe, self).post_create_update(raw_device_info)
@@ -49,14 +49,12 @@ class TenGbe(Memory, Gbe):
     def read_txsnap(self):
         """
         Read the TX snapshot embedded in this TenGBE yellow block
-        :return: 
         """
         return self.snaps['tx'].read(timeout=10)['data']
 
     def read_rxsnap(self):
         """
         Read the RX snapshot embedded in this TenGBE yellow block
-        :return: 
         """
         return self.snaps['rx'].read(timeout=10)['data']
 
@@ -119,6 +117,7 @@ class TenGbe(Memory, Gbe):
     def tap_start(self, restart=False):
         """
         Program a 10GbE device and start the TAP driver.
+
         :param restart: stop before starting
         """
         if len(self.name) > 8:
@@ -194,7 +193,6 @@ class TenGbe(Memory, Gbe):
     def tap_arp_reload(self):
         """
         Have the tap driver reload its ARP table right now.
-        :return:
         """
         reply, _ = self.parent.transport.katcprequest(
             name="tap-arp-reload", request_timeout=-1,
@@ -207,10 +205,11 @@ class TenGbe(Memory, Gbe):
         """
         Send a request to KATCP to have this tap instance send a multicast
         group join request.
+
         :param ip_str: A dotted decimal string representation of the base
-        mcast IP address.
+            mcast IP address.
         :param group_size: An integer for how many mcast addresses from
-        base to respond to.
+            base to respond to.
         """
         # mask = 255*(2 ** 24) + 255*(2 ** 16) + 255*(2 ** 8) + (255-group_size)
         # self.parent.write_int(self.name, str2ip(ip_str), offset=12)
@@ -233,8 +232,9 @@ class TenGbe(Memory, Gbe):
     def multicast_remove(self, ip_str):
         """
         Send a request to be removed from a multicast group.
+
         :param ip_str: A dotted decimal string representation of the base
-        mcast IP address.
+            mcast IP address.
         """
         try:
             reply, _ = self.parent.transport.katcprequest(
@@ -261,7 +261,6 @@ class TenGbe(Memory, Gbe):
         """
 
         :param target_val:
-        :return:
         """
         # 0x20 or (0x20 / 4)? What was the /4 for?
         word_bytes = list(
@@ -275,21 +274,18 @@ class TenGbe(Memory, Gbe):
     def fabric_enable(self):
         """
         Enable the core fabric
-        :return:
         """
         self._fabric_enable_disable(1)
 
     def fabric_disable(self):
         """
         Enable the core fabric
-        :return:
         """
         self._fabric_enable_disable(0)
 
     def fabric_soft_reset_toggle(self):
         """
         Toggle the fabric soft reset
-        :return:
         """
         word_bytes = struct.unpack('>4B', self.parent.read(self.name, 4, 0x20))
         word_bytes = list(word_bytes)
@@ -310,60 +306,65 @@ class TenGbe(Memory, Gbe):
         """
         Get 10GbE core details.
         assemble struct for header stuff...
-        0x00 - 0x07: MAC address
-        0x08 - 0x0b: Not used
-        0x0c - 0x0f: Gateway addr
-        0x10 - 0x13: IP addr
-        0x14 - 0x17: Not assigned
-        0x18 - 0x1b: Buffer sizes
-        0x1c - 0x1f: Not assigned
-        0x20    :    Soft reset (bit 0)
-        0x21    :    Fabric enable (bit 0)
-        0x22 - 0x23: Fabric port
-        0x24 - 0x27: XAUI status (bit 2,3,4,5 = lane sync, bit6 = chan_bond)
-        0x28 - 0x2b: PHY config
-        0x28    :    RX_eq_mix
-        0x29    :    RX_eq_pol
-        0x2a    :    TX_preemph
-        0x2b    :    TX_diff_ctrl
-        0x30 - 0x33: Multicast IP RX base address
-        0x34 - 0x37: Multicast IP mask
-        0x38 - 0x3b: Subnet mask
-        0x1000  :    CPU TX buffer
-        0x2000  :    CPU RX buffer
-        0x3000  :    ARP tables start
-        word_width = 8
-        self.add_field(Bitfield.Field('mac0', 0,            word_width,                 0, 0 * word_width))
-        self.add_field(Bitfield.Field('mac1', 0,            word_width,                 0, 1 * word_width))
-        self.add_field(Bitfield.Field('mac2', 0,            word_width,                 0, 2 * word_width))
-        self.add_field(Bitfield.Field('mac3', 0,            word_width,                 0, 3 * word_width))
-        self.add_field(Bitfield.Field('mac4', 0,            word_width,                 0, 4 * word_width))
-        self.add_field(Bitfield.Field('mac5', 0,            word_width,                 0, 5 * word_width))
-        self.add_field(Bitfield.Field('mac6', 0,            word_width,                 0, 6 * word_width))
-        self.add_field(Bitfield.Field('mac7', 0,            word_width,                 0, 7 * word_width))
-        self.add_field(Bitfield.Field('unused_1', 0,        (0x0c - 0x08) * word_width, 0, 8 * word_width))
-        self.add_field(Bitfield.Field('gateway_ip0', 0,     word_width,                 0, 0x0c * word_width))
-        self.add_field(Bitfield.Field('gateway_ip1', 0,     word_width,                 0, 0x0d * word_width))
-        self.add_field(Bitfield.Field('gateway_ip2', 0,     word_width,                 0, 0x0e * word_width))
-        self.add_field(Bitfield.Field('gateway_ip3', 0,     word_width,                 0, 0x0f * word_width))
-        self.add_field(Bitfield.Field('ip0', 0,             word_width,                 0, 0x10 * word_width))
-        self.add_field(Bitfield.Field('ip1', 0,             word_width,                 0, 0x11 * word_width))
-        self.add_field(Bitfield.Field('ip2', 0,             word_width,                 0, 0x12 * word_width))
-        self.add_field(Bitfield.Field('ip3', 0,             word_width,                 0, 0x13 * word_width))
-        self.add_field(Bitfield.Field('unused_2', 0,        (0x18 - 0x14) * word_width, 0, 0x14 * word_width))
-        self.add_field(Bitfield.Field('buf_sizes', 0,       (0x1c - 0x18) * word_width, 0, 0x18 * word_width))
-        self.add_field(Bitfield.Field('unused_3', 0,        (0x20 - 0x1c) * word_width, 0, 0x1c * word_width))
-        self.add_field(Bitfield.Field('soft_reset', 2,      1,                          0, 0x20 * word_width))
-        self.add_field(Bitfield.Field('fabric_enable', 2,   1,                          0, 0x21 * word_width))
-        self.add_field(Bitfield.Field('port', 0,            (0x24 - 0x22) * word_width, 0, 0x22 * word_width))
-        self.add_field(Bitfield.Field('xaui_status', 0,     (0x28 - 0x24) * word_width, 0, 0x24 * word_width))
-        self.add_field(Bitfield.Field('rx_eq_mix', 0,       word_width,                 0, 0x28 * word_width))
-        self.add_field(Bitfield.Field('rq_eq_pol', 0,       word_width,                 0, 0x29 * word_width))
-        self.add_field(Bitfield.Field('tx_preempth', 0,     word_width,                 0, 0x2a * word_width))
-        self.add_field(Bitfield.Field('tx_diff_ctrl', 0,    word_width,                 0, 0x2b * word_width))
-        #self.add_field(Bitfield.Field('buffer_tx', 0,       0x1000 * word_width,        0, 0x1000 * word_width))
-        #self.add_field(Bitfield.Field('buffer_rx', 0,       0x1000 * word_width,        0, 0x2000 * word_width))
-        #self.add_field(Bitfield.Field('arp_table', 0,       0x1000 * word_width,        0, 0x3000 * word_width))
+
+        .. code-block:: python
+
+            \"\"\"
+            0x00 - 0x07: MAC address
+            0x08 - 0x0b: Not used
+            0x0c - 0x0f: Gateway addr
+            0x10 - 0x13: IP addr
+            0x14 - 0x17: Not assigned
+            0x18 - 0x1b: Buffer sizes
+            0x1c - 0x1f: Not assigned
+            0x20    :    Soft reset (bit 0)
+            0x21    :    Fabric enable (bit 0)
+            0x22 - 0x23: Fabric port
+            0x24 - 0x27: XAUI status (bit 2,3,4,5 = lane sync, bit6 = chan_bond)
+            0x28 - 0x2b: PHY config
+            0x28    :    RX_eq_mix
+            0x29    :    RX_eq_pol
+            0x2a    :    TX_preemph
+            0x2b    :    TX_diff_ctrl
+            0x30 - 0x33: Multicast IP RX base address
+            0x34 - 0x37: Multicast IP mask
+            0x38 - 0x3b: Subnet mask
+            0x1000  :    CPU TX buffer
+            0x2000  :    CPU RX buffer
+            0x3000  :    ARP tables start
+            word_width = 8
+            \"\"\"
+            self.add_field(Bitfield.Field('mac0', 0,            word_width,                 0, 0 * word_width))
+            self.add_field(Bitfield.Field('mac1', 0,            word_width,                 0, 1 * word_width))
+            self.add_field(Bitfield.Field('mac2', 0,            word_width,                 0, 2 * word_width))
+            self.add_field(Bitfield.Field('mac3', 0,            word_width,                 0, 3 * word_width))
+            self.add_field(Bitfield.Field('mac4', 0,            word_width,                 0, 4 * word_width))
+            self.add_field(Bitfield.Field('mac5', 0,            word_width,                 0, 5 * word_width))
+            self.add_field(Bitfield.Field('mac6', 0,            word_width,                 0, 6 * word_width))
+            self.add_field(Bitfield.Field('mac7', 0,            word_width,                 0, 7 * word_width))
+            self.add_field(Bitfield.Field('unused_1', 0,        (0x0c - 0x08) * word_width, 0, 8 * word_width))
+            self.add_field(Bitfield.Field('gateway_ip0', 0,     word_width,                 0, 0x0c * word_width))
+            self.add_field(Bitfield.Field('gateway_ip1', 0,     word_width,                 0, 0x0d * word_width))
+            self.add_field(Bitfield.Field('gateway_ip2', 0,     word_width,                 0, 0x0e * word_width))
+            self.add_field(Bitfield.Field('gateway_ip3', 0,     word_width,                 0, 0x0f * word_width))
+            self.add_field(Bitfield.Field('ip0', 0,             word_width,                 0, 0x10 * word_width))
+            self.add_field(Bitfield.Field('ip1', 0,             word_width,                 0, 0x11 * word_width))
+            self.add_field(Bitfield.Field('ip2', 0,             word_width,                 0, 0x12 * word_width))
+            self.add_field(Bitfield.Field('ip3', 0,             word_width,                 0, 0x13 * word_width))
+            self.add_field(Bitfield.Field('unused_2', 0,        (0x18 - 0x14) * word_width, 0, 0x14 * word_width))
+            self.add_field(Bitfield.Field('buf_sizes', 0,       (0x1c - 0x18) * word_width, 0, 0x18 * word_width))
+            self.add_field(Bitfield.Field('unused_3', 0,        (0x20 - 0x1c) * word_width, 0, 0x1c * word_width))
+            self.add_field(Bitfield.Field('soft_reset', 2,      1,                          0, 0x20 * word_width))
+            self.add_field(Bitfield.Field('fabric_enable', 2,   1,                          0, 0x21 * word_width))
+            self.add_field(Bitfield.Field('port', 0,            (0x24 - 0x22) * word_width, 0, 0x22 * word_width))
+            self.add_field(Bitfield.Field('xaui_status', 0,     (0x28 - 0x24) * word_width, 0, 0x24 * word_width))
+            self.add_field(Bitfield.Field('rx_eq_mix', 0,       word_width,                 0, 0x28 * word_width))
+            self.add_field(Bitfield.Field('rq_eq_pol', 0,       word_width,                 0, 0x29 * word_width))
+            self.add_field(Bitfield.Field('tx_preempth', 0,     word_width,                 0, 0x2a * word_width))
+            self.add_field(Bitfield.Field('tx_diff_ctrl', 0,    word_width,                 0, 0x2b * word_width))
+            #self.add_field(Bitfield.Field('buffer_tx', 0,       0x1000 * word_width,        0, 0x1000 * word_width))
+            #self.add_field(Bitfield.Field('buffer_rx', 0,       0x1000 * word_width,        0, 0x2000 * word_width))
+            #self.add_field(Bitfield.Field('arp_table', 0,       0x1000 * word_width,        0, 0x3000 * word_width))
         """
         data = self.parent.read(self.name, 16384)
         data = list(struct.unpack('>16384B', data))
@@ -415,7 +416,9 @@ class TenGbe(Memory, Gbe):
     def get_arp_details(self, port_dump=None):
         """
         Get ARP details from this interface.
-        :param port_dump: list - A list of raw bytes from interface memory.
+
+        :param port_dump: A list of raw bytes from interface memory.
+        :type port_dump: list
         """
         if port_dump is None:
             port_dump = self.parent.read(self.name, 16384)
@@ -431,8 +434,8 @@ class TenGbe(Memory, Gbe):
     def get_cpu_details(self, port_dump=None):
         """
         Read details of the CPU buffers.
+
         :param port_dump:
-        :return:
         """
         if port_dump is None:
             port_dump = self.parent.read(self.name, 16384)

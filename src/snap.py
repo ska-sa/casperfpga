@@ -36,6 +36,7 @@ class Snap(Memory):
         """
         Process device info and the memory map to get all necessary
         info and return a Snap instance.
+
         :param parent: the Casperfpga on which this snap is found
         :param device_name: the unique device name
         :param device_info: information about this device
@@ -62,7 +63,8 @@ class Snap(Memory):
     def post_create_update(self, raw_system_info):
         """
         Update the device with information not available at creation.
-        @param raw_system_info: dictionary of device information
+
+        :param raw_system_info: dictionary of device information
         """
         # is this snap block inside a bitsnap block?
         for dev_name, dev_info in raw_system_info.items():
@@ -77,9 +79,10 @@ class Snap(Memory):
     def update_from_bitsnap(self, info):
         """
         Update this device with information from a bitsnap container.
+
         :type self: Snap
         :param info: device information dictionary containing Simulink block
-        information
+            information
         """
         clean_fields = bitfield.clean_fields
         self.block_info = info
@@ -129,6 +132,7 @@ class Snap(Memory):
     def _link_control_registers(self, raw_device_info):
         """
         Link available registers to this snapshot block's control registers.
+
         :param raw_device_info: Information about the device in raw form
         """
         for controlreg in self.control_registers.values():
@@ -169,10 +173,15 @@ class Snap(Memory):
             circular_capture=False):
         """
         Arm the snapshot block.
-        :param man_trig: Boolean
-        :param man_valid: Boolean
-        :param offset: Integer
-        :param circular_capture: Boolean
+
+        :param man_trig:
+        :type man_trig: Boolean
+        :param man_valid:
+        :type man_valid: Boolean
+        :param offset:
+        :type offset: Integer
+        :param circular_capture:
+        :type circular_capture: Boolean
         """
         ctrl_reg = self.control_registers['control']['register']
         if offset >= 0:
@@ -185,6 +194,7 @@ class Snap(Memory):
     def print_snap(self, limit_lines=-1, **kwargs):
         """
         Read and print(a snap block.)
+
         :param limit_lines: limit the number of lines to print
         :param offset: trigger offset
         :param man_valid: force valid to be true
@@ -192,7 +202,6 @@ class Snap(Memory):
         :param circular_capture: enable circular capture
         :param timeout: time out after this many seconds
         :param read_nowait: do not wait for the snap to finish reading
-        :return:
         """
         snapdata = self.read(**kwargs)
         for ctr in range(0, len(snapdata['data'][snapdata['data'].keys()[0]])):
@@ -207,6 +216,7 @@ class Snap(Memory):
     def read(self, **kwargs):
         """
         Override Memory.read to handle the extra value register.
+
         :param offset: trigger offset
         :param man_valid: force valid to be true
         :param man_trig: force a trigger now
@@ -328,11 +338,12 @@ class Snap(Memory):
     def packetise_snapdata(data, eof_key='eof', packet_length=-1, dv_key=None):
         """
         Use the given EOF key to packetise a dictionary of snap data
+
         :param data: a dictionary containing snap block data
         :param eof_key: the key used to identify the packet boundaries - the eof
-        comes on the LAST VALID word in a packet
+            comes on the LAST VALID word in a packet
         :param packet_length: check the length of the packets against
-        this as they are created (in 64-bit words)
+            this as they are created (in 64-bit words)
         :param dv_key: the key used to identify which data samples are valid
         :return: a list of packets
         """

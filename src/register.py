@@ -179,6 +179,7 @@ class Register(Memory):
     def write(self, **kwargs):
         """
         Write fields in a register, using keyword arguments for fields
+        
         :param kwargs:
         """
         fint, pulse = self._write_common(**kwargs)
@@ -189,6 +190,7 @@ class Register(Memory):
     def write_single(self, value):
         """
         Write single value.
+
         :param value:
         """
         if len(self.field_names()) != 1:

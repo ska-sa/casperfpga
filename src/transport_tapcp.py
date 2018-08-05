@@ -69,8 +69,8 @@ class TapcpTransport(Transport):
     def __init__(self, **kwargs):
         """
         Initialized Tapcp FPGA object
+
         :param host: IP Address of the targeted Board
-        :return: none
         """
         try:
             import tftpy
@@ -97,8 +97,8 @@ class TapcpTransport(Transport):
     def test_host_type(host_ip):
         """
         Is this host_ip assigned to a Tapcp board?
+
         :param host_ip:
-        :return:
         """
         try:
             board = TapcpTransport(host=host_ip, timeout=0.1)
@@ -121,8 +121,8 @@ class TapcpTransport(Transport):
     def test_host_type(host_ip):
         """
         Is this host_ip assigned to a Tapcp board?
+
         :param host_ip:
-        :return:
         """
         try:
             board = TapcpTransport(host=host_ip, timeout=0.1)
@@ -348,9 +348,11 @@ class TapcpTransport(Transport):
         """
         Program a new golden image (i.e., the image stored at the
         start of the flash.
-        Beware: If this command fails, and you reboot your
+
+        **Beware:** If this command fails, and you reboot your
         board, chances are it will require JTAG intervention
         to being back to life!
+
         :param imagefile: A .bin file containing a golden image
         """
         sector_size = 0x10000
@@ -378,13 +380,13 @@ class TapcpTransport(Transport):
         """
         
         :param device_name: 
-        :return: 
         """
         raise NotImplementedError
 
     def read(self, device_name, size, offset=0, use_bulk=True):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
+       
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
@@ -409,11 +411,11 @@ class TapcpTransport(Transport):
     def blindwrite(self, device_name, data, offset=0, use_bulk=True):
         """
         Unchecked data write.
+        
         :param device_name: the memory device to which to write
         :param data: the byte string to write
         :param offset: the offset, in bytes, at which to write
         :param use_bulk: Does nothing. Kept for API compatibility
-        :return: <nothing>
         """
         assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
@@ -436,7 +438,6 @@ class TapcpTransport(Transport):
         """
         Deprogram the FPGA.
         This actually reboots & boots from the Golden Image
-        :return: nothing
         """
         # trigger reboot of FPGA
         self.progdev(0)
@@ -446,6 +447,7 @@ class TapcpTransport(Transport):
         """
         Used to perform low level wishbone write to a wishbone slave. Gives
         low level direct access to wishbone bus.
+        
         :param wb_address: address of the wishbone slave to write to
         :param data: data to write
         :return: response object
@@ -455,6 +457,7 @@ class TapcpTransport(Transport):
     def read_wishbone(self, wb_address):
         """
         Used to perform low level wishbone read from a Wishbone slave.
+        
         :param wb_address: address of the wishbone slave to read from
         :return: Read Data or None
         """
@@ -463,14 +466,16 @@ class TapcpTransport(Transport):
     def get_firmware_version(self):
         """
         Read the version of the firmware
+        
         :return: golden_image, multiboot, firmware_major_version,
-        firmware_minor_version
+            firmware_minor_version
         """
         raise NotImplementedError
 
     def get_soc_version(self):
         """
         Read the version of the soc
+        
         :return: golden_image, multiboot, soc_major_version, soc_minor_version
         """
         raise NotImplementedError

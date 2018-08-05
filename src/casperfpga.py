@@ -66,7 +66,6 @@ class CasperFpga(object):
     def __init__(self, *args, **kwargs):
         """
         :param args[0] - host: the hostname of this CasperFpga
-        :return: <nothing>
         """
         if len(args) > 0:
             try:
@@ -140,7 +139,6 @@ class CasperFpga(object):
         Test whether a given host is a katcp client or a skarab
 
         :param host_ip:
-        :return:
         """
         self.logger.debug('Trying to figure out what kind of device %s is' % host_ip)
         if host_ip.startswith('CasperDummy'):
@@ -169,15 +167,12 @@ class CasperFpga(object):
         Attempt to connect to a CASPER Hardware Target
 
         :param timeout: Integer value in seconds
-        :return:
         """
         return self.transport.connect(timeout)
 
     def disconnect(self):
         """
         Attempt to disconnect from a CASPER Hardware Target
-
-        :return:
         """
         return self.transport.disconnect()
 
@@ -191,15 +186,15 @@ class CasperFpga(object):
         used to setup the logger
 
         :param log_level: String input defining the logging_level:
-                             Level      | Numeric Value
-                             --------------------------
-                             CRITICAL   | 50
-                             ERROR      | 40
-                             WARNING    | 30
-                             INFO       | 20
-                             DEBUG      | 10
-                             NOTSET     | 0
-        :return:
+                           
+                            Level      | Numeric Value
+                            --------------------------
+                            CRITICAL   | 50
+                            ERROR      | 40
+                            WARNING    | 30
+                            INFO       | 20
+                            DEBUG      | 10
+                            NOTSET     | 0
         """
         log_level_numeric = getattr(logging, log_level.upper(), None)
         if not isinstance(log_level_numeric, int):
@@ -218,7 +213,6 @@ class CasperFpga(object):
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
         :param kwargs:
-        :return:
         """
         return self.transport.read(device_name, size, offset, **kwargs)
 
@@ -228,6 +222,7 @@ class CasperFpga(object):
     def listdev(self):
         """
         Get a list of the memory bus items in this design.
+
         :return: a list of memory devices
         """
         try:
@@ -239,7 +234,6 @@ class CasperFpga(object):
         """
         The child class will deprogram the FPGA, we just reset out
         device information
-        :return:
         """
         self.transport.deprogram()
         self._reset_device_info()
@@ -247,18 +241,19 @@ class CasperFpga(object):
     def set_igmp_version(self, version):
         """
         Sets version of IGMP multicast protocol to use
-        - This method is only available to katcp-objects
+        
+        * This method is only available to katcp-objects
+        
         :param version: IGMP protocol version, 0 for kernel default, 1, 2 or 3
-        :return:
         """
         return self.transport.set_igmp_version(version)
 
     def upload_to_ram_and_program(self, filename=None, wait_complete=True):
         """
         Upload an FPG file to RAM and then program the FPGA.
+
         :param filename: the file to upload
-        :param wait_complete: do not wait for this operation, just return
-        after upload
+        :param wait_complete: do not wait for this operation, just return after upload
         :return: True or False
         """
         if filename is not None:
@@ -277,14 +272,12 @@ class CasperFpga(object):
     def is_connected(self, **kwargs):
         """
         Is the transport connected to the host?
-        :return: 
         """
         return self.transport.is_connected(**kwargs)
 
     def is_running(self):
         """
         Is the FPGA programmed and running?
-        :return: 
         """
         return self.transport.is_running()
 
@@ -323,7 +316,6 @@ class CasperFpga(object):
     def dram_bulkread(self, device, size, offset):
         """
         
-        :return: 
         """
         raise NotImplementedError
 
@@ -332,9 +324,11 @@ class CasperFpga(object):
         Reads data from a ROACH's DRAM. Reads are done up to 1MB at a time.
         The 64MB indirect address register is automatically incremented 
         as necessary.
+
         It returns a string, as per the normal 'read' function.
         ROACH has a fixed device name for the DRAM (dram memory).
         Uses dram_bulkread internally.
+
         :param size: amount of data to read, in bytes
         :param offset: offset at which to read, in bytes
         :return: binary data string
@@ -372,11 +366,12 @@ class CasperFpga(object):
         Writes data to a ROACH's DRAM. Writes are done up to 512KiB at a time.
         The 64MB indirect address register is automatically 
         incremented as necessary.
+
         ROACH has a fixed device name for the DRAM (dram memory) and so the 
         user does not need to specify the write register.
+
         :param data: packed binary string data to write
         :param offset: the offset at which to write
-        :return:
         """
         size = len(data)
         n_writes = 0
@@ -407,10 +402,10 @@ class CasperFpga(object):
     def write(self, device_name, data, offset=0):
         """
         Write data, then read it to confirm a successful write.
+
         :param device_name: memory device name to write
         :param data: packed binary data string to write
         :param offset: offset at which to write, in bytes
-        :return:
         """
         self.blindwrite(device_name, data, offset)
         new_data = self.read(device_name, len(data), offset)
@@ -429,8 +424,10 @@ class CasperFpga(object):
     def read_int(self, device_name, word_offset=0):
         """
         Read an integer from memory device.
+
         i.e. calls self.read(device_name, size=4, offset=0) and uses 
         struct to unpack it into an integer
+
         :param device_name: device from which to read
         :param word_offset: the 32-bit word offset at which to read
         :return: signed 32-bit integer
@@ -441,6 +438,7 @@ class CasperFpga(object):
     def read_uint(self, device_name, word_offset=0):
         """
         Read an unsigned integer from memory device.
+
         :param device_name: device from which to read
         :param word_offset: the 32-bit word offset at which to read
         :return: unsigned 32-bit integer
@@ -452,11 +450,11 @@ class CasperFpga(object):
         """
         Writes an integer to the device specified at the offset specified.
         A blind write is optional.
+
         :param device_name: device to be written
         :param integer: the integer to write
         :param blindwrite: True for blind write, default False
         :param word_offset: the offset at which to write, in 32-bit words
-        :return:
         """
         # careful of packing input data into 32 bit - check range: if
         # negative, must be signed int; if positive over 2^16, must be unsigned
@@ -479,11 +477,11 @@ class CasperFpga(object):
     def _create_memory_devices(self, device_dict, memorymap_dict):
         """
         Create memory devices from dictionaries of design information.
+        
         :param device_dict: raw dictionary of information from tagged
-        blocks in Simulink design, keyed on device name
+            blocks in Simulink design, keyed on device name
         :param memorymap_dict: dictionary of information that would have been
-        in coreinfo.tab - memory bus information
-        :return:
+            in coreinfo.tab - memory bus information
         """
         # create and add memory devices to the memory device dictionary
         for device_name, device_info in device_dict.items():
@@ -526,9 +524,9 @@ class CasperFpga(object):
     def _create_other_devices(self, device_dict):
         """
         Store non-memory device information in a dictionary
+
         :param device_dict: raw dictionary of information from tagged
-        blocks in Simulink design, keyed on device name
-        :return:
+            blocks in Simulink design, keyed on device name
         """
         for device_name, device_info in device_dict.items():
             if device_name == '':
@@ -543,6 +541,7 @@ class CasperFpga(object):
     def device_names_by_container(self, container_name):
         """
         Return a list of devices in a certain container.
+        
         :param container_name: String to search for in containers in memory_devices
         :return: List of strings matching the description
         """
@@ -558,13 +557,12 @@ class CasperFpga(object):
 
     def get_system_information(self, filename=None, fpg_info=None):
         """
-        balhGet information about the design running on the FPGA.
-        If filename is given, get it from file, otherwise query the 
-            host via KATCP.
+        Get information about the design running on the FPGA.
+
+        If filename is given, get it from file, otherwise query the host via KATCP.
+
         :param filename: fpg filename
-        :param fpg_info: a tuple containing device_info and coreinfo 
-            dictionaries
-        :return: <nothing> the information is populated in the class
+        :param fpg_info: a tuple containing device_info and coreinfo dictionaries
         """
         t_filename, t_fpg_info = \
             self.transport.get_system_information_from_transport()
@@ -605,6 +603,7 @@ class CasperFpga(object):
     def estimate_fpga_clock(self):
         """
         Get the estimated clock of the running FPGA, in Mhz.
+
         :return: Float - FPGA Clock speed in MHz
         """
         firstpass = self.read_uint('sys_clkcounter')
@@ -618,6 +617,7 @@ class CasperFpga(object):
         """
         Check to see whether this host is transmitting packets without
         error on all its GbE interfaces.
+
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
         :return: Boolean - True/False - Success/Fail
@@ -631,9 +631,9 @@ class CasperFpga(object):
         """
         Check to see whether this host is receiving packets without
         error on all its GbE interfaces.
+
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
-        :return:
         """
         for gbecore in self.gbes:
             if not gbecore.rx_okay(wait_time=wait_time, checks=checks):
@@ -680,8 +680,7 @@ class CasperFpga(object):
 
     def __str__(self):
         """
-
-        :return:
+]
         """
         return self.host
 

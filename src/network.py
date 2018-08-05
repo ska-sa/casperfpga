@@ -179,7 +179,6 @@ class IpAddress(object):
     def is_multicast(self):
         """
         Does the data source's IP address begin with 239?
-        :return:
         """
         return (self.ip_int >> 24) == 239
 

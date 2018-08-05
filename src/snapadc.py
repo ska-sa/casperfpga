@@ -88,7 +88,8 @@ class SNAPADC(object):
         self.p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
 
     def init(self, samplingRate=250, numChannel=4, resolution=None):
-        """ Get SNAP ADCs into working condition
+        """
+        Get SNAP ADCs into working condition
 
         Supported frequency range: 60MHz ~ 1000MHz. Set resolution to
         None to let init() automatically decide the best resolution.
@@ -102,12 +103,13 @@ class SNAPADC(object):
         4. configuring IDELAYE2 and ISERDESE2 inside of FPGA
         5. Testing under dual pattern and ramp mode
 
-        E.g.
-            init(1000,1)    1 channel mode, 1Gsps, 8bit, since 1Gsps
-                    is only available in 8bit mode
-            init(320,2) 2 channel mode, 320Msps, 8bit for HMCAD1511,
-                    or 12bit for HMCAD1520
-            init(160,4,8)   4 channel mode, 160Msps, 8bit resolution
+        .. code-block:: python
+
+            init(1000,1)   # 1 channel mode, 1Gsps, 8bit, since 1Gsps
+                           # is only available in 8bit mode
+            init(320,2)    # 2 channel mode, 320Msps, 8bit for HMCAD1511,
+                           # or 12bit for HMCAD1520
+            init(160,4,8)  # 4 channel mode, 160Msps, 8bit resolution
 
         """
 
@@ -188,7 +190,9 @@ class SNAPADC(object):
         """ Select one or multiple ADCs
 
         Select the ADC(s) to be configured. ADCs are numbered by 0, 1, 2...
-        E.g.
+        
+        .. code-block:: python
+
             selectADC(0)        # select the 1st ADC
             selectADC([0,1])    # select two ADCs
             selectADC()     # select all ADCs
@@ -280,9 +284,11 @@ class SNAPADC(object):
             return rid[0]
 
     def interleave(self,data,mode):
-        """ Reorder the data according to the interleaving mode
+        """ 
+        Reorder the data according to the interleaving mode
 
-        E.g.
+        .. code-block:: python
+
             data = numpy.arange(1024).reshape(-1,8)
             interleave(data, 1) # return a one-column numpy array
             interleave(data, 2) # return a two-column numpy array
@@ -291,9 +297,11 @@ class SNAPADC(object):
         return self.adc.interleave(data, mode)
 
     def readRAM(self, ram=None):
-        """ Read RAM(s) and return the 1024-sample data
+        """
+        Read RAM(s) and return the 1024-sample data
 
-        E.g.
+        .. code-block:: python
+
             readRAM()       # read all RAMs, return a list of arrays
             readRAM(1)      # read the 2nd RAMs, return a 128X8 array
             readRAM([0,1])      # read 2 RAMs, return two arrays
@@ -319,18 +327,20 @@ class SNAPADC(object):
     # A lane in this method actually corresponds to a "branch" in HMCAD1511 datasheet.
     # But I have to follow the naming convention of signals in casper repo.
     def bitslip(self, chipSel=None, laneSel=None):
-        """ Reorder the parallelize data for word-alignment purpose
+        """ 
+        Reorder the parallelize data for word-alignment purpose
         
         Reorder the parallelized data by asserting a itslip command to the bitslip 
         submodule of a ISERDES primitive.  Each bitslip command left shift the 
         parallelized data by one bit.
 
-        E.g.
+        .. code-block:: python
+
             bitslip()       # left shift all lanes of all ADCs
             bitslip(0)      # shift all lanes of the 1st ADC
             bitslip(0,3)        # shift the 4th lane of the 1st ADC
             bitslip([0,1],[3,4])    # shift the 4th and 5th lanes of the 1st
-                        # and the 2nd ADCs
+                                    # and the 2nd ADCs
         """
 
         if chipSel == None:
@@ -375,14 +385,16 @@ class SNAPADC(object):
     # Refer to the memory map word 2 and word 3 for clarification.  The memory map was made 
     # for a ROACH design so it has chips A-H.  SNAP 1 design has three chips.
     def delay(self, tap, chipSel=None, laneSel=None):
-        """ Delay the serial data from ADC LVDS links
+        """
+        Delay the serial data from ADC LVDS links
         
         Delay the serial data by Xilinx IDELAY primitives
-        E.g.
+        
+        .. code-block:: python
+
             delay(0)        # Set all delay tap of IDELAY to 0
-            delay(4, 1, 7)      # set delay on the 8th lane of the 2nd ADC to 4
-            delay(31, [0,1,2], [0,1,2,3,4,5,6,7])
-                        # Set all delay taps (in SNAP 1 case) to 31
+            delay(4, 1, 7)  # set delay on the 8th lane of the 2nd ADC to 4
+            delay(31, [0,1,2], [0,1,2,3,4,5,6,7])   # Set all delay taps (in SNAP 1 case) to 31
         """
 
         if chipSel==None:
@@ -447,7 +459,8 @@ class SNAPADC(object):
 
 
     def testPatterns(self, chipSel=None, taps=None, mode='std', pattern1=None, pattern2=None):
-        """ Return a list of std/err for a given tap or a list of taps
+        """ 
+        Return a list of std/err for a given tap or a list of taps
 
         Return the lane-wise standard deviation/error of the data under a given
         tap setting or a list of tap settings.  By default, mode='std', taps=range(32).
@@ -459,15 +472,13 @@ class SNAPADC(object):
         on the assumption that in most cases, $cur = $pre + 1. When using 'ramp' mode,
         taps=None
 
-        E.g.
-            testPatterns(taps=True) # Return lane-wise std of all ADCs, taps=range(32)
-            testPatterns(0,taps=range(32))
-                        # Return lane-wise std of the 1st ADC
-            testPatterns([0,1],2)   # Return lane-wise std of the first two ADCs 
-                        # with tap = 2
-            testPatterns(1, taps=[0,2,3], mode='std')
-                        # Return lane-wise stds of the 2nd ADC with
-                        # three different tap settings
+        .. code-block:: python
+
+            testPatterns(taps=True)     # Return lane-wise std of all ADCs, taps=range(32)
+            testPatterns(0,taps=range(32))      # Return lane-wise std of the 1st ADC
+            testPatterns([0,1],2)   # Return lane-wise std of the first two ADCs with tap = 2
+            testPatterns(1, taps=[0,2,3], mode='std')       # Return lane-wise stds of the 2nd ADC with
+                                                            # three different tap settings
             testPatterns(2, mode='err', pattern1=0b10101010)
                         # Check the actual data against the given test
                         # pattern without changing current delay tap
@@ -642,7 +653,8 @@ class SNAPADC(object):
             return results
 
     def _signed(self, data, res=8):
-        """ Convert unsigned number to signed number
+        """
+        Convert unsigned number to signed number
 
         adc16_interface converts ADC outputs into signed numbers by flipping MSB.
         Therefore we have to prepare signed-number test patterns as well.
@@ -655,7 +667,8 @@ class SNAPADC(object):
         
 
     def decideDelay(self, data):
-        """ Decide and return proper setting for delay tap
+        """
+        Decide and return proper setting for delay tap
 
         Find the tap setting that has the largest margin of error, i.e. the biggest distance
         to borders (tap=0 and tap=31) and rows with non-zero deviations/mismatches.  The
@@ -696,7 +709,8 @@ class SNAPADC(object):
 
     # Line clock also known as bit clock in ADC datasheets
     def alignLineClock(self, mode='dual_pat'):
-        """ Align the rising edge of line clock with data eye
+        """
+        Align the rising edge of line clock with data eye
 
         And return the tap settings being using
         """
@@ -757,7 +771,8 @@ class SNAPADC(object):
             return False
 
     def alignFrameClock(self):
-        """ Align the frame clock with data frame
+        """
+        Align the frame clock with data frame
         """
 
         for u in range(self.RESOLUTION*2):
