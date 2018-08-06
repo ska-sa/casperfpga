@@ -1,11 +1,11 @@
 """
-Description:
-Definitions for the Skarab Motherboard.
-    - Includes
-    - OPCCODES
-    - PORTS
-    - Register Masks
-    - Data structures
+**Description:** Definitions for the Skarab Motherboard.
+
+* Includes
+* OPCCODES
+* PORTS
+* Register Masks
+* Data structures
 """
 import struct
 from odict import odict

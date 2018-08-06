@@ -61,7 +61,7 @@ class UnknownTransportError(Exception):
 
 class CasperFpga(object):
     """
-    testA FPGA host board that has a CASPER design running on it. Or will soon have.
+    blahA FPGA host board that has a CASPER design running on it. Or will soon have.
     """
     def __init__(self, *args, **kwargs):
         """

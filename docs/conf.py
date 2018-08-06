@@ -18,25 +18,6 @@ from sphinx.apidoc import main as sphinx_apidoc_main
 # add casperfpga directory to sys.path so autodoc can document its modules.
 casperfpga_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'casperfpga'))
 sys.path.append(casperfpga_path)
-# use sphinx-apidoc to automatically document modules, classes, functions, etc.
-# Code found here: https://github.com/rtfd/readthedocs.org/issues/1139
-def run_apidoc(_):
-    build_modules_dir = os.path.join(os.path.dirname(__file__), 'src', 'casperfpga_modules')
-    ignore_file  = 'conf.py'
-    # Using '--force' in order to regenerate modules on every build.
-    sphinx_apidoc_main(['-e', '-o',  build_modules_dir, casperfpga_path, ignore_file, '--force'])
-
-# Workaround to include __init__'s with sphinx-apidoc generated documnentation.
-# Code found here: https://stackoverflow.com/questions/5599254/how-to-use-sphinxs-autodoc-to-document-a-classs-init-self-method
-def skip(app, what, name, obj, skip, options):
-    if name == "__init__":
-        return False
-    return skip    
-
-def setup(app):
-    # app.connect('builder-inited', run_apidoc)
-    app.connect("autodoc-skip-member", skip)
-
 
 # -- Project information -----------------------------------------------------
 

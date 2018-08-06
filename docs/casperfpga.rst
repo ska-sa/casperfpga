@@ -1,5 +1,5 @@
-casperfpga package
-==================
+casperfpga
+==========
 
 CasperLogHandlers
 -----------------------------------
@@ -8,6 +8,7 @@ CasperLogHandlers
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 adc
 ---------------------
@@ -16,14 +17,7 @@ adc
     :members:
     :undoc-members:
     :show-inheritance:
-
-async\_requester
-----------------------------------
-
-.. automodule:: async_requester
-    :members:
-    :undoc-members:
-    :show-inheritance:
+    :special-members:
 
 attribute\_container
 --------------------------------------
@@ -32,6 +26,7 @@ attribute\_container
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 bitfield
 --------------------------
@@ -40,6 +35,7 @@ bitfield
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 casperfpga
 ----------------------------
@@ -48,6 +44,7 @@ casperfpga
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 clockswitch
 -----------------------------
@@ -56,6 +53,7 @@ clockswitch
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 fortygbe
 --------------------------
@@ -64,6 +62,7 @@ fortygbe
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 gbe
 ---------------------
@@ -72,6 +71,7 @@ gbe
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 i2c
 ---------------------
@@ -80,6 +80,7 @@ i2c
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 i2c\_bar
 --------------------------
@@ -88,6 +89,7 @@ i2c\_bar
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 i2c\_eeprom
 -----------------------------
@@ -104,6 +106,7 @@ i2c\_gpio
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 i2c\_motion
 -----------------------------
@@ -112,6 +115,7 @@ i2c\_motion
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 i2c\_temp
 ---------------------------
@@ -120,6 +124,7 @@ i2c\_temp
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 i2c\_volt
 ---------------------------
@@ -128,6 +133,7 @@ i2c\_volt
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 katadc
 ------------------------
@@ -136,6 +142,7 @@ katadc
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 memory
 ------------------------
@@ -144,6 +151,7 @@ memory
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 network
 -------------------------
@@ -152,6 +160,7 @@ network
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 qdr
 ---------------------
@@ -160,6 +169,7 @@ qdr
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 register
 --------------------------
@@ -168,6 +178,7 @@ register
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 sbram
 -----------------------
@@ -176,6 +187,7 @@ sbram
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 scroll
 ------------------------
@@ -184,6 +196,7 @@ scroll
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 skarab\_definitions
 -------------------------------------
@@ -192,6 +205,7 @@ skarab\_definitions
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 skarab\_fileops
 ---------------------------------
@@ -200,6 +214,7 @@ skarab\_fileops
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 snap
 ----------------------
@@ -208,6 +223,7 @@ snap
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 snapadc
 -------------------------
@@ -216,6 +232,7 @@ snapadc
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 spead
 -----------------------
@@ -224,6 +241,7 @@ spead
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 synth
 -----------------------
@@ -232,6 +250,7 @@ synth
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 tengbe
 ------------------------
@@ -240,6 +259,7 @@ tengbe
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 termcolors
 ----------------------------
@@ -248,6 +268,7 @@ termcolors
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 transport
 ---------------------------
@@ -256,6 +277,7 @@ transport
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 transport\_dummy
 ----------------------------------
@@ -264,6 +286,7 @@ transport\_dummy
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 transport\_katcp
 ----------------------------------
@@ -272,6 +295,7 @@ transport\_katcp
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 transport\_skarab
 -----------------------------------
@@ -280,6 +304,7 @@ transport\_skarab
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 transport\_tapcp
 ----------------------------------
@@ -288,6 +313,7 @@ transport\_tapcp
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 utils
 -----------------------
@@ -296,6 +322,7 @@ utils
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:
 
 wishbonedevice
 --------------------------------
@@ -304,3 +331,4 @@ wishbonedevice
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members:

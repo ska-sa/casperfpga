@@ -296,7 +296,7 @@ class Qdr(Memory):
 
         :param step: the current step
         :param quickcheck: if True, return after the first error, else process
-        all test vectors before returning
+            all test vectors before returning
         """
         patfail = 0
         for pattern in CAL_DATA:

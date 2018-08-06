@@ -3,9 +3,8 @@ Playing with ncurses in Python to scroll up and down, left and right,
 through a list of data that is periodically refreshed.
 
 Revs:
-2010-12-11  JRM Added concat for status line to prevent bailing on small terminals.
-                Code cleanup to prevent modification of external variables.
-                Added left, right page controls
+    **2010-12-11:**  JRM Added concat for status line to prevent bailing on small terminals.
+    Code cleanup to prevent modification of external variables. Added left, right page controls
 """
 
 import curses
