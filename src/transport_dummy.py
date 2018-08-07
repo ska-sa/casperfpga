@@ -1,27 +1,59 @@
-from utils import get_hostname
+import logging
+
+import skarab_definitions as sd
+from transport import Transport
+from network import IpAddress
+
+LOGGER = logging.getLogger(__name__)
 
 
-class Transport(object):
+class NamedFifo(object):
+    def __init__(self, maxlen=None):
+        self.names = []
+        self.values = []
+        self.maxlen = maxlen
+
+    def push(self, name, value):
+        self.names.append(name)
+        self.values.append(value)
+        if self.maxlen is not None:
+            if len(self) > self.maxlen:
+                self.names.pop(0)
+                self.values.pop(0)
+
+    def pop(self, name=None):
+        pop = self.names.index(name) if name is not None else 0
+        self.names.pop(pop)
+        rv = self.values.pop(pop)
+        return rv
+
+    def __len__(self):
+        return len(self.names)
+
+
+
+class DummyTransport(Transport):
     """
-    The actual network transport of data for a CasperFpga object.
+    A dummy transport for testing
     """
     def __init__(self, **kwargs):
         """
-        Initialise the CasperFpga object
+        Make a Dummy Transport
 
-        :param host: 
+        :param host: IP Address should be 127.0.0.1 for a Dummy
         """
-        self.host, self.bitstream = get_hostname(**kwargs)
-        self.memory_devices = None
-        self.prog_info = {'last_uploaded': '', 'last_programmed': '',
-                          'system_name': ''}
+        Transport.__init__(self, **kwargs)
+        self._devices = NamedFifo(100)
+        self._devices_wishbone = NamedFifo(100)
+        LOGGER.info('%s: port(%s) created and connected.' % (
+            self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS))
 
     def connect(self, timeout=None):
         """
-        
+
         :param timeout:
         """
-        pass
+        return
 
     def is_running(self):
         """
@@ -29,20 +61,17 @@ class Transport(object):
 
         :return: True or False
         """
-        raise NotImplementedError
+        return True
 
     def is_connected(self):
         """
 
         """
-        raise NotImplementedError
+        return True
 
     def test_connection(self):
         """
         Write to and read from the scratchpad to test the connection to the FPGA
-            i.e. Is the casper FPGA connected?
-
-        :return: Boolean - True/False - Success/Fail
         """
         return self.is_connected()
 
@@ -52,31 +81,37 @@ class Transport(object):
 
         :return: True or False
         """
-        raise NotImplementedError
+        return True
 
     def disconnect(self):
         """
-        
+
+        :return:
         """
         pass
 
     def read(self, device_name, size, offset=0):
         """
-        
-        :param device_name: 
-        :param size: 
+
+        :param device_name:
+        :param size:
         :param offset:
         """
-        raise NotImplementedError
+        try:
+            return self._devices.pop(device_name)
+        except ValueError:
+            pass
+        return '\x00' * size
 
     def blindwrite(self, device_name, data, offset=0):
         """
-        
-        :param device_name: 
-        :param data: 
+
+        :param device_name:
+        :param data:
         :param offset:
         """
-        raise NotImplementedError
+        self._devices.push(device_name, data)
+        return
 
     def listdev(self):
         """
@@ -103,8 +138,6 @@ class Transport(object):
         """
         Upload an FPG file to RAM and then program the FPGA.
 
-            - Implemented in the child
-
         :param filename: the file to upload
         :param port: the port to use on the rx end, -1 means a random port
         :param timeout: how long to wait, seconds
@@ -112,7 +145,8 @@ class Transport(object):
             after upload if False
         :param skip_verification: don't verify the image after uploading it
         """
-        raise NotImplementedError
+        self.bitstream = filename
+        return True
 
     def upload_to_flash(self, binary_file, port=-1, force_upload=False,
                         timeout=30, wait_complete=True):
@@ -127,7 +161,7 @@ class Transport(object):
         :param wait_complete: wait for the upload to complete, or just
             kick it off
         """
-        raise NotImplementedError
+        return True
 
     def get_system_information_from_transport(self):
         """
@@ -141,5 +175,42 @@ class Transport(object):
         """
         pass
 
+    def read_wishbone(self, wb_address):
+        """
+        Used to perform low level wishbone read from a Wishbone slave.
+
+        :param wb_address: address of the wishbone slave to read from
+        :return: Read Data or None
+        """
+        try:
+            return self._devices_wishbone.pop(wb_address)
+        except ValueError:
+            pass
+        return 0
+
+    def write_wishbone(self, wb_address, data):
+        """
+        Used to perform low level wishbone write to a wishbone slave. Gives
+        low level direct access to wishbone bus.
+
+        :param wb_address: address of the wishbone slave to write to
+        :param data: data to write
+        :return: response object
+        """
+        self._devices_wishbone.push(wb_address, data)
+        return None
+
+    @staticmethod
+    def multicast_receive(gbename, ip, mask):
+        """
+
+        :param gbename:
+        :param ip:
+        :param mask:
+        """
+        resp_ip = IpAddress(ip)
+        resp_mask = IpAddress(mask)
+        LOGGER.debug('%s: multicast configured: addr(%s) mask(%s)' % (
+            gbename, resp_ip.ip_str, resp_mask.ip_str))
 
 # end

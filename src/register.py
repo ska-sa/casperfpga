@@ -33,6 +33,7 @@ class Register(Memory):
         """
         Process device info and the memory map to get all necessary info and
         return a Register instance.
+
         :param parent: the parent device
         :param device_name: the unique device name
         :param device_info: information about this device
@@ -80,8 +81,8 @@ class Register(Memory):
     def read_raw(self, **kwargs):
         """
         Read a raw 4-byte value from the host device. Size is 4-bytes.
+
         :param kwargs:
-        :return:
         """
         rawdata = self.parent.read(device_name=self.name, size=4, offset=0*4)
         return rawdata, time.time()
@@ -105,8 +106,8 @@ class Register(Memory):
     def _write_common(self, **kwargs):
         """
         Form the dictionary of values that must be written
+
         :param kwargs: the field names and values to write
-        :return:
         """
         if len(kwargs) == 0:
             LOGGER.info('%s: no keyword args given, exiting.' % self.name)
@@ -169,7 +170,6 @@ class Register(Memory):
     def blindwrite(self, **kwargs):
         """
         As write, but without checking the result
-        :return:
         """
         fint, pulse = self._write_common(**kwargs)
         self.write_raw(fint, blindwrite=True)
@@ -179,8 +179,8 @@ class Register(Memory):
     def write(self, **kwargs):
         """
         Write fields in a register, using keyword arguments for fields
+        
         :param kwargs:
-        :return:
         """
         fint, pulse = self._write_common(**kwargs)
         self.write_raw(fint)
@@ -189,9 +189,9 @@ class Register(Memory):
 
     def write_single(self, value):
         """
+        Write single value.
 
         :param value:
-        :return:
         """
         if len(self.field_names()) != 1:
             raise ValueError('Register has more than one field, cannot '

@@ -1,9 +1,10 @@
 import struct
+import socket
 
 
 class Mac(object):
     """
-    A MAC address.
+    A MAC address. Can either be initialised with a IP-string or 32-bit integer.
     """
 
     @staticmethod
@@ -54,7 +55,7 @@ class Mac(object):
             raise ValueError('Cannot make a MAC with no value.')
         elif mac_str is not None:
             self.mac_int = self.str2mac(mac_str)
-            self.mac_str = mac_str
+            self.mac_str = self.mac2str(self.mac_int)
         elif mac_int is not None:
             self.mac_str = self.mac2str(mac_int)
             self.mac_int = mac_int
@@ -69,14 +70,24 @@ class Mac(object):
             hostname = hostname.replace('cbf_oach', 'roach')
             hostname = hostname.replace('dsim', 'roach')
         # /HACK
-        if not hostname.startswith('roach'):
+        if not (hostname.startswith('roach') or hostname.startswith('skarab')):
             raise RuntimeError('Only hostnames beginning with '
-                               'roach supported: %s' % hostname)
-        digits = hostname.replace('roach', '')
+                               'roach or skarab supported: %s' % hostname)
+        if hostname.startswith('roach'):
+            digits = hostname.replace('roach', '')
+        else:
+            digits = hostname.replace('skarab', '')
+            for intsuffix in ['-01', '-02']:
+                if digits.endswith(intsuffix):
+                    digits = digits.replace(intsuffix, '')
         serial = [int(digits[ctr:ctr+2], 16) for ctr in range(0, 6, 2)]
         mac_str = 'fe:00:%02x:%02x:%02x:%02x' % (serial[0], serial[1],
                                                  serial[2], port_num)
         return cls(mac_str)
+
+    @classmethod
+    def from_hostname(cls, hostname, port_num):
+        return Mac.from_roach_hostname(hostname, port_num)
 
     def packed(self):
         mac = [0, 0]
@@ -92,6 +103,15 @@ class Mac(object):
 
     def __repr__(self):
         return 'Mac(%s)' % self.__str__()
+
+    def __eq__(self, other):
+        if isinstance(other, Mac):
+            return int(self) == int(other)
+        elif isinstance(other, basestring):
+            return int(self) == self.str2mac(other)
+        elif isinstance(other, int):
+            return int(self) == other
+        raise TypeError('Don\'t know what to do with other: %s' % other)
 
 
 class IpAddress(object):
@@ -136,7 +156,9 @@ class IpAddress(object):
         elif isinstance(ip, int):
             ip_int = ip
         if ip_str is not None:
-            if ip_str.find('.') == -1:
+            try:
+                ip_str = socket.gethostbyname(ip_str)
+            except Exception as exc:
                 ip_int = int(ip_str)
                 ip_str = None
         if (ip_str is None) and (ip_int is None):
@@ -157,7 +179,6 @@ class IpAddress(object):
     def is_multicast(self):
         """
         Does the data source's IP address begin with 239?
-        :return:
         """
         return (self.ip_int >> 24) == 239
 
@@ -170,3 +191,20 @@ class IpAddress(object):
     def __repr__(self):
         return 'IpAddress(%s)' % self.__str__()
 
+    def __gt__(self, other):
+        return int(self) > int(other)
+
+    def __lt__(self, other):
+        return int(self) < int(other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __eq__(self, other):
+        if isinstance(other, IpAddress):
+            return int(self) == int(other)
+        elif isinstance(other, basestring):
+            return int(self) == self.str2ip(other)
+        elif isinstance(other, int):
+            return int(self) == other
+        raise TypeError('Don\'t know what to do with other: %s' % other)

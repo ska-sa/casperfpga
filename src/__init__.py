@@ -7,13 +7,17 @@ from bitfield import Bitfield, Field
 from katadc import KatAdc
 from casperfpga import CasperFpga
 from transport_katcp import KatcpTransport
+from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
 from memory import Memory
+from network import IpAddress, Mac
 from qdr import Qdr
 from register import Register
 from sbram import Sbram
 from snap import Snap
 from tengbe import TenGbe
+import progska
+import skarab_fileops
 
 # BEGIN VERSION CHECK
 # Get package version when locally imported from repo or via -e develop install
