@@ -16,7 +16,7 @@ import os
 import sys
 # add casperfpga directory to sys.path so autodoc can document its modules.
 casperfpga_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'casperfpga'))
-sys.path.append(casperfpga_path)
+sys.path.insert(0, casperfpga_path)
 # Workaround to include __init__'s with sphinx-apidoc generated documnentation.
 # Code found here: https://stackoverflow.com/questions/5599254/how-to-use-sphinxs-autodoc-to-document-a-classs-init-self-method
 def skip(app, what, name, obj, skip, options):
