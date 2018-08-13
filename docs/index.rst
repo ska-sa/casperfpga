@@ -1,5 +1,5 @@
-casperfpga
-===========
+casperfpga Sourcecode
+=====================
 
 .. toctree::
    :maxdepth: 2
