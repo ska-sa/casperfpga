@@ -38,7 +38,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
                 help='Specify the name of the i2c bus. Initialise I2C devices if baud rate and reference clock are provided.')
     p.add_argument('--rom',nargs='*',metavar=('TEXT'), help='Test EEPROM. Leave parameter empty to read ROM. Add text to write ROM.')
     p.add_argument('--temp',action='store_true', default=False,help='Print temperature and ID.')
-    p.add_argument('--volt',action='store_true', default=False, help='Print voltimeter.')
+    p.add_argument('--volt',action='store_true', default=False, help='Print current.')
     p.add_argument('--bar',nargs='*',metavar=('AVERAGE','INTERVAL'), help='Print air pressure, temperature and height, averaging over multiple measurements.')
     p.add_argument('--imu',action='store_true', default=False,help='Print FEM pose')
     #p.add_argument('--gpio',nargs='*',metavar=('VALUE'), help='Test GPIO. Leave parameter empty to read gpio. Add value to write gpio.')
@@ -66,6 +66,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
     ROM_FEM_ADDR = 0x51 #
     ROM_PAM_ADDR = 0x52
     TEMP_ADDR = 0x40    #
+    INA_ADDR = 0x45    #
     SN_ADDR = 0x50
     GPIO_PAM_ADDR = 0x21
     GPIO_FEM_ADDR = 0x20    #
@@ -97,7 +98,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
         print('Temperature: {}, serial number: {}'.format(t,sn))
 
     if args.switch!=None:
-        smode = {'load':0b000,'antenna':0b110,'noise':0b001}
+        smode = {'load':0b001,'antenna':0b111,'noise':0b000}
         gpio=i2c_gpio.PCF8574(bus,GPIO_FEM_ADDR)
         if len(args.switch)>0:
             key = args.switch[0]
@@ -106,7 +107,10 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
             gpio.write(val)
         else:
             val=gpio.read()
-            key = smode.keys()[smode.values().index(val&0b111)]
+            key = 'Unknown'
+            for name,value in smode.iteritems():
+                if val&0b111 == value:
+                    key = name
             print('read GPIO value: {:#05b}. ({} mode)'.format(val&0b111,key))
     elif args.gpio!=None:
         gpio=i2c_gpio.PCF8574(bus,GPIO_FEM_ADDR)
@@ -161,12 +165,13 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
             print('Barometer temperature: {}, air pressure: {}, altitude: {}'.format(rawt/100.,press,alt))
 
     if args.volt:
-        volt=i2c_volt.LTC2990(bus,VOLT_FEM_ADDR)
-        volt.init(mode0=2,mode1=3)
-        res = 0.33
-        vdiff=volt.readVolt('v1-v2')
-        print('v1-v2 voltage diff: {}, current: {}'.format(vdiff,vdiff/res))
-        # full scale 909mA
+		# full scale 909mA
+		ina=i2c_volt.INA219(bus,INA_ADDR)
+		ina.init()
+		vshunt = ina.readVolt('shunt')
+		vbus = ina.readVolt('bus')
+		res = 0.1
+		print('Shunt voltage: {} V, bus voltage: {} V'.format(vshunt,vbus))
 
     if args.phase!=None:
         phsmap = {  'i2c_ant1':[5,4],
@@ -188,3 +193,4 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
         val = fpga.read_uint('phs_reg')
         for key,offs in phsmap.iteritems():
             print('{},\tX:{},\tY:{}'.format(key,(val>>offs[0])&0b1,(val>>offs[1])&0b1))
+

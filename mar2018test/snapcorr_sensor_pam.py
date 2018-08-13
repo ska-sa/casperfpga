@@ -78,7 +78,7 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
 	ROM_PAM_ADDR = 0x52
 	TEMP_ADDR = 0x40
 	SN_ADDR = 0x50
-	INA_ADDR = 0x45
+	INA_ADDR = 0x44
 	GPIO_PAM_ADDR = 0x21
 	GPIO_FEM_ADDR = 0x20
 	
