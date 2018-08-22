@@ -87,8 +87,13 @@ class CasperFpga(object):
             result, self.logger = self.getLogger(name=self.host)
             if not result:
                 # Problem
-                errmsg = 'Problem creating logger for {}'.format(self.host)
-                raise ValueError(errmsg)
+                if self.logger.handlers:
+                    # Logger already exists
+                    warningmsg = 'Logger for {} already exists'.format(self.host)
+                    self.logger.warning(warningmsg)
+                else:
+                    errmsg = 'Problem creating logger for {}'.format(self.host)
+                    raise ValueError(errmsg)
 
         # some transports, e.g. Skarab, need to know their parent
         kwargs['parent_fpga'] = self
