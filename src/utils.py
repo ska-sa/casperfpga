@@ -104,7 +104,9 @@ def parse_fpg(filename):
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
-            line_split = line.split('\t')
+            #line_split = line.split('\t')
+            # Rather split on any space
+            line_split = line.split()
             name = line_split[0]
             tag = line_split[1]
             param = line_split[2]
