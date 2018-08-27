@@ -210,7 +210,7 @@ HMC_Die_temp_Register = 0x2b0000
 HMC_Top_DRAM_temp_Register = 0x2b0001
 HMC_Bottom_DRAM_temp_Register = 0x2b0002
 HMC_I2C_Address = 0x10
-HMC_MEZ = [1,2,3]
+HMC_MEZZANINE_SITES = [1, 2, 3]
 
 # MAX31785 FAN CONTROLLER PMBUS COMMANDS
 PAGE_CMD = 0x00
@@ -414,6 +414,7 @@ current_ranges = {
 
 # temperature_sensor: (max, min)
 # other temperatures are relative to inlet temp
+# hmc die and mezzanine temps are not relative to inlet temp
 temperature_ranges = {
     'inlet_temperature_degC': (50.0, -10.0),
     'outlet_temperature_degC': (10, -10),
@@ -421,10 +422,13 @@ temperature_ranges = {
     'fan_controller_temperature_degC': (10, -10),
     'voltage_monitor_temperature_degC': (10, -10),
     'current_monitor_temperature_degC': (10, -10),
-    'mezzanine_site_0_temperature_degC': (0.0, 0.0),
-    'mezzanine_site_1_temperature_degC': (0.0, 0.0),
-    'mezzanine_site_2_temperature_degC': (0.0, 0.0),
-    'mezzanine_site_3_temperature_degC': (0.0, 0.0)
+    'mezzanine_site_0_temperature_degC': (80.0, 5.0),
+    'mezzanine_site_1_temperature_degC': (80.0, 5.0),
+    'mezzanine_site_2_temperature_degC': (80.0, 5.0),
+    'mezzanine_site_3_temperature_degC': (80.0, 5.0),
+    'hmc_0_die_temp': (85.0, 5.0),
+    'hmc_1_die_temp': (85.0, 5.0),
+    'hmc_2_die_temp': (85.0, 5.0)
 }
 
 # fan_rpm: (rating, max, min)
