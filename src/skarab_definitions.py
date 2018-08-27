@@ -121,6 +121,7 @@ MULTICAST_REQUEST = 0x002B
 DEBUG_LOOPBACK_TEST = 0x002D
 QSFP_RESET_AND_PROG = 0x002F
 READ_HMC_I2C = 0x0031
+WRITE_HMC_I2C = 0x0033
 
 # SKA SA Defined Command ID's
 GET_SENSOR_DATA = 0x0043
@@ -128,6 +129,7 @@ SET_FAN_SPEED = 0x0045
 BIG_READ_WISHBONE = 0x0047
 BIG_WRITE_WISHBONE = 0x0049
 SDRAM_PROGRAM_WISHBONE = 0x0051
+
 
 # FOR VIRTEX FLASH RECONFIG
 DEFAULT_START_ADDRESS = 0x3000000
@@ -199,6 +201,16 @@ MEZZANINE_3_TEMP_ADC_PAGE = 20
 PLUS3V3AUX_ADC_PAGE = 22
 
 ALL_PAGES_PAGE = 255
+
+# HMC Temperature registers
+
+HMC_Temp_Write_Register = 0x2b0004
+HMC_Temp_Write_Command = 0x8000000a
+HMC_Die_temp_Register = 0x2b0000
+HMC_Top_DRAM_temp_Register = 0x2b0001
+HMC_Bottom_DRAM_temp_Register = 0x2b0002
+HMC_I2C_Address = 0x10
+HMC_MEZZANINE_SITES = [1, 2, 3]
 
 # MAX31785 FAN CONTROLLER PMBUS COMMANDS
 PAGE_CMD = 0x00
@@ -315,7 +327,7 @@ current_scaling = {
     str(P1V2_MGTAVTT_CURRENT_MON_PAGE): 1.0 / (100.0 * 0.002)
 }
 
-# dictionary holding all sensor infomation
+# dictionary holding all sensor information
 # comprised of sensor name and key; key = index of sensor data in rolled
 # up sensor response from SKARAB
 sensor_list = {
@@ -359,7 +371,11 @@ sensor_list = {
     '+1V8_MGTVCCAUX_current': 79,
     '+1V0_MGTAVCC_current': 82,
     '+1V2_MGTAVTT_current': 85,
-    '+3V3_config_current': 88
+    '+3V3_config_current': 88,
+    'mezzanine_site_0_temperature_degC': 91,
+    'mezzanine_site_1_temperature_degC': 92,
+    'mezzanine_site_2_temperature_degC': 93,
+    'mezzanine_site_3_temperature_degC': 94
 }
 
 # sensor thresholds
@@ -398,13 +414,21 @@ current_ranges = {
 
 # temperature_sensor: (max, min)
 # other temperatures are relative to inlet temp
+# hmc die and mezzanine temps are not relative to inlet temp
 temperature_ranges = {
     'inlet_temperature_degC': (50.0, -10.0),
     'outlet_temperature_degC': (10, -10),
     'fpga_temperature_degC': (30, -10),
     'fan_controller_temperature_degC': (10, -10),
     'voltage_monitor_temperature_degC': (10, -10),
-    'current_monitor_temperature_degC': (10, -10)
+    'current_monitor_temperature_degC': (10, -10),
+    'mezzanine_site_0_temperature_degC': (80.0, 5.0),
+    'mezzanine_site_1_temperature_degC': (80.0, 5.0),
+    'mezzanine_site_2_temperature_degC': (80.0, 5.0),
+    'mezzanine_site_3_temperature_degC': (80.0, 5.0),
+    'hmc_0_die_temp': (85.0, 5.0),
+    'hmc_1_die_temp': (85.0, 5.0),
+    'hmc_2_die_temp': (85.0, 5.0)
 }
 
 # fan_rpm: (rating, max, min)
@@ -626,7 +650,7 @@ class WriteI2CReq(Command):
         self.expect_response = True
         self.response = WriteI2CResp
         self.num_words = 39
-        self.pad_words = 1
+        self.pad_words = 0
         self.packet['id'] = i2c_interface_id
         self.packet['slave_address'] = slave_address
         self.packet['num_bytes'] = num_bytes
@@ -635,19 +659,19 @@ class WriteI2CReq(Command):
 
 class WriteI2CResp(Response):
     def __init__(self, command_id, seq_num, i2c_interface_id, slave_address,
-                 num_bytes, write_bytes, write_success, padding):
+                 num_bytes, write_bytes, write_success):
         super(WriteI2CResp, self).__init__(command_id, seq_num)
         self.packet['id'] = i2c_interface_id
         self.packet['slave_address'] = slave_address
         self.packet['num_bytes'] = num_bytes
         self.packet['write_bytes'] = write_bytes
         self.packet['write_success'] = write_success
-        self.packet['padding'] = padding
+        #self.packet['padding'] = padding
 
     @staticmethod
     def unpack_process(unpacked_data):
-        write_bytes = unpacked_data[5:37]
-        unpacked_data[5:37] = [write_bytes]
+        write_bytes = unpacked_data[5:38]
+        unpacked_data[5:38] = [write_bytes]
         return unpacked_data
 
 
@@ -745,7 +769,7 @@ class GetSensorDataReq(Command):
         super(GetSensorDataReq, self).__init__(GET_SENSOR_DATA)
         self.expect_response = True
         self.response = GetSensorDataResp
-        self.num_words = 95
+        self.num_words = 99
         self.pad_words = 2
 
 
@@ -757,8 +781,8 @@ class GetSensorDataResp(Response):
 
     @staticmethod
     def unpack_process(unpacked_data):
-        read_bytes = unpacked_data[2:93]
-        unpacked_data[2:93] = [read_bytes]
+        read_bytes = unpacked_data[2:97]
+        unpacked_data[2:97] = [read_bytes]
         return unpacked_data
 
 
@@ -1288,6 +1312,7 @@ class ReadHMCI2CReq(Command):
         self.packet['read_address'] = read_address
 
 
+
 class ReadHMCI2CResp(Response):
     def __init__(self, command_id, seq_num, interface_id, slave_address,
                  read_address, read_bytes, read_success, padding):
@@ -1306,6 +1331,39 @@ class ReadHMCI2CResp(Response):
         unpacked_data[4:8] = [slave_address]
         # note the indices change after the first replacement!
         unpacked_data[5:9] = [read_bytes]
+        return unpacked_data
+
+class WriteHMCI2CReq(Command):
+    def __init__(self, interface_id, slave_address,
+                 write_address, write_data):
+        super(WriteHMCI2CReq, self).__init__(WRITE_HMC_I2C)
+        self.expect_response = True
+        self.response = WriteHMCI2CResp
+        self.num_words = 15
+        self.pad_words = 2
+        self.packet['id'] = interface_id
+        self.packet['slave_address'] = slave_address
+        self.packet['write_address'] = write_address
+        self.packet['write_data'] = write_data
+
+class WriteHMCI2CResp(Response):
+    def __init__(self, command_id, seq_num, interface_id, slave_address,
+                 write_address, write_data, write_success, padding):
+        super(WriteHMCI2CResp, self).__init__(command_id, seq_num)
+        self.packet['id'] = interface_id
+        self.packet['slave_address'] = slave_address
+        self.packet['write_address'] = write_address
+        self.packet['write_data'] = write_data
+        self.packet['write_success'] = write_success
+        self.packet['padding'] = padding
+
+    @staticmethod
+    def unpack_process(unpacked_data):
+        slave_address = unpacked_data[4:8]
+        write_bytes = unpacked_data[8:12]
+        unpacked_data[4:8] = [slave_address]
+        # note the indices change after the first replacement!
+        unpacked_data[5:9] = [write_bytes]
         return unpacked_data
 
 

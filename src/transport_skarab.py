@@ -1102,7 +1102,9 @@ class SkarabTransport(Transport):
     def write_i2c(self, interface, slave_address, *bytes_to_write):
         """
         Perform i2c write on a selected i2c interface.
-        Up to 32 bytes can be written in a single i2c transaction
+        Up to 33 bytes can be written in a single i2c transaction
+        (33 bytes of data allowed since the fan controller i2c
+         writes require a command byte plus 32 bytes of data)
         :param interface: identifier for i2c interface:
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
@@ -1110,14 +1112,15 @@ class SkarabTransport(Transport):
                           3 - Mezzanine 2 i2c
                           4 - Mezzanine 3 i2c
         :param slave_address: i2c address of slave to write to
-        :param bytes_to_write: 32 bytes of data to write (to be packed as
+        :param bytes_to_write: 33 bytes of data to write (to be packed as
         16-bit word each), list of bytes
         :return: response object
         """
+        MAX_I2C_WRITE_BYTES = 33
         num_bytes = len(bytes_to_write)
-        if num_bytes > 32:
+        if num_bytes > MAX_I2C_WRITE_BYTES:
             self.logger.error(
-                'Maximum of 32 bytes can be written in a single transaction')
+                'Maximum of %s bytes can be written in a single transaction', str(MAX_I2C_WRITE_BYTES))
             return False
 
         # each byte to be written must be packaged as a 16 bit value
@@ -1130,8 +1133,8 @@ class SkarabTransport(Transport):
             packed_bytes += pack(byte)
 
         # pad the number of bytes to write to 32 bytes
-        if num_bytes < 32:
-            packed_bytes += (32 - num_bytes) * '\x00\x00'
+        if num_bytes < MAX_I2C_WRITE_BYTES:
+            packed_bytes += (MAX_I2C_WRITE_BYTES - num_bytes) * '\x00\x00'
 
         # create payload packet structure
         request = sd.WriteI2CReq(interface, slave_address,
@@ -2470,6 +2473,44 @@ class SkarabTransport(Transport):
             raise SkarabSdramError(errmsg)
         self.logger.info('Skarab is rebooting from SDRAM.')
 
+    def write_hmc_i2c(self, interface, slave_address, write_address, write_data,
+                     timeout=None,
+                     retries=None):
+        """
+        Write a register on the HMC device via the I2C interface
+        Also returns the data
+        :param interface: identifier for i2c interface:
+                          0 - SKARAB Motherboard i2c
+                          1 - Mezzanine 0 i2c
+                          2 - Mezzanine 1 i2c
+                          3 - Mezzanine 2 i2c
+                          4 - Mezzanine 3 i2c
+        :param slave_address: I2C slave address of device to write
+        :param write_address: register address on device to write
+        :param write_data: data to write to HMC device
+        :return: operation status: 0 - Fail, 1 - Success
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        # hmc addresses are 24/32bit, pack them as 4 Bytes (32 bits)
+        unpacked_addr = struct.unpack('!4B', struct.pack('!I', write_address))
+        write_address = ''.join([struct.pack('!H', x) for x in unpacked_addr])
+
+        unpacked_data = struct.unpack('!4B', struct.pack('!I', write_data))
+        write_data = ''.join([struct.pack('!H', x) for x in unpacked_data])
+
+        request = sd.WriteHMCI2CReq(interface, slave_address, write_address, write_data)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to HMC I2C write request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['write_success']:
+            errmsg = 'HMC I2C write failed!'
+            raise SkarabWriteFailed(errmsg)
+        return response.packet['write_success']
+
     def read_hmc_i2c(self, interface, slave_address, read_address,
                      format_print=False,
                      timeout=None,
@@ -2486,10 +2527,11 @@ class SkarabTransport(Transport):
                           4 - Mezzanine 3 i2c
         :param slave_address: I2C slave address of device to read
         :param read_address: register address on device to read
+        :param format_print: print the read data in more readable form
         :return: read data / None if fails
         """
-        if timeout is None: timeout=self.timeout
-        if retries is None: retries=self.retries
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
 
         # handle read address (pack it as 4 16-bit words)
         # TODO: handle this in the createPayload method
@@ -2557,6 +2599,10 @@ class SkarabTransport(Transport):
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
 
+        def hmc_die_temp(hmc_mez):
+            self.write_hmc_i2c(hmc_mez, sd.HMC_I2C_Address, sd.HMC_Temp_Write_Register, sd.HMC_Temp_Write_Command)
+            die_temp = self.read_hmc_i2c(hmc_mez, sd.HMC_I2C_Address, sd.HMC_Die_temp_Register)
+            return die_temp
 
         def sign_extend(value, bits):
             """
@@ -2583,6 +2629,37 @@ class SkarabTransport(Transport):
             value = int(value)
             value = float(value)
             return round(value / 100.0, 2)
+
+        def mezzanine_temperature_check_qsfp(value):
+            """
+            Checks the returned QSFP mezzanine temperatures and handles them
+            accordingly.
+            :param value: value returned from the temperature sensor
+            :return: correct mezzanine temperature value
+            """
+            # scale the measured voltage
+            temp = ((value / 1000.0) + 2.34) / 4.0
+            temp = ((temp - 0.76) / 0.0025) + 25.0
+
+            # convert to temperature
+            return round(temp, 2)
+
+        def mezzanine_temperature_check_hmc(value):
+            """
+            Checks the returned HMC mezzanine temperatures and handles them
+            accordingly.
+            :param value: value returned from the temperature sensor
+            :return: correct mezzanine temperature value
+            """
+            # scale the measured voltage
+            temp = value
+            temp = -1.0 * ((5.506 - math.sqrt(30.316036 + 0.00704 * (870.6
+                                                                     -
+                                                                     temp)))
+                           / 0.00352) + 30.0
+
+            # convert to temperature
+            return round(temp, 2)
 
         def voltage_current_monitor_temperature_check(value):
             """
@@ -2752,6 +2829,17 @@ class SkarabTransport(Transport):
                                                                    temperature,
                                                                    inlet_ref))
 
+        def parse_mezzanine_temperatures(raw_sensor_data):
+            for key, value in sd.sensor_list.items():
+
+                if 'mezzanine' in key:
+                    if key == 'mezzanine_site_3_temperature_degC':
+                        temperature = mezzanine_temperature_check_qsfp(raw_sensor_data[value])
+                    else:
+                        temperature = mezzanine_temperature_check_hmc(raw_sensor_data[value])
+
+                    self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref=0))
+
         def parse_voltages(raw_sensor_data):
             for key, value in sd.sensor_list.items():
                 if '_voltage' in key:
@@ -2765,6 +2853,16 @@ class SkarabTransport(Transport):
                     current = current_handler(raw_sensor_data, value)
                     self.sensor_data[key] = (current, 'amperes',
                                              check_current(key, current))
+
+        def get_hmc_temperatures():
+            try:
+                for hmc in sd.HMC_MEZZANINE_SITES:
+                    key = 'hmc_{}_die_temp'.format(hmc - 1)
+                    temperature = hmc_die_temp(hmc)
+                    self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref=0))
+            except:
+                raise SkarabInvalidResponse('Error reading HMC Die Temperatures')
+
         request = sd.GetSensorDataReq()
         response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
@@ -2776,8 +2874,13 @@ class SkarabTransport(Transport):
             parse_currents(recvd_sensor_data_values)
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
+            parse_mezzanine_temperatures(recvd_sensor_data_values)
+            get_hmc_temperatures()
+
             return self.sensor_data
-        return False
+
+        else:
+            raise SkarabInvalidResponse('Error reading board temperatures')
 
     def set_fan_speed(self, fan_page, pwm_setting,
                       timeout=None,
@@ -2786,7 +2889,7 @@ class SkarabTransport(Transport):
         Sets the speed of a selected fan on the SKARAB motherboard. Desired
         speed is given as a PWM setting: range: 0.0 - 100.0
         :param fan_page: desired fan
-        :param pwm_setting: desired PWM speed (as a value from 0.0 to 100.0
+        :param pwm_setting: desired PWM speed (as a value from 0.0 to 100.0)
         :return: (new_fan_speed_pwm, new_fan_speed_rpm)
         """
         if timeout is None: timeout=self.timeout
@@ -2835,105 +2938,6 @@ class SkarabTransport(Transport):
         else:
             self.logger.debug('I2C Switch successfully configured')
             return True
-
-    # fan controller functions
-    # TODO: deprecate
-    def write_fan_controller(self, command_code, num_bytes, byte_to_write):
-        """
-        Perform a PMBus write to the MAX31785 Fan Controller
-        :param command_code: desired command code
-        :param num_bytes: number of bytes in command
-        :param byte_to_write:  bytes to write
-        :return: Nothing
-        """
-
-        # house keeping
-        # if type(bytes_to_write) != list:
-        #    write_data = list()
-        #    write_data.append(bytes_to_write)
-
-        total_num_bytes = 1 + num_bytes
-
-        combined_write_bytes = list()
-
-        combined_write_bytes.append(command_code)
-        combined_write_bytes.append(byte_to_write)
-
-        # do an i2c write
-        if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
-                              total_num_bytes, *combined_write_bytes):
-            self.logger.error('Failed to write to the Fan Controller')
-        else:
-            self.logger.debug('Write to fan controller successful')
-
-    # TODO: deprecate
-    def read_fan_controller(self, command_code, num_bytes):
-        """
-        Performs PMBus read from the MAX31785 Fan Controller
-        :param command_code: desired command code
-        :param num_bytes: number of bytes in command
-        :return: Read bytes if successful
-        """
-        raise DeprecationWarning
-
-        # do a PMBus i2c read
-        data = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
-                                   sd.MAX31785_I2C_DEVICE_ADDRESS, command_code
-                                   , num_bytes)
-
-        # check the received data
-        if data is None:
-            # read was unsucessful
-            self.logger.error('Failed to read from the fan controller')
-            return None
-        else:
-            # success
-            self.logger.debug('Read from fan controller successful')
-            return data
-
-    # TODO: deprecate
-    def read_fan_speed_rpm(self, fan, open_switch=True):
-        """
-        Read the current fan speed of a selected fan in RPM
-        :param fan: selected fan
-        :param open_switch: True if the i2c switch must be opened
-        :return: read fan speed in RPM
-        """
-        raise Exception('Test to stderr')
-        # raise DeprecationWarning
-
-        # find the address of the desired fan
-        if fan == 'LeftFrontFan':
-            fan_selected = sd.LEFT_FRONT_FAN_PAGE
-        elif fan == 'LeftMiddleFan':
-            fan_selected = sd.LEFT_MIDDLE_FAN_PAGE
-        elif fan == 'LeftBackFan':
-            fan_selected = sd.LEFT_BACK_FAN_PAGE
-        elif fan == 'RightBackFan':
-            fan_selected = sd.RIGHT_BACK_FAN_PAGE
-        elif fan == 'FPGAFan':
-            fan_selected = sd.FPGA_FAN
-        else:
-            self.logger.error('Unknown fan selected')
-            return
-
-        # open switch
-        if open_switch:
-            self.configure_i2c_switch(sd.FAN_CONT_SWITCH_SELECT)
-
-        # write to fan controller
-        self.write_fan_controller(sd.PAGE_CMD, 1, fan_selected)
-
-        # read from fan controller
-
-        read_data = self.read_fan_controller(sd.READ_FAN_SPEED_1_CMD, 2)
-
-        if read_data is not None:
-            fan_speed_rpm = read_data[0] + (read_data[1] << 8)
-
-            return fan_speed_rpm
-        else:
-            return
 
     def get_spartan_checksum(self):
         """
