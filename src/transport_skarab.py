@@ -2802,6 +2802,12 @@ class SkarabTransport(Transport):
                     self.sensor_data[key] = (
                             fan_speed, 'rpm', check_fan_speed(key, fan_speed))
 
+        def parse_fan_speeds_generic(raw_sensor_data):
+            for key, value in sd.sensor_list.items():
+                if 'fan_pwm' in key:
+                    self.sensor_data[key] = round(
+                        raw_sensor_data[value] / 100.0, 2)
+
         def parse_fan_speeds_pwm(raw_sensor_data):
             for key, value in sd.sensor_list.items():
                 if 'fan_pwm' in key:
@@ -2869,8 +2875,9 @@ class SkarabTransport(Transport):
             # raw sensor data received from SKARAB
             recvd_sensor_data_values = response.packet['sensor_data']
             # parse the raw data to extract actual sensor info
-            parse_fan_speeds_pwm(recvd_sensor_data_values)
+            parse_fan_speeds_generic(recvd_sensor_data_values)
             parse_fan_speeds_rpm(recvd_sensor_data_values)
+            parse_fan_speeds_pwm(recvd_sensor_data_values)
             parse_currents(recvd_sensor_data_values)
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
