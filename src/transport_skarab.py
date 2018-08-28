@@ -2811,8 +2811,13 @@ class SkarabTransport(Transport):
         def parse_fan_speeds_pwm(raw_sensor_data):
             for key, value in sd.sensor_list.items():
                 if 'fan_pwm' in key:
-                    self.sensor_data[key] = round(
-                        raw_sensor_data[value] / 100.0, 2)
+                    pwm_value = round(raw_sensor_data[value] / 100.0, 2);
+                    if(pwm_value > 100 or pwm_value < 0): 
+                        message = 'ERROR'
+                    else:
+                        message = 'OK'
+                    self.sensor_data[key] = (
+                            pwm_value, '%',message) 
 
         def parse_temperatures(raw_sensor_data):
             # inlet temp (reference)
