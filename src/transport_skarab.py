@@ -160,7 +160,7 @@ class SkarabTransport(Transport):
         # TODO - add the one_gbe
         # self.gbes = []
         # self.gbes.append(FortyGbe(self, 0))
-        # # self.gbes.append(FortyGbe(self, 0, 0x50000 - 0x4000))
+        # # self.gbes.append(FortyGbe(self, 0, 0x54000 - 0x4000))
 
     @staticmethod
     def test_host_type(host_ip):

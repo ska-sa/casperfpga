@@ -10,14 +10,14 @@ class FortyGbe(Gbe):
 
     """
 
-    def __init__(self, parent, name, address=0x50000, length_bytes=0x4000,
+    def __init__(self, parent, name, address=0x54000, length_bytes=0x4000,
                  device_info=None, position=None):
         """
         Implements the Gbe class. This is normally initialised from_device_info.
         :param parent: The parent object, normally a CasperFpga instance
         :param name: The name of the device
         :param position: Optional - defaulted to None
-        :param address: Integer - Optional - defaulted to 0x50000
+        :param address: Integer - Optional - defaulted to 0x54000
         :param length_bytes: Integer - Optional - defaulted to 0x4000
         :param device_info: Information about the device
         :return: <nothing>
@@ -61,7 +61,7 @@ class FortyGbe(Gbe):
         :return: a TenGbe object
         """
         # TODO: fix this hard-coding!
-        address = 0x50000
+        address = 0x54000
         length_bytes = 0x4000
         return cls(parent, device_name, address, length_bytes, device_info, 0)
 
@@ -177,31 +177,31 @@ class FortyGbe(Gbe):
             # no longer meaningful, since subnet can be less than 256?
             # 'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
             'ip': IpAddress('%i.%i.%i.%i' % (
-                pd[0x10], pd[0x11], pd[0x12], pd[0x13])),
+                pd[0x14], pd[0x15], pd[0x16], pd[0x17])),
             'subnet_mask': IpAddress('%i.%i.%i.%i' % (
                     pd[0x38], pd[0x39], pd[0x3a], pd[0x3b])),
             'mac': Mac('%i:%i:%i:%i:%i:%i' % (
-                pd[0x02], pd[0x03], pd[0x04], pd[0x05], pd[0x06], pd[0x07])),
+                pd[0x0E], pd[0x0F], pd[0x10], pd[0x11], pd[0x12], pd[0x13])),
             'gateway_ip': IpAddress('%i.%i.%i.%i' % (
-                pd[0x0c], pd[0x0d], pd[0x0e], pd[0x0f])),
-            'fabric_port': ((pd[0x22] << 8) + (pd[0x23])),
-            'fabric_en': bool(pd[0x21] & 1),
-            'xaui_lane_sync': [
-                bool(pd[0x27] & 4), bool(pd[0x27] & 8),
-                bool(pd[0x27] & 16), bool(pd[0x27] & 32)],
-            'xaui_status': [
-                pd[0x24], pd[0x25], pd[0x26], pd[0x27]],
-            'xaui_chan_bond': bool(pd[0x27] & 64),
-            'xaui_phy': {
-                'rx_eq_mix': pd[0x28],
-                'rx_eq_pol': pd[0x29],
-                'tx_preemph': pd[0x2a],
-                'tx_swing': pd[0x2b]},
+                pd[0x18], pd[0x19], pd[0x20], pd[0x21])),
+            'fabric_port': ((pd[0x2E] << 8) + (pd[0x2F])),
+            'fabric_en': bool(pd[0x2B] & 1),
+            # 'xaui_lane_sync': [
+            #     bool(pd[0x27] & 4), bool(pd[0x27] & 8),
+            #     bool(pd[0x27] & 16), bool(pd[0x27] & 32)],
+            # 'xaui_status': [
+            #     pd[0x24], pd[0x25], pd[0x26], pd[0x27]],
+            # 'xaui_chan_bond': bool(pd[0x27] & 64),
+            # 'xaui_phy': {
+            #     'rx_eq_mix': pd[0x28],
+            #     'rx_eq_pol': pd[0x29],
+            #     'tx_preemph': pd[0x2a],
+            #     'tx_swing': pd[0x2b]},
             'multicast': {
                 'base_ip': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x30], pd[0x31], pd[0x32], pd[0x33])),
+                    pd[0x1C], pd[0x1D], pd[0x1E], pd[0x1F])),
                 'ip_mask': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x34], pd[0x35], pd[0x36], pd[0x37]))}
+                    pd[0x20], pd[0x21], pd[0x22], pd[0x23]))}
         }
         possible_addresses = [int(returnval['multicast']['base_ip'])]
         mask_int = int(returnval['multicast']['ip_mask'])
