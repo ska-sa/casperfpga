@@ -1,4 +1,5 @@
 import time,numpy as np,logging,struct
+from i2c import I2C_DEVICE
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +241,7 @@ class LTC2990():
     def getWord(self,name):
         rid, mask = self._getMask(self.DICT, name)
         return self._get(self.read(rid),mask)
-        
+
     def setWord(self,name,value):
         rid, mask = self._getMask(self.DICT, name)
         if mask == 0xff:
@@ -402,7 +403,7 @@ class INA219():
         self.setWord('configuration',conf)
 
         # check availability
-	cnt=0
+        cnt=0
         while not self.getStatus('CNVR'):
             cnt+=1
             time.sleep(0.01)
@@ -442,7 +443,7 @@ class INA219():
     def getWord(self,name):
         rid, mask = self._getMask(self.DICT, name)
         return self._get(self.read(rid),mask)
-        
+
     def setWord(self,name,value):
         rid, mask = self._getMask(self.DICT, name)
         if mask == 0xffff:
@@ -452,3 +453,101 @@ class INA219():
             data = self.read(rid)
             data = self._set(data,value,mask)
             self.write(reg=rid, data=data)
+
+
+class MAX11644(I2C_DEVICE):
+
+    LSB = 4.096/(2**12)
+
+    def __init__(self, itf, addr=0x36):
+        super(MAX11644, self).__init__(itf, addr)
+
+        self.DICT[0x00] = { 'setup' : 0xff << 0,
+                            'REG' : 0b1 << 7,
+                            'SEL' : 0b111 << 4,
+                            'CLK' : 0b1 << 3,
+                            'BIP' : 0b1 << 2,
+                            'RST' : 0b1 << 1,
+                            'SCAN' : 0b11 << 5,
+                            'CS' : 0b1111 << 1,
+                            'SGL' : 0b1 << 0,
+                            'config' : 0xff << 0, }
+
+    def init(self, **kwargs):
+
+        self.reset()
+
+        _reg = 0x1      # setup
+        _sel = 0b101    # internal reference
+        _clk = 0x0      # internal clock
+        _bip = 0x0      # unipolar
+        _rst = 0x1      # no action
+
+        if 'sel' in kwargs:
+            _sel = str2int(kwargs['sel'])
+        if 'clk' in kwargs:
+            _clk = str2int(kwargs['clk'])
+        if 'bip' in kwargs:
+            _bip = str2int(kwargs['bip'])
+
+        val = self._set(0x0, _reg, self.DICT[0x0]['REG'])
+        val = self._set(val, _sel, self.DICT[0x0]['SEL'])
+        val = self._set(val, _clk, self.DICT[0x0]['CLK'])
+        val = self._set(val, _bip, self.DICT[0x0]['BIP'])
+        val = self._set(val, _rst, self.DICT[0x0]['RST'])
+
+        self.write(data=val)
+
+        _reg = 0x0  # config
+        _scan= 0x0  # Scans up from AIN0 to the input selected by CS0
+        _cs  = 0x1  # select AIN1 after scaning AIN0
+        _sgl = 0x1  # single-ended
+
+        if 'scan' in kwargs:
+            _scan = str2int(kwargs['scan'])
+        if 'cs' in kwargs:
+            _cs = str2int(kwargs['cs'])
+        if 'sgl' in kwargs:
+            _sgl = str2int(kwargs['sgl'])
+
+        val = self._set(0x0, _reg, self.DICT[0x0]['REG'])
+        val = self._set(val, _scan,self.DICT[0x0]['SCAN'])
+        val = self._set(val, _cs,  self.DICT[0x0]['CS'])
+        val = self._set(val, _sgl, self.DICT[0x0]['SGL'])
+
+        self._config = val
+        self.write(data=self._config)
+
+    def reset(self):
+        self.write(data=0x80)
+
+    def readVolt(self,name=None):
+
+        if name.upper() not in ['AIN0','AIN1',None]:
+            raise ValueError('Invalid parameter {}'.format(name))
+
+        self.write(data=self._config)
+
+        MASK = 0x0f
+
+        d0 = self.read(length=2)
+        ain0 = (((d0[0] & MASK) << 8) | d0[1]) * self.LSB
+        d1 = self.read(length=2)
+        ain1 = (((d1[0] & MASK) << 8) | d1[1]) * self.LSB
+
+        if name.upper() == 'AIN0':
+            return ain0
+        elif name.upper() == 'AIN1':
+            return ain1
+        else:
+            return (ain0, ain1)
+
+def str2int(s):
+    if s.startswith('0b'):
+        val=int(s,2)
+    elif s.startswith('0x'):
+        val=int(s,16)
+    else:
+        val=int(s)
+    return val
+
