@@ -253,7 +253,7 @@ class CasperFpga(object):
         """
         return self.transport.set_igmp_version(version)
 
-    def upload_to_ram_and_program(self, filename=None, wait_complete=True):
+    def upload_to_ram_and_program(self, filename=None, wait_complete=True, legacy_reg_map=True):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: the file to upload
@@ -271,7 +271,7 @@ class CasperFpga(object):
             return True
         if self.bitstream:
             if self.bitstream[-3:] == 'fpg':
-                self.get_system_information(filename)
+                self.get_system_information(filename, legacy_reg_map=True)
         return rv
 
     def is_connected(self, **kwargs):
@@ -476,7 +476,7 @@ class CasperFpga(object):
                           'okay%s.' % (integer, device_name, word_offset,
                           ' (blind)' if blindwrite else ''))
 
-    def _create_memory_devices(self, device_dict, memorymap_dict):
+    def _create_memory_devices(self, device_dict, memorymap_dict, legacy_reg_map=True):
         """
         Create memory devices from dictionaries of design information.
         :param device_dict: raw dictionary of information from tagged
@@ -504,7 +504,7 @@ class CasperFpga(object):
                     raise TypeError('%s is not a callable Memory class - '
                                     'that\'s a problem.' % known_device_class)
                 new_device = known_device_class.from_device_info(
-                    self, device_name, device_info, memorymap_dict)
+                    self, device_name, device_info, memorymap_dict, legacy_reg_map=legacy_reg_map)
                 if new_device.name in self.memory_devices.keys():
                     raise NameError(
                         'Device called %s of type %s already exists in '
@@ -556,7 +556,7 @@ class CasperFpga(object):
         """
         return getattr(self, container)
 
-    def get_system_information(self, filename=None, fpg_info=None):
+    def get_system_information(self, filename=None, fpg_info=None, legacy_reg_map=True):
         """
         Get information about the design running on the FPGA.
         If filename is given, get it from file, otherwise query the 
@@ -583,7 +583,7 @@ class CasperFpga(object):
         # reset current devices and create new ones from the new
         # design information
         self._reset_device_info()
-        self._create_memory_devices(device_dict, memorymap_dict)
+        self._create_memory_devices(device_dict, memorymap_dict, legacy_reg_map)
         self._create_other_devices(device_dict)
         # populate some system information
         try:
