@@ -271,7 +271,7 @@ class CasperFpga(object):
             return True
         if self.bitstream:
             if self.bitstream[-3:] == 'fpg':
-                self.get_system_information(filename, legacy_reg_map=True)
+                self.get_system_information(filename, legacy_reg_map=legacy_reg_map)
         return rv
 
     def is_connected(self, **kwargs):
