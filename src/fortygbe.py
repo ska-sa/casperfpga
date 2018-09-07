@@ -64,7 +64,7 @@ class FortyGbe(Gbe):
         # TODO: fix this hard-coding!
         address = 0x54000
         length_bytes = 0x4000
-        return cls(parent, device_name, address, length_bytes, device_info, 0, legacy_reg_map)
+        return cls(parent, device_name, address, length_bytes, device_info, 0, legacy_reg_map=legacy_reg_map)
 
     def _wbone_rd(self, addr):
         """
