@@ -277,14 +277,14 @@ class CasperFpga(object):
     def is_connected(self, **kwargs):
         """
         Is the transport connected to the host?
-        :return: 
+        :return:
         """
         return self.transport.is_connected(**kwargs)
 
     def is_running(self):
         """
         Is the FPGA programmed and running?
-        :return: 
+        :return:
         """
         return self.transport.is_running()
 
@@ -322,15 +322,15 @@ class CasperFpga(object):
 
     def dram_bulkread(self, device, size, offset):
         """
-        
-        :return: 
+
+        :return:
         """
         raise NotImplementedError
 
     def read_dram(self, size, offset=0):
         """
         Reads data from a ROACH's DRAM. Reads are done up to 1MB at a time.
-        The 64MB indirect address register is automatically incremented 
+        The 64MB indirect address register is automatically incremented
         as necessary.
         It returns a string, as per the normal 'read' function.
         ROACH has a fixed device name for the DRAM (dram memory).
@@ -370,9 +370,9 @@ class CasperFpga(object):
     def write_dram(self, data, offset=0):
         """
         Writes data to a ROACH's DRAM. Writes are done up to 512KiB at a time.
-        The 64MB indirect address register is automatically 
+        The 64MB indirect address register is automatically
         incremented as necessary.
-        ROACH has a fixed device name for the DRAM (dram memory) and so the 
+        ROACH has a fixed device name for the DRAM (dram memory) and so the
         user does not need to specify the write register.
         :param data: packed binary string data to write
         :param offset: the offset at which to write
@@ -429,7 +429,7 @@ class CasperFpga(object):
     def read_int(self, device_name, word_offset=0):
         """
         Read an integer from memory device.
-        i.e. calls self.read(device_name, size=4, offset=0) and uses 
+        i.e. calls self.read(device_name, size=4, offset=0) and uses
         struct to unpack it into an integer
         :param device_name: device from which to read
         :param word_offset: the 32-bit word offset at which to read
@@ -556,13 +556,13 @@ class CasperFpga(object):
         """
         return getattr(self, container)
 
-    def get_system_information(self, filename=None, fpg_info=None, legacy_reg_map=True):
+    def get_system_information(self, filename=None, fpg_info=None, **kwargs):
         """
         Get information about the design running on the FPGA.
-        If filename is given, get it from file, otherwise query the 
+        If filename is given, get it from file, otherwise query the
             host via KATCP.
         :param filename: fpg filename
-        :param fpg_info: a tuple containing device_info and coreinfo 
+        :param fpg_info: a tuple containing device_info and coreinfo
             dictionaries
         :return: <nothing> the information is populated in the class
         """
@@ -583,7 +583,11 @@ class CasperFpga(object):
         # reset current devices and create new ones from the new
         # design information
         self._reset_device_info()
-        self._create_memory_devices(device_dict, memorymap_dict, legacy_reg_map)
+        try:
+            legacy_reg_map = kwargs['legacy_reg_map']
+        except KeyError:
+            legacy_reg_map = True
+        self._create_memory_devices(device_dict, memorymap_dict, legacy_reg_map=legacy_reg_map)
         self._create_other_devices(device_dict)
         # populate some system information
         try:
@@ -686,3 +690,4 @@ class CasperFpga(object):
         return self.host
 
 # end
+

@@ -849,7 +849,8 @@ class SkarabTransport(Transport):
 
             # check if response is from the expected SKARAB
             recvd_from_addr = address[0]
-            expected_recvd_from_addr = socket.gethostbyname(hostname)
+            expected_recvd_from_addr = \
+                self._skarab_control_sock.getpeername()[0]
             if recvd_from_addr != expected_recvd_from_addr:
                 self.logger.warning(
                     '%s: received response from  %s, expected response from '
