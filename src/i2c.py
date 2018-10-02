@@ -572,7 +572,7 @@ class I2C_PIGPIO:
         else:
             raise ValueError("Invalid parameter")
 
-class I2C_DEVICE():
+class I2C_DEVICE(object):
     """ I2C device base class """
 
     DICT = dict()

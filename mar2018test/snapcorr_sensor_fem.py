@@ -99,7 +99,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
         print('Temperature: {}, serial number: {}'.format(t,sn))
 
     if args.switch!=None:
-        smode = {'load':0b001,'antenna':0b111,'noise':0b000}
+        smode = {'load':0b000,'antenna':0b110,'noise':0b001}
         gpio=i2c_gpio.PCF8574(bus,GPIO_FEM_ADDR)
         if len(args.switch)>0:
             key = args.switch[0]
@@ -169,13 +169,13 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
             print('\t\tCalibrated altitude: {}'.format(alt-0.16))
 
     if args.volt:
-		# full scale 909mA
-		ina=i2c_volt.INA219(bus,INA_ADDR)
-		ina.init()
-		vshunt = ina.readVolt('shunt')
-		vbus = ina.readVolt('bus')
-		res = 0.1
-		print('Shunt voltage: {} V, current: {} A, bus voltage: {} V'.format(vshunt,vshunt/res,vbus))
+        # full scale 909mA
+        ina=i2c_volt.INA219(bus,INA_ADDR)
+        ina.init()
+        vshunt = ina.readVolt('shunt')
+        vbus = ina.readVolt('bus')
+        res = 0.1
+        print('Shunt voltage: {} V, current: {} A, bus voltage: {} V'.format(vshunt,vshunt/res,vbus))
 
     if args.phase!=None:
         phsmap = {  'i2c_ant1':[5,4],

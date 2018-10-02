@@ -516,14 +516,13 @@ class MAX11644(I2C_DEVICE):
         val = self._set(val, _sgl, self.DICT[0x0]['SGL'])
 
         self._config = val
-        self.write(data=self._config)
 
     def reset(self):
         self.write(data=0x80)
 
-    def readVolt(self,name=None):
+    def readVolt(self, name=None):
 
-        if name.upper() not in ['AIN0','AIN1',None]:
+        if name != None and name.upper() not in ['AIN0','AIN1']:
             raise ValueError('Invalid parameter {}'.format(name))
 
         self.write(data=self._config)
@@ -535,12 +534,12 @@ class MAX11644(I2C_DEVICE):
         d1 = self.read(length=2)
         ain1 = (((d1[0] & MASK) << 8) | d1[1]) * self.LSB
 
-        if name.upper() == 'AIN0':
-            return ain0
-        elif name.upper() == 'AIN1':
-            return ain1
-        else:
+        if name == None:
             return (ain0, ain1)
+        elif name.upper() == 'AIN0':
+            return ain0
+        else:   # name.upper() == 'AIN1':
+            return ain1
 
 def str2int(s):
     if s.startswith('0b'):
