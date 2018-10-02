@@ -79,13 +79,14 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
         bus.enable_core()
         bus.setClock(int(args.i2c[1]),int(args.i2c[2]))
 
-    try:
-        imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[0,1,0],[1,0,0]])
-    except IOError as e:
-        print('FEM is not reachable!')
-        raise
+    #try:
+    #    imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[1,1,0],[-1,1,0]])
+    #except IOError as e:
+    #    print('FEM is not reachable!')
+    #    raise
 
     if args.imu:
+        imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[1,1,0],[-1,1,0]])
         imu.init()
         theta,phi = imu.pose
         print('IMU theta: {}, phi: {}'.format(theta,phi))
@@ -151,11 +152,13 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
                 press = bar.readPress(rawt,dt)
                 alt = bar.toAltitude(press,rawt/100.)
                 print('\tBarometer temperature: {}, air pressure: {}, altitude: {}'.format(rawt/100.,press,alt))
+                print('\t\tCalibrated altitude: {}'.format(alt-0.16))
                 avg_t += (rawt/100./n)
                 avg_p += (press*1./n)
                 avg_a += (alt*1./n)
                 time.sleep(delay)
             print('Averaged barometer temperature: {}, air pressure: {}, altitude: {}'.format(avg_t,avg_p,avg_a))
+            print('\t\tCalibrated altitude: {}'.format(avg_a-0.16))
         else:
             bar = i2c_bar.MS5611_01B(bus,BAR_ADDR)
             bar.init()
@@ -163,6 +166,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
             press = bar.readPress(rawt,dt)
             alt = bar.toAltitude(press,rawt/100.)
             print('Barometer temperature: {}, air pressure: {}, altitude: {}'.format(rawt/100.,press,alt))
+            print('\t\tCalibrated altitude: {}'.format(alt-0.16))
 
     if args.volt:
 		# full scale 909mA
@@ -171,7 +175,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
 		vshunt = ina.readVolt('shunt')
 		vbus = ina.readVolt('bus')
 		res = 0.1
-		print('Shunt voltage: {} V, bus voltage: {} V'.format(vshunt,vbus))
+		print('Shunt voltage: {} V, current: {} A, bus voltage: {} V'.format(vshunt,vshunt/res,vbus))
 
     if args.phase!=None:
         phsmap = {  'i2c_ant1':[5,4],
