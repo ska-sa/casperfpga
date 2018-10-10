@@ -41,11 +41,11 @@ class Bitfield(object):
         """
 
         :param name: name of the device
-        :type name: String
+        :type name: str
         :param width_bits: Bit-width of the Bitfield
-        :type width_bits: Integer
+        :type width_bits: int
         :param fields: number of fields - default to None
-        :type fields: Integer
+        :type fields: int
         """
         self.name = name
         self.width_bits = width_bits
@@ -97,7 +97,7 @@ class Bitfield(object):
         Get a field from this bitfield by its name.
 
         :param field_name: name of field to search for
-        :type field_name: String
+        :type field_name: str
         """
         try:
             return self._fields[field_name]

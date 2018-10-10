@@ -152,17 +152,17 @@ class HMCAD1511(WishBoneDevice):
 						   * numChannel=1	--	8 ADC cores per channel
 						   * numChannel=2	--	4 ADC cores per channel
 						   * numChannel=4	--	2 ADC cores per channel
-		:type numChannel: Integer
+		:type numChannel: int
 		:param clkDivide: Clock divide parameter 
 
 						  * Availalbe clock divide factors: 1, 2, 4, and 8
-		:type clkDivide: Integer
+		:type clkDivide: int
 		:param lowClkFreq: Activate lowClkFreq when
 
 						   * Single channel  Fs < 240 MHz
 						   * Dual channel    Fs < 120 MHz
 						   * Quad channel    Fs < 60 MHz
-		:type lowClkFreq: Boolean
+		:type lowClkFreq: bool
 		"""
 
 		self.reset()

@@ -1,8 +1,7 @@
-casperfpga
-===========
+casperfpga Sourcecode
+=====================
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
 
    casperfpga

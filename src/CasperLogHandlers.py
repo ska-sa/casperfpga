@@ -115,7 +115,7 @@ class CasperConsoleHandler(logging.Handler):
         * Need to add handlers for both Stream AND File
 
         :param name: Name of the StreamHandler
-        :type name: String
+        :type name: str
         :param max_len: How many log records to store in the FIFO
         """
         # logging.Handler.__init__(self)

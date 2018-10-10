@@ -175,13 +175,13 @@ class Snap(Memory):
         Arm the snapshot block.
 
         :param man_trig:
-        :type man_trig: Boolean
+        :type man_trig: bool
         :param man_valid:
-        :type man_valid: Boolean
+        :type man_valid: bool
         :param offset:
-        :type offset: Integer
+        :type offset: int
         :param circular_capture:
-        :type circular_capture: Boolean
+        :type circular_capture: bool
         """
         ctrl_reg = self.control_registers['control']['register']
         if offset >= 0:

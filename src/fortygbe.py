@@ -20,10 +20,10 @@ class FortyGbe(Gbe):
         :param position: defaulted to None
         :type position: Optional
         :param address: defaulted to 0x50000
-        :type address: Optional Integer
+        :type address: Optional int
         :param length_bytes: defaulted to 0x4000
         :type length_bytes: Optional 
-        :type length_bytes: Optional Integer
+        :type length_bytes: Optional int
         :param device_info: Information about the device
         """
         super(FortyGbe, self).__init__(
