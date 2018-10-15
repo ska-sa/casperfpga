@@ -2287,6 +2287,167 @@ class SkarabTransport(Transport):
 
     # endregion
 
+    # region --- SKARAB ADC-related methods ---
+
+    # region === Direct SPI Write ===
+    # Perform an SPI write on the SKARAB ADC mezzanine
+    def direct_spi_write(self, mezzanine_site, spi_destination, address, data):
+        i2c_interface = mezzanine_site + 1
+
+        # Write ADDRESS
+        write_byte = (address >> 8) & 0xFF
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_ADDRESS_MSB_REG, write_byte)
+
+        write_byte = (address & 0xFF)
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_ADDRESS_LSB_REG, write_byte)
+
+        # Write DATA
+        write_byte = (data >> 8) & 0xFF
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_MSB_REG, write_byte)
+
+        write_byte = (data & 0xFF)
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_LSB_REG, write_byte)
+
+        write_byte = spi_destination
+        # Write, so read/not write bit is 0
+        write_byte = write_byte | sd.START_DIRECT_SPI_ACCESS
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG, write_byte)
+
+        # Wait for the update to complete
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        timeout = 0
+        while ((read_byte[0] & sd.START_DIRECT_SPI_ACCESS) != 0) and (timeout < 1000):
+            self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+            read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+            timeout += 1
+
+        if timeout == 1000:
+            print("direct_spi_write ERROR: Timeout waiting for the SPI transaction to complete.")
+
+    # endregion
+
+    # region === Direct SPI Read ===
+    # Perform an SPI read on the SKARAB ADC mezzanine
+    def direct_spi_read(self, mezzanine_site, spi_destination, address):
+        i2c_interface = mezzanine_site + 1
+
+        # Write ADDRESS
+        write_byte = (address >> 8) & 0xFF
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_ADDRESS_MSB_REG, write_byte)
+
+        write_byte = (address & 0xFF)
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_ADDRESS_LSB_REG, write_byte)
+
+        write_byte = spi_destination | sd.START_DIRECT_SPI_ACCESS | sd.DIRECT_SPI_READ_NOT_WRITE
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG, write_byte)
+
+        # Wait for the update to complete
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        timeout = 0
+        while ((read_byte[0] & sd.START_DIRECT_SPI_ACCESS) != 0) and (timeout < 1000):
+            self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+            read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+            timeout += 1
+
+        if timeout == 1000:
+            print("direct_spi_write ERROR: Timeout waiting for the SPI transaction to complete.")
+
+        # Now get the read data
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_MSB_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        read_word = read_byte[0] << 8
+
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_LSB_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        read_word = read_word | read_byte[0]
+
+        return read_word
+
+    # endregion
+
+    # region === Enable ADC Ramp Data ===
+    def enable_adc_ramp_data(self, mezzanine_site):
+
+        print("Sending the commands to enable the ramp source on the ADC.")
+
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5839, 0x00)
+
+        # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33,
+        # 						Ramp=0x44, custom_single_pattern1=0x66,
+        #                       custom_double_pattern1&2=0x77
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5837, 0x44)
+
+        # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33,
+        # 						Ramp=0x44, custom_single_pattern1=0x66,
+        #                       custom_double_pattern1&2=0x77
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5838, 0x44)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x01)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x03)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5039, 0x00)
+
+        # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33,
+        # 						Ramp=0x44, custom_single_pattern1=0x66,
+        #                       custom_double_pattern1&2=0x77
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5037, 0x44)
+
+        # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33,
+        # 						Ramp=0x44, custom_single_pattern1=0x66,
+        #                       custom_double_pattern1&2=0x77
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5038, 0x44)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x01)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x03)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
+
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5839, 0x00)
+
+        # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33,
+        # 						Ramp=0x44, custom_single_pattern1=0x66,
+        #                       custom_double_pattern1&2=0x77
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5837, 0x44)
+
+        # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33,
+        # 						Ramp=0x44, custom_single_pattern1=0x66,
+        #                       custom_double_pattern1&2=0x77
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5838, 0x44)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x01)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x03)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5039, 0x00)
+
+        # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33,
+        # 						Ramp=0x44, custom_single_pattern1=0x66,
+        #                       custom_double_pattern1&2=0x77
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5037, 0x44)
+
+        # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33,
+        # 						Ramp=0x44, custom_single_pattern1=0x66,
+        #                       custom_double_pattern1&2=0x77
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5038, 0x44)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x01)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x03)
+        self.direct_spi_write(mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
+
+    # endregion
+
+    # region === Configure ADC Mezzanine Card ===
+
+
+
+    # endregion
+
     # region --- board level functions ---
 
     def check_programming_packet_count(self,
