@@ -26,14 +26,6 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
     p.add_argument('snap', type=str, metavar="SNAP_IP_OR_HOSTNAME")
-#   p.add_argument('--average', dest='avg', type=int,default=2,
-#                help='The number of samples being averaged. Default is 2')
-#   p.add_argument('--file', dest='file', type=str,
-#                help='Output sensor readings into files with the provided path and prefix.')
-#   p.add_argument('--verbose', action='store_true',
-#                help='Print sensor measurements and time costs.')
-#   p.add_argument('--period',dest='period',type=int, default=-1,
-#                help='Set the period of sampling in second. -1 to run endlessly. Default is -1.')
     p.add_argument('--i2c', dest='i2c', nargs=3, metavar=('I2C_NAME','I2C_BAUD_RATE','REFERENCE_CLOCK'), default=['i2c_ant1',10,100],
                 help='Specify the name of the i2c bus. Initialise I2C devices if baud rate and reference clock are provided.')
     p.add_argument('--rom',nargs='*',metavar=('TEXT'), help='Test EEPROM. Leave parameter empty to read ROM. Add text to write ROM.')
@@ -70,7 +62,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
     SN_ADDR = 0x50
     GPIO_PAM_ADDR = 0x21
     GPIO_FEM_ADDR = 0x20    #
-    
+
     # snap I2C interface
     fpga=CasperFpga(args.snap)
     assert args.i2c[0] in ['i2c_ant1','i2c_ant2','i2c_ant3']
@@ -79,19 +71,13 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
         bus.enable_core()
         bus.setClock(int(args.i2c[1]),int(args.i2c[2]))
 
-    #try:
-    #    imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[1,1,0],[-1,1,0]])
-    #except IOError as e:
-    #    print('FEM is not reachable!')
-    #    raise
-
     if args.imu:
         imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[1,1,0],[-1,1,0]])
         imu.init()
         theta,phi = imu.pose
         print('IMU theta: {}, phi: {}'.format(theta,phi))
         imu.mpu.powerOff()
-    
+
     if args.temp:
         temp = i2c_temp.Si7051(bus,TEMP_ADDR)
         t = temp.readTemp()

@@ -43,14 +43,6 @@ python snapcorr_sensor_pam.py 10.1.0.23 --i2c i2c_ant1 --id""",
 formatter_class=argparse.RawDescriptionHelpFormatter)
 
     p.add_argument('snap', type=str, metavar="SNAP_IP_OR_HOSTNAME")
-#   p.add_argument('--average', dest='avg', type=int,default=2,
-#                help='The number of samples being averaged. Default is 2')
-#   p.add_argument('--file', dest='file', type=str,
-#                help='Output sensor readings into files with the provided path and prefix.')
-#   p.add_argument('--verbose', action='store_true',
-#                help='Print sensor measurements and time costs.')
-#   p.add_argument('--period',dest='period',type=int, default=-1,
-#                help='Set the period of sampling in second. -1 to run endlessly. Default is -1.')
     p.add_argument('--i2c', dest='i2c', nargs=3, metavar=('I2C_NAME','I2C_BAUD_RATE','REFERENCE_CLOCK'), default=['i2c_ant1',10,100],
                 help='Specify the name of the i2c bus. Initialise I2C devices if baud rate and reference clock are provided.')
     p.add_argument('--rom',nargs='*',metavar=('TEXT'), help='Test EEPROM. Leave parameter empty to read ROM. Add text to write ROM.')
@@ -132,7 +124,6 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
         else:
             text = rom.readString()
             print('read EEPROM test: {}'.format(text))
-
 
     if args.volt:
         volt=i2c_volt.MAX11644(bus,VOLT_PAM_ADDR)

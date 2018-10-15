@@ -29,7 +29,7 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
                 help='Specify the name of the i2c bus.')
     p.add_argument('--rom',nargs='*',metavar=('TEXT'), help='Test EEPROM. Leave parameter empty to read ROM. Add text to write ROM.')
     p.add_argument('--temp',action='store_true', default=False,help='Print temperature and ID.')
-    p.add_argument('--volt',action='store_true', default=False, help='Print voltimeter.')
+    p.add_argument('--volt',action='store_true', default=False, help='Print current.')
     p.add_argument('--bar',nargs='*',metavar=('AVERAGE','INTERVAL'), help='Print air pressure, temperature and height, averaging over multiple measurements.')
     p.add_argument('--imu',action='store_true', default=False,help='Print FEM pose')
     #p.add_argument('--gpio',nargs='*',metavar=('VALUE'), help='Test GPIO. Leave parameter empty to read gpio. Add value to write gpio.')
@@ -57,6 +57,7 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
     ROM_FEM_ADDR = 0x51 #
     ROM_PAM_ADDR = 0x52
     TEMP_ADDR = 0x40    #
+    INA_ADDR = 0x45    #
     SN_ADDR = 0x50
     GPIO_PAM_ADDR = 0x21
     GPIO_FEM_ADDR = 0x20    #
@@ -76,13 +77,8 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
     assert args.i2c[0] in i2cmap.keys()
     bus=i2c.I2C_PIGPIO(i2cmap[args.i2c[0]][0],i2cmap[args.i2c[0]][1],I2C_BAUD_RATE)
 
-    try:
-        imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[0,1,0],[1,0,0]])
-    except IOError as e:
-        print('FEM is not reachable!')
-        raise
-
     if args.imu:
+        imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[1,1,0],[-1,1,0]])
         imu.init()
         theta,phi = imu.pose
         print('IMU theta: {}, phi: {}'.format(theta,phi))
@@ -104,7 +100,10 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
             gpio.write(val)
         else:
             val=gpio.read()
-            key = smode.keys()[smode.values().index(val&0b111)]
+            key = 'Unknown'
+            for name,value in smode.iteritems():
+                if val&0b111 == value:
+                    key = name
             print('read GPIO value: {:#05b}. ({} mode)'.format(val&0b111,key))
     elif args.gpio!=None:
         gpio=i2c_gpio.PCF8574(bus,GPIO_FEM_ADDR)
@@ -145,11 +144,13 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
                 press = bar.readPress(rawt,dt)
                 alt = bar.toAltitude(press,rawt/100.)
                 print('\tBarometer temperature: {}, air pressure: {}, altitude: {}'.format(rawt/100.,press,alt))
+                print('\t\tCalibrated altitude: {}'.format(alt-0.16))
                 avg_t += (rawt/100./n)
                 avg_p += (press*1./n)
                 avg_a += (alt*1./n)
                 time.sleep(delay)
             print('Averaged barometer temperature: {}, air pressure: {}, altitude: {}'.format(avg_t,avg_p,avg_a))
+            print('\t\tCalibrated altitude: {}'.format(avg_a-0.16))
         else:
             bar = i2c_bar.MS5611_01B(bus,BAR_ADDR)
             bar.init()
@@ -157,14 +158,16 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
             press = bar.readPress(rawt,dt)
             alt = bar.toAltitude(press,rawt/100.)
             print('Barometer temperature: {}, air pressure: {}, altitude: {}'.format(rawt/100.,press,alt))
+            print('\t\tCalibrated altitude: {}'.format(alt-0.16))
 
     if args.volt:
-        volt=i2c_volt.LTC2990(bus,VOLT_FEM_ADDR)
-        volt.init(mode0=2,mode1=3)
-        res = 0.33
-        vdiff=volt.readVolt('v1-v2')
-        print('v1-v2 voltage diff: {}, current: {}'.format(vdiff,vdiff/res))
         # full scale 909mA
+        ina=i2c_volt.INA219(bus,INA_ADDR)
+        ina.init()
+        vshunt = ina.readVolt('shunt')
+        vbus = ina.readVolt('bus')
+        res = 0.1
+        print('Shunt voltage: {} V, current: {} A, bus voltage: {} V'.format(vshunt,vshunt/res,vbus))
 
     if args.phase!=None:
         ANT1_PHS_X = 15
