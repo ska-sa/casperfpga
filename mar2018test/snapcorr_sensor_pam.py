@@ -58,21 +58,20 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
     # 10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
     # 20: 20 21 -- -- -- -- -- -- -- -- -- -- -- -- -- --
     # 30: -- -- -- -- -- -- 36 -- -- -- -- -- -- -- -- --
-    # 40: 40 -- -- -- 44 -- -- -- -- -- -- -- -- -- 4e --
-    # 50: 50 51/52 -- -- -- -- -- -- -- -- -- -- -- -- --
+    # 40: 40 -- -- -- 44 45 -- -- -- -- -- -- -- -- -- --
+    # 50: 50 51 52 -- -- -- -- -- -- -- -- -- -- -- -- --
     # 60: -- -- -- -- -- -- -- -- -- 69 -- -- -- -- -- --
     # 70: -- -- -- -- -- -- -- 77
 
     ACCEL_ADDR = 0X69
     MAG_ADDR = 0x0c
     BAR_ADDR = 0x77
-    VOLT_FEM_ADDR = 0x4e
-    VOLT_PAM_ADDR = 0x36
+    POW_PAM_ADDR = 0x36
     ROM_FEM_ADDR = 0x51
     ROM_PAM_ADDR = 0x52
     TEMP_ADDR = 0x40
     SN_ADDR = 0x50
-    INA_ADDR = 0x44
+    INA_PAM_ADDR = 0x44
     GPIO_PAM_ADDR = 0x21
     GPIO_FEM_ADDR = 0x20
 
@@ -126,15 +125,15 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
             print('read EEPROM test: {}'.format(text))
 
     if args.volt:
-        volt=i2c_volt.MAX11644(bus,VOLT_PAM_ADDR)
-        volt.init()
-        vp1,vp2=volt.readVolt()
+        power=i2c_volt.MAX11644(bus,POW_PAM_ADDR)
+        power.init()
+        vp1,vp2=power.readVolt()
         loss = 9.8
         print('East voltage: {} V, power level: {} dBm, calibrated power {} dBm'.format(vp1,dc2dbm(vp1), dc2dbm(vp1)+loss))
         print('North voltage: {} V, power level: {} dBm, calibrated power {} dBm'.format(vp2,dc2dbm(vp2), dc2dbm(vp1)+loss))
 
         # full scale 909mA
-        ina=i2c_volt.INA219(bus,INA_ADDR)
+        ina=i2c_volt.INA219(bus,INA_PAM_ADDR)
         ina.init()
         vshunt = ina.readVolt('shunt')
         vbus = ina.readVolt('bus')
