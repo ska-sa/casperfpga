@@ -26,14 +26,6 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
     p.add_argument('snap', type=str, metavar="SNAP_IP_OR_HOSTNAME")
-#   p.add_argument('--average', dest='avg', type=int,default=2,
-#                help='The number of samples being averaged. Default is 2')
-#   p.add_argument('--file', dest='file', type=str,
-#                help='Output sensor readings into files with the provided path and prefix.')
-#   p.add_argument('--verbose', action='store_true',
-#                help='Print sensor measurements and time costs.')
-#   p.add_argument('--period',dest='period',type=int, default=-1,
-#                help='Set the period of sampling in second. -1 to run endlessly. Default is -1.')
     p.add_argument('--i2c', dest='i2c', nargs=3, metavar=('I2C_NAME','I2C_BAUD_RATE','REFERENCE_CLOCK'), default=['i2c_ant1',10,100],
                 help='Specify the name of the i2c bus. Initialise I2C devices if baud rate and reference clock are provided.')
     p.add_argument('--rom',nargs='*',metavar=('TEXT'), help='Test EEPROM. Leave parameter empty to read ROM. Add text to write ROM.')
@@ -52,25 +44,25 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
     # 00:          -- -- -- -- -- -- -- -- -- 0c -- -- --
     # 10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
     # 20: 20 21 -- -- -- -- -- -- -- -- -- -- -- -- -- --
-    # 30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-    # 40: 40 -- -- -- -- -- -- -- -- -- -- -- -- -- -- 4f
-    # 50: 50 51/52 -- -- -- -- -- -- -- -- -- -- -- -- --
+    # 30: -- -- -- -- -- -- 36 -- -- -- -- -- -- -- -- --
+    # 40: 40 -- -- -- 44 45 -- -- -- -- -- -- -- -- -- --
+    # 50: 50 51 52 -- -- -- -- -- -- -- -- -- -- -- -- --
     # 60: -- -- -- -- -- -- -- -- -- 69 -- -- -- -- -- --
     # 70: -- -- -- -- -- -- -- 77
 
     ACCEL_ADDR = 0X69   #
     MAG_ADDR = 0x0c     #
     BAR_ADDR = 0x77     #
-    VOLT_FEM_ADDR = 0x4e    #
-    VOLT_PAM_ADDR = 0x4f
+    POW_PAM_ADDR = 0x36
     ROM_FEM_ADDR = 0x51 #
     ROM_PAM_ADDR = 0x52
     TEMP_ADDR = 0x40    #
-    INA_ADDR = 0x45    #
+    INA_FEM_ADDR = 0x45    #
+    INA_PAM_ADDR = 0x44    #
     SN_ADDR = 0x50
     GPIO_PAM_ADDR = 0x21
     GPIO_FEM_ADDR = 0x20    #
-    
+
     # snap I2C interface
     fpga=CasperFpga(args.snap)
     assert args.i2c[0] in ['i2c_ant1','i2c_ant2','i2c_ant3']
@@ -79,19 +71,13 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
         bus.enable_core()
         bus.setClock(int(args.i2c[1]),int(args.i2c[2]))
 
-    #try:
-    #    imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[1,1,0],[-1,1,0]])
-    #except IOError as e:
-    #    print('FEM is not reachable!')
-    #    raise
-
     if args.imu:
         imu = i2c_motion.IMUSimple(bus,ACCEL_ADDR,orient=[[0,0,1],[1,1,0],[-1,1,0]])
         imu.init()
         theta,phi = imu.pose
         print('IMU theta: {}, phi: {}'.format(theta,phi))
         imu.mpu.powerOff()
-    
+
     if args.temp:
         temp = i2c_temp.Si7051(bus,TEMP_ADDR)
         t = temp.readTemp()
@@ -139,6 +125,8 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
             print('read EEPROM test: {}'.format(text))
 
     if args.bar!=None:
+        bar = i2c_bar.MS5611_01B(bus,BAR_ADDR)
+        bar.init()
         if len(args.bar)>0:
             n=int(args.bar[0])
             delay=float(args.bar[1])
@@ -146,8 +134,6 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
             avg_p = 0
             avg_a = 0
             for i in range(n):
-                bar = i2c_bar.MS5611_01B(bus,BAR_ADDR)
-                bar.init()
                 rawt,dt = bar.readTemp(raw=True)
                 press = bar.readPress(rawt,dt)
                 alt = bar.toAltitude(press,rawt/100.)
@@ -160,8 +146,6 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
             print('Averaged barometer temperature: {}, air pressure: {}, altitude: {}'.format(avg_t,avg_p,avg_a))
             print('\t\tCalibrated altitude: {}'.format(avg_a-0.16))
         else:
-            bar = i2c_bar.MS5611_01B(bus,BAR_ADDR)
-            bar.init()
             rawt,dt = bar.readTemp(raw=True)
             press = bar.readPress(rawt,dt)
             alt = bar.toAltitude(press,rawt/100.)
@@ -170,7 +154,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
 
     if args.volt:
         # full scale 909mA
-        ina=i2c_volt.INA219(bus,INA_ADDR)
+        ina=i2c_volt.INA219(bus,INA_FEM_ADDR)
         ina.init()
         vshunt = ina.readVolt('shunt')
         vbus = ina.readVolt('bus')

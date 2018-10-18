@@ -54,7 +54,7 @@ class SNAPADC(object):
     ERROR_FRAME = 4
     ERROR_RAMP = 5
 
-    def __init__(self, interface, ADC='HMCAD1511', ref=None, resolution=12):
+    def __init__(self, interface, ADC='HMCAD1511', ref=None, resolution=8):
         # interface => casperfpga.CasperFpga(hostname/ip)
 
         self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
@@ -62,9 +62,11 @@ class SNAPADC(object):
         self.ramList = ['adc16_wb_ram0', 'adc16_wb_ram1', 'adc16_wb_ram2']
         self.laneList = [0, 1, 2, 3, 4, 5, 6, 7]
 
-        if resolution not in [8,12,14,None]:
+        if resolution not in [8,12,14]:
             logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
+        else:
+            self.RESOLUTION = resolution
         self.curDelay = [[0]*len(self.laneList)]*len(self.adcList)
 
         if ref is not None:

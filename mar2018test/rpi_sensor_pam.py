@@ -7,19 +7,21 @@ import numpy as np,time,logging,struct,random,sys,time,argparse,Queue,threading
 def db2gpio(ae,an):
     assert ae in range(0,16)
     assert an in range(0,16)
-    val_str = '{0:08b}'.format((an << 4) + ae)
-    val = int(val_str[::-1],2)
+    ae = 15 - ae
+    an = 15 - an
+    val_str = '{0:08b}'.format((ae << 4) + an)
+    val = int(val_str,2)
     return val
 
 def gpio2db(val):
     assert val in range(0,256)
-    val_str = '{0:08b}'.format(val)[::-1]
-    an = int(val_str[0:4],2)
-    ae = int(val_str[4:8],2)
-    return ae,an
+    val_str = '{0:08b}'.format(val)
+    ae = int(val_str[0:4],2)
+    an = int(val_str[4:8],2)
+    return 15-ae, 15-an
 
 def dc2dbm(val):
-    assert val>=0 and val<=3.3
+    assert val>=0 and val<=3.3, "Input value {} out range of 0-3.3V".format(val)
     slope = 27.31294863
     intercept = -55.15991678
     res = val * slope + intercept
@@ -54,8 +56,8 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
     # 00:          -- -- -- -- -- -- -- -- -- 0c -- -- --
     # 10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
     # 20: 20 21 -- -- -- -- -- -- -- -- -- -- -- -- -- --
-    # 30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-    # 40: 40 -- -- -- -- -- -- -- -- -- -- -- -- -- -- 4f
+    # 30: -- -- -- -- -- -- 36 -- -- -- -- -- -- -- -- --
+    # 40: 40 -- -- -- 44 -- -- -- -- -- -- -- -- -- 4e --
     # 50: 50 51/52 -- -- -- -- -- -- -- -- -- -- -- -- --
     # 60: -- -- -- -- -- -- -- -- -- 69 -- -- -- -- -- --
     # 70: -- -- -- -- -- -- -- 77
@@ -64,12 +66,12 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
     MAG_ADDR = 0x0c
     BAR_ADDR = 0x77
     VOLT_FEM_ADDR = 0x4e
-    VOLT_PAM_ADDR = 0x4f
+    VOLT_PAM_ADDR = 0x36
     ROM_FEM_ADDR = 0x51
     ROM_PAM_ADDR = 0x52
     TEMP_ADDR = 0x40
     SN_ADDR = 0x50
-	INA_ADDR = 0x45
+    INA_ADDR = 0x44
     GPIO_PAM_ADDR = 0x21
     GPIO_FEM_ADDR = 0x20
 
@@ -130,20 +132,19 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
             text = rom.readString()
             print('read EEPROM test: {}'.format(text))
 
+    if args.volt:
+        volt=i2c_volt.MAX11644(bus,VOLT_PAM_ADDR)
+        volt.init()
+        vp1,vp2=volt.readVolt()
+        loss = 9.8
+        print('East voltage: {} V, power level: {} dBm, calibrated power {} dBm'.format(vp1,dc2dbm(vp1), dc2dbm(vp1)+loss))
+        print('North voltage: {} V, power level: {} dBm, calibrated power {} dBm'.format(vp2,dc2dbm(vp2), dc2dbm(vp1)+loss))
 
-	if args.volt:
-		volt=i2c_volt.LTC2990(bus,VOLT_PAM_ADDR)
-		volt.init(mode0=2,mode1=3)
-		vp1=volt.readVolt('v3')
-		vp2=volt.readVolt('v4')
-		print('East voltage: {} V, power level: {} dBm'.format(vp1,dc2dbm(vp1)))
-		print('North voltage: {} V, power level: {} dBm'.format(vp2,dc2dbm(vp2)))
+        # full scale 909mA
+        ina=i2c_volt.INA219(bus,INA_ADDR)
+        ina.init()
+        vshunt = ina.readVolt('shunt')
+        vbus = ina.readVolt('bus')
+        res = 0.1
+        print('Shunt voltage: {} V, Current: {} A, bus voltage: {} V'.format(vshunt,vshunt/res,vbus))
 
-		# full scale 909mA
-		ina=i2c_volt.INA219(bus,INA_ADDR)
-		ina.init()
-		vshunt = ina.readVolt('shunt')
-		vbus = ina.readVolt('bus')
-		res = 0.1
-		print('Shunt voltage: {} V, bus voltage: {} V'.format(vshunt,vbus))
-		print('Current: {} A'.format(vshunt/res))
