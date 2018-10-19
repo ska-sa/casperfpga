@@ -403,7 +403,13 @@ static int perform_send(struct total *t, struct skarab *s)
   t->t_address.sin_addr.s_addr = s->s_addr;
   /* t->t_address.sin_port */
 
+  #ifdef __APPLE__
+  wr = sendmsg(t->t_fd, &(t->t_message), 0            | MSG_DONTWAIT);
+  #elif __linux__
   wr = sendmsg(t->t_fd, &(t->t_message), MSG_NOSIGNAL | MSG_DONTWAIT);
+  #else 
+  perror("Unknown platform");
+  #endif
 
   if(wr < 0){
     switch(errno){
