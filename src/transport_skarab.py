@@ -2635,6 +2635,9 @@ class SkarabTransport(Transport):
             """
             Checks the returned QSFP mezzanine temperatures and handles them
             accordingly.
+
+            NB: This sensor doesn't reliably report the temperature and is omitted.
+
             :param value: value returned from the temperature sensor
             :return: correct mezzanine temperature value
             """
@@ -2845,11 +2848,7 @@ class SkarabTransport(Transport):
             for key, value in sd.sensor_list.items():
 
                 if 'mezzanine' in key:
-                    if key == 'mezzanine_site_3_temperature_degC':
-                        temperature = mezzanine_temperature_check_qsfp(raw_sensor_data[value])
-                    else:
-                        temperature = mezzanine_temperature_check_hmc(raw_sensor_data[value])
-
+                    temperature = mezzanine_temperature_check_hmc(raw_sensor_data[value])
                     self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref=0))
 
         def parse_voltages(raw_sensor_data):
