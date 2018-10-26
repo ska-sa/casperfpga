@@ -499,7 +499,7 @@ class MAX11644(I2C_DEVICE):
         self.write(data=val)
 
         _reg = 0x0  # config
-        _scan= 0x0  # Scans up from AIN0 to the input selected by CS0
+        _scan= 0b11  # Converts the input selected by CS0
         _cs  = 0x1  # select AIN1 after scaning AIN0
         _sgl = 0x1  # single-ended
 
@@ -521,25 +521,30 @@ class MAX11644(I2C_DEVICE):
         self.write(data=0x80)
 
     def readVolt(self, name=None):
+        """ Read voltage
+            Possible options are
+                AIN0
+                AIN1
+        """
 
         if name != None and name.upper() not in ['AIN0','AIN1']:
             raise ValueError('Invalid parameter {}'.format(name))
 
-        self.write(data=self._config)
-
-        MASK = 0x0f
-
-        d0 = self.read(length=2)
-        ain0 = (((d0[0] & MASK) << 8) | d0[1]) * self.LSB
-        d1 = self.read(length=2)
-        ain1 = (((d1[0] & MASK) << 8) | d1[1]) * self.LSB
-
         if name == None:
-            return (ain0, ain1)
-        elif name.upper() == 'AIN0':
-            return ain0
-        else:   # name.upper() == 'AIN1':
-            return ain1
+            ain0 = self.readVolt(name='AIN0')
+            ain1 = self.readVolt(name='AIN1')
+            return ain0, ain1
+        else:
+            _cs = 0x0 if name.upper() == 'AIN0' else 0x1
+            val = self._set(self._config, _cs,  self.DICT[0x0]['CS'])
+            self.write(data=val)
+
+            MASK = 0x0f
+
+            d0 = self.read(length=2)
+            ain = (((d0[0] & MASK) << 8) | d0[1]) * self.LSB
+
+            return ain
 
 def str2int(s):
     if s.startswith('0b'):
