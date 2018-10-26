@@ -130,7 +130,7 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
         vp1,vp2=power.readVolt()
         loss = 9.8
         print('East voltage: {} V, power level: {} dBm, calibrated power {} dBm'.format(vp1,dc2dbm(vp1), dc2dbm(vp1)+loss))
-        print('North voltage: {} V, power level: {} dBm, calibrated power {} dBm'.format(vp2,dc2dbm(vp2), dc2dbm(vp2)+loss))
+        print('North voltage: {} V, power level: {} dBm, calibrated power {} dBm'.format(vp2,dc2dbm(vp2), dc2dbm(vp1)+loss))
 
         # full scale 909mA
         ina=i2c_volt.INA219(bus,INA_PAM_ADDR)
