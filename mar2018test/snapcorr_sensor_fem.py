@@ -66,7 +66,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
     # snap I2C interface
     fpga=CasperFpga(args.snap)
     assert args.i2c[0] in ['i2c_ant1','i2c_ant2','i2c_ant3']
-    bus=i2c.I2C(fpga,args.i2c[0])
+    bus=i2c.I2C(fpga,args.i2c[0],retry_wait=0.005)
     if len(args.i2c)==3:
         bus.enable_core()
         bus.setClock(int(args.i2c[1]),int(args.i2c[2]))
