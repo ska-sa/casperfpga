@@ -374,9 +374,7 @@ sensor_list = {
     '+3V3_config_current': 88,
     'mezzanine_site_0_temperature_degC': 91,
     'mezzanine_site_1_temperature_degC': 92,
-    'mezzanine_site_2_temperature_degC': 93,
-    'mezzanine_site_3_temperature_degC': 94
-}
+    'mezzanine_site_2_temperature_degC': 93}
 
 # sensor thresholds
 # voltage_sensor: (max, min)
@@ -425,7 +423,6 @@ temperature_ranges = {
     'mezzanine_site_0_temperature_degC': (80.0, 5.0),
     'mezzanine_site_1_temperature_degC': (80.0, 5.0),
     'mezzanine_site_2_temperature_degC': (80.0, 5.0),
-    'mezzanine_site_3_temperature_degC': (80.0, 5.0),
     'hmc_0_die_temp': (85.0, 5.0),
     'hmc_1_die_temp': (85.0, 5.0),
     'hmc_2_die_temp': (85.0, 5.0)
@@ -770,7 +767,7 @@ class GetSensorDataReq(Command):
         self.expect_response = True
         self.response = GetSensorDataResp
         self.num_words = 99
-        self.pad_words = 2
+        self.pad_words = 3
 
 
 class GetSensorDataResp(Response):
@@ -781,8 +778,8 @@ class GetSensorDataResp(Response):
 
     @staticmethod
     def unpack_process(unpacked_data):
-        read_bytes = unpacked_data[2:97]
-        unpacked_data[2:97] = [read_bytes]
+        read_bytes = unpacked_data[2:96]
+        unpacked_data[2:96] = [read_bytes]
         return unpacked_data
 
 
