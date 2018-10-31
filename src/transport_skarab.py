@@ -3014,7 +3014,7 @@ class SkarabTransport(Transport):
         self.logger.debug('%s: multicast configured: addr(%s) mask(%s)' % (
             gbename, resp_ip.ip_str, resp_mask.ip_str))
 
-    def one_wire_read_rom(self, one_wire_port):
+    def one_wire_read_rom(self, one_wire_port, timeout=None, retries=None):
         """
         Reads the 64-bit ROM address of a DS24N33 EEPROM on the specified
         1-wire interface
@@ -3036,7 +3036,10 @@ class SkarabTransport(Transport):
         if not response.packet['read_success']:
             errmsg = 'One Wire Rom Read failed!'
             raise SkarabWriteFailed(errmsg)
-        return response.packet['rom']
+
+        raw_address = ''.join([struct.pack('!B', x) for x in response.packet['rom']])
+        real_address = struct.unpack('!Q', raw_address)[0]
+        return real_address
 
     def one_wire_ds2433_write_mem(self, device_rom, skip_rom_address,
                                   write_bytes, num_bytes, target_address_1,
