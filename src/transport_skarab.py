@@ -863,7 +863,7 @@ class SkarabTransport(Transport):
                                     'Discarding response.' % hostname)
                 return None
             # check response packet size
-            if (len(response_payload)/2) != request_object.num_words:
+            if (len(response_payload)/2) != request_object.num_response_words:
                 self.logger.warning("%s: incorrect response packet size. "
                                     "Discarding response" % hostname)
 
@@ -871,7 +871,7 @@ class SkarabTransport(Transport):
                 self.logger.debug("Response packet not of correct size. "
                                   "Expected %i words, got %i words.\n "
                                   "Incorrect Response: %s" % (
-                                    request_object.num_words,
+                                    request_object.num_response_words,
                                     (len(response_payload)/2),
                                     repr(response_payload)))
                 # self.logger.pdebug("%s: command ID - expected (%i) got (%i)" %
@@ -886,7 +886,7 @@ class SkarabTransport(Transport):
 
             # unpack the response before checking it
             response_object = request_object.response.from_raw_data(
-                response_payload, request_object.num_words,
+                response_payload, request_object.num_response_words,
                 request_object.pad_words)
             self.logger.debug('%s: response from %s, with seq num %i' % (
                 hostname, str(address),
@@ -3013,5 +3013,84 @@ class SkarabTransport(Transport):
             resp_pkt['fabric_multicast_ip_address_mask_low'])
         self.logger.debug('%s: multicast configured: addr(%s) mask(%s)' % (
             gbename, resp_ip.ip_str, resp_mask.ip_str))
+
+    def one_wire_ds2433_write_mem(self, device_rom, skip_rom_address,
+                                  write_bytes, num_bytes, target_address_1,
+                                  target_address_2, one_wire_port,
+                                  timeout=None, retries=None):
+        """
+        :param device_rom:
+        :param skip_rom_address:
+        :param write_bytes: list of bytes or single byte
+        :param num_bytes:
+        :param target_address_1:
+        :param target_address_2:
+        :param one_wire_port:
+        :return:
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        # need to pack device rom 16*8
+        unpacked_device_rom = struct.unpack('!8B', struct.pack('!Q', device_rom))
+        device_rom = ''.join([struct.pack('!H', x) for x in unpacked_device_rom])
+
+        if type(write_bytes) != list:
+            tmp = write_bytes
+            write_bytes = [tmp]
+
+        packed_write_bytes = [struct.pack('!H', x) for x in write_bytes]
+        write_bytes = ''.join(packed_write_bytes) + ('\x00\x00' * (32-num_bytes))
+
+        request = sd.OneWireDS2433WriteMemReq(device_rom, skip_rom_address,
+                                              write_bytes, num_bytes,
+                                              target_address_1,
+                                              target_address_2, one_wire_port)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to One Wire Write request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['write_success']:
+            errmsg = 'One Wire DS2433 Write failed!'
+            raise SkarabWriteFailed(errmsg)
+        return response.packet['write_success']
+
+
+    def one_wire_ds2433_read_mem(self, device_rom, skip_rom_address, num_bytes,
+                                 target_address_1, target_address_2,
+                                 one_wire_port, timeout=None, retries=None):
+        """
+        :param device_rom:
+        :param skip_rom_address:
+        :param num_bytes:
+        :param target_address_1:
+        :param target_address_2:
+        :param one_wire_port:
+        :return:
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        # need to pack device rom 16*8
+        unpacked_device_rom = struct.unpack('!8B', struct.pack('!Q', device_rom))
+        device_rom = ''.join([struct.pack('!H', x) for x in unpacked_device_rom])
+
+        request = sd.OneWireDS2433ReadMemReq(device_rom, skip_rom_address,
+                                             num_bytes, target_address_1,
+                                             target_address_2, one_wire_port)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to One Wire Read request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['read_success']:
+            errmsg = 'One Wire DS2433 Read failed!'
+            raise SkarabWriteFailed(errmsg)
+
+        # do something clever here to return the number of bytes requested
+        return response.packet['read_bytes']
 
 # end
