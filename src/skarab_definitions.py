@@ -990,11 +990,11 @@ class OneWireReadROMResp(Response):
         self.packet['read_success'] = read_success
         self.packet['padding'] = padding
 
-        @staticmethod
-        def unpack_process(unpacked_data):
-            rom = unpacked_data[3:11]
-            unpacked_data[3:11] = [rom]
-            return unpacked_data
+    @staticmethod
+    def unpack_process(unpacked_data):
+        rom = unpacked_data[3:11]
+        unpacked_data[3:11] = [rom]
+        return unpacked_data
 
 
 class OneWireDS2433WriteMemReq(Command):
@@ -1030,14 +1030,14 @@ class OneWireDS2433WriteMemResp(Response):
         self.packet['write_success'] = write_success
         self.packet['padding'] = padding
 
-        @staticmethod
-        def unpack_process(unpacked_data):
-            device_rom = unpacked_data[2:10]
-            write_bytes = unpacked_data[11:43]
-            unpacked_data[4:8] = [device_rom]
-            # note the indices change after the first replacement!
-            unpacked_data[4:36] = [write_bytes]
-            return unpacked_data
+    @staticmethod
+    def unpack_process(unpacked_data):
+        device_rom = unpacked_data[2:10]
+        write_bytes = unpacked_data[11:43]
+        unpacked_data[2:10] = [device_rom]
+        # note the indices change after the first replacement!
+        unpacked_data[4:36] = [write_bytes]
+        return unpacked_data
 
 
 class OneWireDS2433ReadMemReq(Command):
@@ -1071,14 +1071,14 @@ class OneWireDS2433ReadMemResp(Response):
         self.packet['read_success'] = read_success
         self.packet['padding'] = padding
 
-        @staticmethod
-        def unpack_process(unpacked_data):
-            device_rom = unpacked_data[2:10]
-            read_bytes = unpacked_data[11:43]
-            unpacked_data[4:8] = [device_rom]
-            # note the indices change after the first replacement!
-            unpacked_data[4:36] = [read_bytes]
-            return unpacked_data
+    @staticmethod
+    def unpack_process(unpacked_data):
+        device_rom = unpacked_data[2:10]
+        read_bytes = unpacked_data[11:43]
+        unpacked_data[2:10] = [device_rom]
+        # note the indices change after the first replacement!
+        unpacked_data[4:36] = [read_bytes]
+        return unpacked_data
 
 
 class DebugConfigureEthernetReq(Command):
