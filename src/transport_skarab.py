@@ -3043,7 +3043,8 @@ class SkarabTransport(Transport):
 
     def one_wire_ds2433_write_mem(self, write_bytes, page, one_wire_port,
                                   device_rom=None, skip_rom_address=1,
-                                  offset=0, timeout=None, retries=None):
+                                  offset=0, timeout=None, retries=None,
+                                  force_page_zero_write=False):
         """
         Write to the EEPROM of a connected device connected on the one-wire bus
         :param device_rom: 64-bit ROM address of device
@@ -3057,11 +3058,17 @@ class SkarabTransport(Transport):
         1 - 4 mezzanine 0 - 3
         :param timeout:
         :param retries:
+        :param force_page_zero_write: set to true to force writing to page zero
         :return: 1 if success
         """
 
         if timeout is None: timeout = self.timeout
         if retries is None: retries = self.retries
+
+        if page == 0 and force_page_zero_write is not True:
+            raise UserWarning('WARNING: trying to write to Page 0. If this is'
+                              'what you want to do, set the '
+                              'force_page_zero_write flag to true')
 
         # if a device rom is given, disable skip-rom
         if device_rom is not None:
