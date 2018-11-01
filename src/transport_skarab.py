@@ -3041,25 +3041,36 @@ class SkarabTransport(Transport):
         real_address = struct.unpack('!Q', raw_address)[0]
         return real_address
 
-    def one_wire_ds2433_write_mem(self, device_rom, skip_rom_address,
-                                  write_bytes, num_bytes, target_address_1,
-                                  target_address_2, one_wire_port,
-                                  timeout=None, retries=None):
+    def one_wire_ds2433_write_mem(self, write_bytes, page, one_wire_port,
+                                  device_rom=None, skip_rom_address=1,
+                                  offset=0, timeout=None, retries=None):
         """
-        :param device_rom:
-        :param skip_rom_address:
-        :param write_bytes: list of bytes or single byte
-        :param num_bytes:
-        :param target_address_1:
-        :param target_address_2:
-        :param one_wire_port:
-        :return:
+        Write to the EEPROM of a connected device connected on the one-wire bus
+        :param device_rom: 64-bit ROM address of device
+        :param skip_rom_address: if enable, skip using the rom to address device,
+        assumes only one device connected
+        :param write_bytes: bytes to write, maximum of 32 bytes
+        :param page: page to write [0 to 15]
+        :param offset: offset at which to start writing in the page (max 31)
+        :param one_wire_port: 1-wire interface to access
+        0 - skarab motherboard
+        1 - 4 mezzanine 0 - 3
+        :param timeout:
+        :param retries:
+        :return: 1 if success
         """
 
         if timeout is None: timeout = self.timeout
         if retries is None: retries = self.retries
 
-        # need to pack device rom 16*8
+        # if a device rom is given, disable skip-rom
+        if device_rom is not None:
+            skip_rom_address=0
+
+        if offset > 31:
+            raise ValueError('Maximum offset is 31 bytes')
+
+        # need to pack device rom (pack each byte
         unpacked_device_rom = struct.unpack('!8B', struct.pack('!Q', device_rom))
         device_rom = ''.join([struct.pack('!H', x) for x in unpacked_device_rom])
 
@@ -3067,8 +3078,25 @@ class SkarabTransport(Transport):
             tmp = write_bytes
             write_bytes = [tmp]
 
+        num_bytes = len(write_bytes)
+
+        if num_bytes > 32:
+            raise ValueError('Maximum number of bytes that can be written is 32')
+
+        # pack the write bytes: pack each byte as a 16-bit word
         packed_write_bytes = [struct.pack('!H', x) for x in write_bytes]
         write_bytes = ''.join(packed_write_bytes) + ('\x00\x00' * (32-num_bytes))
+
+        # determine target address 1 and target address 2
+        target_address_1 = ((page*0x20) & 0xFF) + offset
+        target_address_2 = (page*0x20) >> 8
+        full_address = (target_address_2 << 8) + target_address_1
+
+        # check if writing over a page boundary
+        number_of_writable_bytes = 0x20 - (full_address % 0x20)
+
+        if num_bytes> number_of_writable_bytes:
+            raise ValueError('Cannot write across a page boundary!')
 
         request = sd.OneWireDS2433WriteMemReq(device_rom, skip_rom_address,
                                               write_bytes, num_bytes,
@@ -3084,26 +3112,43 @@ class SkarabTransport(Transport):
             raise SkarabWriteFailed(errmsg)
         return response.packet['write_success']
 
-
-    def one_wire_ds2433_read_mem(self, device_rom, skip_rom_address, num_bytes,
-                                 target_address_1, target_address_2,
-                                 one_wire_port, timeout=None, retries=None):
+    def one_wire_ds2433_read_mem(self, one_wire_port, num_bytes, page, offset=0,
+                                 device_rom=None, skip_rom_address=1,
+                                 timeout=None, retries=None):
         """
-        :param device_rom:
-        :param skip_rom_address:
-        :param num_bytes:
-        :param target_address_1:
-        :param target_address_2:
-        :param one_wire_port:
-        :return:
+        Read from the EEPROM of a connected device connected on the one-wire bus
+        :param one_wire_port: 1-wire interface to access
+        0 - skarab motherboard
+        1 - 4 mezzanine 0 - 3
+        :param num_bytes: number of bytes to read
+        :param page: page to write [0 to 15]
+        :param offset: offset at which to start reading in the page (max 31)
+        :param device_rom: 64-bit ROM address of device
+        :param skip_rom_address: if enable, skip using the rom to address device,
+        assumes only one device connected
+        :param timeout:
+        :param retries:
+        :return: read data
         """
 
         if timeout is None: timeout = self.timeout
         if retries is None: retries = self.retries
 
-        # need to pack device rom 16*8
-        unpacked_device_rom = struct.unpack('!8B', struct.pack('!Q', device_rom))
-        device_rom = ''.join([struct.pack('!H', x) for x in unpacked_device_rom])
+        # if a device rom is given, disable skip-rom
+        if device_rom is not None:
+            skip_rom_address = 0
+
+        if offset > 31:
+            raise ValueError('Maximum offset is 31 bytes')
+        # need to pack device rom (pack each byte
+        unpacked_device_rom = struct.unpack('!8B',
+                                            struct.pack('!Q', device_rom))
+        device_rom = ''.join(
+            [struct.pack('!H', x) for x in unpacked_device_rom])
+
+        # determine target address 1 and target address 2
+        target_address_1 = ((page * 0x20) & 0xFF) + offset
+        target_address_2 = (page * 0x20) >> 8
 
         request = sd.OneWireDS2433ReadMemReq(device_rom, skip_rom_address,
                                              num_bytes, target_address_1,
@@ -3118,6 +3163,6 @@ class SkarabTransport(Transport):
             raise SkarabWriteFailed(errmsg)
 
         # do something clever here to return the number of bytes requested
-        return response.packet['read_bytes']
+        return response.packet['read_bytes'][0:num_bytes]
 
 # end
