@@ -3066,6 +3066,9 @@ class SkarabTransport(Transport):
         # if a device rom is given, disable skip-rom
         if device_rom is not None:
             skip_rom_address=0
+        else:
+            # then set a dummy address
+            device_rom = 0
 
         if offset > 31:
             raise ValueError('Maximum offset is 31 bytes')
@@ -3137,6 +3140,12 @@ class SkarabTransport(Transport):
         # if a device rom is given, disable skip-rom
         if device_rom is not None:
             skip_rom_address = 0
+        else:
+            # then set a dummy address
+            device_rom = 0
+
+        if num_bytes > 32:
+            raise ValueError('Maximum number of bytes that can be read is 32')
 
         if offset > 31:
             raise ValueError('Maximum offset is 31 bytes')
