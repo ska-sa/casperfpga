@@ -270,7 +270,7 @@ def program_fpgas(fpga_list, progfile, timeout=10):
 
 def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
                                      port=7147, timeout=10,
-                                     best_effort=False):
+                                     best_effort=False, **kwargs):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
     :param fpga_class: the class to insantiate, usually CasperFpga
@@ -289,7 +289,7 @@ def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
     thread_list = []
 
     def makehost(hostname):
-        result_queue.put_nowait(fpga_class(hostname, port))
+        result_queue.put_nowait(fpga_class(hostname, port, **kwargs))
 
     for host_ in host_list:
         thread = threading.Thread(target=makehost, args=(host_,))
