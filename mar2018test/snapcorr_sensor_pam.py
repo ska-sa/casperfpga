@@ -127,7 +127,8 @@ formatter_class=argparse.RawDescriptionHelpFormatter)
     if args.volt:
         power=i2c_volt.MAX11644(bus,POW_PAM_ADDR)
         power.init()
-        vp1,vp2=power.readVolt()
+        vp1=power.readVolt('AIN0')
+        vp2=power.readVolt('AIN1')
         loss = 9.8
         print('East voltage: {} V, power level: {} dBm, calibrated power {} dBm'.format(vp1,dc2dbm(vp1), dc2dbm(vp1)+loss))
         print('North voltage: {} V, power level: {} dBm, calibrated power {} dBm'.format(vp2,dc2dbm(vp2), dc2dbm(vp2)+loss))

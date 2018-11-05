@@ -218,11 +218,11 @@ if __name__ == '__main__':
         for i in range(auto_data.shape[1]):
             label='auto_'+chr(ord('a')+i)+chr(ord('a')+i)+'_amp'
             ydata = np.abs(auto_data[:,i])
-            ax_auto_amp.plot(xaxis,ydata,label=label)
+            ax_auto_amp.plot(xaxis,10*np.log10(ydata),label=label)
         ax_auto_amp.set_xlabel('Frequency ' + 'in MHz' if args.freq else 'bin')
         ax_auto_amp.set_ylabel('auto-correlation amplitude ' + 'in relative dBm')
         ax_auto_amp.legend(loc=0)
-        ax_auto_amp.set_yscale('symlog')
+        #ax_auto_amp.set_yscale('symlog')
         ax_auto_amp.relim()
         ax_auto_amp.autoscale_view(scaley=True)
 
@@ -240,11 +240,11 @@ if __name__ == '__main__':
         ax_cross_amp = fig_cross_amp.add_subplot(111)
         for i in range(cross_data.shape[1]):
             label='cross_'+baselines[i]+'_amp'
-            ax_cross_amp.plot(xaxis,np.abs(cross_data[:,i]),label=label)
+            ax_cross_amp.plot(xaxis,10*np.log10(np.abs(cross_data[:,i])),label=label)
         ax_cross_amp.set_xlabel('Frequency ' + 'in MHz' if args.freq else 'bin')
         ax_cross_amp.set_ylabel('cross-correlation amplitude')
         ax_cross_amp.legend(loc=0)
-        ax_cross_amp.set_yscale('symlog')
+        #ax_cross_amp.set_yscale('symlog')
         ax_cross_amp.relim()
         ax_cross_amp.autoscale_view(scaley=True)
 

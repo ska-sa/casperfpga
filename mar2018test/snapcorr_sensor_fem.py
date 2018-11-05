@@ -65,7 +65,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
 
     # snap I2C interface
     fpga=CasperFpga(args.snap)
-    assert args.i2c[0] in ['i2c_ant1','i2c_ant2','i2c_ant3']
+    assert args.i2c[0] in ['i2c_ant0','i2c_ant1','i2c_ant2','i2c_ant3']
     bus=i2c.I2C(fpga,args.i2c[0],retry_wait=0.005)
     if len(args.i2c)==3:
         bus.enable_core()
@@ -85,7 +85,7 @@ python snapcorr_sensor_fem.py 10.1.0.23 --i2c i2c_ant1 --phase 0b111111""",
         print('Temperature: {}, serial number: {}'.format(t,sn))
 
     if args.switch!=None:
-        smode = {'load':0b000,'antenna':0b110,'noise':0b001}
+        smode = {'load':0b000,'antenna':0b111,'noise':0b001}
         gpio=i2c_gpio.PCF8574(bus,GPIO_FEM_ADDR)
         if len(args.switch)>0:
             key = args.switch[0]
