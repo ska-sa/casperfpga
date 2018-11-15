@@ -212,6 +212,16 @@ HMC_Bottom_DRAM_temp_Register = 0x2b0002
 HMC_I2C_Address = 0x10
 HMC_MEZZANINE_SITES = [1, 2, 3]
 
+# mapping between hmc card index and i2c one wire port number
+HMC_CARD_I2C_PORT_MAP = {0: 0x1,
+                         1: 0x2,
+                         2: 0x3}
+
+# flash pages
+MEZZANINE_SIGNATURES_PAGE = 0
+TUNABLE_PARAMETERS_PAGE = 15
+HMC_STATISTICS_PAGE = 15
+
 # MAX31785 FAN CONTROLLER PMBUS COMMANDS
 PAGE_CMD = 0x00
 CLEAR_FAULTS_CMD = 0x03
