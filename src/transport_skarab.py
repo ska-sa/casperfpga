@@ -3065,6 +3065,9 @@ class SkarabTransport(Transport):
         if timeout is None: timeout = self.timeout
         if retries is None: retries = self.retries
 
+        if page not in range(16):
+            raise ValueError('Selected page does not exist. Select page in range 0 - 15')
+
         if page == 0 and force_page_zero_write is not True:
             raise UserWarning('WARNING: trying to write to Page 0. If this is'
                               'what you want to do, set the '
@@ -3144,6 +3147,9 @@ class SkarabTransport(Transport):
         if timeout is None: timeout = self.timeout
         if retries is None: retries = self.retries
 
+        if page not in range(16):
+            raise ValueError('Selected page does not exist. Select page in range 0 - 15')
+
         # if a device rom is given, disable skip-rom
         if device_rom is not None:
             skip_rom_address = 0
@@ -3156,6 +3162,7 @@ class SkarabTransport(Transport):
 
         if offset > 31:
             raise ValueError('Maximum offset is 31 bytes')
+
         # need to pack device rom (pack each byte
         unpacked_device_rom = struct.unpack('!8B',
                                             struct.pack('!Q', device_rom))
@@ -3181,4 +3188,218 @@ class SkarabTransport(Transport):
         # do something clever here to return the number of bytes requested
         return response.packet['read_bytes'][0:num_bytes]
 
+    # high level Mezzanine Flash Reads/Writes
+
+    # for adjusting tunable configuration parameters stored in flash
+
+    def set_dhcp_init_time(self, dhcp_init_time):
+        """
+        Set the init time for DHCP - time before first DHCP message is sent
+        :param dhcp_init_time: the desired dhcp init time, in seconds
+        :return: True if success, False if failed
+        """
+
+        assert(0 <= dhcp_init_time <= 120), 'DHCP init time range: 0 - 120 sec'
+
+        # the uBlaze requires a count of 100ms increments
+
+        dhcp_init_time = int((dhcp_init_time * 1000.0)/100.0)
+
+        # need to pack data in little endian
+        msb = (dhcp_init_time >> 8) & 0xff
+        lsb = dhcp_init_time & 0xff
+        write_bytes = [lsb, msb]
+
+        #dhcp init time occupies bytes 0, 1
+        offset = 0
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            device_rom=None, skip_rom_address=1,
+                                            offset=offset, timeout=None, retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def set_dhcp_retry_rate(self, dhcp_retry_rate):
+        """
+        Set the rate at which the SKARAB re-attempts to get DHCP configured
+        :param dhcp_retry_rate: the desired dhcp retry rate, in seconds
+        :return: True if success, False if failed
+        """
+
+        assert(0.5 <= dhcp_retry_rate <= 30), 'DHCP retry rate range: 0.5 - 30 sec'
+
+        # the uBlaze requires a count of 100ms increments
+
+        dhcp_retry_rate = int((dhcp_retry_rate * 1000.0) / 100.0)
+
+        # need to pack data in little endian
+        msb = (dhcp_retry_rate >> 8) & 0xff
+        lsb = dhcp_retry_rate & 0xff
+        write_bytes = [lsb, msb]
+
+        #dhcp retry rate occupies bytes 2, 3
+        offset = 2
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                       page=sd.TUNABLE_PARAMETERS_PAGE,
+                                       one_wire_port=sd.MB_I2C_BUS_ID,
+                                        device_rom=None, skip_rom_address=1,
+                                        offset=offset, timeout=None, retries=None,
+                                        force_page_zero_write=False)
+
+        return rv
+
+    def set_hmc_reconfig_timeout(self, hmc_reconfig_timeout=10):
+        """
+        Set the HMC reconfiguration state machine timeout,
+        before triggering a motherboard reset to attempt to initialise all HMCs
+        :param hmc_reconfig_timeout: the desired HMC reconfiguration timeout (default is 10 seconds)
+        :return: True if success, False if failed
+        """
+
+        assert(1 <= hmc_reconfig_timeout <= 60), 'HMC Reconfig timeout range: 1 - 60 sec'
+
+        # the uBlaze requires a count of 100ms increments
+
+        hmc_reconfig_timeout = int((hmc_reconfig_timeout * 1000.0) / 100.0)
+
+        # need to pack data in little endian
+        msb = (hmc_reconfig_timeout >> 8) & 0xff
+        lsb = hmc_reconfig_timeout & 0xff
+        write_bytes = [lsb, msb]
+
+        # hmc reconfig timeout occupies bytes 4, 5
+        offset = 4
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            device_rom=None,
+                                            skip_rom_address=1,
+                                            offset=offset, timeout=None,
+                                            retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def set_hmc_reconfig_max_retries(self, max_retries):
+        """
+        Set the maximum number of retires for initialisation of all HMCs.
+        Each retry is a motherboard reset.
+        :param max_retries: desired number of max retries
+        :return: True if success, False if failed
+        """
+
+        # this is an 8-bit number
+        assert(3 <= max_retries <= 255), 'Maximum number of retries must be in the range 3 - 255'
+
+        write_bytes = max_retries
+        # hmc reconfig max retries occupies byte 6
+        offset = 6
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            device_rom=None,
+                                            skip_rom_address=1,
+                                            offset=offset, timeout=None,
+                                            retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def set_link_mon_timeout(self, link_mon_timeout):
+        """
+        Set the link monitor timeout - how long to wait for the single 40GbE link
+        to show activity. After this timeout, the motherboard resets in attempt to
+        re-initialise the link. Only monitors the RX side of the link.
+        :param link_mon_timeout: desired link mon timeout, minimum time is 30 sec
+        :return: True if success, False if failed
+        """
+
+        assert(link_mon_timeout >= 30), 'Minimum link monitor timeout is 30 seconds'
+
+        # the uBlaze requires a count of 100ms increments
+
+        link_mon_timeout = int((link_mon_timeout * 1000.0) / 100.0)
+
+        # need to pack data in little endian
+        msb = (link_mon_timeout >> 8) & 0xff
+        lsb = link_mon_timeout & 0xff
+        write_bytes = [lsb, msb]
+
+        # hmc reconfig timeout occupies bytes 7, 8
+        offset = 7
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            device_rom=None,
+                                            skip_rom_address=1,
+                                            offset=offset, timeout=None,
+                                            retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    # for retrieving the HMC reconfiguration statistics
+
+    def get_hmc_reconfigure_stats(self, *hmcs):
+        """
+        Get the reconfiguration statistics for a specific HMC card or cards
+        :param hmc: the hmc card index (or indices) - 0, 1 or 2 - to read the stats for
+        :return: dictionary: {hmcN : {hmc_retires: # ; hmc_total_retries: #}}
+        or None if failed
+        """
+
+        hmc_reconfigure_stats = {}
+
+        for hmc in hmcs:
+            stats = {}
+            prefix = 'hmc_{}'.format(hmc)
+
+            raw_data = self.one_wire_ds2433_read_mem(one_wire_port=sd.HMC_CARD_I2C_PORT_MAP[hmc],
+                                                 num_bytes=8, page=sd.HMC_STATISTICS_PAGE, offset=0,
+                                                 device_rom=None, skip_rom_address=1,
+                                                 timeout=None, retries=None)
+
+            hmc_retries_raw = raw_data[:4]
+            hmc_total_retries_raw = raw_data[4:]
+
+            # data is stored in little endian, hence use '<' to unpack
+            hmc_retries = struct.unpack('<I', struct.pack('!4B', *hmc_retries_raw))[0]
+            hmc_total_retries = struct.unpack('<I', struct.pack('!4B', *hmc_total_retries_raw))[0]
+
+            stats['hmc_retries'] = hmc_retries
+            stats['hmc_total_retries'] = hmc_total_retries
+
+            hmc_reconfigure_stats[prefix] = stats
+
+        return hmc_reconfigure_stats
+
+    # for reading the mezzanine signatures stored in flash
+
+    def get_mezzanine_signature(self, mezzanine_card_one_wire_port):
+        """
+        Get the signature of a a specific mezzanine card
+        :param mezzanine_card_one_wire_port: one wire port of the mezzanine
+        care to read
+        :return: success: card signature (as an integer), fail: None
+        """
+
+        raw_data = self.one_wire_ds2433_read_mem(one_wire_port=mezzanine_card_one_wire_port,
+                                                 num_bytes=7, page=sd.MEZZANINE_SIGNATURES_PAGE,
+                                                 offset=0,
+                                                 device_rom=None, skip_rom_address=1,
+                                                 timeout=None, retries=None)
+
+        # select the bytes of interest
+        selected_data = [raw_data[i] for i in [0, 4, 5, 6]]
+
+        signature = struct.unpack('!I', struct.pack('!4B', *selected_data))[0]
+
+        return signature
 # end
