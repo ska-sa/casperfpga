@@ -1658,53 +1658,88 @@ class SkarabTransport(Transport):
     # endregion
 
     # region === VirtexFlashReconfig ===
-
-    def virtex_flash_reconfig(self, filename,
-                              flash_address=sd.DEFAULT_START_ADDRESS,
-                              blind_reconfig=False):
+    def process_flash_bin(self, filename):
         """
-        This is the entire function that makes the necessary calls to
-        reconfigure the Virtex7's Flash Memory
+        Sends the file to skarab_fileops for processing and returns 
+        number of words, number of memory blocks and image to program
         :param filename: The actual .bin file that is to be written to
         the Virtex FPGA
-        :param flash_address: 32-bit Address in the NOR flash to
-        start programming from
-        :param blind_reconfig: Reconfigure the board and don't wait to
-        verify what has been written
-        :return: Success/Fail - 0/1
+        :returns image_to_program, num_words, num_memory_blocks
         """
-
         # For completeness, make sure the input file is of a .bin disposition
         file_extension = os.path.splitext(filename)[1]
         image_to_program = ''
 
         # Need to change file-handler to use skarab_fileops.choose_processor(filename)
-        binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
+        #binname = '/tmp/fpgstream_' + str(self.parent) + '.bin'
         processor = skfops.choose_processor(filename)
-        processor = processor(filename, binname)
-        image_to_program, binname = processor.make_bin()
+        processor = processor(filename, extract_to_disk=False)
+        #image_to_program, binname = processor.make_bin()
+        image_to_program, _none = processor.make_bin()
 
         self.logger.debug('VIRTEX FLASH RECONFIG: Analysing Words')
         # Can still analyse the filename, as the file size should still
         # be the same, regardless of swapping the endianness
-        num_words, num_memory_blocks = skfops.analyse_file_virtex_flash(binname)
+        num_words, num_memory_blocks = skfops.analyse_file_virtex_flash(bitstream=image_to_program)
 
         if (num_words == 0) or (num_memory_blocks == 0):
             # Problem
             errmsg = 'Failed to Analyse File successfully'
             self.logger.error(errmsg)
             # Remove temp bin-file wherever possible
-            os.remove(binname)
+            #os.remove(binname)
             raise sd.SkarabInvalidBitstream(errmsg)
         # else: Continue
+
+        #os.remove(binname)
+        return image_to_program, num_words, num_memory_blocks
+
+    def virtex_flash_reconfig(self, filename=None,
+                              image_to_program=None,
+                              num_words=None,
+                              num_memory_blocks=None,
+                              flash_address=sd.DEFAULT_START_ADDRESS,
+                              blind_reconfig=False):
+        """
+        This is the entire function that makes the necessary calls to
+        reconfigure the Virtex7's Flash Memory. Either specify a filename
+        to program or process the file separately using 
+        transport_skarab.process_flash_bin and send image_to_program, num_words 
+        and num_memory_blocks. Note when using this function as a thread it
+        is preferable to send image_to_program as processing a file will use
+        memory for each instance.
+        :param filename: The actual .bin file that is to be written to
+        the Virtex FPGA
+        :param image_to_program: Image processed by skarab_fileops.py
+        to program.
+        :param num_words: Number of words as processed by skarab_fileops.py
+        :param num_memory_blocks: Number of blocks to program as processed
+        by skarab_fileops.py
+        :param flash_address: 32-bit Address in the NOR flash to
+        start programming from
+        :param blind_reconfig: Reconfigure the board and don't wait to
+        verify what has been written
+        :return: Success/Fail - 0/1
+        """
+        if filename:
+            image_to_program, num_words, num_memory_blocks = self.process_flash_bin(filename)
+        elif (image_to_program is None or num_words is None or
+             num_memory_blocks is None):
+            errmsg = ('Specify either a filename or image_to_program when '
+                      'calling virtex_flash_reconfig')
+            raise sd.SkarabProgrammingError(errmsg)
+
+        if (num_words == 0) or (num_memory_blocks == 0):
+            # Problem
+            errmsg = 'num_words or num_memory_blocks incorrect'
+            self.logger.error(errmsg)
+            raise sd.SkarabInvalidBitstream(errmsg)
 
         self.logger.debug('VIRTEX FLASH RECONFIG: Erasing Flash Memory Blocks')
         if not self.erase_blocks(num_memory_blocks, flash_address):
             # Problem
             errmsg = 'Failed to Erase Flash Memory Blocks'
             self.logger.error(errmsg)
-            # Remove temp bin-file wherever possible
-            os.remove(binname)
             raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
@@ -1713,8 +1748,6 @@ class SkarabTransport(Transport):
             # Problem
             errmsg = 'Failed to Program Flash Memory Blocks'
             self.logger.error(errmsg)
-            # Remove temp bin-file wherever possible
-            os.remove(binname)
             raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
@@ -1725,12 +1758,8 @@ class SkarabTransport(Transport):
                 # Problem
                 errmsg = 'Failed to Program Flash Memory Blocks'
                 self.logger.error(errmsg)
-                # Remove temp bin-file wherever possible
-                os.remove(binname)
                 raise sd.SkarabProgrammingError(errmsg)
             # else: Continue
-        # Remove temp bin-file wherever possible
-        os.remove(binname)
         return True
 
     # endregion

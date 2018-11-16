@@ -39,8 +39,11 @@ class ImageProcessor(object):
     """
     def __init__(self, image_file, bin_name=None, extract_to_disk=True):
         self.image_file = image_file
-        tmpbin = '/tmp/casperstream_' + str(os.getpid()) + '.bin'
-        self.bin_name = bin_name or tmpbin
+        if extract_to_disk:
+            if bin_name==None:
+                self.bin_name = '/tmp/casperstream_' + str(os.getpid()) + '.bin'
+            else:
+                self.bin_name = bin_name
         self.extract = extract_to_disk
 
     def make_bin(self):
@@ -443,29 +446,39 @@ def analyse_ufp_bitstream(bitstream):
 
 
 # Only working with BPIx8 .bin files now
-def analyse_file_virtex_flash(filename):
+def analyse_file_virtex_flash(filename=None, bitstream=None):
     """
     This method analyses the input .bin file to determine the number of
-    words to program, and the number of blocks to erase
+    words to program, and the number of blocks to erase.
+    Specify either a file or a bitstream processed by ImageProcessor
     :param filename: Input .bin to be written to the Virtex FPGA
+    :param bitstream: processed .bin file variable
     :return: Tuple - num_words (in file), num_memory_blocks (required to
     hold this file)
     """
-    # File contents are in bytes
-    fptr = open(filename, 'rb')
-    contents = fptr.read()
-    fptr.close()
-    if len(contents) % 2 != 0:
+    if filename:
+        # File contents are in bytes
+        fptr = open(filename, 'rb')
+        bitstream = fptr.read()
+        fptr.close()
+    elif bitstream:
+        pass
+    else:
+        errmsg = 'Specify a file or a processed bitstream.'
+        LOGGER.error(errmsg)
+        raise sd.SkarabInvalidBitstream(errmsg)
+
+    if len(bitstream) % 2 != 0:
         # Problem
-        if len(contents) % 2 == 1:
+        if len(bitstream) % 2 == 1:
             # hex file with carriage return (\n) at the end
-            contents = contents[:-1]
+            bitstream = bitstream[:-1]
         else:
             errmsg = 'Invalid file size: Number of Words is not whole'
             LOGGER.error(errmsg)
             raise sd.SkarabInvalidBitstream(errmsg)
     # else: Continue
-    num_words = len(contents) / 2
+    num_words = len(bitstream) / 2
     from math import ceil
     num_memory_blocks = int(ceil(num_words / sd.DEFAULT_BLOCK_SIZE))
     return num_words, num_memory_blocks
