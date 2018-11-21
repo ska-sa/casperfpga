@@ -2600,11 +2600,6 @@ class SkarabTransport(Transport):
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
 
-        def hmc_die_temp(hmc_mez):
-            self.write_hmc_i2c(hmc_mez, sd.HMC_I2C_Address, sd.HMC_Temp_Write_Register, sd.HMC_Temp_Write_Command)
-            die_temp = self.read_hmc_i2c(hmc_mez, sd.HMC_I2C_Address, sd.HMC_Die_temp_Register)
-            return die_temp
-
         def sign_extend(value, bits):
             """
             Performs 2's compliment sign extension
@@ -2836,6 +2831,13 @@ class SkarabTransport(Transport):
                             key] = (temperature, 'degC',
                                     check_temperature(key, temperature,
                                                       inlet_ref))
+                    elif 'hmc' in key:
+                        temperature = struct.unpack(
+                            '!I', struct.pack('!4B',
+                                              *raw_sensor_data[value:value+4]))[0]
+                        self.sensor_data[key] = (temperature,
+                                                 check_temperature(key, temperature, inlet_ref=0), 'degC')
+
                     else:
                         temperature = temperature_value_check(
                             raw_sensor_data[value])
@@ -2865,15 +2867,6 @@ class SkarabTransport(Transport):
                     self.sensor_data[key] = (current, 'amperes',
                                              check_current(key, current))
 
-        def get_hmc_temperatures():
-            try:
-                for hmc in sd.HMC_MEZZANINE_SITES:
-                    key = 'hmc_{}_die_temp'.format(hmc - 1)
-                    temperature = hmc_die_temp(hmc)
-                    self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref=0))
-            except:
-                raise SkarabInvalidResponse('Error reading HMC Die Temperatures')
-
         request = sd.GetSensorDataReq()
         response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
@@ -2887,7 +2880,6 @@ class SkarabTransport(Transport):
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
             parse_mezzanine_temperatures(recvd_sensor_data_values)
-            get_hmc_temperatures()
 
             return self.sensor_data
 
