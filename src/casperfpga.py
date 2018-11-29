@@ -253,11 +253,13 @@ class CasperFpga(object):
         """
         return self.transport.set_igmp_version(version)
 
-    def upload_to_ram_and_program(self, filename=None, wait_complete=True, legacy_reg_map=True):
+    def upload_to_ram_and_program(self, filename=None, wait_complete=True, legacy_reg_map=True, chunk_size=1988):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: the file to upload
         :param wait_complete: do not wait for this operation, just return
+        :param legacy_reg_map: older fpg files have a different register mapping, set this flag to true for these
+        :param chunk_size: the SKARAB supports 1988, 3976 and 7952 byte programming packets, but old bitfiles only support 1988 (the default)
         after upload
         :return: True or False
         """
@@ -266,7 +268,7 @@ class CasperFpga(object):
         else:
             filename = self.bitstream
         rv = self.transport.upload_to_ram_and_program(
-            filename=filename, wait_complete=wait_complete)
+            filename=filename, wait_complete=wait_complete, chunk_size=chunk_size)
         if not wait_complete:
             return True
         if self.bitstream:

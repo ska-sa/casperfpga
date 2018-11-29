@@ -240,7 +240,7 @@ class BinProcessor(ImageProcessor):
         return reordered_bitstream
 
 
-def upload_to_ram_progska(filename, fpga_list):
+def upload_to_ram_progska(filename, fpga_list, chunk_size=1988):
     """
     Use the progska C extension to upload an image to a list of skarabs
     :param filename: the fpg to upload
@@ -253,8 +253,13 @@ def upload_to_ram_progska(filename, fpga_list):
     processor = processor(filename, binname)
     binname = processor.make_bin()[1]
     fpga_hosts = [fpga.host for fpga in fpga_list]
+    
+    if chunk_size not in [1988, 3976, 7952]:
+        raise sd.SkarabProgrammingError(
+           'chunk_size can only be 1988, 3976 or 7952')
+        return 0
     try:
-        retval = progska.upload(binname, fpga_hosts)
+        retval = progska.upload(binname, fpga_hosts, str(chunk_size))
     except RuntimeError as exc:
         os.remove(binname)
         raise sd.SkarabProgrammingError(

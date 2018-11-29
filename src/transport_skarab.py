@@ -579,7 +579,7 @@ class SkarabTransport(Transport):
         self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
         self.prog_info['last_uploaded'] = ''
 
-    def upload_to_ram(self, filename, verify=True):
+    def upload_to_ram(self, filename, verify=True, chunk_size=1988):
         """
         Upload a bitstream to the SKARAB via the wishone --> SDRAM interface
         :param filename: fpga image to upload
@@ -602,7 +602,7 @@ class SkarabTransport(Transport):
             raise ValueError(errmsg)
         # else: Continue!
 
-        upload_time = skfops.upload_to_ram_progska(filename, [self.parent])
+        upload_time = skfops.upload_to_ram_progska(filename, [self.parent], chunk_size)
         self.logger.debug('Uploaded bitstream in %.1f seconds.' % upload_time)
         return upload_time
 
@@ -642,7 +642,7 @@ class SkarabTransport(Transport):
             return False, firmware_version
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
-                                  wait_complete=True, skip_verification=False):
+                                  wait_complete=True, skip_verification=False, chunk_size=1988):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -655,7 +655,9 @@ class SkarabTransport(Transport):
         :param skip_verification - do not verify the image after upload
         :return: Boolean - True/False - Succes/Fail
         """
-        upload_time = self.upload_to_ram(filename, not skip_verification)
+        print('skarab_transport')
+        print(chunk_size)
+        upload_time = self.upload_to_ram(filename, not skip_verification, chunk_size)
         if not wait_complete:
             self.logger.debug('Returning immediately after programming.')
             return True

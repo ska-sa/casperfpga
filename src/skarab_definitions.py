@@ -1458,7 +1458,7 @@ class BigWriteWishboneResp(Response):
         self.packet['padding'] = padding
 
 
-MAX_IMAGE_CHUNK_SIZE = 1988
+MAX_IMAGE_CHUNK_SIZE = 7952
 
 
 class SdramProgramWishboneReq(Command):
