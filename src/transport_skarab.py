@@ -657,29 +657,33 @@ class SkarabTransport(Transport):
         """
         print('skarab_transport')
         print(chunk_size)
-        upload_time = self.upload_to_ram(filename, not skip_verification, chunk_size)
-        if not wait_complete:
-            self.logger.debug('Returning immediately after programming.')
-            return True
-        self.boot_from_sdram()
-        # wait for board to come back up
-        timeout = timeout + time.time()
-        reboot_start_time = time.time()
-        while timeout > time.time():
-            if self.is_connected(retries=1):
-                # # configure the mux back to user_date mode
-                # self.config_prog_mux(user_data=1)
-                result, firmware_version = self.check_running_firmware()
-                if result:
-                    reboot_time = time.time() - reboot_start_time
-                    self.logger.info(
-                        'Skarab is back up, in %.1f seconds (%.1f + %.1f) with FW ver '
-                        '%s' % (upload_time + reboot_time, upload_time, reboot_time,
-                                firmware_version))
-                    return True
-                else:
-                    return False
-            time.sleep(0.1)
+        try:
+            upload_time = self.upload_to_ram(filename, not skip_verification, chunk_size)
+            if not wait_complete:
+                self.logger.debug('Returning immediately after programming.')
+                return True
+            self.boot_from_sdram()
+            # wait for board to come back up
+            timeout = timeout + time.time()
+            reboot_start_time = time.time()
+            while timeout > time.time():
+                if self.is_connected(retries=1):
+                    # # configure the mux back to user_date mode
+                    # self.config_prog_mux(user_data=1)
+                    result, firmware_version = self.check_running_firmware()
+                    if result:
+                        reboot_time = time.time() - reboot_start_time
+                        self.logger.info(
+                            'Skarab is back up, in %.1f seconds (%.1f + %.1f) with FW ver '
+                            '%s' % (upload_time + reboot_time, upload_time, reboot_time,
+                                    firmware_version))
+                        return True
+                    else:
+                        return False
+                time.sleep(0.1)
+        except sd.SkarabProgrammingError:
+            return False
+
         self.logger.error('Skarab has not come back after programming')
         return False
 

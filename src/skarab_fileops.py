@@ -260,6 +260,7 @@ def upload_to_ram_progska(filename, fpga_list, chunk_size=1988):
         return 0
     try:
         retval = progska.upload(binname, fpga_hosts, str(chunk_size))
+        print('progska exit code: %s' %retval)
     except RuntimeError as exc:
         os.remove(binname)
         raise sd.SkarabProgrammingError(

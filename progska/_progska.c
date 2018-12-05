@@ -73,7 +73,7 @@ static PyObject *casperfpga_progskaupload(PyObject *self, PyObject *args) {
     // call Marc's main function to do the upload
     int marcresult;
     marcresult = main(num_mainargs, mainargs);
-    
+    printf("Exit code : %d\n", marcresult); 
     PyObject *ret = Py_BuildValue("i", marcresult);
     // Py_DECREF(host_list); - is this making the segfault
     // Py_DECREF(item);

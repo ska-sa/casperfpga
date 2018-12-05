@@ -27,6 +27,24 @@ class FortyGbe(Gbe):
         self.position = position
         self.logger = parent.logger
         self.legacy_reg_map = legacy_reg_map
+        if self.legacy_reg_map == False:
+            self.reg_map = {'mac'            : 0x0E,
+                            'ip'             : 0x14,
+                            'fabric_port'    : 0x30,
+                            'fabric_en'      : 0x2C,
+                            'subnet_mask'    : 0x24,
+                            'gateway_ip'     : 0x18,
+                            'multicast_ip'   : 0x1C,
+                            'multicast_mask' : 0x20}
+        else:
+            self.reg_map = {'mac'            : 0x02,
+                            'ip'             : 0x10,
+                            'fabric_port'    : 0x20,
+                            'fabric_en'      : 0x20,
+                            'subnet_mask'    : 0x38,
+                            'gateway_ip'     : 0x0C,
+                            'multicast_ip'   : 0x30,
+                            'multicast_mask' : 0x34}
 
     def post_create_update(self, raw_device_info):
         """
@@ -85,30 +103,30 @@ class FortyGbe(Gbe):
 
     def fabric_enable(self):
         """
-        Enables 40G core.
+        Enables 40G corei fabric interface.
         :return: 
         """
-        en_port = self._wbone_rd(self.address + 0x20)
-        if en_port >> 16 == 1:
+        en_port = self._wbone_rd(self.address + self.reg_map['fabric_en'])
+        if en_port & 0xF == 1:
             return
-        en_port_new = (1 << 16) + (en_port & (2 ** 16 - 1))
-        self._wbone_wr(self.address + 0x20, en_port_new)
-        if self._wbone_rd(self.address + 0x20) != en_port_new:
+        en_port_new = en_port | 0x1
+        self._wbone_wr(self.address + self.reg_map['fabric_en'], en_port_new)
+        if self._wbone_rd(self.address + self.reg_map['fabric_en']) != en_port_new:
             errmsg = 'Error enabling 40gbe port'
             self.logger.error(errmsg)
             raise ValueError(errmsg)
 
     def fabric_disable(self):
         """
-        Disables 40G core.
+        Disables 40G core fabric interface.
         :return: 
         """
-        en_port = self._wbone_rd(self.address + 0x20)
-        if en_port >> 16 == 0:
+        en_port = self._wbone_rd(self.address + self.reg_map['fabric_en'])
+        if en_port & 0xF == 0:
             return
-        old_port = en_port & (2 ** 16 - 1)
-        self._wbone_wr(self.address + 0x20, old_port)
-        if self._wbone_rd(self.address + 0x20) != old_port:
+        old_port = en_port >> 1 << 1
+        self._wbone_wr(self.address + self.reg_map['fabric_en'], old_port)
+        if self._wbone_rd(self.address + self.reg_map['fabric_en']) != old_port:
             errmsg = 'Error disabling 40gbe port'
             self.logger.error(errmsg)
             raise ValueError(errmsg)
@@ -126,7 +144,7 @@ class FortyGbe(Gbe):
         Retrieve core's IP address from HW.
         :return: IpAddress object
         """
-        ip = self._wbone_rd(self.address + 0x10)
+        ip = self._wbone_rd(self.address + self.reg_map['ip'])
         self.ip_address = IpAddress(ip)
         return self.ip_address
 
@@ -136,7 +154,7 @@ class FortyGbe(Gbe):
 
         :return:  int
         """
-        en_port = self._wbone_rd(self.address + 0x20)
+        en_port = self._wbone_rd(self.address + self.reg_map['fabric_port'])
         self.port = en_port & (2 ** 16 - 1)
         return self.port
 
@@ -146,12 +164,12 @@ class FortyGbe(Gbe):
         :param port: 
         :return: 
         """
-        en_port = self._wbone_rd(self.address + 0x20)
+        en_port = self._wbone_rd(self.address + self.reg_map['fabric_port'])
         if en_port & (2 ** 16 - 1) == port:
             return
         en_port_new = ((en_port >> 16) << 16) + port
-        self._wbone_wr(self.address + 0x20, en_port_new)
-        if self._wbone_rd(self.address + 0x20) != en_port_new:
+        self._wbone_wr(self.address + self.reg_map['fabric_port'], en_port_new)
+        if self._wbone_rd(self.address + self.reg_map['fabric_port']) != en_port_new:
             errmsg = 'Error setting 40gbe port to 0x%04x' % port
             self.logger.error(errmsg)
             raise ValueError(errmsg)
