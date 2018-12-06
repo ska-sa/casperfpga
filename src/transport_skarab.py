@@ -151,7 +151,7 @@ class SkarabTransport(Transport):
         try:
             self._skarab_control_sock.connect(self.skarab_eth_ctrl_addr)
         except socket.gaierror:
-            errmsg = 'Your given host name is invalid, ensure `dnsmasq` service is running!'
+            errmsg = 'Hostname invalid, check leases or resource-list'
             self.logger.error(errmsg)
             raise SkarabInvalidHostname(errmsg)
 
