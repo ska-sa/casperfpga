@@ -73,6 +73,11 @@ class SkarabSpeadWarning(ValueError):
 class SkarabSpeadError(ValueError):
     pass
 
+
+class SkarabInvalidHostname(RuntimeError):
+    pass
+
+
 # endregion
 
 
@@ -143,7 +148,13 @@ class SkarabTransport(Transport):
 
         # create, and connect to, a socket for the skarab object
         self._skarab_control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self._skarab_control_sock.connect(self.skarab_eth_ctrl_addr)
+        try:
+            self._skarab_control_sock.connect(self.skarab_eth_ctrl_addr)
+        except socket.gaierror:
+            errmsg = 'Hostname invalid, check leases or resource-list'
+            self.logger.error(errmsg)
+            raise SkarabInvalidHostname(errmsg)
+
         self._skarab_control_sock.setblocking(0)
         self._lock=Lock()
 
@@ -1669,7 +1680,7 @@ class SkarabTransport(Transport):
     # region === VirtexFlashReconfig ===
     def process_flash_bin(self, filename):
         """
-        Sends the file to skarab_fileops for processing and returns 
+        Sends the file to skarab_fileops for processing and returns
         number of words, number of memory blocks and image to program
         :param filename: The actual .bin file that is to be written to
         the Virtex FPGA
@@ -1712,8 +1723,8 @@ class SkarabTransport(Transport):
         """
         This is the entire function that makes the necessary calls to
         reconfigure the Virtex7's Flash Memory. Either specify a filename
-        to program or process the file separately using 
-        transport_skarab.process_flash_bin and send image_to_program, num_words 
+        to program or process the file separately using
+        transport_skarab.process_flash_bin and send image_to_program, num_words
         and num_memory_blocks. Note when using this function as a thread it
         is preferable to send image_to_program as processing a file will use
         memory for each instance.
@@ -2849,12 +2860,12 @@ class SkarabTransport(Transport):
             for key, value in sd.sensor_list.items():
                 if 'fan_pwm' in key:
                     pwm_value = round(raw_sensor_data[value] / 100.0, 2);
-                    if(pwm_value > 100 or pwm_value < 0): 
+                    if(pwm_value > 100 or pwm_value < 0):
                         message = 'ERROR'
                     else:
                         message = 'OK'
                     self.sensor_data[key] = (
-                            pwm_value, '%',message) 
+                            pwm_value, '%',message)
 
         def parse_temperatures(raw_sensor_data):
             # inlet temp (reference)
