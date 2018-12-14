@@ -32,6 +32,7 @@
 #define SEQUENCE_STRIDE  0x10  /* (N*STRIDE)+FIRST = initial sequence of board N */
 
 #define MAX_PROBLEMS       10  /* try to deal with tings */
+#define MAX_TIMEOUTS       50  /* */
 
 #define SKARAB_REQ 0x0051  /* gets htons'ed */
 #define SKARAB_ACK 0x0052  /* gets htons'ed */
@@ -599,7 +600,7 @@ static void handle_signal(int s)
       break;
     case SIGINT :
     case SIGTERM :
-      run = 0;
+      run = (-2);
       break;
   }
 }
@@ -658,11 +659,12 @@ static int bulk_send(struct total *t)
 void usage(char *name)
 {
   printf("usage: %s -qhvf file [skarab]*\n", name);
-  printf("-f file  BIN file to upload\n");
-  printf("-q       quiet operation \n");
-  printf("-v       more output\n");
-  printf("-h       this help\n");
-  printf("-s size  specify a chunk size (max %u)\n", MAX_CHUNK);
+  printf("-f file    BIN file to upload\n");
+  printf("-q         quiet operation\n");
+  printf("-v         more output\n");
+  printf("-h         this help\n");
+  printf("-s size    specify a chunk size (max %u)\n", MAX_CHUNK);
+  printf("-t count   maximum number of sequential unacknowledged sends\n");
   printf("\n");
   printf("note: the list of skarabs is space delimited\n");
 }
@@ -672,20 +674,24 @@ int main(int argc, char **argv)
   struct total *t;
   struct sigaction sag;
   fd_set fsr;
-  int verbose, result, problems, completed;
+  int verbose, result, problems, completed, timeouts;
   int i, j, c;
-  char *app;
+  char *app, *name;
   struct timeval delta, now;
-  unsigned int last;
+  unsigned int last, lost;
   unsigned int chunk;
 
   verbose = 2;
   app = argv[0];
 
+  name = NULL;
+
   t = create_total();
   if(t == NULL){
     return EX_OSERR;
   }
+
+  timeouts = MAX_TIMEOUTS;
 
   i = j = 1;
   while (i < argc) {
@@ -709,6 +715,7 @@ int main(int argc, char **argv)
 
         case 'f' :
         case 's' :
+        case 't' :
 
           j++;
           if (argv[i][j] == '\0') {
@@ -724,10 +731,7 @@ int main(int argc, char **argv)
 
           switch(c){
             case 'f' :
-              if(open_total(t, argv[i] + j) < 0){
-                destroy_total(t);
-                return EX_OSERR;
-              }
+              name = argv[i] + j;
               break;
             case 's' : 
               chunk = strtoul(argv[i] + j, NULL, 0);
@@ -736,6 +740,9 @@ int main(int argc, char **argv)
                 destroy_total(t);
                 return EX_USAGE;
               }
+              break;
+            case 't' :
+              timeouts = strtoul(argv[i] + j, NULL, 0);
               break;
           }
 
@@ -765,6 +772,17 @@ int main(int argc, char **argv)
     }
   }
 
+  if(name == NULL){
+    fprintf(stderr, "%s: usage: need something to upload\n", app);
+    destroy_total(t);
+    return EX_USAGE;
+  }
+
+  if(open_total(t, name) < 0){
+    destroy_total(t);
+    return EX_OSERR;
+  }
+
   sag.sa_handler = handle_signal;
   sigemptyset(&(sag.sa_mask));
   sag.sa_flags = SA_RESTART;
@@ -785,6 +803,7 @@ int main(int argc, char **argv)
 
   problems = 0;
   last = 0;
+  lost = 0;
 
   for(run = 1; run > 0; ){
     
@@ -795,7 +814,7 @@ int main(int argc, char **argv)
     if(result < 0){
       problems++;
       if(problems > MAX_PROBLEMS){
-        fprintf(stderr, "%s: too many problems, giving up\n", app);
+        fprintf(stderr, "%s: too many problems, giving up with %d of %u programmed\n", app, completed, t->t_count);
         destroy_total(t);
         return EX_SOFTWARE;
       }
@@ -827,7 +846,17 @@ int main(int argc, char **argv)
       }
     }
 
+    if(result == 0){
+      lost++;
+      if((timeouts > 0) && (lost > timeouts)){
+        fprintf(stderr, "%s: too many lost packets, giving up with %d of %u programmed\n", app, completed, t->t_count);
+        destroy_total(t);
+        return EX_SOFTWARE;
+      }
+    }
+
     if(result > 0){
+      lost = 0;
       result = perform_receive(t);
       if(result < 0){
         problems++;
@@ -868,6 +897,6 @@ int main(int argc, char **argv)
 
   destroy_total(t);
 
-  return EX_OK;
+  return (run < 0) ? EX_UNAVAILABLE : EX_OK;
 }
 

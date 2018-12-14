@@ -260,7 +260,6 @@ def upload_to_ram_progska(filename, fpga_list, chunk_size=1988):
         return 0
     try:
         retval = progska.upload(binname, fpga_hosts, str(chunk_size))
-        print('progska exit code: %s' %retval)
     except RuntimeError as exc:
         os.remove(binname)
         raise sd.SkarabProgrammingError(
@@ -268,7 +267,7 @@ def upload_to_ram_progska(filename, fpga_list, chunk_size=1988):
     os.remove(binname)
     if retval != 0:
         raise sd.SkarabProgrammingError(
-            'progska returned nonzero code: %i' % retval)
+            'progska returned nonzero exit code: %i' % retval)
     upload_time = time.time() - upload_start_time
     LOGGER.debug('Uploaded bitstream to %s in %.1f seconds.' % (
         fpga_hosts, upload_time))
