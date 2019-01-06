@@ -7,6 +7,7 @@ import select
 import register
 import sbram
 import snap
+import onegbe
 import tengbe
 import fortygbe
 import qdr
@@ -28,6 +29,7 @@ CASPER_MEMORY_DEVICES = {
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:ten_gbe':      {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
+    'xps:onegbe':       {'class': onegbe.OneGbe,     'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
 }
 
