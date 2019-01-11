@@ -30,4 +30,6 @@ else:
     __version__ = _katversion.get_version(__path__[0])
 # END VERSION CHECK
 
+name = "casperfpga"
+
 # end
