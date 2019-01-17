@@ -1,4 +1,4 @@
-/* Released under the GNU GPLv3 - see COPYING */ 
+/* Released under the GNU GPLv3 - see COPYING */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -28,7 +28,7 @@
 #define MAX_CHUNK        9000
 #define CHUNK_SIZE       1988
 #define SKARAB_PORT     30584
-#define SEQUENCE_FIRST   0x10  
+#define SEQUENCE_FIRST   0x10
 #define SEQUENCE_STRIDE  0x10  /* (N*STRIDE)+FIRST = initial sequence of board N */
 
 #define MAX_PROBLEMS       10  /* try to deal with tings */
@@ -46,7 +46,9 @@ struct skarab
   in_addr_t s_addr;
   struct timeval s_last;
   struct timeval s_expire;
+#if 0
   struct timeval s_delta;
+#endif
 };
 
 struct header{
@@ -59,6 +61,7 @@ struct header{
 struct total{
   struct timeval t_begin;
   struct timeval t_stall;
+  struct timeval t_interval;
 
   unsigned int t_sent;
   unsigned int t_got;
@@ -68,6 +71,7 @@ struct total{
   unsigned int t_alien;
   unsigned int t_misfit;
   unsigned int t_defer;
+  unsigned int t_timeout;
 
   unsigned int t_chunksize;
 
@@ -101,14 +105,22 @@ struct total *create_total()
 {
   struct total *t;
   unsigned int i;
+  struct timeval now;
 
   t = malloc(sizeof(struct total));
   if(t == NULL){
     return NULL;
   }
 
-  t->t_stall.tv_sec = 0;
-  t->t_stall.tv_usec = 0;
+  component_th(&(t->t_interval), INITIAL_TIMEOUT);
+
+  /* first run we wait, as nobody has calculated the stall time */
+  gettimeofday(&now, NULL);
+  add_th(&(t->t_stall), &now, &(t->t_interval));
+
+#ifdef DEBUG
+  printf("start %lu.%06lus, stall until %lu.%06lus (added %lu.%06lus)\n", now.tv_sec, now.tv_usec, t->t_stall.tv_sec, t->t_stall.tv_usec, t->t_interval.tv_sec, t->t_interval.tv_usec);
+#endif
 
   t->t_verbose = 0;
 
@@ -120,6 +132,7 @@ struct total *create_total()
   t->t_alien = 0;
   t->t_misfit = 0;
   t->t_defer = 0;
+  t->t_timeout = 0;
 
   t->t_chunksize = CHUNK_SIZE;
 
@@ -235,10 +248,12 @@ int add_total(struct total *t, char *skarab)
   s->s_last.tv_sec = 0;
   s->s_last.tv_usec = 0;
 
-  s->s_expire.tv_sec = 0;
-  s->s_expire.tv_usec = 0;
+  s->s_expire.tv_sec = 12;
+  s->s_expire.tv_usec = 15;
 
+#if 0
   component_th(&(s->s_delta), INITIAL_TIMEOUT);
+#endif
 
   return 0;
 }
@@ -400,7 +415,9 @@ static int perform_send(struct total *t, struct skarab *s)
 #ifdef DEBUG
     fprintf(stderr, "all done %d/%u\n", s->s_chunk, t->t_chunks);
 #endif
+#if 0
     gettimeofday(&(s->s_expire), NULL);
+#endif
     return 1;
   }
 
@@ -454,7 +471,7 @@ static int perform_send(struct total *t, struct skarab *s)
 
   gettimeofday(&(s->s_last), NULL);
 
-  add_th(&(s->s_expire), &(s->s_last), &(s->s_delta));
+  add_th(&(s->s_expire), &(s->s_last), &(t->t_interval));
 
 #ifdef DEBUG
   fprintf(stderr, "sent chunk %d/%d\n", s->s_chunk, t->t_chunks);
@@ -546,7 +563,7 @@ static int perform_receive(struct total *t)
   if(where < (s->s_chunk + 1)){
     fprintf(stderr, "%s: stale chunk 0x%04x - expected 0x%04x\n", inet_ntoa(from.sin_addr), where, s->s_chunk + 1);
     /* wait a bit more ... */
-    add_th(&(s->s_expire), &now, &(s->s_delta));
+    add_th(&(s->s_expire), &now, &(t->t_interval));
     t->t_late++;
     return 0;
   }
@@ -554,7 +571,7 @@ static int perform_receive(struct total *t)
   if(sequence != s->s_sequence){
     fprintf(stderr, "%s: mismatched sequence number 0x%04x - expected 0x%04x\n", inet_ntoa(from.sin_addr), ntohs(answer.h_sequence), s->s_sequence);
     /* wait a bit more ... otherwise other packet might not drain */
-    add_th(&(s->s_expire), &now, &(s->s_delta));
+    add_th(&(s->s_expire), &now, &(t->t_interval));
     t->t_weird++;
     return 0;
   }
@@ -616,6 +633,7 @@ static int bulk_send(struct total *t)
   int result, total, finished;
 
   gettimeofday(&now, NULL);
+  add_th(&closer, &now, &(t->t_interval));
 
 #ifdef DEBUG
   if(sizeof(closer.tv_sec) != sizeof(long)){
@@ -624,28 +642,34 @@ static int bulk_send(struct total *t)
   }
 #endif
 
-  closer.tv_sec = LONG_MAX;
   total = 0;
   finished = 0;
 
   for(i = 0; i < t->t_count; i++){
     s = &(t->t_vector[i]);
-    if(cmp_th(&now, &(s->s_expire)) >= 0){
-      result = perform_index(t, i);
-      if(result > 0){
-        finished++;
-      } else if(result < 0){
-        total = result;
+    if(s->s_chunk < t->t_chunks){
+      if(cmp_th(&now, &(s->s_expire)) >= 0){
+        result = perform_index(t, i);
+        if(result > 0){
+          finished++;
+        } else if(result < 0){
+          total = result;
+        }
       }
-    }
-    if(cmp_th(&closer, &(s->s_expire)) > 0){
-      closer.tv_sec  = s->s_expire.tv_sec;
-      closer.tv_usec = s->s_expire.tv_usec;
+      if(cmp_th(&closer, &(s->s_expire)) > 0){
+        closer.tv_sec  = s->s_expire.tv_sec;
+        closer.tv_usec = s->s_expire.tv_usec;
+      }
+    } else {
+      finished++;
     }
   }
 
   t->t_stall.tv_sec  = closer.tv_sec;
   t->t_stall.tv_usec = closer.tv_usec;
+#ifdef DEBUG
+  printf("now %lu.%06lus, stall until %lu.%06lus\n", now.tv_sec, now.tv_usec, t->t_stall.tv_sec, t->t_stall.tv_usec);
+#endif
 
   if(finished >= t->t_count){
     return 1;
@@ -733,7 +757,7 @@ int main(int argc, char **argv)
             case 'f' :
               name = argv[i] + j;
               break;
-            case 's' : 
+            case 's' :
               chunk = strtoul(argv[i] + j, NULL, 0);
               if(update_chunksize(t, chunk) < 0){
                 fprintf(stderr, "%s: usage: %s not a reasonable chunk size\n", app, argv[i] + j);
@@ -806,7 +830,7 @@ int main(int argc, char **argv)
   lost = 0;
 
   for(run = 1; run > 0; ){
-    
+
     result = bulk_send(t);
     if(result > 0){
       break;
@@ -837,8 +861,8 @@ int main(int argc, char **argv)
     result = select(t->t_fd + 1, &fsr, NULL, NULL, &delta);
     if(result < 0){
       switch(errno){
-        case EAGAIN : 
-        case EINTR : 
+        case EAGAIN :
+        case EINTR :
           break;
         default :
           problems++;
@@ -847,12 +871,15 @@ int main(int argc, char **argv)
     }
 
     if(result == 0){
-      lost++;
-      if((timeouts > 0) && (lost > timeouts)){
-        fprintf(stderr, "%s: too many lost packets, giving up with %d of %u programmed\n", app, completed, t->t_count);
+      t->t_timeout++;
+      if((timeouts > 0) && (t->t_timeout > timeouts)){
+        fprintf(stderr, "%s: lost %u packets of %u sent, giving up with %d of %u programmed\n", app, t->t_timeout, t->t_sent, completed, t->t_count);
         destroy_total(t);
         return EX_SOFTWARE;
       }
+
+      gettimeofday(&now, NULL);
+      add_th(&(t->t_stall), &now, &(t->t_interval));
     }
 
     if(result > 0){
@@ -888,6 +915,7 @@ int main(int argc, char **argv)
       printf("%u misaddressed packets\n", t->t_alien);
       printf("%u under or oversized packets\n", t->t_misfit);
       printf("%u interruptions and stalls\n", t->t_defer);
+      printf("%u select timeouts\n", t->t_timeout);
       printf("%lu.%06lus elapsed time\n", delta.tv_sec, delta.tv_usec);
       printf("%.3fMb/s send data rate\n", ((double)(t->t_sent) * (t->t_chunksize + sizeof(struct header))) / ((delta.tv_sec * 1000000) + delta.tv_usec));
     } else {

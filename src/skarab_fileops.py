@@ -240,7 +240,7 @@ class BinProcessor(ImageProcessor):
         return reordered_bitstream
 
 
-def upload_to_ram_progska(filename, fpga_list, chunk_size=1988, **kwargs):
+def upload_to_ram_progska(filename, fpga_list, chunk_size=1988):
     """
     Use the progska C extension to upload an image to a list of skarabs
     :param filename: the fpg to upload
