@@ -2,6 +2,8 @@ import logging
 import struct
 import time
 import socket
+from time import strptime
+import string
 
 import register
 import sbram
@@ -585,13 +587,8 @@ class CasperFpga(object):
         # reset current devices and create new ones from the new
         # design information
         self._reset_device_info()
-        try:
-            legacy_reg_map = kwargs['legacy_reg_map']
-        except KeyError:
-            legacy_reg_map = True
-        self._create_memory_devices(device_dict, memorymap_dict, legacy_reg_map=legacy_reg_map)
-        self._create_other_devices(device_dict)
-        # populate some system information
+
+	# populate some system information
         try:
             self.system_info.update(device_dict['77777'])
         except KeyError:
@@ -603,8 +600,28 @@ class CasperFpga(object):
                 if 'git' not in self.rcs_info:
                     self.rcs_info['git'] = {}
                 self.rcs_info['git'][name] = device_dict[device_name]
+
         if '77777_svn' in device_dict:
             self.rcs_info['svn'] = device_dict['77777_svn']
+        
+	#Determine if the new or old register map is used
+
+	new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03*4)
+	old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00*4)
+	
+	if(new_reg_map_mac_word1_hex == 0x650):
+		print('Using new 40GbE core register map')
+		legacy_reg_map = False
+	elif(old_reg_map_mac_word1_hex == 0x650):
+		print('Using old 40GbE core register map')
+		legacy_reg_map = True
+	else:
+		print('Unknown 40GbE core register map')
+
+        
+	#Create Register Map
+        self._create_memory_devices(device_dict, memorymap_dict, legacy_reg_map=legacy_reg_map)
+        self._create_other_devices(device_dict)
         self.transport.memory_devices = self.memory_devices
         self.transport.post_get_system_information()
 
