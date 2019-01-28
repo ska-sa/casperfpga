@@ -611,14 +611,14 @@ class CasperFpga(object):
         old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
 
         if(new_reg_map_mac_word1_hex == 0x650):
-            print('Using new 40GbE core register map')
+            #self.logger.debug('Using new 40GbE core register map')
             legacy_reg_map = False
         elif(old_reg_map_mac_word1_hex == 0x650):
-            print('Using old 40GbE core register map')
+            #self.logger.debug('Using old 40GbE core register map')
             legacy_reg_map = True
         else:
-            print('Unknown 40GbE core register map')
-
+            self.logger.error('Unknown 40GbE core register map')
+            raise Exception('Unknown register map')
 
         #Create Register Map
         self._create_memory_devices(device_dict, memorymap_dict, legacy_reg_map=legacy_reg_map)

@@ -666,13 +666,13 @@ class SkarabTransport(Transport):
         :param skip_verification - do not verify the image after upload
         :return: Boolean - True/False - Succes/Fail
         """
-        print('skarab_transport')
+        #print('skarab_transport')
         print(chunk_size)
         try:
             upload_time = self.upload_to_ram(filename, not skip_verification, chunk_size)
-            print("completed fine")
+            #print("completed fine")
         except:
-            print("failed to program")
+            #print("failed to program")
             self.logger.error('Failed to program.')
             raise
         if not wait_complete:
