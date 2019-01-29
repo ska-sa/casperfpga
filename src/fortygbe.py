@@ -32,10 +32,10 @@ class FortyGbe(Gbe):
                             'ip'             : 0x14,
                             'fabric_port'    : 0x30,
                             'fabric_en'      : 0x2C,
-                            'subnet_mask'    : 0x24,
+                            'subnet_mask'    : 0x1C,
                             'gateway_ip'     : 0x18,
-                            'multicast_ip'   : 0x1C,
-                            'multicast_mask' : 0x20}
+                            'multicast_ip'   : 0x20,
+                            'multicast_mask' : 0x24}
         else:
             self.reg_map = {'mac'            : 0x02,
                             'ip'             : 0x10,
@@ -252,9 +252,9 @@ class FortyGbe(Gbe):
                 #     'tx_swing': pd[0x2b]},
                 'multicast': {
                     'base_ip': IpAddress('%i.%i.%i.%i' % (
-                        pd[0x1C], pd[0x1D], pd[0x1E], pd[0x1F])),
+                        pd[0x20], pd[0x21], pd[0x22], pd[0x23])),
                     'ip_mask': IpAddress('%i.%i.%i.%i' % (
-                        pd[0x20], pd[0x21], pd[0x22], pd[0x23]))}
+                        pd[0x24], pd[0x25], pd[0x26], pd[0x27]))}
             }
         possible_addresses = [int(returnval['multicast']['base_ip'])]
         mask_int = int(returnval['multicast']['ip_mask'])
