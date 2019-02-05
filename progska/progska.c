@@ -75,6 +75,8 @@ struct total{
 
   unsigned int t_chunksize;
 
+  unsigned int t_burst;
+
   int t_verbose;
 
   int t_fd;
@@ -135,6 +137,7 @@ struct total *create_total()
   t->t_timeout = 0;
 
   t->t_chunksize = CHUNK_SIZE;
+  t->t_burst = 0;
 
   t->t_fd = (-1);
   t->t_count = 0;
@@ -248,8 +251,8 @@ int add_total(struct total *t, char *skarab)
   s->s_last.tv_sec = 0;
   s->s_last.tv_usec = 0;
 
-  s->s_expire.tv_sec = 12;
-  s->s_expire.tv_usec = 15;
+  s->s_expire.tv_sec = 0;
+  s->s_expire.tv_usec = 0;
 
 #if 0
   component_th(&(s->s_delta), INITIAL_TIMEOUT);
@@ -688,7 +691,8 @@ void usage(char *name)
   printf("-v         more output\n");
   printf("-h         this help\n");
   printf("-s size    specify a chunk size (max %u)\n", MAX_CHUNK);
-  printf("-t count   maximum number of sequential unacknowledged sends\n");
+  printf("-t count   burst of errors triggering an abort (multiplied by number of skarabs)\n");
+  printf("-T count   burst of errors triggering an abort\n");
   printf("\n");
   printf("note: the list of skarabs is space delimited\n");
 }
@@ -698,11 +702,11 @@ int main(int argc, char **argv)
   struct total *t;
   struct sigaction sag;
   fd_set fsr;
-  int verbose, result, problems, completed, timeouts;
+  int verbose, result, problems, completed, scale, terminal;
   int i, j, c;
   char *app, *name;
   struct timeval delta, now;
-  unsigned int last, lost;
+  unsigned int last, lost, timeouts;
   unsigned int chunk;
 
   verbose = 2;
@@ -716,6 +720,9 @@ int main(int argc, char **argv)
   }
 
   timeouts = MAX_TIMEOUTS;
+  scale = 1;
+
+  terminal = isatty(STDOUT_FILENO);
 
   i = j = 1;
   while (i < argc) {
@@ -765,6 +772,9 @@ int main(int argc, char **argv)
                 return EX_USAGE;
               }
               break;
+            case 'T' :
+              scale = 0;
+              /* fall */
             case 't' :
               timeouts = strtoul(argv[i] + j, NULL, 0);
               break;
@@ -794,6 +804,10 @@ int main(int argc, char **argv)
       }
       i++;
     }
+  }
+
+  if(scale){
+    timeouts *= t->t_count;
   }
 
   if(name == NULL){
@@ -848,7 +862,7 @@ int main(int argc, char **argv)
     FD_SET(t->t_fd, &fsr);
 
     gettimeofday(&now, NULL);
-    if(verbose > 0){
+    if((verbose > 0) && (terminal > 0)){
       if(last != now.tv_sec){
         printf("\rTX=%7u", t->t_sent);
         fflush(stdout);
@@ -872,8 +886,9 @@ int main(int argc, char **argv)
 
     if(result == 0){
       t->t_timeout++;
-      if((timeouts > 0) && (t->t_timeout > timeouts)){
-        fprintf(stderr, "%s: lost %u packets of %u sent, giving up with %d of %u programmed\n", app, t->t_timeout, t->t_sent, completed, t->t_count);
+      t->t_burst++;
+      if((timeouts > 0) && (t->t_burst > timeouts)){
+        fprintf(stderr, "%s: now lost %u packets and overall %u of %u sent so giving up with %d of %u programmed\n", app, t->t_burst, t->t_timeout, t->t_sent, completed, t->t_count);
         destroy_total(t);
         return EX_SOFTWARE;
       }
@@ -887,12 +902,14 @@ int main(int argc, char **argv)
       result = perform_receive(t);
       if(result < 0){
         problems++;
+      } else {
+        t->t_burst = 0;
       }
     }
 
   }
 
-  if(verbose > 0){
+  if((verbose > 0) && (terminal > 0)){
     printf("\r");
   }
 
