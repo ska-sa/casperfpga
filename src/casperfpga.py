@@ -52,6 +52,8 @@ CASPER_OTHER_DEVICES = {
     'casper:xeng':                  'xeng',
     'xps:xsg':                      'xps',
     'xps:katadc':                   'katadc',
+    'xps:skarab_adc4x3g_14':        'skarabadc',
+    'xps:skarab_adc4x3g_14_byp':    'skarabadc_byp',
 }
 
 
@@ -83,7 +85,6 @@ class CasperFpga(object):
             self.logger = kwargs['logger']
         except KeyError:
             # Damn
-            # self.logger = logging.getLogger(self.host)
             result, self.logger = self.getLogger(name=self.host)
             if not result:
                 # Problem
