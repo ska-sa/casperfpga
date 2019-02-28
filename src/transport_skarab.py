@@ -1737,6 +1737,8 @@ class SkarabTransport(Transport):
         by skarab_fileops.py
         :param flash_address: 32-bit Address in the NOR flash to
         start programming from
+            - flash_address = DEFUALT_START_ADDRESS is for programming the Multiboot Image
+            - flash_address = 0x0 is for programming the Golden Image
         :param blind_reconfig: Reconfigure the board and don't wait to
         verify what has been written
         :return: Success/Fail - 0/1
