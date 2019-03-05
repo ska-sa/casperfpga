@@ -274,23 +274,6 @@ class CasperFpga(object):
             if self.bitstream[-3:] == 'fpg':
                 self.get_system_information(filename, legacy_reg_map=legacy_reg_map)
 
-                # Get git info here and log it
-                git_info_dict = get_git_info_from_fpg(filename)
-                bitstream_info_str = '{}\n'.format(filename)
-                for git_repo, git_version in git_info_dict.items():
-                    bitstream_info_str += '\t {} \n \t {} \n\n'.format(git_repo, git_version)
-                    
-                # Need to log at logging.INFO
-                # - Problem if the logger is set at something > logging.INFO (e.g. ERROR)
-                if self.logger.level > logging.INFO:
-                    old_log_level = self.logger.level
-                    self.logger.setLevel(logging.INFO)
-                    self.logger.info(bitstream_info_str)
-                    self.logger.setLevel(old_log_level)
-                else:
-                    self.logger.info(bitstream_info_str)
-                # Job done
-
         return rv
 
     def is_connected(self, **kwargs):
