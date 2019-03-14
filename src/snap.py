@@ -32,7 +32,7 @@ class Snap(Memory):
         LOGGER.debug('New Snap %s' % self)
 
     @classmethod
-    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict, **kwargs):
         """
         Process device info and the memory map to get all necessary
         info and return a Snap instance.
@@ -127,7 +127,9 @@ class Snap(Memory):
             self.field_add(field, auto_offset=True)
 
     def _link_control_registers(self, raw_device_info):
-        """Link available registers to this snapshot block's control registers.
+        """
+        Link available registers to this snapshot block's control registers.
+        :param raw_device_info: Information about the device in raw form
         """
         for controlreg in self.control_registers.values():
             try:
@@ -167,6 +169,10 @@ class Snap(Memory):
             circular_capture=False):
         """
         Arm the snapshot block.
+        :param man_trig: Boolean
+        :param man_valid: Boolean
+        :param offset: Integer
+        :param circular_capture: Boolean
         """
         ctrl_reg = self.control_registers['control']['register']
         if offset >= 0:

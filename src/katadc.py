@@ -12,12 +12,18 @@ LOGGER = logging.getLogger(__name__)
 
 
 class KatAdc(Memory):
-    """Information above KatAdc yellow blocks.
+    """
+    Information above KatAdc yellow blocks. Seems to be called most often via from_device_info.
     """
     def __init__(self, parent, name, address, length, device_info):
         """
-        @param parent: The owner of this block.
-        @param name: The name of this block.
+        Initialise a KatAdc object with the following parameters.
+        :param parent: The owner of this block.
+        :param name: The name of this block.
+        :param address:
+        :param length:
+        :param device_info:
+        :return: <nothing>
         """
         super(KatAdc, self).__init__(name=name, width=32, address=address, length=length)
         self.parent = parent
@@ -25,7 +31,7 @@ class KatAdc(Memory):
         LOGGER.debug('New KatAdc %s' % self.name)
 
     @classmethod
-    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict, **kwargs):
         """
         Process device info and the memory map to get all necessary info and return a KatAdc instance.
         :param device_name: the unique device name

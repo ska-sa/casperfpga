@@ -63,8 +63,8 @@ def logl3(msg):
 def find_cal_area(a):
     """
     Given a vector of pass (1) and fail (-1), find contiguous chunks of 'pass'.
-    :param a:
-    :return:
+    :param a: Vector input (list?)
+    :return: Tuple - (max_so_far, begin_index, end_index)
     """
     max_so_far = a[0]
     max_ending_here = a[0]
@@ -92,6 +92,14 @@ class Qdr(Memory):
                  device_info, ctrlreg_address):
         """
         Make the QDR instance, given a parent, name and info from Simulink.
+        - Most often called from_device_info
+        :param parent: Parent device who owns this Qdr
+        :param name: A unique device name
+        :param address: Address of the Qdr in memory
+        :param length_bytes: Length of the Qdr in memory
+        :param device_info: Information about this Qdr device
+        :param ctrlreg_address:
+        :return: <nothing>
         """
         super(Qdr, self).__init__(name=name, width_bits=32,
                                   address=address, length_bytes=length_bytes)
@@ -124,7 +132,7 @@ class Qdr(Memory):
         # TODO - Link QDR ctrl register to self.registers properly
 
     @classmethod
-    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict, **kwargs):
         """
         Process device info and the memory map to get all necessary info and
         return a Qdr instance.
@@ -156,7 +164,7 @@ class Qdr(Memory):
 
     def __repr__(self):
         """
-
+        Return a string representation of the Qdr Class
         :return:
         """
         return '%s:%s' % (self.__class__.__name__, self.name)

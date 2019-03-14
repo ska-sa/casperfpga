@@ -104,7 +104,9 @@ def parse_fpg(filename):
             # and carry on as usual.
             line = line.replace('\_', ' ').replace('?meta', '')
             line = line.replace('\n', '').lstrip().rstrip()
-            line_split = line.split('\t')
+            #line_split = line.split('\t')
+            # Rather split on any space
+            line_split = line.split()
             name = line_split[0]
             tag = line_split[1]
             param = line_split[2]
@@ -136,6 +138,31 @@ def parse_fpg(filename):
     fptr.close()
     return create_meta_dictionary(metalist), memorydict
 
+def get_git_info_from_fpg(fpg_file):
+    """
+    Method to get git info from an fpg-file's header
+    :param fpg_file: filename as string
+    :return: Dictionary of git_info
+             - key = git-repo
+             - value = git-version
+    """
+    git_tag = '77777_git'
+    git_info_dict = None
+
+    # This returns a tuple of dictionaries,
+    # - device info dict, memory map info (coreinfo.tab) dict
+    # - Git info is meta-data, and should only ever be in the
+    #   first dictionary of the tuple
+    fpg_header = parse_fpg(fpg_file)
+    fpg_metadata = fpg_header[0]
+
+    git_info_dict = fpg_metadata.get(git_tag, None)
+    try:
+        git_info_dict.pop('tag')
+        return git_info_dict
+    except KeyError:
+        # tag: rcs entry isn't there, no worries
+        return git_info_dict
 
 def pull_info_from_fpg(fpg_file, parameter):
     """
@@ -268,7 +295,7 @@ def program_fpgas(fpga_list, progfile, timeout=10):
 
 def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
                                      port=7147, timeout=10,
-                                     best_effort=False):
+                                     best_effort=False, **kwargs):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
     :param fpga_class: the class to insantiate, usually CasperFpga
@@ -287,7 +314,7 @@ def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
     thread_list = []
 
     def makehost(hostname):
-        result_queue.put_nowait(fpga_class(hostname, port))
+        result_queue.put_nowait(fpga_class(hostname, port, **kwargs))
 
     for host_ in host_list:
         thread = threading.Thread(target=makehost, args=(host_,))
@@ -348,7 +375,7 @@ def _check_target_func(target_function):
 def threaded_fpga_function(fpga_list, timeout, target_function):
     """
     Thread the running of any CasperFpga function on a list of
-        CasperFpga objects. Much faster.
+    CasperFpga objects. Much faster.
     :param fpga_list: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
     :param target_function: a tuple with three parts:

@@ -39,8 +39,11 @@ class ImageProcessor(object):
     """
     def __init__(self, image_file, bin_name=None, extract_to_disk=True):
         self.image_file = image_file
-        tmpbin = '/tmp/casperstream_' + str(os.getpid()) + '.bin'
-        self.bin_name = bin_name or tmpbin
+        if extract_to_disk:
+            if bin_name==None:
+                self.bin_name = '/tmp/casperstream_' + str(os.getpid()) + '.bin'
+            else:
+                self.bin_name = bin_name
         self.extract = extract_to_disk
 
     def make_bin(self):
@@ -237,7 +240,7 @@ class BinProcessor(ImageProcessor):
         return reordered_bitstream
 
 
-def upload_to_ram_progska(filename, fpga_list):
+def upload_to_ram_progska(filename, fpga_list, chunk_size=1988):
     """
     Use the progska C extension to upload an image to a list of skarabs
     :param filename: the fpg to upload
@@ -250,8 +253,13 @@ def upload_to_ram_progska(filename, fpga_list):
     processor = processor(filename, binname)
     binname = processor.make_bin()[1]
     fpga_hosts = [fpga.host for fpga in fpga_list]
+    
+    if chunk_size not in [1988, 3976, 7952]:
+        raise sd.SkarabProgrammingError(
+           'chunk_size can only be 1988, 3976 or 7952')
+        return 0
     try:
-        retval = progska.upload(binname, fpga_hosts)
+        retval = progska.upload(binname, fpga_hosts, str(chunk_size))
     except RuntimeError as exc:
         os.remove(binname)
         raise sd.SkarabProgrammingError(
@@ -259,7 +267,7 @@ def upload_to_ram_progska(filename, fpga_list):
     os.remove(binname)
     if retval != 0:
         raise sd.SkarabProgrammingError(
-            'progska returned nonzero code: %i' % retval)
+            'progska returned nonzero exit code: %i' % retval)
     upload_time = time.time() - upload_start_time
     LOGGER.debug('Uploaded bitstream to %s in %.1f seconds.' % (
         fpga_hosts, upload_time))
@@ -443,29 +451,39 @@ def analyse_ufp_bitstream(bitstream):
 
 
 # Only working with BPIx8 .bin files now
-def analyse_file_virtex_flash(filename):
+def analyse_file_virtex_flash(filename=None, bitstream=None):
     """
     This method analyses the input .bin file to determine the number of
-    words to program, and the number of blocks to erase
+    words to program, and the number of blocks to erase.
+    Specify either a file or a bitstream processed by ImageProcessor
     :param filename: Input .bin to be written to the Virtex FPGA
+    :param bitstream: processed .bin file variable
     :return: Tuple - num_words (in file), num_memory_blocks (required to
     hold this file)
     """
-    # File contents are in bytes
-    fptr = open(filename, 'rb')
-    contents = fptr.read()
-    fptr.close()
-    if len(contents) % 2 != 0:
+    if filename:
+        # File contents are in bytes
+        fptr = open(filename, 'rb')
+        bitstream = fptr.read()
+        fptr.close()
+    elif bitstream:
+        pass
+    else:
+        errmsg = 'Specify a file or a processed bitstream.'
+        LOGGER.error(errmsg)
+        raise sd.SkarabInvalidBitstream(errmsg)
+
+    if len(bitstream) % 2 != 0:
         # Problem
-        if len(contents) % 2 == 1:
+        if len(bitstream) % 2 == 1:
             # hex file with carriage return (\n) at the end
-            contents = contents[:-1]
+            bitstream = bitstream[:-1]
         else:
             errmsg = 'Invalid file size: Number of Words is not whole'
             LOGGER.error(errmsg)
             raise sd.SkarabInvalidBitstream(errmsg)
     # else: Continue
-    num_words = len(contents) / 2
+    num_words = len(bitstream) / 2
     from math import ceil
     num_memory_blocks = int(ceil(num_words / sd.DEFAULT_BLOCK_SIZE))
     return num_words, num_memory_blocks

@@ -7,7 +7,6 @@ busses. Normally via KATCP.
 import logging
 import bitfield
 import struct
-import numpy as np
 
 LOGGER = logging.getLogger(__name__)
 
@@ -94,7 +93,7 @@ def fp2fixed_int(num, bitwidth, bin_pt, signed):
 
 class Memory(bitfield.Bitfield):
     """
-    Memory on an FPGA
+    Memory on an FPGA.
     """
     def __init__(self, name, width_bits, address, length_bytes):
         """

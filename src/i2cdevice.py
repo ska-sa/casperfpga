@@ -1,6 +1,8 @@
 
 class I2CDevice(object):
-
+	"""
+	Parent class for implementing devices on an I2C bus
+	"""
 	def __init__(self,interface,addr):
 		self.itf = interface
 		self.addr = addr
