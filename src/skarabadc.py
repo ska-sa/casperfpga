@@ -45,7 +45,6 @@ class SkarabAdc(object):
         return cls(parent, device_name, device_info, memorymap_dict, **kwargs)
         
     
-    # Putting it here for now
     # TODO: Make this a static method (somehow)
     def get_adc_embedded_software_version(self):
         """
@@ -55,11 +54,11 @@ class SkarabAdc(object):
         :return: Tuple - (int, int) - (major_version, minor_version)
         """
         self.parent.transport.write_i2c(self.i2c_interface,
-					sd.STM_I2C_DEVICE_ADDRESS, sd.FIRMWARE_VERSION_MAJOR_REG)
+					sd.STM_I2C_DEVICE_ADDRESS, sd.ADC_FIRMWARE_MAJOR_VERSION_REG)
 		major_version = self.parent.transport.read_i2c(self.i2c_interface,
 													sd.STM_I2C_DEVICE_ADDRESS, 1)
 		self.parent.transport.write_i2c(self.i2c_interface,
-					sd.STM_I2C_DEVICE_ADDRESS, sd.FIRMWARE_VERSION_MINOR_REG)
+					sd.STM_I2C_DEVICE_ADDRESS, sd.ADC_FIRMWARE_MINOR_VERSION_REG)
 		minor_version = self.parent.transport.read_i2c(self.i2c_interface,
 													sd.STM_I2C_DEVICE_ADDRESS, 1)
 
@@ -75,7 +74,6 @@ class SkarabAdc(object):
         :return: Boolean - Success/Fail - True/False
         """
 
-        raise NotImplementedError
         try:
 
             self.parent.transport.direct_spi_write(
@@ -181,153 +179,7 @@ class SkarabAdc(object):
         except Exception as exc:
             self.parent.logger.exception(exc)
             return False
-        
-
-    def ConfigureGain(self, gain, adc_input):
-		"""
-		Function used to set the gain of the amplifiers in the analogue channels of the SKARAB ADC4x3G-14 mezzanine module.		
-		
-		:param adc_input: The ADC channel whose gain should be set (0 -> 3).
-		:type adc_input: int
-		:param adc_input: The gain of the ADC channel (-6 to 15 dB).
-		:type adc_input: int
-		"""
-		gain_channel = 0
-		 
-		if adc_input == 0:
-			gain_channel = sd.ADC_GAIN_CHANNEL_0
-		elif adc_input == 1:
-			gain_channel = sd.ADC_GAIN_CHANNEL_1
-		elif adc_input == 2:
-			gain_channel = sd.ADC_GAIN_CHANNEL_2
-		else:
-			gain_channel = sd.ADC_GAIN_CHANNEL_3
-
-		self.logger.debug("Configuring gain.")
-		gain_control_word = (-1 * gain) + 15
-
-		write_byte = gain_channel | (gain_control_word << 2) | sd.UPDATE_GAIN
-
-		self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-								 		sd.GAIN_CONTROL_REG, write_byte)
-
-		# This command requires a fourth field: bytes_to_write ?! 
-		self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-								 		sd.GAIN_CONTROL_REG)
-
-		read_byte = self.parent.transport.read_i2c(self.i2c_interface,
-												   sd.STM_I2C_DEVICE_ADDRESS, 1)
-
-		timeout = 0
-		while (((read_byte[0] & UPDATE_GAIN) != 0) and (timeout < 1000)):
-			self.parent.transport.write_i2c(self.i2c_interface,
-									sd.STM_I2C_DEVICE_ADDRESS, sd.GAIN_CONTROL_REG)
-			read_byte = self.parent.transport.read_i2c(self.i2c_interface,
-													   sd.STM_I2C_DEVICE_ADDRESS, 1)
-			timeout = timeout + 1
-
-		if timeout == 1000:
-			print("ERROR: Timeout waiting for configure gain to complete!")
-			
-
-	def ConfigureAdcDdc(self, adc_input, real_ddc_output_enable):
-		"""
-		Function used to configure the DDCs on the SKARAB ADC4x3G-14 mezzanine module.		
-		
-		:param adc_input: The ADC channel to configure (0 -> 3).
-		:type adc_input: int
-		:param real_ddc_output_enable: Enable/Disable real DDC output values
-		:type real_ddc_output_enable: boolean
-		"""
-	
-		ADC = 0
-		channel = ''
-		
-		if adc_input == 0:
-			ADC = 0
-			channel = 'B'
-		elif adc_input == 1:
-			ADC = 0
-			channel = 'A'
-		elif adc_input == 2:
-			ADC = 1
-			channel = 'B'
-		else:
-			ADC = 1
-			channel = 'A'
-			
-		adc_sample_rate = 3e9
-		decimation_rate = 4	
-		ddc0_centre_frequency = 1e9
-		ddc1_centre_frequency = 0
-		dual_band_mode = False
-		
-		# Configure ADC DDC
-		self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 
-										sd.DECIMATION_RATE_REG, decimation_rate)
-
-		# Calculate the NCO value
-		nco_register_setting = pow(2.0, 16.0) * (ddc0_centre_frequency / adc_sample_rate)
-		nco_register_setting = int(nco_register_setting)
-
-		write_byte = (nco_register_setting >> 8) & 0xFF
-		self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-										sd.DDC0_NCO_SETTING_MSB_REG, write_byte)
-
-		write_byte = nco_register_setting & 0xFF
-		self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-										sd.DDC0_NCO_SETTING_LSB_REG, write_byte)
-
-		# If in dual band mode, calculate the second NCO value
-		if dual_band_mode == True:
-			nco_register_setting = pow(2.0, 16.0) * (ddc1_centre_frequency / adc_sample_rate)
-			nco_register_setting = int(nco_register_setting)
-
-			write_byte = (nco_register_setting >> 8) & 0xFF
-			self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-											sd.DDC1_NCO_SETTING_MSB_REG, write_byte)
-
-			write_byte = nco_register_setting & 0xFF
-			self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-											sd.DDC1_NCO_SETTING_LSB_REG, write_byte)
-
-		# Trigger a configuration
-		write_byte = 0
-		if ADC == 1:
-			write_byte = write_byte | sd.DDC_ADC_SELECT
-
-		if channel == 'B':
-			write_byte = write_byte | sd.DDC_CHANNEL_SELECT
-
-		if dual_band_mode == True:
-			write_byte = write_byte | sd.DUAL_BAND_ENABLE
-			
-		# 08/08/2018 ADD SUPPORT FOR REAL DDC OUTPUT SAMPLES	
-		if real_ddc_output_enable == True:
-			write_byte = write_byte | sd.REAL_DDC_OUTPUT_SELECT
-
-		# Determine if in second nyquist zone
-		if (ddc0_centre_frequency > (adc_sample_rate / 2)):
-			write_byte = write_byte | sd.SECOND_NYQUIST_ZONE_SELECT
-
-		write_byte = write_byte | sd.UPDATE_DDC_CHANGE
-
-		self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, DDC_CONTROL_REG, write_byte)
-
-		# Wait for the update to complete
-		self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, DDC_CONTROL_REG)
-		read_byte = self.parent.transport.read_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
-
-		timeout = 0
-		while (((read_byte[0] & UPDATE_DDC_CHANGE) != 0) and (timeout < 1000)):
-			self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, DDC_CONTROL_REG)
-			read_byte = self.parent.transport.read_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
-			timeout = timeout + 1
-
-		if timeout == 1000:
-			print("ERROR: Timeout waiting for configure DDC to complete!")
-
-
+    
     
     def PerformAdcPllSync(self):
 		"""
@@ -337,16 +189,9 @@ class SkarabAdc(object):
 		"""
 		
 		# Get embedded software version
-		self.parent.transport.write_i2c(self.i2c_interface,
-					sd.STM_I2C_DEVICE_ADDRESS, sd.FIRMWARE_VERSION_MAJOR_REG)
-		major_version = self.parent.transport.read_i2c(self.i2c_interface,
-													sd.STM_I2C_DEVICE_ADDRESS, 1)
-		self.parent.transport.write_i2c(self.i2c_interface,
-					sd.STM_I2C_DEVICE_ADDRESS, sd.FIRMWARE_VERSION_MINOR_REG)
-		minor_version = self.parent.transport.read_i2c(self.i2c_interface,
-													sd.STM_I2C_DEVICE_ADDRESS, 1)
+		major_version, minor_version = self.get_adc_embedded_software_version()
 		
-		# Synchronise PLL and ADC	
+		# Synchronise PLL and ADC
 		self.parent.write_int('pll_sync_start_in', 0)
 		self.parent.write_int('adc_sync_start_in', 0)
 		self.parent.write_int('adc_trig', 0)	
@@ -355,16 +200,12 @@ class SkarabAdc(object):
 		synchronise_mezzanine = [False, False, False, False]
 		synchronise_mezzanine[self.mezzanine_site] = True
 
-		if not ((major_version == 1) and (minor_version < 3)):
-			# This is a huge if-statement
+		if not ((major_version == sd.CURRENT_ADC_MAJOR_VERSION) and (minor_version < sd.CURRENT_ADC_MINOR_VERSION)):
 			# TO DO: Implement LVDS SYSREF
 			self.logger.debug("Synchronising PLL with LVDS SYSREF")
 
 			for mezzanine in range(0, 4):
-				# Don't understand the point of this for-loop
-				# - We know which index we've set to True
-				#	Why don't we just go straight there?
-
+				
 				self.logger.debug("Checking PLL loss of reference for mezzanine: {}".format(self.mezzanine_site)
 				
 				if synchronise_mezzanine[self.mezzanine_site] == True:
@@ -377,16 +218,17 @@ class SkarabAdc(object):
 					if ((read_byte[0] & 0x01) == 0x01):
 						# PLL reporting loss of reference
 						pll_loss_of_reference = True
-						self.logger("PLL reporting loss of reference.")
+						self.logger.error("PLL reporting loss of reference.")
+						# And then?
 					else:
 						self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-												PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xD1)
+												sd.PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xD1)
 						self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-												PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xD1)
+												sd.PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xD1)
 
 						# Enable PLL SYNC
 						self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-														sd.MEZ_CONTROL_REG, ENABLE_PLL_SYNC)
+														sd.MEZ_CONTROL_REG, sd.ENABLE_PLL_SYNC)
 
 			# Only try to synchronise PLLs if all SKARAB ADC32RF45X2 mezzanines have reference
 			if pll_loss_of_reference == False:
@@ -416,11 +258,12 @@ class SkarabAdc(object):
 														sd.MEZ_CONTROL_REG, 0x0)
 
 						spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
-														sd.SPI_DESTINATION_PLL, PLL_ALARM_READBACK)
+														sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
+						
 						timeout = 0
 						while (((spi_read_word & PLL_CLOCK_OUTPUT_PHASE_STATUS) == 0x0) and (timeout < 1000)):
 							spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
-															sd.SPI_DESTINATION_PLL, PLL_ALARM_READBACK)
+															sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
 							timeout = timeout + 1
 
 						if timeout == 1000:
@@ -450,12 +293,14 @@ class SkarabAdc(object):
 						# Disable SYSREF again
 						self.parent.transport.direct_spi_write(
 							self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-							PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xD0)
+							sd.PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xD0)
 						self.parent.transport.direct_spi_write(
 							self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-							PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xD0)
+							sd.PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xD0)
 
 		else:
+			# Major version == 1, and
+			# Minor version < 3
 			self.logger.debug("Synchronising PLL with LVPECL SYSREF.")
 			
 			# Check first to see if mezzanine has a reference clock
@@ -481,20 +326,20 @@ class SkarabAdc(object):
 						# Change SYSREF to pulse gen mode so don't generate any pulses yet
 						self.parent.transport.direct_spi_write(
 							self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-							PLL_CHANNEL_OUTPUT_3_CONTROL_FORCE_MUTE, 0x88)
+							sd.PLL_CHANNEL_OUTPUT_3_CONTROL_FORCE_MUTE, 0x88)
 						self.parent.transport.direct_spi_write(
 							self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-							PLL_CHANNEL_OUTPUT_7_CONTROL_FORCE_MUTE, 0x88)
+							sd.PLL_CHANNEL_OUTPUT_7_CONTROL_FORCE_MUTE, 0x88)
 						self.parent.transport.direct_spi_write(
 							self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-							PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xDD)
+							sd.PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xDD)
 						self.parent.transport.direct_spi_write(
 							self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-							PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xDD)
+							sd.PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xDD)
 
 						# Enable PLL SYNC
 						self.parent.transport.write_i2c(self.i2c_interface,
-								sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, ENABLE_PLL_SYNC)
+								sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, sd.ENABLE_PLL_SYNC)
 
 			# Only try to synchronise PLLs if all self.parent ADC32RF45X2 mezzanines have reference
 			if pll_loss_of_reference == False:
@@ -521,11 +366,11 @@ class SkarabAdc(object):
 					
 					if synchronise_mezzanine[mezzanine] == True:
 						spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
-														sd.SPI_DESTINATION_PLL, PLL_ALARM_READBACK)
+														sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
 						timeout = 0
 						while (((spi_read_word & PLL_CLOCK_OUTPUT_PHASE_STATUS) == 0x0) and (timeout < 1000)):
 							spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
-															sd.SPI_DESTINATION_PLL, PLL_ALARM_READBACK)
+															sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
 							timeout = timeout + 1
 
 						if timeout == 1000:
@@ -587,7 +432,7 @@ class SkarabAdc(object):
 				self.logger.debug("Enabling ADC SYNC on mezzanine: ", mezzanine)
 
 				self.parent.transport.write_i2c(
-					self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, ENABLE_ADC_SYNC)
+					self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, sd.ENABLE_ADC_SYNC)
 
 		# Trigger a ADC SYNC signal from the MB firmware
 		self.parent.write_int('adc_sync_start_in', 0)
@@ -609,6 +454,17 @@ class SkarabAdc(object):
 
 				self.parent.transport.write_i2c(self.i2c_interface,
 					sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, 0x0)
+
+	
+	def arm_and_trigger(self):
+		"""
+		Wrapped functions to arm and trigger the snapshot blocks
+		
+		"""
+
+		raise NotImplementedError
+		self.parent.snapshots.adc0_out_ss.arm()
+		
 
 
     
