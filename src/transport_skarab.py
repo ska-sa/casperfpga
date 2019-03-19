@@ -73,6 +73,11 @@ class SkarabSpeadWarning(ValueError):
 class SkarabSpeadError(ValueError):
     pass
 
+
+class SkarabInvalidHostname(RuntimeError):
+    pass
+
+
 # endregion
 
 
@@ -143,7 +148,13 @@ class SkarabTransport(Transport):
 
         # create, and connect to, a socket for the skarab object
         self._skarab_control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self._skarab_control_sock.connect(self.skarab_eth_ctrl_addr)
+        try:
+            self._skarab_control_sock.connect(self.skarab_eth_ctrl_addr)
+        except socket.gaierror:
+            errmsg = 'Hostname invalid, check leases or resource-list'
+            self.logger.error(errmsg)
+            raise SkarabInvalidHostname(errmsg)
+
         self._skarab_control_sock.setblocking(0)
         self._lock=Lock()
 
@@ -579,7 +590,7 @@ class SkarabTransport(Transport):
         self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
         self.prog_info['last_uploaded'] = ''
 
-    def upload_to_ram(self, filename, verify=True):
+    def upload_to_ram(self, filename, verify=True, chunk_size=1988):
         """
         Upload a bitstream to the SKARAB via the wishone --> SDRAM interface
         :param filename: fpga image to upload
@@ -602,7 +613,7 @@ class SkarabTransport(Transport):
             raise ValueError(errmsg)
         # else: Continue!
 
-        upload_time = skfops.upload_to_ram_progska(filename, [self.parent])
+        upload_time = skfops.upload_to_ram_progska(filename, [self.parent], chunk_size)
         self.logger.debug('Uploaded bitstream in %.1f seconds.' % upload_time)
         return upload_time
 
@@ -642,7 +653,7 @@ class SkarabTransport(Transport):
             return False, firmware_version
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
-                                  wait_complete=True, skip_verification=False):
+                                  wait_complete=True, skip_verification=False, chunk_size=1988):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -655,7 +666,15 @@ class SkarabTransport(Transport):
         :param skip_verification - do not verify the image after upload
         :return: Boolean - True/False - Succes/Fail
         """
-        upload_time = self.upload_to_ram(filename, not skip_verification)
+        #print('skarab_transport')
+        print(chunk_size)
+        try:
+            upload_time = self.upload_to_ram(filename, not skip_verification, chunk_size)
+            #print("completed fine")
+        except:
+            #print("failed to program")
+            self.logger.error('Failed to program.')
+            raise
         if not wait_complete:
             self.logger.debug('Returning immediately after programming.')
             return True
@@ -678,6 +697,7 @@ class SkarabTransport(Transport):
                 else:
                     return False
             time.sleep(0.1)
+
         self.logger.error('Skarab has not come back after programming')
         return False
 
@@ -863,7 +883,7 @@ class SkarabTransport(Transport):
                                     'Discarding response.' % hostname)
                 return None
             # check response packet size
-            if (len(response_payload)/2) != request_object.num_words:
+            if (len(response_payload)/2) != request_object.num_response_words:
                 self.logger.warning("%s: incorrect response packet size. "
                                     "Discarding response" % hostname)
 
@@ -871,7 +891,7 @@ class SkarabTransport(Transport):
                 self.logger.debug("Response packet not of correct size. "
                                   "Expected %i words, got %i words.\n "
                                   "Incorrect Response: %s" % (
-                                    request_object.num_words,
+                                    request_object.num_response_words,
                                     (len(response_payload)/2),
                                     repr(response_payload)))
                 # self.logger.pdebug("%s: command ID - expected (%i) got (%i)" %
@@ -886,7 +906,7 @@ class SkarabTransport(Transport):
 
             # unpack the response before checking it
             response_object = request_object.response.from_raw_data(
-                response_payload, request_object.num_words,
+                response_payload, request_object.num_response_words,
                 request_object.pad_words)
             self.logger.debug('%s: response from %s, with seq num %i' % (
                 hostname, str(address),
@@ -1658,53 +1678,90 @@ class SkarabTransport(Transport):
     # endregion
 
     # region === VirtexFlashReconfig ===
-
-    def virtex_flash_reconfig(self, filename,
-                              flash_address=sd.DEFAULT_START_ADDRESS,
-                              blind_reconfig=False):
+    def process_flash_bin(self, filename):
         """
-        This is the entire function that makes the necessary calls to
-        reconfigure the Virtex7's Flash Memory
+        Sends the file to skarab_fileops for processing and returns
+        number of words, number of memory blocks and image to program
         :param filename: The actual .bin file that is to be written to
         the Virtex FPGA
-        :param flash_address: 32-bit Address in the NOR flash to
-        start programming from
-        :param blind_reconfig: Reconfigure the board and don't wait to
-        verify what has been written
-        :return: Success/Fail - 0/1
+        :returns image_to_program, num_words, num_memory_blocks
         """
-
         # For completeness, make sure the input file is of a .bin disposition
         file_extension = os.path.splitext(filename)[1]
         image_to_program = ''
 
         # Need to change file-handler to use skarab_fileops.choose_processor(filename)
-        binname = '/tmp/fpgstream_' + str(os.getpid()) + '.bin'
+        #binname = '/tmp/fpgstream_' + str(self.parent) + '.bin'
         processor = skfops.choose_processor(filename)
-        processor = processor(filename, binname)
-        image_to_program, binname = processor.make_bin()
+        processor = processor(filename, extract_to_disk=False)
+        #image_to_program, binname = processor.make_bin()
+        image_to_program, _none = processor.make_bin()
 
         self.logger.debug('VIRTEX FLASH RECONFIG: Analysing Words')
         # Can still analyse the filename, as the file size should still
         # be the same, regardless of swapping the endianness
-        num_words, num_memory_blocks = skfops.analyse_file_virtex_flash(binname)
+        num_words, num_memory_blocks = skfops.analyse_file_virtex_flash(bitstream=image_to_program)
 
         if (num_words == 0) or (num_memory_blocks == 0):
             # Problem
             errmsg = 'Failed to Analyse File successfully'
             self.logger.error(errmsg)
             # Remove temp bin-file wherever possible
-            os.remove(binname)
+            #os.remove(binname)
             raise sd.SkarabInvalidBitstream(errmsg)
         # else: Continue
+
+        #os.remove(binname)
+        return image_to_program, num_words, num_memory_blocks
+
+    def virtex_flash_reconfig(self, filename=None,
+                              image_to_program=None,
+                              num_words=None,
+                              num_memory_blocks=None,
+                              flash_address=sd.DEFAULT_START_ADDRESS,
+                              blind_reconfig=False):
+        """
+        This is the entire function that makes the necessary calls to
+        reconfigure the Virtex7's Flash Memory. Either specify a filename
+        to program or process the file separately using
+        transport_skarab.process_flash_bin and send image_to_program, num_words
+        and num_memory_blocks. Note when using this function as a thread it
+        is preferable to send image_to_program as processing a file will use
+        memory for each instance.
+        :param filename: The actual .bin file that is to be written to
+        the Virtex FPGA
+        :param image_to_program: Image processed by skarab_fileops.py
+        to program.
+        :param num_words: Number of words as processed by skarab_fileops.py
+        :param num_memory_blocks: Number of blocks to program as processed
+        by skarab_fileops.py
+        :param flash_address: 32-bit Address in the NOR flash to
+        start programming from
+            - flash_address = DEFUALT_START_ADDRESS is for programming the Multiboot Image
+            - flash_address = 0x0 is for programming the Golden Image
+        :param blind_reconfig: Reconfigure the board and don't wait to
+        verify what has been written
+        :return: Success/Fail - 0/1
+        """
+        if filename:
+            image_to_program, num_words, num_memory_blocks = self.process_flash_bin(filename)
+        elif (image_to_program is None or num_words is None or
+             num_memory_blocks is None):
+            errmsg = ('Specify either a filename or image_to_program when '
+                      'calling virtex_flash_reconfig')
+            raise sd.SkarabProgrammingError(errmsg)
+
+        if (num_words == 0) or (num_memory_blocks == 0):
+            # Problem
+            errmsg = 'num_words or num_memory_blocks incorrect'
+            self.logger.error(errmsg)
+            raise sd.SkarabInvalidBitstream(errmsg)
 
         self.logger.debug('VIRTEX FLASH RECONFIG: Erasing Flash Memory Blocks')
         if not self.erase_blocks(num_memory_blocks, flash_address):
             # Problem
             errmsg = 'Failed to Erase Flash Memory Blocks'
             self.logger.error(errmsg)
-            # Remove temp bin-file wherever possible
-            os.remove(binname)
             raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
@@ -1713,8 +1770,6 @@ class SkarabTransport(Transport):
             # Problem
             errmsg = 'Failed to Program Flash Memory Blocks'
             self.logger.error(errmsg)
-            # Remove temp bin-file wherever possible
-            os.remove(binname)
             raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
@@ -1725,12 +1780,8 @@ class SkarabTransport(Transport):
                 # Problem
                 errmsg = 'Failed to Program Flash Memory Blocks'
                 self.logger.error(errmsg)
-                # Remove temp bin-file wherever possible
-                os.remove(binname)
                 raise sd.SkarabProgrammingError(errmsg)
             # else: Continue
-        # Remove temp bin-file wherever possible
-        os.remove(binname)
         return True
 
     # endregion
@@ -2697,11 +2748,6 @@ class SkarabTransport(Transport):
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
 
-        def hmc_die_temp(hmc_mez):
-            self.write_hmc_i2c(hmc_mez, sd.HMC_I2C_Address, sd.HMC_Temp_Write_Register, sd.HMC_Temp_Write_Command)
-            die_temp = self.read_hmc_i2c(hmc_mez, sd.HMC_I2C_Address, sd.HMC_Die_temp_Register)
-            return die_temp
-
         def sign_extend(value, bits):
             """
             Performs 2's compliment sign extension
@@ -2732,6 +2778,9 @@ class SkarabTransport(Transport):
             """
             Checks the returned QSFP mezzanine temperatures and handles them
             accordingly.
+
+            NB: This sensor doesn't reliably report the temperature and is omitted.
+
             :param value: value returned from the temperature sensor
             :return: correct mezzanine temperature value
             """
@@ -2910,12 +2959,12 @@ class SkarabTransport(Transport):
             for key, value in sd.sensor_list.items():
                 if 'fan_pwm' in key:
                     pwm_value = round(raw_sensor_data[value] / 100.0, 2);
-                    if(pwm_value > 100 or pwm_value < 0): 
+                    if(pwm_value > 100 or pwm_value < 0):
                         message = 'ERROR'
                     else:
                         message = 'OK'
                     self.sensor_data[key] = (
-                            pwm_value, '%',message) 
+                            pwm_value, '%',message)
 
         def parse_temperatures(raw_sensor_data):
             # inlet temp (reference)
@@ -2930,6 +2979,13 @@ class SkarabTransport(Transport):
                             key] = (temperature, 'degC',
                                     check_temperature(key, temperature,
                                                       inlet_ref))
+                    elif 'hmc' in key:
+                        temperature = struct.unpack(
+                            '!I', struct.pack('!4B',
+                                              *raw_sensor_data[value:value+4]))[0]
+                        self.sensor_data[key] = (temperature,
+                                                 check_temperature(key, temperature, inlet_ref=0), 'degC')
+
                     else:
                         temperature = temperature_value_check(
                             raw_sensor_data[value])
@@ -2942,11 +2998,7 @@ class SkarabTransport(Transport):
             for key, value in sd.sensor_list.items():
 
                 if 'mezzanine' in key:
-                    if key == 'mezzanine_site_3_temperature_degC':
-                        temperature = mezzanine_temperature_check_qsfp(raw_sensor_data[value])
-                    else:
-                        temperature = mezzanine_temperature_check_hmc(raw_sensor_data[value])
-
+                    temperature = mezzanine_temperature_check_hmc(raw_sensor_data[value])
                     self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref=0))
 
         def parse_voltages(raw_sensor_data):
@@ -2963,15 +3015,6 @@ class SkarabTransport(Transport):
                     self.sensor_data[key] = (current, 'amperes',
                                              check_current(key, current))
 
-        def get_hmc_temperatures():
-            try:
-                for hmc in sd.HMC_MEZZANINE_SITES:
-                    key = 'hmc_{}_die_temp'.format(hmc - 1)
-                    temperature = hmc_die_temp(hmc)
-                    self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref=0))
-            except:
-                raise SkarabInvalidResponse('Error reading HMC Die Temperatures')
-
         request = sd.GetSensorDataReq()
         response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
@@ -2985,7 +3028,6 @@ class SkarabTransport(Transport):
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
             parse_mezzanine_temperatures(recvd_sensor_data_values)
-            get_hmc_temperatures()
 
             return self.sensor_data
 
@@ -3112,4 +3154,392 @@ class SkarabTransport(Transport):
         self.logger.debug('%s: multicast configured: addr(%s) mask(%s)' % (
             gbename, resp_ip.ip_str, resp_mask.ip_str))
 
+    def one_wire_read_rom(self, one_wire_port, timeout=None, retries=None):
+        """
+        Reads the 64-bit ROM address of a DS24N33 EEPROM on the specified
+        1-wire interface
+        :param one_wire_port: 1-wire interface to access
+        0 - skarab motherboard
+        1 - 4 mezzanine 0 - 3
+        :return: 64-bit ROM address
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        request = sd.OneWireReadROMReq(one_wire_port)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to One Wire Read Rom request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['read_success']:
+            errmsg = 'One Wire Rom Read failed!'
+            raise SkarabWriteFailed(errmsg)
+
+        raw_address = ''.join([struct.pack('!B', x) for x in response.packet['rom']])
+        real_address = struct.unpack('!Q', raw_address)[0]
+        return real_address
+
+    def one_wire_ds2433_write_mem(self, write_bytes, page, one_wire_port,
+                                  device_rom=None, skip_rom_address=1,
+                                  offset=0, timeout=None, retries=None,
+                                  force_page_zero_write=False):
+        """
+        Write to the EEPROM of a connected device connected on the one-wire bus
+        :param device_rom: 64-bit ROM address of device
+        :param skip_rom_address: if enable, skip using the rom to address device,
+        assumes only one device connected
+        :param write_bytes: bytes to write, maximum of 32 bytes
+        :param page: page to write [0 to 15]
+        :param offset: offset at which to start writing in the page (max 31)
+        :param one_wire_port: 1-wire interface to access
+        0 - skarab motherboard
+        1 - 4 mezzanine 0 - 3
+        :param timeout:
+        :param retries:
+        :param force_page_zero_write: set to true to force writing to page zero
+        :return: 1 if success
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        if page not in range(16):
+            raise ValueError('Selected page does not exist. Select page in range 0 - 15')
+
+        if page == 0 and force_page_zero_write is not True:
+            raise UserWarning('WARNING: trying to write to Page 0. If this is'
+                              'what you want to do, set the '
+                              'force_page_zero_write flag to true')
+
+        # if a device rom is given, disable skip-rom
+        if device_rom is not None:
+            skip_rom_address=0
+        else:
+            # then set a dummy address
+            device_rom = 0
+
+        if offset > 31:
+            raise ValueError('Maximum offset is 31 bytes')
+
+        # need to pack device rom (pack each byte
+        unpacked_device_rom = struct.unpack('!8B', struct.pack('!Q', device_rom))
+        device_rom = ''.join([struct.pack('!H', x) for x in unpacked_device_rom])
+
+        if type(write_bytes) != list:
+            tmp = write_bytes
+            write_bytes = [tmp]
+
+        num_bytes = len(write_bytes)
+
+        if num_bytes > 32:
+            raise ValueError('Maximum number of bytes that can be written is 32')
+
+        # pack the write bytes: pack each byte as a 16-bit word
+        packed_write_bytes = [struct.pack('!H', x) for x in write_bytes]
+        write_bytes = ''.join(packed_write_bytes) + ('\x00\x00' * (32-num_bytes))
+
+        # determine target address 1 and target address 2
+        target_address_1 = ((page*0x20) & 0xFF) + offset
+        target_address_2 = (page*0x20) >> 8
+        full_address = (target_address_2 << 8) + target_address_1
+
+        # check if writing over a page boundary
+        number_of_writable_bytes = 0x20 - (full_address % 0x20)
+
+        if num_bytes> number_of_writable_bytes:
+            raise ValueError('Cannot write across a page boundary!')
+
+        request = sd.OneWireDS2433WriteMemReq(device_rom, skip_rom_address,
+                                              write_bytes, num_bytes,
+                                              target_address_1,
+                                              target_address_2, one_wire_port)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to One Wire Write request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['write_success']:
+            errmsg = 'One Wire DS2433 Write failed!'
+            raise SkarabWriteFailed(errmsg)
+        return response.packet['write_success']
+
+    def one_wire_ds2433_read_mem(self, one_wire_port, num_bytes, page, offset=0,
+                                 device_rom=None, skip_rom_address=1,
+                                 timeout=None, retries=None):
+        """
+        Read from the EEPROM of a connected device connected on the one-wire bus
+        :param one_wire_port: 1-wire interface to access
+        0 - skarab motherboard
+        1 - 4 mezzanine 0 - 3
+        :param num_bytes: number of bytes to read
+        :param page: page to write [0 to 15]
+        :param offset: offset at which to start reading in the page (max 31)
+        :param device_rom: 64-bit ROM address of device
+        :param skip_rom_address: if enable, skip using the rom to address device,
+        assumes only one device connected
+        :param timeout:
+        :param retries:
+        :return: read data
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        if page not in range(16):
+            raise ValueError('Selected page does not exist. Select page in range 0 - 15')
+
+        # if a device rom is given, disable skip-rom
+        if device_rom is not None:
+            skip_rom_address = 0
+        else:
+            # then set a dummy address
+            device_rom = 0
+
+        if num_bytes > 32:
+            raise ValueError('Maximum number of bytes that can be read is 32')
+
+        if offset > 31:
+            raise ValueError('Maximum offset is 31 bytes')
+
+        # need to pack device rom (pack each byte
+        unpacked_device_rom = struct.unpack('!8B',
+                                            struct.pack('!Q', device_rom))
+        device_rom = ''.join(
+            [struct.pack('!H', x) for x in unpacked_device_rom])
+
+        # determine target address 1 and target address 2
+        target_address_1 = ((page * 0x20) & 0xFF) + offset
+        target_address_2 = (page * 0x20) >> 8
+
+        request = sd.OneWireDS2433ReadMemReq(device_rom, skip_rom_address,
+                                             num_bytes, target_address_1,
+                                             target_address_2, one_wire_port)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to One Wire Read request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['read_success']:
+            errmsg = 'One Wire DS2433 Read failed!'
+            raise SkarabWriteFailed(errmsg)
+
+        # do something clever here to return the number of bytes requested
+        return response.packet['read_bytes'][0:num_bytes]
+
+    # high level Mezzanine Flash Reads/Writes
+
+    # for adjusting tunable configuration parameters stored in flash
+
+    def set_dhcp_init_time(self, dhcp_init_time):
+        """
+        Set the init time for DHCP - time before first DHCP message is sent
+        :param dhcp_init_time: the desired dhcp init time, in seconds
+        :return: True if success, False if failed
+        """
+
+        assert(0 <= dhcp_init_time <= 120), 'DHCP init time range: 0 - 120 sec'
+
+        # the uBlaze requires a count of 100ms increments
+
+        dhcp_init_time = int((dhcp_init_time * 1000.0)/100.0)
+
+        # need to pack data in little endian
+        msb = (dhcp_init_time >> 8) & 0xff
+        lsb = dhcp_init_time & 0xff
+        write_bytes = [lsb, msb]
+
+        #dhcp init time occupies bytes 0, 1
+        offset = 0
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            device_rom=None, skip_rom_address=1,
+                                            offset=offset, timeout=None, retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def set_dhcp_retry_rate(self, dhcp_retry_rate):
+        """
+        Set the rate at which the SKARAB re-attempts to get DHCP configured
+        :param dhcp_retry_rate: the desired dhcp retry rate, in seconds
+        :return: True if success, False if failed
+        """
+
+        assert(0.5 <= dhcp_retry_rate <= 30), 'DHCP retry rate range: 0.5 - 30 sec'
+
+        # the uBlaze requires a count of 100ms increments
+
+        dhcp_retry_rate = int((dhcp_retry_rate * 1000.0) / 100.0)
+
+        # need to pack data in little endian
+        msb = (dhcp_retry_rate >> 8) & 0xff
+        lsb = dhcp_retry_rate & 0xff
+        write_bytes = [lsb, msb]
+
+        #dhcp retry rate occupies bytes 2, 3
+        offset = 2
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                       page=sd.TUNABLE_PARAMETERS_PAGE,
+                                       one_wire_port=sd.MB_I2C_BUS_ID,
+                                        device_rom=None, skip_rom_address=1,
+                                        offset=offset, timeout=None, retries=None,
+                                        force_page_zero_write=False)
+
+        return rv
+
+    def set_hmc_reconfig_timeout(self, hmc_reconfig_timeout=10):
+        """
+        Set the HMC reconfiguration state machine timeout,
+        before triggering a motherboard reset to attempt to initialise all HMCs
+        :param hmc_reconfig_timeout: the desired HMC reconfiguration timeout (default is 10 seconds)
+        :return: True if success, False if failed
+        """
+
+        assert(1 <= hmc_reconfig_timeout <= 60), 'HMC Reconfig timeout range: 1 - 60 sec'
+
+        # the uBlaze requires a count of 100ms increments
+
+        hmc_reconfig_timeout = int((hmc_reconfig_timeout * 1000.0) / 100.0)
+
+        # need to pack data in little endian
+        msb = (hmc_reconfig_timeout >> 8) & 0xff
+        lsb = hmc_reconfig_timeout & 0xff
+        write_bytes = [lsb, msb]
+
+        # hmc reconfig timeout occupies bytes 4, 5
+        offset = 4
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            device_rom=None,
+                                            skip_rom_address=1,
+                                            offset=offset, timeout=None,
+                                            retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def set_hmc_reconfig_max_retries(self, max_retries):
+        """
+        Set the maximum number of retires for initialisation of all HMCs.
+        Each retry is a motherboard reset.
+        :param max_retries: desired number of max retries
+        :return: True if success, False if failed
+        """
+
+        # this is an 8-bit number
+        assert(3 <= max_retries <= 255), 'Maximum number of retries must be in the range 3 - 255'
+
+        write_bytes = max_retries
+        # hmc reconfig max retries occupies byte 6
+        offset = 6
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            device_rom=None,
+                                            skip_rom_address=1,
+                                            offset=offset, timeout=None,
+                                            retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def set_link_mon_timeout(self, link_mon_timeout):
+        """
+        Set the link monitor timeout - how long to wait for the single 40GbE link
+        to show activity. After this timeout, the motherboard resets in attempt to
+        re-initialise the link. Only monitors the RX side of the link.
+        :param link_mon_timeout: desired link mon timeout, minimum time is 30 sec
+        :return: True if success, False if failed
+        """
+
+        assert(link_mon_timeout >= 30), 'Minimum link monitor timeout is 30 seconds'
+
+        # the uBlaze requires a count of 100ms increments
+
+        link_mon_timeout = int((link_mon_timeout * 1000.0) / 100.0)
+
+        # need to pack data in little endian
+        msb = (link_mon_timeout >> 8) & 0xff
+        lsb = link_mon_timeout & 0xff
+        write_bytes = [lsb, msb]
+
+        # hmc reconfig timeout occupies bytes 7, 8
+        offset = 7
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            device_rom=None,
+                                            skip_rom_address=1,
+                                            offset=offset, timeout=None,
+                                            retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    # for retrieving the HMC reconfiguration statistics
+
+    def get_hmc_reconfigure_stats(self, *hmcs):
+        """
+        Get the reconfiguration statistics for a specific HMC card or cards
+        :param hmc: the hmc card index (or indices) - 0, 1 or 2 - to read the stats for
+        :return: dictionary: {hmcN : {hmc_retires: # ; hmc_total_retries: #}}
+        or None if failed
+        """
+
+        hmc_reconfigure_stats = {}
+
+        for hmc in hmcs:
+            stats = {}
+            prefix = 'hmc_{}'.format(hmc)
+
+            raw_data = self.one_wire_ds2433_read_mem(one_wire_port=sd.HMC_CARD_I2C_PORT_MAP[hmc],
+                                                 num_bytes=8, page=sd.HMC_STATISTICS_PAGE, offset=0,
+                                                 device_rom=None, skip_rom_address=1,
+                                                 timeout=None, retries=None)
+
+            hmc_retries_raw = raw_data[:4]
+            hmc_total_retries_raw = raw_data[4:]
+
+            # data is stored in little endian, hence use '<' to unpack
+            hmc_retries = struct.unpack('<I', struct.pack('!4B', *hmc_retries_raw))[0]
+            hmc_total_retries = struct.unpack('<I', struct.pack('!4B', *hmc_total_retries_raw))[0]
+
+            stats['hmc_retries'] = hmc_retries
+            stats['hmc_total_retries'] = hmc_total_retries
+
+            hmc_reconfigure_stats[prefix] = stats
+
+        return hmc_reconfigure_stats
+
+    # for reading the mezzanine signatures stored in flash
+
+    def get_mezzanine_signature(self, mezzanine_card_one_wire_port):
+        """
+        Get the signature of a a specific mezzanine card
+        :param mezzanine_card_one_wire_port: one wire port of the mezzanine
+        care to read
+        :return: success: card signature (as an integer), fail: None
+        """
+
+        raw_data = self.one_wire_ds2433_read_mem(one_wire_port=mezzanine_card_one_wire_port,
+                                                 num_bytes=7, page=sd.MEZZANINE_SIGNATURES_PAGE,
+                                                 offset=0,
+                                                 device_rom=None, skip_rom_address=1,
+                                                 timeout=None, retries=None)
+
+        # select the bytes of interest
+        selected_data = [raw_data[i] for i in [0, 4, 5, 6]]
+
+        signature = struct.unpack('!I', struct.pack('!4B', *selected_data))[0]
+
+        return signature
 # end

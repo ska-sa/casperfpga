@@ -261,6 +261,8 @@ def configure_console_logging(logger_entity, console_handler_name=None):
     console_handler = CasperConsoleHandler(name=console_handler_name)
     logger_entity.addHandler(console_handler)
 
+    logger_entity.parent.handlers = []
+
     debugmsg = 'Successfully created ConsoleHandler {}'.format(console_handler_name)
     LOGGER.debug(debugmsg)
 

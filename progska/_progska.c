@@ -26,11 +26,12 @@ static PyObject *casperfpga_progskaupload(PyObject *self, PyObject *args) {
     */
     const char *binfile, *skarabname;
     PyObject *hostlist_obj, *host_list, *item;
+    const char *packet_size;
     int host_ctr, num_hosts;
     int verbose;
     verbose = 0;
     // parse the input tuple
-    if (!PyArg_ParseTuple(args, "sO", &binfile, &hostlist_obj))
+    if (!PyArg_ParseTuple(args, "sOs", &binfile, &hostlist_obj, &packet_size))
         return NULL;
 
     if(strlen(binfile) <= 0){
@@ -52,17 +53,20 @@ static PyObject *casperfpga_progskaupload(PyObject *self, PyObject *args) {
         printf("Given %i hosts.\n", num_hosts);
     char **mainargs;
     int num_mainargs;
-    num_mainargs = num_hosts + 3;
+    num_mainargs = num_hosts + 5;
     mainargs = malloc(num_mainargs * sizeof(char*));
     const char *progska = "progksa";
+    const char *dashs = "-s";
     const char *dashf = "-f";
     mainargs[0] = progska;
-    mainargs[1] = dashf;
-    mainargs[2] = binfile;
+    mainargs[1] = dashs;
+    mainargs[2] = packet_size;
+    mainargs[3] = dashf;
+    mainargs[4] = binfile;
     for (host_ctr = 0; host_ctr < num_hosts; host_ctr++) {
         item = PySequence_Fast_GET_ITEM(host_list, host_ctr);
         const char *hostname = PyString_AsString(item);
-        mainargs[host_ctr + 3] = hostname;
+        mainargs[host_ctr + 5] = hostname;
         if(verbose > 0)
             printf("\t%s\n", hostname);
     }
