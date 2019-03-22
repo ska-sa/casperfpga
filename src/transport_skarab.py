@@ -835,7 +835,6 @@ class SkarabTransport(Transport):
                                'buffer.'.format(hostname))
                 # wait to receive incoming responses
                 time.sleep(1)
-                # self.clear_recv_buffer(skarab_socket)
                 self._lock.release()
                 self.logger.info('{}: cleared recv buffer.'.format(hostname))
                 raise KeyboardInterrupt
@@ -857,82 +856,93 @@ class SkarabTransport(Transport):
         """
         self.logger.debug('%s: reading response to sequence id %i.' % (
             hostname, sequence_number))
-        # wait for response until timeout
-        data_ready = select.select([self._skarab_control_sock], [], [], timeout)
-        # if we have a response, process it
-        if data_ready[0]:
-            data = self._skarab_control_sock.recvfrom(4096)
-            response_payload, address = data
 
-            self.logger.debug('%s: response from %s = %s' % (
-                hostname, str(address), repr(response_payload)))
+        try:
+            # wait for response until timeout
+            data_ready = select.select([self._skarab_control_sock], [], [], timeout)
+            # if we have a response, process it
+            if data_ready[0]:
+                data = self._skarab_control_sock.recvfrom(4096)
+                response_payload, address = data
 
-            # check if response is from the expected SKARAB
-            recvd_from_addr = address[0]
-            expected_recvd_from_addr = \
-                self._skarab_control_sock.getpeername()[0]
-            if recvd_from_addr != expected_recvd_from_addr:
-                self.logger.warning(
-                    '%s: received response from  %s, expected response from '
-                    '%s. Discarding response.' % (
-                        hostname, recvd_from_addr, expected_recvd_from_addr))
-                return None
-            # check the opcode of the response i.e. first two bytes
-            if response_payload[:2] == '\xff\xff':
-                self.logger.warning('%s: received unsupported opcode: 0xffff. '
-                                    'Discarding response.' % hostname)
-                return None
-            # check response packet size
-            if (len(response_payload)/2) != request_object.num_response_words:
-                self.logger.warning("%s: incorrect response packet size. "
-                                    "Discarding response" % hostname)
+                self.logger.debug('%s: response from %s = %s' % (
+                    hostname, str(address), repr(response_payload)))
 
-                # self.logger.pdebug("Response packet not of correct size. "
-                self.logger.debug("Response packet not of correct size. "
-                                  "Expected %i words, got %i words.\n "
-                                  "Incorrect Response: %s" % (
-                                    request_object.num_response_words,
-                                    (len(response_payload)/2),
-                                    repr(response_payload)))
-                # self.logger.pdebug("%s: command ID - expected (%i) got (%i)" %
-                self.logger.debug("%s: command ID - expected (%i) got (%i)" %
-                                  (hostname, request_object.type + 1,
-                                   (struct.unpack('!H', response_payload[:2]))[0]))
-                # self.logger.pdebug("%s: sequence num - expected (%i) got (%i)" %
-                self.logger.debug("%s: sequence num - expected (%i) got (%i)" %
-                                  (hostname, sequence_number,
-                                   (struct.unpack('!H', response_payload[2:4]))[0]))
-                return None
+                # check if response is from the expected SKARAB
+                recvd_from_addr = address[0]
+                expected_recvd_from_addr = \
+                    self._skarab_control_sock.getpeername()[0]
+                if recvd_from_addr != expected_recvd_from_addr:
+                    self.logger.warning(
+                        '%s: received response from  %s, expected response from '
+                        '%s. Discarding response.' % (
+                            hostname, recvd_from_addr, expected_recvd_from_addr))
+                    return None
+                # check the opcode of the response i.e. first two bytes
+                if response_payload[:2] == '\xff\xff':
+                    self.logger.warning('%s: received unsupported opcode: 0xffff. '
+                                        'Discarding response.' % hostname)
+                    return None
+                # check response packet size
+                if (len(response_payload)/2) != request_object.num_response_words:
+                    self.logger.warning("%s: incorrect response packet size. "
+                                        "Discarding response" % hostname)
 
-            # unpack the response before checking it
-            response_object = request_object.response.from_raw_data(
-                response_payload, request_object.num_response_words,
-                request_object.pad_words)
-            self.logger.debug('%s: response from %s, with seq num %i' % (
-                hostname, str(address),
-                response_object.seq_num))
-            expected_response_id = request_object.type + 1
-            if response_object.type != expected_response_id:
-                self.logger.warning('%s: incorrect command ID in response. Expected'
-                               '(%i) got(%i). Discarding response.' % (
-                                   hostname, expected_response_id,
-                                   response_object.type))
-                return None
-            elif response_object.seq_num != sequence_number:
-                self.logger.debug('%s: incorrect sequence number in response. '
-                               'Expected(%i,%i), got(%i). Discarding '
-                               'response.' % (
-                                   hostname, sequence_number,
-                                   request_object.packet['seq_num'],
-                                   response_object.seq_num))
-                return None
-            return response_object
-        else:
-            errmsg = '%s: timeout; no packet received for seq %i. Will ' \
-                     'retransmit as seq %i.' % (
-                         hostname, sequence_number, sequence_number + 1)
-            self.logger.debug(errmsg)
-            raise SkarabResponseNotReceivedError(errmsg)
+                    # self.logger.pdebug("Response packet not of correct size. "
+                    self.logger.debug("Response packet not of correct size. "
+                                      "Expected %i words, got %i words.\n "
+                                      "Incorrect Response: %s" % (
+                                        request_object.num_response_words,
+                                        (len(response_payload)/2),
+                                        repr(response_payload)))
+                    # self.logger.pdebug("%s: command ID - expected (%i) got (%i)" %
+                    self.logger.debug("%s: command ID - expected (%i) got (%i)" %
+                                      (hostname, request_object.type + 1,
+                                       (struct.unpack('!H', response_payload[:2]))[0]))
+                    # self.logger.pdebug("%s: sequence num - expected (%i) got (%i)" %
+                    self.logger.debug("%s: sequence num - expected (%i) got (%i)" %
+                                      (hostname, sequence_number,
+                                       (struct.unpack('!H', response_payload[2:4]))[0]))
+                    return None
+
+                # unpack the response before checking it
+                response_object = request_object.response.from_raw_data(
+                    response_payload, request_object.num_response_words,
+                    request_object.pad_words)
+                self.logger.debug('%s: response from %s, with seq num %i' % (
+                    hostname, str(address),
+                    response_object.seq_num))
+                expected_response_id = request_object.type + 1
+                if response_object.type != expected_response_id:
+                    self.logger.warning('%s: incorrect command ID in response. Expected'
+                                   '(%i) got(%i). Discarding response.' % (
+                                       hostname, expected_response_id,
+                                       response_object.type))
+                    return None
+                elif response_object.seq_num != sequence_number:
+                    self.logger.debug('%s: incorrect sequence number in response. '
+                                   'Expected(%i,%i), got(%i). Discarding '
+                                   'response.' % (
+                                       hostname, sequence_number,
+                                       request_object.packet['seq_num'],
+                                       response_object.seq_num))
+                    return None
+                return response_object
+            else:
+                errmsg = '%s: timeout; no packet received for seq %i. Will ' \
+                         'retransmit as seq %i.' % (
+                             hostname, sequence_number, sequence_number + 1)
+                self.logger.debug(errmsg)
+                raise SkarabResponseNotReceivedError(errmsg)
+
+        except KeyboardInterrupt:
+            self.logger.warning('{}: keyboard interrupt, clearing '
+                            'buffer.'.format(hostname))
+            # wait to receive incoming responses
+            time.sleep(1)
+            _ = self._skarab_control_sock.recvfrom(4096)
+            self.logger.info('{}: cleared recv buffer.'.format(hostname))
+            raise KeyboardInterrupt
 
     # low level access functions
     def reboot_fpga(self):
