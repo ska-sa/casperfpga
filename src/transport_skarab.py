@@ -2791,10 +2791,8 @@ class SkarabTransport(Transport):
             :param value: fan speed value
             :return: OK, WARNING or ERROR
             """
-            # TODO - this statement it too long and unreadable!
-            if value > ((self.sensor_data[fan_name.replace('_rpm', '_pwm')] + 10.0) / 100.0) * \
-                    sd.fan_speed_ranges[fan_name][0] or value < ((self.sensor_data[fan_name.replace('_rpm','_pwm')] - 10.0) / 100.0) * \
-                    sd.fan_speed_ranges[fan_name][0]:
+            if value > sd.fan_speed_ranges[fan_name][0] or value < \
+                        sd.fan_speed_ranges[fan_name][1]:
                 return 'ERROR'
             else:
                 return 'OK'
