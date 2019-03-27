@@ -2895,7 +2895,8 @@ class SkarabTransport(Transport):
                             '!I', struct.pack('!4B',
                                               *raw_sensor_data[value:value+4]))[0]
                         self.sensor_data[key] = (temperature,
-                                                 check_temperature(key, temperature, inlet_ref=0), 'degC')
+                                                 'degC',
+                                                 check_temperature(key, temperature, inlet_ref=0))
 
                     else:
                         temperature = temperature_value_check(
