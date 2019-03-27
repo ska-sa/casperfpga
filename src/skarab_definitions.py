@@ -442,13 +442,14 @@ temperature_ranges = {
 }
 
 # fan_rpm: (rating, max, min)
+# fan_rpm: (max, min)
 # fan_pwm: (max, min)
 fan_speed_ranges = {
-    'left_front_fan_rpm': (23000, 2000, -4000),
-    'left_middle_fan_rpm': (23000, 2000, -4000),
-    'left_back_fan_rpm': (23000, 2000, -4000),
-    'right_back_fan_rpm': (23000, 2000, -4000),
-    'fpga_fan_rpm': (6000, 2000, -2000),
+    'left_front_fan_rpm': (200000, 100),
+    'left_middle_fan_rpm': (200000, 100),
+    'left_back_fan_rpm': (200000, 100),
+    'right_back_fan_rpm': (200000, 100),
+    'fpga_fan_rpm': (200000, 100),
     'left_front_fan_pwm': (100, 0),
     'left_middle_fan_pwm': (100, 0),
     'left_back_fan_pwm': (100, 0),

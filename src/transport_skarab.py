@@ -2793,7 +2793,7 @@ class SkarabTransport(Transport):
             """
             if value > sd.fan_speed_ranges[fan_name][0] or value < \
                         sd.fan_speed_ranges[fan_name][1]:
-                return 'ERROR'
+                return 'WARNING'
             else:
                 return 'OK'
 
