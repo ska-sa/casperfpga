@@ -33,14 +33,16 @@ class Transport(object):
 
     def is_connected(self):
         """
+        Is the transport layer connected to the platform?
 
+        :return: True or False
         """
         raise NotImplementedError
 
     def test_connection(self):
         """
         Write to and read from the scratchpad to test the connection to the FPGA
-            i.e. Is the casper FPGA connected?
+        - i.e. Is the casper FPGA connected?
 
         :return: Boolean - True/False - Success/Fail
         """
@@ -62,19 +64,33 @@ class Transport(object):
 
     def read(self, device_name, size, offset=0):
         """
-        
-        :param device_name: 
-        :param size: 
-        :param offset:
+        Read `size` bytes from register `device_name`.
+        Start reading from `offset` bytes from `device_name`'s base address.
+        Return the read data as a big-endian binary string.
+
+        :param device_name: Name of device to be read
+        :type device_name: String
+        :param size: Number of bytes to read
+        :type size: Integer
+        :param offset: Offset from which to begin read, in bytes
+        :type offset: Integer
+
+        :return: Big-endian binary string
         """
         raise NotImplementedError
 
     def blindwrite(self, device_name, data, offset=0):
         """
+        Write binary data to `device_name`, starting at `offset` bytes from `device_name`'s base address..
         
-        :param device_name: 
-        :param data: 
-        :param offset:
+        :param device_name: Name of device to be read
+        :type device_name: String
+        :param data: Data to write
+        :type data: Big-endian binary string
+        :param offset: Offset from which to begin write, in bytes
+        :type offset: Integer
+
+        :return: None
         """
         raise NotImplementedError
 
