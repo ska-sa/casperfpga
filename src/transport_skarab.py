@@ -104,18 +104,17 @@ class SkarabTransport(Transport):
         Transport.__init__(self, **kwargs)
 
         try:
-            self.logger = kwargs['logger']
-        except KeyError:
-            self.logger = logging.getLogger(__name__)
-
-        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
-        self.logger.info(new_connection_msg)
-        try:
+            # Entry point is always via casperfpga.CasperFpga
             self.parent = kwargs['parent_fpga']
+            self.logger = self.parent.logger
         except KeyError:
             errmsg = 'parent_fpga argument not supplied when creating skarab'
-            self.logger.error(errmsg)
+            # Pointless trying to log to a logger
             raise RuntimeError(errmsg)
+        
+        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+        self.logger.debug(new_connection_msg)
+        
         try:
             self.timeout = kwargs['timeout']
         except KeyError:

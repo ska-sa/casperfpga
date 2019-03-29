@@ -11,6 +11,9 @@ import snap
 import tengbe
 import fortygbe
 import qdr
+import katadc
+import skarabadc
+
 from attribute_container import AttributeContainer
 from utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
 from transport_katcp import KatcpTransport
@@ -25,16 +28,21 @@ from CasperLogHandlers import getLogger
 # known CASPER memory-accessible devices and their associated
 # classes and containers
 CASPER_MEMORY_DEVICES = {
-    'xps:bram': {'class': sbram.Sbram, 'container': 'sbrams'},
-    'xps:qdr': {'class': qdr.Qdr, 'container': 'qdrs'},
-    'xps:sw_reg': {'class': register.Register, 'container': 'registers'},
-    'xps:tengbe_v2': {'class': tengbe.TenGbe, 'container': 'gbes'},
-    'xps:forty_gbe': {'class': fortygbe.FortyGbe, 'container': 'gbes'},
-    'casper:snapshot': {'class': snap.Snap, 'container': 'snapshots'},
+    'xps:bram':         {'class': sbram.Sbram,       'container': 'sbrams'},
+    'xps:qdr':          {'class': qdr.Qdr,           'container': 'qdrs'},
+    'xps:sw_reg':       {'class': register.Register, 'container': 'registers'},
+    'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
+    'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
+    'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
 }
 
+CASPER_ADC_DEVICES = {
+    'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
+    'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+}
 
-# other devices - blocks that aren't memory devices, but about which we'd
+# other devices - blocks that aren't memory devices nor ADCs, but about which we'd
 # like to know tagged in the simulink diagram
 CASPER_OTHER_DEVICES = {
     'casper:bitsnap':               'bitsnap',
@@ -53,10 +61,9 @@ CASPER_OTHER_DEVICES = {
     'casper:vacc':                  'vacc',
     'casper:xeng':                  'xeng',
     'xps:xsg':                      'xps',
-    'xps:katadc':                   'katadc',
-    'xps:skarab_adc4x3g_14':        'skarabadc',
-    'xps:skarab_adc4x3g_14_byp':    'skarabadc_byp',
 }
+
+
 
 
 class UnknownTransportError(Exception):
@@ -105,14 +112,6 @@ class CasperFpga(object):
         # Setup logger to be propagated through transports
         self.logger.setLevel(logging.NOTSET)
 
-        # define a custom log level between DEBUG and INFO
-        # PDEBUG = 15
-        # logging.addLevelName(PDEBUG, "PDEBUG")
-        #
-        # self.logger.pdebug = pdebug
-
-        kwargs['logger'] = self.logger
-
         # was the transport specified?
         transport = get_kwarg('transport', kwargs)
         if transport:
@@ -124,6 +123,7 @@ class CasperFpga(object):
         # this is just for code introspection
         self.devices = None
         self.memory_devices = None
+        self.adc_devices = None
         self.other_devices = None
         self.sbrams = None
         self.qdrs = None
@@ -161,8 +161,9 @@ class CasperFpga(object):
                 self.logger.debug('%s seems to be ROACH' % host_ip)
                 return KatcpTransport
             else:
-                raise UnknownTransportError('Possible that host '
-                                            'does not follow one of the defined casperfpga transport protocols')
+                errmsg = 'Possible that host does not follow one of the \
+                            defined casperfpga transport protocols'
+                raise UnknownTransportError(errmsg)
         except socket.gaierror:
             raise RuntimeError('Address/host %s makes no sense to '
                                'the OS?' % host_ip)
@@ -254,13 +255,16 @@ class CasperFpga(object):
         """
         return self.transport.set_igmp_version(version)
 
-    def upload_to_ram_and_program(self, filename=None, wait_complete=True, legacy_reg_map=True, chunk_size=1988):
+    def upload_to_ram_and_program(self, filename=None, wait_complete=True,
+                                    legacy_reg_map=True, chunk_size=1988):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: the file to upload
         :param wait_complete: do not wait for this operation, just return
-        :param legacy_reg_map: older fpg files have a different register mapping, set this flag to true for these
-        :param chunk_size: the SKARAB supports 1988, 3976 and 7952 byte programming packets, but old bitfiles only support 1988 (the default)
+        :param legacy_reg_map: older fpg files have a different register mapping,
+                                set this flag to true for these
+        :param chunk_size: the SKARAB supports 1988, 3976 and 7952 byte programming packets,
+                           but old bitfiles only support 1988 (the default)
         after upload
         :return: True or False
         """
@@ -302,10 +306,14 @@ class CasperFpga(object):
         #   other_devices: anything not on the bus
         self.devices = {}
         self.memory_devices = {}
+        self.adc_devices = {}
         self.other_devices = {}
 
         # containers
         for container_ in CASPER_MEMORY_DEVICES.values():
+            setattr(self, container_['container'], AttributeContainer())
+
+        for container_ in CASPER_ADC_DEVICES.values():
             setattr(self, container_['container'], AttributeContainer())
 
         # hold misc information about the bof file, program time, etc
@@ -527,6 +535,52 @@ class CasperFpga(object):
             except AttributeError:  # the device may not have an update function
                 pass
 
+    def _create_casper_adc_devices(self, device_dict):
+        """
+        New method to instantiate CASPER ADC objects and attach them to the
+        parent CasperFpga object
+        :param device_dict: raw dictionary of information from tagged
+        blocks in Simulink design, keyed on device name
+        :return: 
+        """
+        for device_name, device_info in device_dict.items():
+            
+            if device_name == '':
+                raise NameError('There\'s a problem somewhere, got a blank '
+                                'device name?')
+            if device_name in self.adc_devices.keys():
+                raise NameError('ADC device %s already exists' % device_name)
+            # get the class from the known devices, if it exists there
+            tag = device_info['tag']
+            try:
+                known_device_class = CASPER_ADC_DEVICES[tag]['class']
+                known_device_container = CASPER_ADC_DEVICES[tag]['container']
+            except KeyError:
+                pass
+            else:
+                if not callable(known_device_class):
+                    errmsg = '{} is not a callable ADC Class'.format(known_device_class)
+                    raise TypeError(errmsg)
+
+                new_device = known_device_class.from_device_info(
+                                self, device_name, device_info)
+                
+                if new_device.name in self.adc_devices.keys():
+                    errmsg = 'Device {} of type {} already exists in \
+                             the devices list'.format(new_device.name, type(new_device))
+
+                    raise NameError(errmsg)
+                
+                self.devices[device_name] = new_device
+                self.adc_devices[device_name] = new_device
+
+                container = getattr(self, known_device_container)
+                setattr(container, device_name, new_device)
+                
+                assert id(getattr(container, device_name)) == id(new_device)
+                assert id(new_device) == id(self.adc_devices[device_name])
+        
+
     def _create_other_devices(self, device_dict):
         """
         Store non-memory device information in a dictionary
@@ -621,6 +675,7 @@ class CasperFpga(object):
 
         #Create Register Map
         self._create_memory_devices(device_dict, memorymap_dict, legacy_reg_map=legacy_reg_map)
+        self._create_casper_adc_devices(device_dict)
         self._create_other_devices(device_dict)
         self.transport.memory_devices = self.memory_devices
         self.transport.post_get_system_information()
