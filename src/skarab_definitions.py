@@ -542,7 +542,7 @@ current_ranges = {
     '2V5_current': (0.55, 0.001),
     '1V8_current': (0.88, 0.001),
     '1V2_current': (0.22, 0.001),
-    '1V0_current': (24.2, 0.001),
+    '1V0_current': (33.0, 0.001),
     '1V8_MGTVCCAUX_current': (0.33, 0.001),
     '1V0_MGTAVCC_current': (15.84, 0.001),
     '1V2_MGTAVTT_current': (5.83, 0.001),
@@ -568,13 +568,14 @@ temperature_ranges = {
 }
 
 # fan_rpm: (rating, max, min)
+# fan_rpm: (max, min)
 # fan_pwm: (max, min)
 fan_speed_ranges = {
-    'left_front_fan_rpm': (23000, 2000, -4000),
-    'left_middle_fan_rpm': (23000, 2000, -4000),
-    'left_back_fan_rpm': (23000, 2000, -4000),
-    'right_back_fan_rpm': (23000, 2000, -4000),
-    'fpga_fan_rpm': (6000, 2000, -2000),
+    'left_front_fan_rpm': (200000, 100),
+    'left_middle_fan_rpm': (200000, 100),
+    'left_back_fan_rpm': (200000, 100),
+    'right_back_fan_rpm': (200000, 100),
+    'fpga_fan_rpm': (200000, 100),
     'left_front_fan_pwm': (100, 0),
     'left_middle_fan_pwm': (100, 0),
     'left_back_fan_pwm': (100, 0),
