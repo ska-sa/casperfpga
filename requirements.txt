@@ -51,7 +51,6 @@ Sphinx==1.6.4
 sphinx-autobuild==0.7.1
 sphinxcontrib-websupport==1.0.1
 subprocess32==3.2.7
-tftpy==0.6.2
 tornado==4.5.2
 traceback2==1.4.0
 traitlets==4.3.2
@@ -60,3 +59,4 @@ unittest2==1.1.0
 urllib3==1.22
 watchdog==0.8.3
 wcwidth==0.1.7
+-e git://github.com/casper-astro/tftpy.git#egg=tftpy-0.6.3_fork-py2.7.egg

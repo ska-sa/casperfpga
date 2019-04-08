@@ -27,6 +27,7 @@ CASPER_MEMORY_DEVICES = {
     'xps:qdr':          {'class': qdr.Qdr,           'container': 'qdrs'},
     'xps:sw_reg':       {'class': register.Register, 'container': 'registers'},
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
+    'xps:ten_gbe':      {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
 }

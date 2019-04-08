@@ -26,17 +26,23 @@ logger = logging.getLogger(__name__)
 
 class I2C:
 
-    def __init__(self,fpga,controller_name):
-        """ 
-        I2C module for I2C yellow block
+    def __init__(self,fpga,controller_name,**kwargs):
+        """ I2C module for I2C yellow block
 
-        :param fpga: casperfpga.CasperFpga instance
-        :param controller_name: The name of the I2C yellow block
+        fpga: casperfpga.CasperFpga instance
+        controller_name: The name of the I2C yellow block
+        retry_wait: Time interval between pulling status of I2C module,
+                    Default value is 0.02. Typical range between [0.1, 0.001].
         """
 
         self.fpga = fpga
         self.controller_name = controller_name
         self.enable_core()
+
+        self._retry_wait = 0.02
+        if kwargs is not None:
+            if 'retry_wait' in kwargs:
+                self._retry_wait = float(kwargs['retry_wait'])
 
     def setClock(self, target, reference=100):
         """ 
@@ -135,7 +141,7 @@ class I2C:
         self.fpga.write_int(self.controller_name, data, word_offset=addr, blindwrite=True)
         if addr == commandReg:
             while (self.getStatus()["TIP"]):
-                time.sleep(.001)
+                time.sleep(self._retry_wait)
 
     def _itf_read(self,addr):
         return self.fpga.read_int(self.controller_name, word_offset=addr)
@@ -544,3 +550,59 @@ class I2C_PIGPIO:
             self._write(addr,cmd+data)
         else:
             raise ValueError("Invalid parameter")
+
+class I2C_DEVICE():
+    """ I2C device base class """
+
+    DICT = dict()
+
+    def __init__(self, itf, addr):
+        self.itf=itf
+        self.addr=addr
+
+    def _set(self, d1, d2, mask=None):
+        # Update some bits of d1 with d2, while keep other bits unchanged
+        if mask:
+            d1 = d1 & ~mask
+            d2 = d2 * (mask & -mask)
+        return d1 | d2
+
+    def _get(self, data, mask):
+        data = data & mask
+        return data / (mask & -mask)
+
+    def _getMask(self, dicts, name):
+        for rid in dicts:
+            if name in dicts[rid]:
+                return rid, dicts[rid][name]
+        return None,None
+
+    def write(self,reg=None,data=None):
+        self.itf.write(self.addr,reg,data)
+
+    def read(self,reg=None,length=1):
+        return self.itf.read(self.addr,reg,length)
+
+    def getRegister(self,rid=None):
+        if rid==None:
+            return dict([(regId,self.getRegister(regId)) for regId in self.DICT])
+        elif rid in self.DICT:
+            rval = self.read(rid)
+            return {name: self._get(rval,mask) for name, mask in self.DICT[rid].items()}
+        else:
+            logger.error('Invalid parameter')
+            raise ValueError("Invalid parameter")
+
+    def getWord(self,name):
+        rid, mask = self._getMask(self.DICT, name)
+        return self._get(self.read(rid),mask)
+
+    def setWord(self,name,value):
+        rid, mask = self._getMask(self.DICT, name)
+        if mask == 0xff:
+            data = self._set(0x0,value,mask)
+            self.write(rid,data)
+        else:
+            data = self.read(rid)
+            data = self._set(data,value,mask)
+            self.write(rid,data)

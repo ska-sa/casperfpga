@@ -14,6 +14,8 @@ class DS28CM00:
     def __init__(self,itf,addr=0x50):
         self.itf = itf
         self.addr = addr
+        # switch from SMB mode to I2C mode
+        self.write(0x8,0x0)
 
     def readSN(self):
         data = self.read(0x0,8)
