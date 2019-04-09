@@ -77,6 +77,8 @@ class SkarabSpeadError(ValueError):
 class SkarabInvalidHostname(RuntimeError):
     pass
 
+class InvalidDeviceType(ValueError):
+    pass
 
 # endregion
 
@@ -3454,4 +3456,183 @@ class SkarabTransport(Transport):
         signature = struct.unpack('!I', struct.pack('!4B', *selected_data))[0]
 
         return signature
+
+    # TODO: only declare this function once! Will have to be global
+    @staticmethod
+    def _sign_extend(value, bits):
+        """
+        Performs 2's compliment sign extension
+        :param value: value to sign extend
+        :param bits: number of bits making up the value
+        :return: sign extended value
+        """
+        sign_bit = 1 << (bits - 1)
+        return (value & (sign_bit - 1)) - (value & sign_bit)
+
+    def _voltage_handler_logging(self, voltage, scale_factor, device_page):
+        """
+        Handles the data returned by the voltage monitor for the various
+        board voltages. Returns actual voltages extracted from this data.
+        :param raw_sensor_data: array containing raw sensor data
+        :param index: index at which next voltage sensor data begins
+        :return: extracted voltage
+        """
+
+        if (scale_factor & 0x10) != 0:
+            scale_factor = self._sign_extend(scale_factor, 5)
+        scale_factor = int(scale_factor)
+        val = float(voltage) * float(pow(2.0, float(scale_factor)))
+        return round(val * sd.voltage_scaling[str(device_page)], 2)
+
+    def _current_handler_logging(self, current, scale_factor, device_page):
+        """
+        Handles the data returned by the current monitor for the various
+        board currents. Returns actual current extracted from this data.
+        :param raw_sensor_data: array containing raw sensor data
+        :param index: index at which next current sensor data begins
+        :return: extracted current
+        """
+
+        if (scale_factor & 0x10) != 0:
+            scale_factor = self._sign_extend(scale_factor, 5)
+        scale_factor = int(scale_factor)
+        val = float(current) * float(pow(2.0, float(scale_factor)))
+
+        return round(
+            val * sd.current_scaling[str(device_page)], 2)
+
+    def get_ucd90120a_hw_logs(self, device, timeout=None, retries=None):
+        """
+        Retrieve the non-volatile logs from the UCD90120A hardware monitoring devices
+        on the SKARAB. There are two devices: a voltage monitor and a current monitor.
+        These must be specified using the device parameter.
+        :param device: 'current' or 'voltage'
+        :param timeout:
+        :param retries:
+        :return: log data in the form [[page specific, fault type, device page,
+        fault value, scaling, milliseconds, days]]
+        """
+
+        # initialisation depending on device type
+        if device == 'current':
+            request = sd.GetCurrentLogsReq()
+            packet_field = 'current_mon_logs'
+            handler = self._current_handler_logging
+            page_dict = sd.current_monitor_pages
+        elif device == 'voltage':
+            request = sd.GetVoltageLogsReq()
+            packet_field = 'voltage_mon_logs'
+            handler = self._voltage_handler_logging
+            page_dict = sd.voltage_monitor_pages
+        else:
+            err = "Invalid device type specified. device must either be 'current' or 'voltage'"
+            raise InvalidDeviceType(err)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        """
+        log entry structure:
+        log[0] - Page Specific
+        log[1] - Fault Type
+        log[2] - Device Page
+        log[3] - Fault Value (unscaled)
+        log[4] - Scaling Factor
+        log[5] - Milliseconds - MSW
+        log[6] - Milliseconds - LSW
+        log[7] - Days - MSW
+        log[8] - Days - LSW
+        """
+
+        status_bits = list(
+            '{:016b}'.format(response.packet['log_entry_success']))
+
+        log_entries = list(range(16, 0, -1))
+
+        log_data = [[log_entries.pop(), page_dict[log[2]],
+                     self._check_fault_type(log[0], log[1], sensor=device),
+                     handler(log[3], log[4], log[2]),
+                     sd.log_entry_success_codes[status_bits.pop()]]
+                    if log[0] != 0xFFFF
+                    else [log_entries.pop(), None,
+                          sd.log_entry_success_codes[status_bits.pop()]]
+                    for log in response.packet[packet_field]]
+
+        log_data.reverse()
+
+        return log_data
+
+    @staticmethod
+    def _check_fault_type(page_specifc, fault_type, sensor='voltage'):
+        """
+        Check the fault on the UCD90120A device
+        :param page_specifc: page specific flag
+        :param fault_type: fault code
+        :return: fault_type (str)
+        """
+
+        if not page_specifc:
+            return sd.non_page_specific_faults[fault_type]
+        else:
+            if sensor == 'current':
+                if fault_type == 0 or fault_type == 1:
+                    fault_type += 3
+
+            return sd.page_specific_faults[fault_type]
+
+    @staticmethod
+    def get_fault_timestamp(milliseconds, days):
+        raise NotImplementedError
+
+    def display_skarab_hw_logs(self, log_data, device_logged, units):
+        """
+        Display the skarab hardware logs in an easily readable format
+        :param log_data: the log data retrieved from the skarab
+        :param device_logged: the name of the device logged e.g. voltage_monitor
+        :return:
+        """
+        title = 'Hardware Log Data for {skarab} - Device: {device_logged}'.format(
+            skarab=self.host, device_logged=device_logged)
+
+        print('\n{title:^94}\n'.format(title=title))
+
+        print(
+        '{entry:^10} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+            entry='Log Entry', device='Device Page', event='Fault Event',
+            fault_value='Fault Value ({})'.format(units), entry_success='Log Entry Success?'))
+
+        for log in log_data:
+            if log[1] is None:
+                print(
+                    '{entry:^10} {data:-^67} {entry_success:^15}'.format(
+                        entry=log[0], data='No Log Data',
+                        entry_success=log[2]))
+            else:
+                print(
+                    '{entry:^10} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+                        entry=log[0], device=log[1], event=log[2],
+                        fault_value=log[3], entry_success=log[4]))
+
+    def display_voltage_monitor_logs(self):
+        """
+        Retrieve and display the NV logs of the voltage monitor
+        :param voltage_mon_logs:
+        :return: None
+        """
+
+        # retrieve log data
+        log_data = self.get_ucd90120a_hw_logs('voltage')
+
+        # display log data
+        self.display_skarab_hw_logs(log_data=log_data, device_logged='UCD90120A Voltage Monitor', units='V')
+
+    def display_current_monitor_logs(self):
+        """
+        Retrieve and display the NV logs of the current monitor
+        :return: None
+        """
+
+        # retrieve log data
+        log_data = self.get_ucd90120a_hw_logs('current')
+
+        # display log data
+        self.display_skarab_hw_logs(log_data=log_data, device_logged='UCD90120A Current Monitor', units='A')
 # end

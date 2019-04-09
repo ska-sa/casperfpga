@@ -129,6 +129,9 @@ SET_FAN_SPEED = 0x0045
 BIG_READ_WISHBONE = 0x0047
 BIG_WRITE_WISHBONE = 0x0049
 SDRAM_PROGRAM_WISHBONE = 0x0051
+GET_CURRENT_LOGS = 0x0057
+GET_VOLTAGE_LOGS = 0x0059
+GET_FAN_CONT_LOGS = 0x005B
 
 
 # FOR VIRTEX FLASH RECONFIG
@@ -305,6 +308,65 @@ P1V8_MGTVCCAUX_CURRENT_MON_PAGE = 8
 P1V0_MGTAVCC_CURRENT_MON_PAGE = 9
 P1V2_MGTAVTT_CURRENT_MON_PAGE = 10
 P1V8_CURRENT_MON_PAGE = 11
+
+log_entry_success_codes = {'0': 'fail', '1': 'ok'}
+
+non_page_specific_faults = {0: 'Reserved', 1: 'Reserved', 2: 'Resequence Error',
+                            3: 'Watchdog Timeout', 4: 'Fan 1 Fault',
+                            5: 'Fan 2 Fault', 6: 'Fan 3 Fault', 7: 'Fan 4 Fault' }
+
+page_specific_faults = {0: 'VOUT Over Voltage Fault', 1: 'VOUT Under Voltage Fault',
+                        2: 'TON MAX Fault', 3: 'IOUT Over Current Fault',
+                        4: 'IOUT Under Current Fault', 5: 'Over Temperature Fault',
+                        6: 'SEQ TIMEOUT Fault', 7: 'Reserved'}
+
+current_monitor_pages = {
+    P12V2_CURRENT_MON_PAGE: 'P12V2_CURRENT',
+    P12V_CURRENT_MON_PAGE: 'P12V_CURRENT',
+    P5V_CURRENT_MON_PAGE: 'P5V_CURRENT',
+    P3V3_CURRENT_MON_PAGE: 'P3V3_CURRENT',
+    P2V5_CURRENT_MON_PAGE: 'P2V5_CURRENT',
+    P3V3_CONFIG_CURRENT_MON_PAGE: 'P3V3_CONFIG_CURRENT',
+    P1V2_CURRENT_MON_PAGE: 'P1V2_CURRENT',
+    P1V0_CURRENT_MON_PAGE: 'P1V0_CURRENT',
+    P1V8_MGTVCCAUX_CURRENT_MON_PAGE: 'P1V8_MGTVCCAUX_CURRENT',
+    P1V0_MGTAVCC_CURRENT_MON_PAGE: 'P1V0_MGTAVCC_CURRENT',
+    P1V2_MGTAVTT_CURRENT_MON_PAGE: 'P1V2_MGTAVTT_CURRENT',
+    P1V8_CURRENT_MON_PAGE: 'P1V8_CURRENT'
+}
+
+voltage_monitor_pages = {
+    P12V2_VOLTAGE_MON_PAGE: 'P12V2_VOLTAGE',
+    P12V_VOLTAGE_MON_PAGE: 'P12V_VOLTAGE',
+    P5V_VOLTAGE_MON_PAGE: 'P5V_VOLTAGE',
+    P3V3_VOLTAGE_MON_PAGE: 'P3V3_VOLTAGE',
+    P2V5_VOLTAGE_MON_PAGE: 'P2V5_VOLTAGE',
+    P1V8_VOLTAGE_MON_PAGE: 'P1V8_VOTLAGE',
+    P1V2_VOLTAGE_MON_PAGE: 'P1V2_VOLTAGE',
+    P1V0_VOLTAGE_MON_PAGE: 'P1V0_VOLTAGE',
+    P1V8_MGTVCCAUX_VOLTAGE_MON_PAGE: 'P1V8_MGTVCCAUX_VOLTAGE',
+    P1V0_MGTAVCC_VOLTAGE_MON_PAGE: 'P1V0_MGTAVCC_VOLTAGE',
+    P1V2_MGTAVTT_VOLTAGE_MON_PAGE: 'P1V2_MGTAVTT_VOLTAGE',
+    P3V3_CONFIG_VOLTAGE_MON_PAGE: 'P3V3_CONFIG_VOLTAGE',
+    PLUS3V3CONFIG02_ADC_PAGE: 'PLUS3v3CONFIG02_ADC_VOLTAGE',
+    P5VAUX_VOLTAGE_MON_PAGE: 'P5VAUX_VOLTAGE'
+}
+
+fan_controller_pages = {
+    LEFT_FRONT_FAN_PAGE: 'LEFT_FRONT_FAN',
+    LEFT_MIDDLE_FAN_PAGE: 'LEFT_MIDDLE_FAN',
+    LEFT_BACK_FAN_PAGE: 'LEFT_BACK_FAN',
+    RIGHT_BACK_FAN_PAGE: 'RIGHT_BACK_FAN',
+    FPGA_FAN: 'FPGA_FAN',
+    FPGA_TEMP_DIODE_ADC_PAGE: 'FPGA_TEMP_DIODE_ADC',
+    FAN_CONT_TEMP_SENSOR_PAGE: 'FAN_CONT_TEMP_SENSOR',
+    INLET_TEMP_SENSOR_PAGE: 'INLET_TEMP_SENSOR',
+    OUTLET_TEMP_SENSOR_PAGE: 'OUTLET_TEMP_SENSOR',
+    MEZZANINE_0_TEMP_ADC_PAGE: 'MEZZANINE_0_TEMP',
+    MEZZANINE_1_TEMP_ADC_PAGE: 'MEZZANINE_1_TEMP',
+    MEZZANINE_2_TEMP_ADC_PAGE: 'MEZZANINE_2_TEMP',
+    MEZZANINE_3_TEMP_ADC_PAGE: 'MEZZANINE_3_TEMP'
+}
 
 voltage_scaling = {
     str(P12V2_VOLTAGE_MON_PAGE): 6100.0 / 1000.0,
@@ -1481,6 +1543,67 @@ class SdramProgramWishboneResp(Response):
         self.packet['ack'] = ack
         self.packet['padding'] = padding
 
+
+class GetCurrentLogsReq(Command):
+    def __init__(self):
+        super(GetCurrentLogsReq, self).__init__(GET_CURRENT_LOGS)
+        self.expect_response = True
+        self.response = GetCurrentLogsResp
+        self.num_response_words = 147
+        self.pad_words = 0
+
+
+class GetCurrentLogsResp(Response):
+    def __init__(self, command_id, seq_num, current_mon_logs, status):
+        super(GetCurrentLogsResp, self).__init__(command_id, seq_num)
+        self.packet['current_mon_logs'] = current_mon_logs
+        self.packet['log_entry_success'] = status
+
+    @staticmethod
+    def unpack_process(unpacked_data):
+        log_data = unpacked_data[2:146]
+        log_data = [list(log_data)[i*9:(i+1)*9] for i in range(0,16)]
+        unpacked_data[2:146] = [log_data]
+        return unpacked_data
+
+
+class GetVoltageLogsReq(Command):
+    def __init__(self):
+        super(GetVoltageLogsReq, self).__init__(GET_VOLTAGE_LOGS)
+        self.expect_response = True
+        self.response = GetVoltageLogsResp
+        self.num_response_words = 147
+        self.pad_words = 0
+
+
+class GetVoltageLogsResp(Response):
+    def __init__(self, command_id, seq_num, voltage_mon_logs, status):
+        super(GetVoltageLogsResp, self).__init__(command_id, seq_num)
+        self.packet['voltage_mon_logs'] = voltage_mon_logs
+        self.packet['log_entry_success'] = status
+
+    @staticmethod
+    def unpack_process(unpacked_data):
+        log_data = unpacked_data[2:146]
+        log_data = [list(log_data)[i*9:(i+1)*9] for i in range(0,16)]
+        unpacked_data[2:146] = [log_data]
+        return unpacked_data
+
+
+class GetFanControllerLogsReq(Command):
+    def __init__(self):
+        super(GetFanControllerLogsReq, self).__init__(GET_FAN_CONT_LOGS)
+        self.expect_response = True
+        self.response = GetCurrentLogsResp
+        self.num_response_words = 67
+        self.pad_words = 1
+
+
+class GetFanControllerLogsResp(Response):
+    def __init__(self, command_id, seq_num, fan_cont_mon_logs, padding):
+        super(GetFanControllerLogsResp, self).__init__(command_id, seq_num)
+        self.packet['fan_cont_mon_logs'] = fan_cont_mon_logs
+        self.packet['padding'] = padding
 
 # Mezzanine Site Identifiers
 class Mezzanine(object):
