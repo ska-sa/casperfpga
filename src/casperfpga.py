@@ -256,17 +256,21 @@ class CasperFpga(object):
         return self.transport.set_igmp_version(version)
 
     def upload_to_ram_and_program(self, filename=None, wait_complete=True,
-                                    legacy_reg_map=True, chunk_size=1988):
+                                  legacy_reg_map=True, chunk_size=1988,
+                                  initialise_objects=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
-        :param filename: the file to upload
-        :param wait_complete: do not wait for this operation, just return
-        :param legacy_reg_map: older fpg files have a different register mapping,
+        :param filename: The file to upload
+        :param wait_complete: Do not wait for this operation, just return
+        :param legacy_reg_map: Older fpg files have a different register mapping,
                                 set this flag to true for these
-        :param chunk_size: the SKARAB supports 1988, 3976 and 7952 byte programming packets,
+        :param chunk_size: The SKARAB supports 1988, 3976 and 7952 byte programming packets,
                            but old bitfiles only support 1988 (the default)
-        after upload
-        :return: True or False
+                           after upload
+        :param initialise_objects: Flag included in the event some child objects can be initialised
+                                   upon creation/startup of the SKARAB with the new firmware
+                                   - e.g. The SKARAB ADC
+        :return: Boolean - True/False - Success/Fail
         """
         if filename is not None:
             self.bitstream = filename
@@ -278,7 +282,8 @@ class CasperFpga(object):
             return True
         if self.bitstream:
             if self.bitstream[-3:] == 'fpg':
-                self.get_system_information(filename, legacy_reg_map=legacy_reg_map)
+                self.get_system_information(filename, legacy_reg_map=legacy_reg_map,
+                                            initialise_objects=initialise_objects)
 
         return rv
 
@@ -488,7 +493,7 @@ class CasperFpga(object):
                           'okay%s.' % (integer, device_name, word_offset,
                           ' (blind)' if blindwrite else ''))
 
-    def _create_memory_devices(self, device_dict, memorymap_dict, legacy_reg_map=True):
+    def _create_memory_devices(self, device_dict, memorymap_dict, legacy_reg_map=True, **kwargs):
         """
         Create memory devices from dictionaries of design information.
         :param device_dict: raw dictionary of information from tagged
@@ -535,13 +540,16 @@ class CasperFpga(object):
             except AttributeError:  # the device may not have an update function
                 pass
 
-    def _create_casper_adc_devices(self, device_dict):
+    def _create_casper_adc_devices(self, device_dict, initialise=False, **kwargs):
         """
         New method to instantiate CASPER ADC objects and attach them to the
         parent CasperFpga object
         :param device_dict: raw dictionary of information from tagged
         blocks in Simulink design, keyed on device name
-        :return: 
+        :param initialise: Flag included in the event some child objects can be initialised
+                           upon creation/startup of the SKARAB with the new firmware
+                           - e.g. The SKARAB ADC's PLL SYNC
+        :return: None
         """
         for device_name, device_info in device_dict.items():
             
@@ -562,8 +570,8 @@ class CasperFpga(object):
                     errmsg = '{} is not a callable ADC Class'.format(known_device_class)
                     raise TypeError(errmsg)
 
-                new_device = known_device_class.from_device_info(
-                                self, device_name, device_info)
+                new_device = known_device_class.from_device_info(self,
+                                device_name, device_info, initialise=initialise)
                 
                 if new_device.name in self.adc_devices.keys():
                     errmsg = 'Device {} of type {} already exists in \
@@ -581,7 +589,7 @@ class CasperFpga(object):
                 assert id(new_device) == id(self.adc_devices[device_name])
         
 
-    def _create_other_devices(self, device_dict):
+    def _create_other_devices(self, device_dict, **kwargs):
         """
         Store non-memory device information in a dictionary
         :param device_dict: raw dictionary of information from tagged
@@ -614,14 +622,18 @@ class CasperFpga(object):
         """
         return getattr(self, container)
 
-    def get_system_information(self, filename=None, fpg_info=None, **kwargs):
+    def get_system_information(self, filename=None, fpg_info=None,
+                               legacy_reg_map=True, initialise_objects=False, **kwargs):
         """
         Get information about the design running on the FPGA.
         If filename is given, get it from file, otherwise query the
             host via KATCP.
         :param filename: fpg filename
         :param fpg_info: a tuple containing device_info and coreinfo
-            dictionaries
+                         dictionaries
+        :param initialise_objects: Flag included in the event some child objects can be initialised
+                                   upon creation/startup of the SKARAB with the new firmware
+                                   - e.g. The SKARAB ADC's PLL SYNC
         :return: <nothing> the information is populated in the class
         """
         t_filename, t_fpg_info = \
@@ -658,25 +670,26 @@ class CasperFpga(object):
         if '77777_svn' in device_dict:
             self.rcs_info['svn'] = device_dict['77777_svn']
 
-        #Determine if the new or old register map is used
-
+        # Determine if the new or old register map is used
         new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
         old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
 
         if(new_reg_map_mac_word1_hex == 0x650):
-            #self.logger.debug('Using new 40GbE core register map')
+            self.logger.debug('Using new 40GbE core register map')
             legacy_reg_map = False
         elif(old_reg_map_mac_word1_hex == 0x650):
-            #self.logger.debug('Using old 40GbE core register map')
+            self.logger.debug('Using old 40GbE core register map')
             legacy_reg_map = True
         else:
             self.logger.error('Unknown 40GbE core register map')
-            raise Exception('Unknown register map')
+            raise ValueError('Unknown register map')
 
-        #Create Register Map
-        self._create_memory_devices(device_dict, memorymap_dict, legacy_reg_map=legacy_reg_map)
-        self._create_casper_adc_devices(device_dict)
-        self._create_other_devices(device_dict)
+        # Create Register Map
+        self._create_memory_devices(device_dict, memorymap_dict,
+                                    legacy_reg_map=legacy_reg_map,
+                                    initialise=initialise_objects)
+        self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
+        self._create_other_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
         self.transport.post_get_system_information()
 
