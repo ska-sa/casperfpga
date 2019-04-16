@@ -1549,7 +1549,7 @@ class GetCurrentLogsReq(Command):
         super(GetCurrentLogsReq, self).__init__(GET_CURRENT_LOGS)
         self.expect_response = True
         self.response = GetCurrentLogsResp
-        self.num_response_words = 147
+        self.num_response_words = 115
         self.pad_words = 0
 
 
@@ -1561,9 +1561,9 @@ class GetCurrentLogsResp(Response):
 
     @staticmethod
     def unpack_process(unpacked_data):
-        log_data = unpacked_data[2:146]
-        log_data = [list(log_data)[i*9:(i+1)*9] for i in range(0,16)]
-        unpacked_data[2:146] = [log_data]
+        log_data = unpacked_data[2:114]
+        log_data = [list(log_data)[i*7:(i+1)*7] for i in range(0, 16)]
+        unpacked_data[2:114] = [log_data]
         return unpacked_data
 
 
@@ -1572,7 +1572,7 @@ class GetVoltageLogsReq(Command):
         super(GetVoltageLogsReq, self).__init__(GET_VOLTAGE_LOGS)
         self.expect_response = True
         self.response = GetVoltageLogsResp
-        self.num_response_words = 147
+        self.num_response_words = 115
         self.pad_words = 0
 
 
@@ -1584,9 +1584,9 @@ class GetVoltageLogsResp(Response):
 
     @staticmethod
     def unpack_process(unpacked_data):
-        log_data = unpacked_data[2:146]
-        log_data = [list(log_data)[i*9:(i+1)*9] for i in range(0,16)]
-        unpacked_data[2:146] = [log_data]
+        log_data = unpacked_data[2:114]
+        log_data = [list(log_data)[i*7:(i+1)*7] for i in range(0, 16)]
+        unpacked_data[2:114] = [log_data]
         return unpacked_data
 
 

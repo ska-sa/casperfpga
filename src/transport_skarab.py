@@ -3510,7 +3510,7 @@ class SkarabTransport(Transport):
         :param timeout:
         :param retries:
         :return: log data in the form [[page specific, fault type, device page,
-        fault value, scaling, milliseconds, days]]
+        fault value, scaling, runtime seconds since fault]
         """
 
         # initialisation depending on device type
@@ -3536,10 +3536,8 @@ class SkarabTransport(Transport):
         log[2] - Device Page
         log[3] - Fault Value (unscaled)
         log[4] - Scaling Factor
-        log[5] - Milliseconds - MSW
-        log[6] - Milliseconds - LSW
-        log[7] - Days - MSW
-        log[8] - Days - LSW
+        log[5] - Runtime Seconds Since Fault - MSW
+        log[6] - Runtime Seconds Since Fault - LSW
         """
 
         status_bits = list(
@@ -3550,7 +3548,8 @@ class SkarabTransport(Transport):
         log_data = [[log_entries.pop(), page_dict[log[2]],
                      self._check_fault_type(log[0], log[1], sensor=device),
                      handler(log[3], log[4], log[2]),
-                     sd.log_entry_success_codes[status_bits.pop()]]
+                     sd.log_entry_success_codes[status_bits.pop()],
+                     self.get_fault_timestamp(log[5], log[6])]
                     if log[0] != 0xFFFF
                     else [log_entries.pop(), None,
                           sd.log_entry_success_codes[status_bits.pop()]]
@@ -3579,8 +3578,14 @@ class SkarabTransport(Transport):
             return sd.page_specific_faults[fault_type]
 
     @staticmethod
-    def get_fault_timestamp(milliseconds, days):
-        raise NotImplementedError
+    def get_fault_timestamp(seconds_msw, seconds_lsw):
+        """
+        Get the timestamp of the fault
+        :param seconds_msw: most significant word of the seconds since fault
+        :param seconds_lsw: least significatn word of the seconds since fault
+        :return: seconds
+        """
+        return struct.unpack('!I', struct.pack('!2H', seconds_msw, seconds_lsw))[0]
 
     def display_skarab_hw_logs(self, log_data, device_logged, units):
         """
@@ -3595,21 +3600,30 @@ class SkarabTransport(Transport):
         print('\n{title:^94}\n'.format(title=title))
 
         print(
-        '{entry:^10} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+        '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
             entry='Log Entry', device='Device Page', event='Fault Event',
-            fault_value='Fault Value ({})'.format(units), entry_success='Log Entry Success?'))
+            fault_value='Fault Value ({})'.format(units),
+            entry_success='Log Entry Success?',
+            timestamp='Runtime Since Fault'))
 
         for log in log_data:
             if log[1] is None:
                 print(
-                    '{entry:^10} {data:-^67} {entry_success:^15}'.format(
+                    '{entry:^10} {data:-^93} {entry_success:^15}'.format(
                         entry=log[0], data='No Log Data',
                         entry_success=log[2]))
             else:
+
+                # make timestamp human readable
+                min, sec = divmod(log[5], 60)
+                hours, min = divmod(min, 60)
+                timestamp = '{hours:02d}h{minutes:02d}m{seconds:02d}s'.format(
+                    hours=hours, minutes=min, seconds=sec)
+
                 print(
-                    '{entry:^10} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+                    '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
                         entry=log[0], device=log[1], event=log[2],
-                        fault_value=log[3], entry_success=log[4]))
+                        fault_value=log[3], entry_success=log[4],timestamp=timestamp))
 
     def display_voltage_monitor_logs(self):
         """
