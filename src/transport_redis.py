@@ -129,7 +129,7 @@ class RedisTftp(object):
             if message is not None and message["type"] != "message":
                 continue
             if message is None:
-                self._logger.error("Timed out waiting for a correlator response")
+                self._logger.debug("Timed out waiting for a correlator response")
                 raise RuntimeError("Timed out waiting for a correlator response")
                 return
             try:
