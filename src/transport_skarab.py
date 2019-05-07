@@ -80,6 +80,12 @@ class SkarabInvalidHostname(RuntimeError):
 class InvalidDeviceType(ValueError):
     pass
 
+class SkarabFanControllerClearError(ValueError):
+    pass
+
+class NonVolatileLogRetrievalError(ValueError):
+    pass
+
 # endregion
 
 
@@ -3501,6 +3507,133 @@ class SkarabTransport(Transport):
         return round(
             val * sd.current_scaling[str(device_page)], 2)
 
+    def get_max31785_hw_logs(self, timeout=None, retries=None):
+        """
+        Retrieve the non-volatile logs from the MAX31785 fan controller on the
+        SKARAB.
+        :param timeout:
+        :param retries:
+        :return: log data in the form [FAULT_LOG_INDEX, FAULT_LOG_COUNT,
+        STATUS_WORD, STATUS_VOUT Pages 17/18,
+        STATUS_VOUT Pages 19/20, STATUS_VOUT Pages 21/22,
+        STATUS_MFR_SPECIFIC Pages 6/7, STATUS_MFR_SPECIFIC Pages 8/9,
+        STATUS_MFR_SPECIFIC Pages 10/11, STATUS_MFR_SPECIFIC Pages 12/13,
+        STATUS_MFR_SPECIFIC Pages 14/15, STATUS_MFR_SPECIFIC Pages 16/00h,
+        STATUS_FANS_1_2 Pages 0/1, STATUS_FANS_1_2 Pages 2/3,
+        STATUS_FANS_1_2 Pages 4/5]
+        """
+
+        request = sd.GetFanControllerLogsReq()
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check if logs were read successfully
+        if not response.packet['log_entry_success']:
+            err = 'fan controller non-volatile log retrieval failed'
+            raise NonVolatileLogRetrievalError(err)
+
+        """
+        log entry structure:
+        log[0] - fault log index
+        log[1] - fault log count
+        log[2] - status word
+        log[3] - status_vout pages 18/17
+        log[4] - status_vout pages 20/19
+        log[5] - status_vout pages 22/21
+        log[6] - status_mfr_specific pages 7/6
+        log[7] - status_mfr_specific pages 9/8
+        log[8] - status_mfr_specific pages 11/10
+        log[9] - status_mfr_specific pages 13/12
+        log[10] - status_mfr_specific pages 15/14
+        log[11] - status_mfr_specific pages 00h/16
+        log[12] - status_fans_1_2 pages 1/0
+        log[13] - status_fans_1_2 pages 3/2
+        log[14] - status_fans_1_2 pages 5/4
+        """
+
+        # list to store the parsed log data
+        log_data = []
+
+        log_entries = [(entry, data) for entry, data in enumerate(response.packet['fan_cont_mon_logs'])]
+
+        # parse each of the 15 log entries
+        # each log is of form [entry number, [log data]]
+        for log in log_entries:
+            # check if a log entry is empty
+            if log[1].count(0xFFFF) == len(log[1]):
+                # log entry is empty
+                fault_summary = (log[0], None)
+            else:
+                idx_of_faulty_page = next(
+                    (i + 3 for i, val in enumerate(log[1][3:]) if val), None)
+
+                # determine the fault register
+                fault_log_field = sd.fault_log_fields[idx_of_faulty_page]
+                if 'status_mfr_specific' in fault_log_field:
+                    fault_reg = sd.status_mfr_specific
+                elif 'status_fans_1_2' in fault_log_field:
+                    fault_reg = sd.status_fans_1_2
+                elif 'status_vout' in fault_log_field:
+                    fault_reg = sd.status_vout
+                else:
+                    err = 'unknown fault registered detected. cannot interpret' \
+                          'failure'
+                    raise NonVolatileLogRetrievalError(err)
+
+                # parse page data
+                upper_page = log[1][idx_of_faulty_page] >> 8
+                lower_page = log[1][idx_of_faulty_page] & 0xFF
+
+                if upper_page:
+                    fault_page = int(
+                        fault_log_field.split('_')[-1].split('/')[0])
+                    fault_value = upper_page
+                elif lower_page:
+                    fault_page = int(
+                        fault_log_field.split('_')[-1].split('/')[1])
+                    fault_value = lower_page
+                else:
+                    err = 'retrieved log data is invalid'
+                    raise NonVolatileLogRetrievalError(err)
+
+                device_page = sd.fan_controller_pages[fault_page]
+
+                # find the type of fault
+                # convert to 8-bit binary number and reverse order to make python indexing match msb indexing
+                fault_data_bits = '{0:08b}'.format(fault_value)[::-1]
+
+                # look for the bit that is set
+                for bit, val in enumerate(fault_data_bits):
+                    if int(val):
+                        fault_event = fault_reg[bit]
+
+                # need one of these per log entry, then parse in a separate function
+                fault_summary = (log[0], device_page, fault_event)
+
+            log_data.append(fault_summary)
+
+        return log_data
+
+    def clear_max31785_hw_logs(self, timeout=None, retries=None):
+        """
+        Clear the error logs of the MAX31785 fan controller.
+        The controller only stores 15 logs. Once this is full, the logs
+        must be cleared to catch new faults.
+        :param timeout:
+        :param retries:
+        :return: True if completed successfuly, otherwise, raises error
+        """
+
+        request = sd.ClearFanControllerLogsReq()
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check the status
+        if response.packet['status']:
+            self.logger.info('MAX31785 fan controller logs cleared successfully')
+            return True
+        else:
+            err = 'MAX31785 fan controller logs not cleared!'
+            raise SkarabFanControllerClearError(err)
+
     def get_ucd90120a_hw_logs(self, device, timeout=None, retries=None):
         """
         Retrieve the non-volatile logs from the UCD90120A hardware monitoring devices
@@ -3509,9 +3642,11 @@ class SkarabTransport(Transport):
         :param device: 'current' or 'voltage'
         :param timeout:
         :param retries:
-        :return: log data in the form [[page specific, fault type, device page,
+        :return: log data in the form [page specific, fault type, device page,
         fault value, scaling, runtime seconds since fault]
         """
+
+        #TODO: fix up docstrings
 
         # initialisation depending on device type
         if device == 'current':
@@ -3582,7 +3717,7 @@ class SkarabTransport(Transport):
         """
         Get the timestamp of the fault
         :param seconds_msw: most significant word of the seconds since fault
-        :param seconds_lsw: least significatn word of the seconds since fault
+        :param seconds_lsw: least significant word of the seconds since fault
         :return: seconds
         """
         return struct.unpack('!I', struct.pack('!2H', seconds_msw, seconds_lsw))[0]
@@ -3591,39 +3726,59 @@ class SkarabTransport(Transport):
         """
         Display the skarab hardware logs in an easily readable format
         :param log_data: the log data retrieved from the skarab
-        :param device_logged: the name of the device logged e.g. voltage_monitor
+        :param device_logged: the name of the device logged
+        :param units: the unit of the measured value, where applicable
         :return:
         """
+
         title = 'Hardware Log Data for {skarab} - Device: {device_logged}'.format(
             skarab=self.host, device_logged=device_logged)
 
         print('\n{title:^94}\n'.format(title=title))
 
-        print(
-        '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
-            entry='Log Entry', device='Device Page', event='Fault Event',
-            fault_value='Fault Value ({})'.format(units),
-            entry_success='Log Entry Success?',
-            timestamp='Runtime Since Fault'))
+        if device_logged == 'MAX31785 Fan Controller':
+            print(
+                '{entry:^10} {device:^25} {event:^25}'.format(
+                    entry='Log Entry', device='Device Page',
+                    event='Fault Event'))
 
-        for log in log_data:
-            if log[1] is None:
-                print(
-                    '{entry:^10} {data:-^93} {entry_success:^15}'.format(
-                        entry=log[0], data='No Log Data',
-                        entry_success=log[2]))
-            else:
+            for log in log_data:
+                if log[1] is None:
+                    print(
+                        '{entry:^10} {data:-^51}'.format(
+                            entry=log[0], data='No Log Data'))
+                else:
 
-                # make timestamp human readable
-                min, sec = divmod(log[5], 60)
-                hours, min = divmod(min, 60)
-                timestamp = '{hours:02d}h{minutes:02d}m{seconds:02d}s'.format(
-                    hours=hours, minutes=min, seconds=sec)
+                    print(
+                        '{entry:^10} {device:^25} {event:^25}'.format(
+                            entry=log[0], device=log[1], event=log[2]))
+        else:
 
-                print(
-                    '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
-                        entry=log[0], device=log[1], event=log[2],
-                        fault_value=log[3], entry_success=log[4],timestamp=timestamp))
+            print(
+            '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+                entry='Log Entry', device='Device Page', event='Fault Event',
+                fault_value='Fault Value ({})'.format(units),
+                entry_success='Log Entry Success?',
+                timestamp='Runtime Since Fault'))
+
+            for log in log_data:
+                if log[1] is None:
+                    print(
+                        '{entry:^10} {data:-^93} {entry_success:^15}'.format(
+                            entry=log[0], data='No Log Data',
+                            entry_success=log[2]))
+                else:
+
+                    # make timestamp human readable
+                    min, sec = divmod(log[5], 60)
+                    hours, min = divmod(min, 60)
+                    timestamp = '{hours:02d}h{minutes:02d}m{seconds:02d}s'.format(
+                        hours=hours, minutes=min, seconds=sec)
+
+                    print(
+                        '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+                            entry=log[0], device=log[1], event=log[2],
+                            fault_value=log[3], entry_success=log[4],timestamp=timestamp))
 
     def display_voltage_monitor_logs(self):
         """
@@ -3649,4 +3804,23 @@ class SkarabTransport(Transport):
 
         # display log data
         self.display_skarab_hw_logs(log_data=log_data, device_logged='UCD90120A Current Monitor', units='A')
+
+    def display_fan_controller_logs(self):
+        """
+        Retrieve and display the NV logs from the MAX31785 fan controller
+        :return:
+        """
+
+        # retrieve log data
+        try:
+            log_data = self.get_max31785_hw_logs()
+
+            # display log data
+            self.display_skarab_hw_logs(log_data=log_data,
+                                        device_logged='MAX31785 Fan Controller',
+                                        units=None)
+
+        except NonVolatileLogRetrievalError:
+            self.logger.error('Failed to retrieve fan controller log data')
+
 # end
