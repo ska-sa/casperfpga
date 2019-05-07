@@ -60,11 +60,9 @@ CASPER_OTHER_DEVICES = {
     'casper:spead_unpack':          'spead_unpack',
     'casper:vacc':                  'vacc',
     'casper:xeng':                  'xeng',
+    'xps:hmc':                      'hmc',
     'xps:xsg':                      'xps',
 }
-
-
-
 
 class UnknownTransportError(Exception):
     pass
