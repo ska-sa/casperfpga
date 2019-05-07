@@ -175,15 +175,16 @@ class RedisTapcpDaemon(object):
             self._process_command()
 
     def _process_command(self):
-        message = self.cmd_chan.get_message(timeout=self.timeout, ignore_subscribe_messages=True)
-        if message is None:
+        message_raw = self.cmd_chan.get_message(timeout=self.timeout, ignore_subscribe_messages=True)
+        if message_raw is None:
             return
         try:
-            message = json.loads(message["data"])
+            message = json.loads(message_raw["data"])
         except:
             self._logger.warning("Got a non-JSON command!")
             return
-        #try:
+
+        self._logger.info("Got command %s" % message_raw["data"])
         command = message["command"]
         host = command["target"]
         cmd_type = command["type"]
@@ -193,6 +194,7 @@ class RedisTapcpDaemon(object):
             self.tftp_connections[host] = tftpy.TftpClient(host, 69)
         
         if cmd_type == "read":
+            self._logger.info("Got read command")
             try:
                 buf = StringIO()
                 self.tftp_connections[host].download(filename, buf, timeout=timeout)
@@ -206,8 +208,10 @@ class RedisTapcpDaemon(object):
                     pass
             return
         if cmd_type == "write":
+            self._logger.info("Got write command")
             try:
                 buf = StringIO(base64.b64decode(command["data"]))
+                self._logger.info("Writing %d bytes" % buf.len)
                 self.tftp_connections[host].upload(filename, buf, timeout=timeout)
                 message["response"] = None
                 self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(message))
