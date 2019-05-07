@@ -126,15 +126,17 @@ class RedisTftp(object):
         # isn't for us.
         while(True):
             message = self.resp_chan.get_message(timeout=timeout)
-            if message["type"] != "message":
+            if message is not None and message["type"] != "message":
                 continue
             if message is None:
                 self._logger.error("Timed out waiting for a correlator response")
+                raise RuntimeError("Timed out waiting for a correlator response")
                 return
             try:
                 message = json.loads(message["data"])   
             except:
-                self._logger.warning("Got a non-JSON message on the correlator response channel")
+                self._logger.error("Got a non-JSON message on the correlator response channel")
+                raise RuntimeError("Got a non-JSON message on the correlator response channel")
                 continue
             if ((message["command"] == target_cmd) and (message["time"] == target_time)):
                 if message["response"] is None:
