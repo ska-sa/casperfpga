@@ -17,6 +17,9 @@ LOGGER = logging.getLogger(__name__)
 REDIS_COMMAND_CHANNEL = "casperfpga:command"
 REDIS_RESPONSE_CHANNEL = "casperfpga:response"
 
+FAIL = False
+SUCCESS = True
+
 class RedisTftp(object):
     """
     # A class-wide variable to hold redis connections.
@@ -121,15 +124,15 @@ class RedisTftp(object):
         except:
             self._logger.error("Failed to decode sent command")
         target_time = sent_message["time"]
-        target_cmd  = sent_message["command"]
+        target_id  = sent_message["command"]["id"]
         # This loop only gets activated if we get a response which
         # isn't for us.
         while(True):
-            message = self.resp_chan.get_message(timeout=timeout)
+            message = self.resp_chan.get_message(timeout=1)
             if message is not None and message["type"] != "message":
                 continue
             if message is None:
-                self._logger.debug("Timed out waiting for a correlator response")
+                self._logger.error("Timed out waiting for a correlator response")
                 raise RuntimeError("Timed out waiting for a correlator response")
                 return
             try:
@@ -138,11 +141,17 @@ class RedisTftp(object):
                 self._logger.error("Got a non-JSON message on the correlator response channel")
                 raise RuntimeError("Got a non-JSON message on the correlator response channel")
                 continue
-            if ((message["command"] == target_cmd) and (message["time"] == target_time)):
+            if ((message["id"] == target_id) and (message["time"] == target_time)):
+                self._logger.debug("Got our redis response")
+                if message["status"] != SUCCESS:
+                    self._logger.info("Command failed!")
+                    raise RuntimeError("Command failed!")
                 if message["response"] is None:
                     return
                 else:
                     return base64.b64decode(message["response"])
+            else:
+                self._logger.debug("Got a redis response which wasn't ours")
 
 class RedisTapcpTransport(TapcpTransport):
     """
@@ -190,6 +199,7 @@ class RedisTapcpDaemon(object):
         cmd_type = command["type"]
         filename = command["file"]
         timeout = command["timeout"]
+        response = {"time": message["time"], "id": command["id"]}
         if host not in self.tftp_connections.keys():
             self.tftp_connections[host] = tftpy.TftpClient(host, 69)
         
@@ -198,10 +208,14 @@ class RedisTapcpDaemon(object):
             try:
                 buf = StringIO()
                 self.tftp_connections[host].download(filename, buf, timeout=timeout)
-                message["response"] = base64.b64encode(buf.getvalue())
-                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(message))
+                response["response"] = base64.b64encode(buf.getvalue())
+                response["status"] = SUCCESS
+                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
             except:
                 self._logger.error("Error on read!")
+                response["response"] = ""
+                response["status"] = FAIL
+                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
                 try:
                     self.tftp_connections[host].context.end()
                 except:
@@ -213,10 +227,14 @@ class RedisTapcpDaemon(object):
                 buf = StringIO(base64.b64decode(command["data"]))
                 self._logger.info("Writing %d bytes" % buf.len)
                 self.tftp_connections[host].upload(filename, buf, timeout=timeout)
-                message["response"] = None
-                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(message))
+                response["response"] = None
+                response["status"] = SUCCESS
+                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
             except:
                 self._logger.error("Error on write!")
+                response["response"] = None
+                response["status"] = FAIL
+                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
                 try:
                     self.tftp_connections[host].context.end()
                 except:
