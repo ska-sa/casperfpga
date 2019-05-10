@@ -8,6 +8,9 @@ import base64
 from numpy import random
 from StringIO import StringIO
 
+from Queue import Queue
+from threading import Thread
+
 from transport_tapcp import TapcpTransport
 
 __author__ = 'jackh'
@@ -26,8 +29,6 @@ class RedisTftp(object):
     # This prevents multiple instances of this class
     # from creating lots and lots (and lots) of redis connections
     """
-    redis_connections = {}
-    response_channels = {}
 
     def __init__(self, redishost, host):
         """
@@ -37,19 +38,9 @@ class RedisTftp(object):
         :return: none
         """
 
-        # If the redishost is one we've already connected to, use it again.
-        # Otherwise, add it.
-        # Also share response channels. This opens the door to all sorts of
-        # unintended consequences if you try to multithread access to
-        # multiple HeraCorrCM instances in the same program. But in most cases
-        # sharing means the code will just do The Right Thing, and won't leave
-        # a trail of a orphaned connections.
-        if redishost not in self.redis_connections.keys():
-            self.redis_connections[redishost] = redis.Redis(redishost, max_connections=100)
-            self.response_channels[redishost] = self.redis_connections[redishost].pubsub()
-            self.response_channels[redishost].subscribe(REDIS_RESPONSE_CHANNEL)
-        self.r = self.redis_connections[redishost]
-        self.resp_chan = self.response_channels[redishost]
+        self.r = redis.Redis(redishost, max_connections=100)
+        self.resp_chan = self.r.pubsub()
+        self.resp_chan.subscribe(REDIS_RESPONSE_CHANNEL)
         self._logger = LOGGER
         self.host = host
    
@@ -178,6 +169,9 @@ class RedisTapcpDaemon(object):
         self._logger = LOGGER
         self.timeout = 1
         self.tftp_connections = {}
+        # Queues to store transactions involving different FPGA boards
+        self.hostq = {} # separate queue for each new board
+        self.workers = {} # separate thread for each new board
     
     def run(self):
         while True:
@@ -201,42 +195,70 @@ class RedisTapcpDaemon(object):
         timeout = command["timeout"]
         response = {"time": message["time"], "id": command["id"]}
         if host not in self.tftp_connections.keys():
+            self._logger.debug("Initializing TFTP connection to %s" % host)
             self.tftp_connections[host] = tftpy.TftpClient(host, 69)
-        
-        if cmd_type == "read":
-            self._logger.info("Got read command")
+        if host not in self.hostq.keys():
+            self._logger.debug("Initializing queue for %s" % host)
+            self.hostq[host] = Queue()
+            self.workers[host] = Thread(target=self._process_queue, args=(self.hostq[host],))
+            self.workers[host].setDaemon(True)
+            self.workers[host].start()
+        self._logger.debug("Queuing task ID %d for host %s" % (command["id"], host))
+        self.hostq[host].put(message)
+            
+
+    def _process_queue(self, q):
+        while True:
+            message = q.get()
+            command = message["command"]
+            host = command["target"]
+            cmd_type = command["type"]
+            filename = command["file"]
+            timeout = command["timeout"]
+            response = {"time": message["time"], "id": command["id"]}
+            if cmd_type == "read":
+                self._logger.debug("Processing read command (ID %d)" % command["id"])
+                self.process_read_cmd(filename, timeout, response, host)
+            elif cmd_type == "write":
+                self._logger.debug("Processing write command (ID %d)" % command["id"])
+                data = command["data"]
+                self.process_write_cmd(filename, timeout, response, host, data)
+            self._logger.debug("Marking task %d done" % command["id"])
+            q.task_done()
+
+    def process_read_cmd(self, filename, timeout, response, host):
+        try:
+            buf = StringIO()
+            self.tftp_connections[host].download(filename, buf, timeout=timeout)
+            response["response"] = base64.b64encode(buf.getvalue())
+            response["status"] = SUCCESS
+            self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
+        except:
+            self._logger.error("Error on read!")
+            response["response"] = ""
+            response["status"] = FAIL
+            self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
             try:
-                buf = StringIO()
-                self.tftp_connections[host].download(filename, buf, timeout=timeout)
-                response["response"] = base64.b64encode(buf.getvalue())
-                response["status"] = SUCCESS
-                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
+                self.tftp_connections[host].context.end()
             except:
-                self._logger.error("Error on read!")
-                response["response"] = ""
-                response["status"] = FAIL
-                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
-                try:
-                    self.tftp_connections[host].context.end()
-                except:
-                    pass
-            return
-        if cmd_type == "write":
-            self._logger.info("Got write command")
+                pass
+        return
+
+    def process_write_cmd(self, filename, timeout, response, host, data):
+        try:
+            buf = StringIO(base64.b64decode(data))
+            self._logger.info("Writing %d bytes" % buf.len)
+            self.tftp_connections[host].upload(filename, buf, timeout=timeout)
+            response["response"] = None
+            response["status"] = SUCCESS
+            self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
+        except:
+            self._logger.error("Error on write!")
+            response["response"] = None
+            response["status"] = FAIL
+            self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
             try:
-                buf = StringIO(base64.b64decode(command["data"]))
-                self._logger.info("Writing %d bytes" % buf.len)
-                self.tftp_connections[host].upload(filename, buf, timeout=timeout)
-                response["response"] = None
-                response["status"] = SUCCESS
-                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
+                self.tftp_connections[host].context.end()
             except:
-                self._logger.error("Error on write!")
-                response["response"] = None
-                response["status"] = FAIL
-                self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
-                try:
-                    self.tftp_connections[host].context.end()
-                except:
-                    pass
-            return
+                pass
+        return
