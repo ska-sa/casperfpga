@@ -111,7 +111,7 @@ class TapcpTransport(Transport):
 
     def get_temp(self):
         buf = StringIO()
-        self.t.download('/temp', buf)
+        self.t.download('/temp', buf, timeout=self.timeout)
         return struct.unpack('>f', buf.getvalue())[0]
 
     def is_connected(self):
