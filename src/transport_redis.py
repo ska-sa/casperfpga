@@ -119,7 +119,7 @@ class RedisTftp(object):
         # This loop only gets activated if we get a response which
         # isn't for us.
         while(True):
-            message = self.resp_chan.get_message(timeout=1)
+            message = self.resp_chan.get_message(timeout=1+timeout)
             if message is not None and message["type"] != "message":
                 continue
             if message is None:
