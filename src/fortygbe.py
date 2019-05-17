@@ -296,15 +296,25 @@ class FortyGbe(Gbe):
         group join request.
         :param ip_str: A dotted decimal string representation of the base
         mcast IP address.
-        :param group_size: An integer for how many mcast addresses from
-        base to respond to.
+        :param group_size: An integer for how many additional mcast addresses 
+        (from base) to subscribe to. Must be (2^N-1), ie 0, 1, 3, 7, 15 etc.
         :param port: The UDP port on which you want to receive. Note 
         that only one port is possible per interface (ie it's global
         and will override any other port you may have configured).
         :return:
         """
         ip = IpAddress(ip_str)
-        mask = IpAddress('255.255.255.%i' % (256 - group_size))
+        if (group_size < 0):
+            raise RuntimeError("Can't subscribe to a negative number of addresses!")
+        elif (group_size==0):
+            mask = "255.255.255.255"
+        else:
+            import numpy
+            if ((numpy.log2(group_size+1)%1)!=0):
+                raise RuntimeError("You tried to subscribe to {}+{}. Must subscribe to a binary multiple of addresses.".format(ip_str,group_size))
+            if ((group_size+1)>256):
+                raise RuntimeError("You tried to subscribe to {}+{}. Can't subscribe to more than 256 addresses.".format(ip_str,group_size))
+            mask = IpAddress('255.255.255.%i' % (255 - group_size))
         self.parent.transport.multicast_receive(self.name, ip, mask)
         self.set_port(port)
 
