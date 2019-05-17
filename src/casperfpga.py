@@ -11,6 +11,7 @@ import snap
 import tengbe
 import fortygbe
 import qdr
+import hmc
 import katadc
 import skarabadc
 
@@ -34,6 +35,7 @@ CASPER_MEMORY_DEVICES = {
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
+    'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
 }
 
 CASPER_ADC_DEVICES = {
@@ -60,7 +62,6 @@ CASPER_OTHER_DEVICES = {
     'casper:spead_unpack':          'spead_unpack',
     'casper:vacc':                  'vacc',
     'casper:xeng':                  'xeng',
-    'xps:hmc':                      'hmc',
     'xps:xsg':                      'xps',
 }
 
@@ -125,6 +126,7 @@ class CasperFpga(object):
         self.other_devices = None
         self.sbrams = None
         self.qdrs = None
+        self.hmcs = None
         self.registers = None
         self.gbes = None
         self.snapshots = None
