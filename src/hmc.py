@@ -10,8 +10,8 @@ class Hmc(Memory):
     """
     General HMC memory on the FPGA.
     """
-    def __init__(self, parent, device_name, address, length_bytes, mezzanine_site, device_info=None):
-        super(Hmc, self).__init__(name=device_name,address=address, length_bytes=length_bytes)
+    def __init__(self, parent, device_name, address, length_bytes, mezzanine_site, device_info=None, legacy_reg_map=True):
+        super(Hmc, self).__init__(name=device_name, width_bits=32, address=address, length_bytes=length_bytes)
         self.parent = parent
         self.device_info = device_info
         self.device_name = device_name
@@ -80,7 +80,7 @@ class Hmc(Memory):
         LOGGER.debug('New Hmc %s' % self.__str__())
 
     @classmethod
-    def from_device_info(cls, parent, device_name, device_info, memorymap_dict, **kwargs):
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict, legacy_reg_map=True):
         """
         Process device info and the memory map to get all necessary info
         and return a Hmc instance.
@@ -103,7 +103,8 @@ class Hmc(Memory):
 
         if address == -1 or length_bytes == -1:
             raise RuntimeError('Could not find address or length for ''Hmc %s' % device_name)
-        return cls(parent, device_name, address, length_bytes, mezzanine_site, device_info,  **kwargs)
+        return cls(parent, device_name, address, length_bytes, mezzanine_site, device_info,
+                   legacy_reg_map=legacy_reg_map)
 
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.name)
@@ -261,7 +262,8 @@ class Hmc(Memory):
         mezz_site = self.mezz_site + 1
         # Reads back the Revisions and Vendor ID (Register Address: 0x2C0004) - Refer to page 4 of the Micron HMC
         # Register Addendum data sheet for field mapping
-        hmc_revision = SkarabTransport.read_hmc_i2c(interface = mezz_site, slave_address = 0x10, read_address = 0x2C0004)
+        hmc_revision = SkarabTransport.read_hmc_i2c(SkarabTransport.read_hmc_i2c(), interface = mezz_site,
+                                                    slave_address = 0x10, read_address = 0x2C0004)
 
         return hmc_revision
 
