@@ -346,7 +346,6 @@ HMC_MEZZANINE_SITES = [1, 2, 3]
 HMC_CARD_I2C_PORT_MAP = {0: 0x1,
                          1: 0x2,
                          2: 0x3}
-
 # flash pages
 MEZZANINE_SIGNATURES_PAGE = 0
 TUNABLE_PARAMETERS_PAGE = 15
