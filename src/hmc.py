@@ -1,8 +1,6 @@
 import logging
 
-
 from memory import Memory
-from transport_skarab import SkarabTransport
 
 LOGGER = logging.getLogger(__name__)
 
@@ -74,9 +72,9 @@ class Hmc(Memory):
                         'HMC_CRC_ERR_CNT_LINK3': 0xD4,
                         'HMC_STATUS': 0xD8}
         # dictionary holding all HMC status information
-        # comprised of status name and key; key = index of HMC status register in rolled
-        # up HMC status response from SKARAB
         self.hmc_status_list = {}
+        #dictionary holding all HMC revision information
+        self.hmc_revision_list = {}
         LOGGER.debug('New Hmc %s' % self.__str__())
 
     @classmethod
@@ -136,55 +134,67 @@ class Hmc(Memory):
 
         # HMC Status Registers (LINK2)
         self.hmc_status_list['hmc_stat_gen_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_STAT_GEN_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_STAT_GEN_HIGH_LINK2'] << 32))
+                                                     self.reg_map['HMC_STAT_GEN_LOW_LINK2']) + \
+                                                     (self._wbone_rd(self.address +
+                                                     self.reg_map['HMC_STAT_GEN_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_stat_init_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_STAT_INIT_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_STAT_INIT_HIGH_LINK2'] << 32))
+                                                     self.reg_map['HMC_STAT_INIT_LOW_LINK2']) + \
+                                                     (self._wbone_rd(self.address +
+                                                     self.reg_map['HMC_STAT_INIT_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_ctrl_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_CTRL_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_CTRL_HIGH_LINK2'] << 32))
+                                                 self.reg_map['HMC_CTRL_LOW_LINK2']) + \
+                                                 (self._wbone_rd(self.address +
+                                                 self.reg_map['HMC_CTRL_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_sent_p_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_SENT_P_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_SENT_P_HIGH_LINK2'] << 32))
+                                                   self.reg_map['HMC_SENT_P_LOW_LINK2']) + \
+                                                   (self._wbone_rd(self.address +
+                                                   self.reg_map['HMC_SENT_P_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_sent_np_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_SENT_NP_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_SENT_NP_HIGH_LINK2'] << 32))
+                                                    self.reg_map['HMC_SENT_NP_LOW_LINK2']) + \
+                                                    (self._wbone_rd(self.address +
+                                                    self.reg_map['HMC_SENT_NP_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_sent_r_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_SENT_R_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_SENT_R_HIGH_LINK2'] << 32))
+                                                   self.reg_map['HMC_SENT_R_LOW_LINK2']) + \
+                                                   (self._wbone_rd(self.address +
+                                                   self.reg_map['HMC_SENT_R_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_poisoned_packet_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_POISONED_PACKET_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_POISONED_PACKET_HIGH_LINK2'] << 32))
+                                                            self.reg_map['HMC_POISONED_PACKET_LOW_LINK2']) + \
+                                                            (self._wbone_rd(self.address +
+                                                            self.reg_map['HMC_POISONED_PACKET_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_rcvd_resp_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_RCVD_RESP_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_RCVD_RESP_HIGH_LINK2'] << 32))
+                                                      self.reg_map['HMC_RCVD_RESP_LOW_LINK2']) + \
+                                                      (self._wbone_rd(self.address +
+                                                      self.reg_map['HMC_RCVD_RESP_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_tx_link_retries_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_TX_LINK_RETRIES_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_TX_LINK_RETRIES_HIGH_LINK2'] << 32))
+                                                            self.reg_map['HMC_TX_LINK_RETRIES_LOW_LINK2']) + \
+                                                            (self._wbone_rd(self.address +
+                                                            self.reg_map['HMC_TX_LINK_RETRIES_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_err_on_rx_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_ERR_ON_RX_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_ERR_ON_RX_HIGH_LINK2'] << 32))
+                                                      self.reg_map['HMC_ERR_ON_RX_LOW_LINK2']) + \
+                                                      (self._wbone_rd(self.address +
+                                                      self.reg_map['HMC_ERR_ON_RX_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_run_lngth_bitflip_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_RUN_LNGTH_BITFLIP_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_RUN_LNGTH_BITFLIP_HIGH_LINK2'] << 32))
+                                                              self.reg_map['HMC_RUN_LNGTH_BITFLIP_LOW_LINK2']) + \
+                                                              (self._wbone_rd(self.address +
+                                                              self.reg_map['HMC_RUN_LNGTH_BITFLIP_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_err_abort_not_clr_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_ERR_ABORT_NOT_CLEAR_LOW_LINK2'] +
-                                                     (self.reg_map['HMC_ERR_ABORT_NOT_CLEAR_HIGH_LINK2'] << 32))
+                                                              self.reg_map['HMC_ERR_ABORT_NOT_CLEAR_LOW_LINK2']) + \
+                                                              (self._wbone_rd(self.address +
+                                                              self.reg_map['HMC_ERR_ABORT_NOT_CLEAR_HIGH_LINK2']) << 32)
 
         self.hmc_status_list['hmc_err_rsp_packet_link2'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_ERR_RSP_PACKET_LINK2'])
+                                                           self.reg_map['HMC_ERR_RSP_PACKET_LINK2'])
 
         self.hmc_status_list['hmc_errstat_link2'] = self._wbone_rd(self.address + self.reg_map['HMC_ERRSTAT_LINK2'])
 
@@ -193,52 +203,64 @@ class Hmc(Memory):
 
         # HMC Status Registers (LINK3)
         self.hmc_status_list['hmc_stat_gen_link3'] = self._wbone_rd(self.address +
-                                                     self.reg_map['HMC_STAT_GEN_LOW_LINK3'] +
-                                                     (self.reg_map['HMC_STAT_GEN_HIGH_LINK3'] << 32))
+                                                     self.reg_map['HMC_STAT_GEN_LOW_LINK3']) + \
+                                                     (self._wbone_rd(self.address +
+                                                     self.reg_map['HMC_STAT_GEN_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_stat_init_link3'] = self._wbone_rd(self.address +
-                                                      self.reg_map['HMC_STAT_INIT_LOW_LINK3'] +
-                                                      (self.reg_map['HMC_STAT_INIT_HIGH_LINK3'] << 32))
+                                                      self.reg_map['HMC_STAT_INIT_LOW_LINK3']) + \
+                                                      (self._wbone_rd(self.address +
+                                                      self.reg_map['HMC_STAT_INIT_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_ctrl_link3'] = self._wbone_rd(self.address +
-                                                 self.reg_map['HMC_CTRL_LOW_LINK3'] +
-                                                 (self.reg_map['HMC_CTRL_HIGH_LINK3'] << 32))
+                                                 self.reg_map['HMC_CTRL_LOW_LINK3']) + \
+                                                 (self._wbone_rd(self.address +
+                                                 self.reg_map['HMC_CTRL_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_sent_p_link3'] = self._wbone_rd(self.address +
-                                                   self.reg_map['HMC_SENT_P_LOW_LINK3'] +
-                                                   (self.reg_map['HMC_SENT_P_HIGH_LINK3'] << 32))
+                                                   self.reg_map['HMC_SENT_P_LOW_LINK3']) + \
+                                                   (self._wbone_rd(self.address +
+                                                   self.reg_map['HMC_SENT_P_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_sent_np_link3'] = self._wbone_rd(self.address +
-                                                    self.reg_map['HMC_SENT_NP_LOW_LINK3'] +
-                                                    (self.reg_map['HMC_SENT_NP_HIGH_LINK3'] << 32))
+                                                    self.reg_map['HMC_SENT_NP_LOW_LINK3']) + \
+                                                    (self._wbone_rd(self.address +
+                                                    self.reg_map['HMC_SENT_NP_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_sent_r_link3'] = self._wbone_rd(self.address +
-                                                   self.reg_map['HMC_SENT_R_LOW_LINK3'] +
-                                                   (self.reg_map['HMC_SENT_R_HIGH_LINK3'] << 32))
+                                                   self.reg_map['HMC_SENT_R_LOW_LINK3']) + \
+                                                   (self._wbone_rd(self.address +
+                                                   self.reg_map['HMC_SENT_R_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_poisoned_packet_link3'] = self._wbone_rd(self.address +
-                                                            self.reg_map['HMC_POISONED_PACKET_LOW_LINK3'] +
-                                                            (self.reg_map['HMC_POISONED_PACKET_HIGH_LINK3'] << 32))
+                                                            self.reg_map['HMC_POISONED_PACKET_LOW_LINK3']) + \
+                                                            (self._wbone_rd(self.address +
+                                                            self.reg_map['HMC_POISONED_PACKET_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_rcvd_resp_link3'] = self._wbone_rd(self.address +
-                                                      self.reg_map['HMC_RCVD_RESP_LOW_LINK3'] +
-                                                      (self.reg_map['HMC_RCVD_RESP_HIGH_LINK3'] << 32))
+                                                      self.reg_map['HMC_RCVD_RESP_LOW_LINK3']) + \
+                                                      (self._wbone_rd(self.address +
+                                                      self.reg_map['HMC_RCVD_RESP_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_tx_link_retries_link3'] = self._wbone_rd(self.address +
-                                                            self.reg_map['HMC_TX_LINK_RETRIES_LOW_LINK3'] +
-                                                            (self.reg_map['HMC_TX_LINK_RETRIES_HIGH_LINK3'] << 32))
+                                                            self.reg_map['HMC_TX_LINK_RETRIES_LOW_LINK3']) + \
+                                                            (self._wbone_rd(self.address +
+                                                            self.reg_map['HMC_TX_LINK_RETRIES_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_err_on_rx_link3'] = self._wbone_rd(self.address +
-                                                      self.reg_map['HMC_ERR_ON_RX_LOW_LINK3'] +
-                                                      (self.reg_map['HMC_ERR_ON_RX_HIGH_LINK3'] << 32))
+                                                      self.reg_map['HMC_ERR_ON_RX_LOW_LINK3']) + \
+                                                      (self._wbone_rd(self.address +
+                                                      self.reg_map['HMC_ERR_ON_RX_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_run_lngth_bitflip_link3'] = self._wbone_rd(self.address +
-                                                              self.reg_map['HMC_RUN_LNGTH_BITFLIP_LOW_LINK3'] +
-                                                              (self.reg_map['HMC_RUN_LNGTH_BITFLIP_HIGH_LINK3'] << 32))
+                                                              self.reg_map['HMC_RUN_LNGTH_BITFLIP_LOW_LINK3']) + \
+                                                              (self._wbone_rd(self.address +
+                                                              self.reg_map['HMC_RUN_LNGTH_BITFLIP_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_err_abort_not_clr_link3'] = self._wbone_rd(self.address +
-                                                              self.reg_map['HMC_ERR_ABORT_NOT_CLEAR_LOW_LINK3'] +
-                                                              (self.reg_map['HMC_ERR_ABORT_NOT_CLEAR_HIGH_LINK3'] << 32))
+                                                              self.reg_map['HMC_ERR_ABORT_NOT_CLEAR_LOW_LINK3']) + \
+                                                              (self._wbone_rd(self.address +
+                                                              self.reg_map['HMC_ERR_ABORT_NOT_CLEAR_HIGH_LINK3']) << 32)
 
         self.hmc_status_list['hmc_err_rsp_packet_link3'] = self._wbone_rd(self.address +
                                                            self.reg_map['HMC_ERR_RSP_PACKET_LINK3'])
@@ -256,16 +278,20 @@ class Hmc(Memory):
         """
         Read HMC revision.
         :param
-        :return: revision - this is a 25 bit field, which contains the vendor ID, Product revision, Protocol revision
-        and PHY revision of the HMC device
+        :return: self.hmc_revision_list - this is a dictionary containing HMC Vendor ID, HMC Product Revision,
+                                          HMC Protocol Revision and HMC Phy Revision
         """
         mezz_site = self.mezz_site + 1
         # Reads back the Revisions and Vendor ID (Register Address: 0x2C0004) - Refer to page 4 of the Micron HMC
         # Register Addendum data sheet for field mapping
-        hmc_revision = SkarabTransport.read_hmc_i2c(SkarabTransport.read_hmc_i2c(), interface = mezz_site,
-                                                    slave_address = 0x10, read_address = 0x2C0004)
+        hmc_revision = self.parent.transport.read_hmc_i2c(interface = mezz_site,
+                                                          slave_address = 0x10, read_address = 0x2C0004)
+        self.hmc_revision_list['hmc_vendor_id'] = hex(hmc_revision & 0x000000FF)
+        self.hmc_revision_list['hmc_product_rev'] = hex((hmc_revision & 0x0000FF00) >> 8)
+        self.hmc_revision_list['hmc_protocol_rev'] = hex((hmc_revision & 0x00FF0000) >> 16)
+        self.hmc_revision_list['hmc_phy_rev'] = hex((hmc_revision & 0xFF000000) >> 24)
 
-        return hmc_revision
+        return self.hmc_revision_list
 
 
 
