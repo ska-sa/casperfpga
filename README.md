@@ -4,12 +4,12 @@
 
 This README will outline, and make reference to, the following:
 1. Notes to Users
-   1. [New Users](#new-users)
-   2. [Existing Users](#existing-users)
+    1. [New Users](#new-users)
+    2. [Existing Users](#existing-users)
 2. [Installation](#installation)
 3. [Usage](#usage)
-   1. [Getting Started](https://casper.berkeley.edu/wiki/Tutorials)
-   2. [Methods and Utilities](https://github.com/ska-sa/casperfpga/wiki/API-Documentation)
+    1. [Getting Started](https://casper.berkeley.edu/wiki/Tutorials)
+    2. [Methods and Utilities](https://github.com/ska-sa/casperfpga/wiki/API-Documentation)
 4. [Contributing](#contributing)
 
 
@@ -50,7 +50,8 @@ There are a number of prerequisites required for the casperfpga package.
 
 ```shell
 $ sudo apt-get install python-pip
-$ sudo pip install ply tornado futures futures unittest2 mock ProxyTypes numpy
+$ sudo pip install -r requirements.txt
+$ sudo python setup.py install
 $ # mock might give some warnings, they are not critical and can be ignored.
 ```
 

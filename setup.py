@@ -1,53 +1,76 @@
 import setuptools
-from distutils.core import setup, Extension
+from distutils.core import Extension
 import glob
 import sysconfig
+import os
 
-with open("README.md", "r") as readme:
-    # long_description = readme.read().split('\n')[2]
-    long_description = readme.read()
+NAME = 'casperfpga'
+DESCRIPTION = 'Talk to CASPER hardware devices using katcp or dcp. See https://github.com/casper-astro/casperfpga for more.'
+URL = 'https://github.com/casper-astro/casperfpga'
+EMAIL = 'apatel@ska.ac.za'
+AUTHOR = 'Paul Prozesky'
+VERSION = '0.0.16' # Need to adopt the __version__.py format
+
+
+here = os.path.abspath(os.path.dirname(__file__))
+
+
+try:
+    with open(os.path.join(here, 'README.md')) as readme:
+        # long_description = readme.read().split('\n')[2]
+        long_description = '\n{}'.format(readme.read())
+except Exception as exc:
+    # Probably didn't find the file?
+    long_description = DESCRIPTION
+
 
 # extra_compile_args = sysconfig.get_config_var('CFLAGS').split()
 extra_compile_args = ['-O2', '-Wall']
-progska_extension = Extension(
+#progska_extension = Extension(
+progska_extension = setuptools.Extension(
     'casperfpga.progska',
-    ['progska/_progska.c', 'progska/progska.c', 'progska/th.c',
-     'progska/netc.c'],
+    # sources=['progska/_progska.c', 'progska/progska.c', 'progska/th.c',
+    #         'progska/netc.c', 'progska/netc.h'],
+    sources=['progska/_progska.c', 'progska/progska.c', 'progska/th.c',
+            'progska/netc.c'],
     include_dirs=['progska'],
+    language='c',
     # extra_compile_args=extra_compile_args,
     # extra_link_args=['-static'],
 )
 
+
 setuptools.setup(
-    name='casperfpga',
-    version="0.1.9",
-    description='Talk to CASPER hardware devices using katcp or dcp.',
-    author='P. Prozesky',
-    author_email='paulp@ska.ac.za',
-    url="https://github.com/ska-sa/casperfpga",
-    download_url="https://test.pypi.org/projects/casperfpga",
-    license='LICENSE.txt',
-    long_description=long_description,
+    name=NAME,
+    version=VERSION,
+    description=DESCRIPTION,
+    author=AUTHOR,
+    author_email=EMAIL,
+    url=URL,
+    download_url='https://pypi.org/project/casperfpga',
+    license='GNU GPLv2',
+    # long_description=long_description,
+    # long_description_content_type='text/markdown',
     install_requires=[
         'katcp',
         'numpy',
         'odict',
     ],
-    packages=['casperfpga', 'casperfpga.progska'],  # , 'casperfpga.test'],
+    packages=['casperfpga', 'casperfpga.progska'],
     package_dir={'casperfpga': 'src', 'casperfpga.progska': 'progska'},
-    # packages = setuptools.find_packages(),
-    #packages=['casperfpga'],
-    #package_dir={'casperfpga':'src'},
     scripts=glob.glob('scripts/*'),
     setup_requires=['katversion'],
     use_katversion=False,
     ext_modules=[progska_extension],
-    keywords="CASPER SKA MeerKAT FPGA",
+    # Required for PyPI
+    dependency_links=['https://github.com/casper-astro/tftpy#egg=tftpy-0.6.3_fork-py2.7.egg'],
+    keywords='casper ska meerkat fpga',
     classifiers=[
-        "Programming Language :: Python :: 2.7",
-        "Operating System :: OS Independent",
-	"Topic :: Software Development :: Libraries :: Python Modules",
-        "Topic :: Scientific/Engineering :: Astronomy",
+        "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
+        'Programming Language :: Python :: 2.7',
+        'Operating System :: OS Independent',
+	    'Topic :: Software Development :: Libraries :: Python Modules',
+        'Topic :: Scientific/Engineering :: Astronomy',
     ]
 )
 
