@@ -138,6 +138,31 @@ def parse_fpg(filename):
     fptr.close()
     return create_meta_dictionary(metalist), memorydict
 
+def get_git_info_from_fpg(fpg_file):
+    """
+    Method to get git info from an fpg-file's header
+    :param fpg_file: filename as string
+    :return: Dictionary of git_info
+             - key = git-repo
+             - value = git-version
+    """
+    git_tag = '77777_git'
+    git_info_dict = None
+
+    # This returns a tuple of dictionaries,
+    # - device info dict, memory map info (coreinfo.tab) dict
+    # - Git info is meta-data, and should only ever be in the
+    #   first dictionary of the tuple
+    fpg_header = parse_fpg(fpg_file)
+    fpg_metadata = fpg_header[0]
+
+    git_info_dict = fpg_metadata.get(git_tag, None)
+    try:
+        git_info_dict.pop('tag')
+        return git_info_dict
+    except KeyError:
+        # tag: rcs entry isn't there, no worries
+        return git_info_dict
 
 def pull_info_from_fpg(fpg_file, parameter):
     """

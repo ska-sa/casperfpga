@@ -2,6 +2,8 @@ import logging
 import struct
 import time
 import socket
+from time import strptime
+import string
 
 import register
 import sbram
@@ -9,8 +11,12 @@ import snap
 import tengbe
 import fortygbe
 import qdr
+import hmc
+import katadc
+import skarabadc
+
 from attribute_container import AttributeContainer
-from utils import parse_fpg, get_hostname, get_kwarg
+from utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
 from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
@@ -29,10 +35,16 @@ CASPER_MEMORY_DEVICES = {
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
+    'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
 }
 
+CASPER_ADC_DEVICES = {
+    'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
+    'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+}
 
-# other devices - blocks that aren't memory devices, but about which we'd
+# other devices - blocks that aren't memory devices nor ADCs, but about which we'd
 # like to know tagged in the simulink diagram
 CASPER_OTHER_DEVICES = {
     'casper:bitsnap':               'bitsnap',
@@ -51,9 +63,7 @@ CASPER_OTHER_DEVICES = {
     'casper:vacc':                  'vacc',
     'casper:xeng':                  'xeng',
     'xps:xsg':                      'xps',
-    'xps:katadc':                   'katadc',
 }
-
 
 class UnknownTransportError(Exception):
     pass
@@ -63,6 +73,7 @@ class CasperFpga(object):
     """
     A FPGA host board that has a CASPER design running on it. Or will soon have.
     """
+
     def __init__(self, *args, **kwargs):
         """
         :param args[0] - host: the hostname of this CasperFpga
@@ -83,7 +94,6 @@ class CasperFpga(object):
             self.logger = kwargs['logger']
         except KeyError:
             # Damn
-            # self.logger = logging.getLogger(self.host)
             result, self.logger = self.getLogger(name=self.host)
             if not result:
                 # Problem
@@ -101,14 +111,6 @@ class CasperFpga(object):
         # Setup logger to be propagated through transports
         self.logger.setLevel(logging.NOTSET)
 
-        # define a custom log level between DEBUG and INFO
-        # PDEBUG = 15
-        # logging.addLevelName(PDEBUG, "PDEBUG")
-        #
-        # self.logger.pdebug = pdebug
-
-        kwargs['logger'] = self.logger
-
         # was the transport specified?
         transport = get_kwarg('transport', kwargs)
         if transport:
@@ -120,9 +122,11 @@ class CasperFpga(object):
         # this is just for code introspection
         self.devices = None
         self.memory_devices = None
+        self.adc_devices = None
         self.other_devices = None
         self.sbrams = None
         self.qdrs = None
+        self.hmcs = None
         self.registers = None
         self.gbes = None
         self.snapshots = None
@@ -136,10 +140,7 @@ class CasperFpga(object):
         # Set log level to ERROR
         self.logger.setLevel(logging.ERROR)
 
-        # Just to test
-        self.configure_console_logging = configure_console_logging
-        self.configure_file_logging = configure_file_logging
-
+        
     def choose_transport(self, host_ip):
         """
         Test whether a given host is a katcp client or a skarab
@@ -160,8 +161,9 @@ class CasperFpga(object):
                 self.logger.debug('%s seems to be ROACH' % host_ip)
                 return KatcpTransport
             else:
-                raise UnknownTransportError('Possible that host '
-                                            'does not follow one of the defined casperfpga transport protocols')
+                errmsg = 'Possible that host does not follow one of the \
+                            defined casperfpga transport protocols'
+                raise UnknownTransportError(errmsg)
         except socket.gaierror:
             raise RuntimeError('Address/host %s makes no sense to '
                                'the OS?' % host_ip)
@@ -253,15 +255,22 @@ class CasperFpga(object):
         """
         return self.transport.set_igmp_version(version)
 
-    def upload_to_ram_and_program(self, filename=None, wait_complete=True, legacy_reg_map=True, chunk_size=1988):
+    def upload_to_ram_and_program(self, filename=None, wait_complete=True,
+                                  legacy_reg_map=True, chunk_size=1988,
+                                  initialise_objects=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
-        :param filename: the file to upload
-        :param wait_complete: do not wait for this operation, just return
-        :param legacy_reg_map: older fpg files have a different register mapping, set this flag to true for these
-        :param chunk_size: the SKARAB supports 1988, 3976 and 7952 byte programming packets, but old bitfiles only support 1988 (the default)
-        after upload
-        :return: True or False
+        :param filename: The file to upload
+        :param wait_complete: Do not wait for this operation, just return
+        :param legacy_reg_map: Older fpg files have a different register mapping,
+                                set this flag to true for these
+        :param chunk_size: The SKARAB supports 1988, 3976 and 7952 byte programming packets,
+                           but old bitfiles only support 1988 (the default)
+                           after upload
+        :param initialise_objects: Flag included in the event some child objects can be initialised
+                                   upon creation/startup of the SKARAB with the new firmware
+                                   - e.g. The SKARAB ADC
+        :return: Boolean - True/False - Success/Fail
         """
         if filename is not None:
             self.bitstream = filename
@@ -273,7 +282,9 @@ class CasperFpga(object):
             return True
         if self.bitstream:
             if self.bitstream[-3:] == 'fpg':
-                self.get_system_information(filename, legacy_reg_map=legacy_reg_map)
+                self.get_system_information(filename, legacy_reg_map=legacy_reg_map,
+                                            initialise_objects=initialise_objects)
+
         return rv
 
     def is_connected(self, **kwargs):
@@ -300,10 +311,14 @@ class CasperFpga(object):
         #   other_devices: anything not on the bus
         self.devices = {}
         self.memory_devices = {}
+        self.adc_devices = {}
         self.other_devices = {}
 
         # containers
         for container_ in CASPER_MEMORY_DEVICES.values():
+            setattr(self, container_['container'], AttributeContainer())
+
+        for container_ in CASPER_ADC_DEVICES.values():
             setattr(self, container_['container'], AttributeContainer())
 
         # hold misc information about the bof file, program time, etc
@@ -345,7 +360,7 @@ class CasperFpga(object):
         n_reads = 0
         last_dram_page = -1
 
-        dram_indirect_page_size = (64*1024*1024)
+        dram_indirect_page_size = (64 * 1024 * 1024)
         # read_chunk_size = (1024*1024)
         self.logger.debug('Reading a total of %8i bytes from offset %8i...' %
                          (size, offset))
@@ -384,20 +399,20 @@ class CasperFpga(object):
         n_writes = 0
         last_dram_page = -1
 
-        dram_indirect_page_size = (64*1024*1024)
-        write_chunk_size = (1024*512)
+        dram_indirect_page_size = (64 * 1024 * 1024)
+        write_chunk_size = (1024 * 512)
         self.logger.debug('Writing a total of %8i bytes from offset %8i...' %
                          (size, offset))
 
         while n_writes < size:
-            dram_page = (offset+n_writes)/dram_indirect_page_size
-            local_offset = (offset+n_writes) % dram_indirect_page_size
+            dram_page = (offset + n_writes) / dram_indirect_page_size
+            local_offset = (offset + n_writes) % dram_indirect_page_size
             local_writes = min(write_chunk_size, size - n_writes,
                                dram_indirect_page_size -
                                (offset % dram_indirect_page_size))
             self.logger.debug('Writing %8i bytes from indirect address %4i '
                               'at local offset %8i...' % (
-                               local_writes, dram_page, local_offset))
+                                  local_writes, dram_page, local_offset))
             if last_dram_page != dram_page:
                 self.write_int('dram_controller', dram_page)
                 last_dram_page = dram_page
@@ -423,8 +438,8 @@ class CasperFpga(object):
             unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
             err_str = 'Verification of write to %s at offset %d failed. ' \
                       'Wrote 0x%08x... but got back 0x%08x.' % (
-                        device_name, offset,
-                        unpacked_wrdata, unpacked_rddata)
+                          device_name, offset,
+                          unpacked_wrdata, unpacked_rddata)
             self.logger.error(err_str)
             raise ValueError(err_str)
 
@@ -437,7 +452,7 @@ class CasperFpga(object):
         :param word_offset: the 32-bit word offset at which to read
         :return: signed 32-bit integer
         """
-        data = self.read(device_name, 4, word_offset*4)
+        data = self.read(device_name, 4, word_offset * 4)
         return struct.unpack('>i', data)[0]
 
     def read_uint(self, device_name, word_offset=0):
@@ -447,7 +462,7 @@ class CasperFpga(object):
         :param word_offset: the 32-bit word offset at which to read
         :return: unsigned 32-bit integer
         """
-        data = self.read(device_name, 4, word_offset*4)
+        data = self.read(device_name, 4, word_offset * 4)
         return struct.unpack('>I', data)[0]
 
     def write_int(self, device_name, integer, blindwrite=False, word_offset=0):
@@ -471,14 +486,14 @@ class CasperFpga(object):
             raise ValueError('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
         if blindwrite:
-            self.blindwrite(device_name, data, word_offset*4)
+            self.blindwrite(device_name, data, word_offset * 4)
         else:
-            self.write(device_name, data, word_offset*4)
+            self.write(device_name, data, word_offset * 4)
         self.logger.debug('Write_int %8x to register %s at word offset %d '
                           'okay%s.' % (integer, device_name, word_offset,
                           ' (blind)' if blindwrite else ''))
 
-    def _create_memory_devices(self, device_dict, memorymap_dict, legacy_reg_map=True):
+    def _create_memory_devices(self, device_dict, memorymap_dict, legacy_reg_map=True, **kwargs):
         """
         Create memory devices from dictionaries of design information.
         :param device_dict: raw dictionary of information from tagged
@@ -525,7 +540,56 @@ class CasperFpga(object):
             except AttributeError:  # the device may not have an update function
                 pass
 
-    def _create_other_devices(self, device_dict):
+    def _create_casper_adc_devices(self, device_dict, initialise=False, **kwargs):
+        """
+        New method to instantiate CASPER ADC objects and attach them to the
+        parent CasperFpga object
+        :param device_dict: raw dictionary of information from tagged
+        blocks in Simulink design, keyed on device name
+        :param initialise: Flag included in the event some child objects can be initialised
+                           upon creation/startup of the SKARAB with the new firmware
+                           - e.g. The SKARAB ADC's PLL SYNC
+        :return: None
+        """
+        for device_name, device_info in device_dict.items():
+            
+            if device_name == '':
+                raise NameError('There\'s a problem somewhere, got a blank '
+                                'device name?')
+            if device_name in self.adc_devices.keys():
+                raise NameError('ADC device %s already exists' % device_name)
+            # get the class from the known devices, if it exists there
+            tag = device_info['tag']
+            try:
+                known_device_class = CASPER_ADC_DEVICES[tag]['class']
+                known_device_container = CASPER_ADC_DEVICES[tag]['container']
+            except KeyError:
+                pass
+            else:
+                if not callable(known_device_class):
+                    errmsg = '{} is not a callable ADC Class'.format(known_device_class)
+                    raise TypeError(errmsg)
+
+                new_device = known_device_class.from_device_info(self,
+                                device_name, device_info, initialise=initialise)
+                
+                if new_device.name in self.adc_devices.keys():
+                    errmsg = 'Device {} of type {} already exists in \
+                             the devices list'.format(new_device.name, type(new_device))
+
+                    raise NameError(errmsg)
+                
+                self.devices[device_name] = new_device
+                self.adc_devices[device_name] = new_device
+
+                container = getattr(self, known_device_container)
+                setattr(container, device_name, new_device)
+                
+                assert id(getattr(container, device_name)) == id(new_device)
+                assert id(new_device) == id(self.adc_devices[device_name])
+        
+
+    def _create_other_devices(self, device_dict, **kwargs):
         """
         Store non-memory device information in a dictionary
         :param device_dict: raw dictionary of information from tagged
@@ -558,14 +622,18 @@ class CasperFpga(object):
         """
         return getattr(self, container)
 
-    def get_system_information(self, filename=None, fpg_info=None, **kwargs):
+    def get_system_information(self, filename=None, fpg_info=None,
+                               legacy_reg_map=True, initialise_objects=False, **kwargs):
         """
         Get information about the design running on the FPGA.
         If filename is given, get it from file, otherwise query the
             host via KATCP.
         :param filename: fpg filename
         :param fpg_info: a tuple containing device_info and coreinfo
-            dictionaries
+                         dictionaries
+        :param initialise_objects: Flag included in the event some child objects can be initialised
+                                   upon creation/startup of the SKARAB with the new firmware
+                                   - e.g. The SKARAB ADC's PLL SYNC
         :return: <nothing> the information is populated in the class
         """
         t_filename, t_fpg_info = \
@@ -585,12 +653,7 @@ class CasperFpga(object):
         # reset current devices and create new ones from the new
         # design information
         self._reset_device_info()
-        try:
-            legacy_reg_map = kwargs['legacy_reg_map']
-        except KeyError:
-            legacy_reg_map = True
-        self._create_memory_devices(device_dict, memorymap_dict, legacy_reg_map=legacy_reg_map)
-        self._create_other_devices(device_dict)
+
         # populate some system information
         try:
             self.system_info.update(device_dict['77777'])
@@ -603,8 +666,30 @@ class CasperFpga(object):
                 if 'git' not in self.rcs_info:
                     self.rcs_info['git'] = {}
                 self.rcs_info['git'][name] = device_dict[device_name]
+
         if '77777_svn' in device_dict:
             self.rcs_info['svn'] = device_dict['77777_svn']
+
+        # Determine if the new or old register map is used
+        new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
+        old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
+
+        if(new_reg_map_mac_word1_hex == 0x650):
+            self.logger.debug('Using new 40GbE core register map')
+            legacy_reg_map = False
+        elif(old_reg_map_mac_word1_hex == 0x650):
+            self.logger.debug('Using old 40GbE core register map')
+            legacy_reg_map = True
+        else:
+            self.logger.error('Unknown 40GbE core register map')
+            raise ValueError('Unknown register map')
+
+        # Create Register Map
+        self._create_memory_devices(device_dict, memorymap_dict,
+                                    legacy_reg_map=legacy_reg_map,
+                                    initialise=initialise_objects)
+        self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
+        self._create_other_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
         self.transport.post_get_system_information()
 
@@ -692,4 +777,3 @@ class CasperFpga(object):
         return self.host
 
 # end
-

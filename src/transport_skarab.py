@@ -77,6 +77,14 @@ class SkarabSpeadError(ValueError):
 class SkarabInvalidHostname(RuntimeError):
     pass
 
+class InvalidDeviceType(ValueError):
+    pass
+
+class SkarabFanControllerClearError(ValueError):
+    pass
+
+class NonVolatileLogRetrievalError(ValueError):
+    pass
 
 # endregion
 
@@ -104,18 +112,17 @@ class SkarabTransport(Transport):
         Transport.__init__(self, **kwargs)
 
         try:
-            self.logger = kwargs['logger']
-        except KeyError:
-            self.logger = logging.getLogger(__name__)
-
-        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
-        self.logger.info(new_connection_msg)
-        try:
+            # Entry point is always via casperfpga.CasperFpga
             self.parent = kwargs['parent_fpga']
+            self.logger = self.parent.logger
         except KeyError:
             errmsg = 'parent_fpga argument not supplied when creating skarab'
-            self.logger.error(errmsg)
+            # Pointless trying to log to a logger
             raise RuntimeError(errmsg)
+        
+        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+        self.logger.debug(new_connection_msg)
+        
         try:
             self.timeout = kwargs['timeout']
         except KeyError:
@@ -666,13 +673,13 @@ class SkarabTransport(Transport):
         :param skip_verification - do not verify the image after upload
         :return: Boolean - True/False - Succes/Fail
         """
-        print('skarab_transport')
+        #print('skarab_transport')
         print(chunk_size)
         try:
             upload_time = self.upload_to_ram(filename, not skip_verification, chunk_size)
-            print("completed fine")
+            #print("completed fine")
         except:
-            print("failed to program")
+            #print("failed to program")
             self.logger.error('Failed to program.')
             raise
         if not wait_complete:
@@ -835,7 +842,6 @@ class SkarabTransport(Transport):
                                'buffer.'.format(hostname))
                 # wait to receive incoming responses
                 time.sleep(1)
-                # self.clear_recv_buffer(skarab_socket)
                 self._lock.release()
                 self.logger.info('{}: cleared recv buffer.'.format(hostname))
                 raise KeyboardInterrupt
@@ -857,82 +863,93 @@ class SkarabTransport(Transport):
         """
         self.logger.debug('%s: reading response to sequence id %i.' % (
             hostname, sequence_number))
-        # wait for response until timeout
-        data_ready = select.select([self._skarab_control_sock], [], [], timeout)
-        # if we have a response, process it
-        if data_ready[0]:
-            data = self._skarab_control_sock.recvfrom(4096)
-            response_payload, address = data
 
-            self.logger.debug('%s: response from %s = %s' % (
-                hostname, str(address), repr(response_payload)))
+        try:
+            # wait for response until timeout
+            data_ready = select.select([self._skarab_control_sock], [], [], timeout)
+            # if we have a response, process it
+            if data_ready[0]:
+                data = self._skarab_control_sock.recvfrom(4096)
+                response_payload, address = data
 
-            # check if response is from the expected SKARAB
-            recvd_from_addr = address[0]
-            expected_recvd_from_addr = \
-                self._skarab_control_sock.getpeername()[0]
-            if recvd_from_addr != expected_recvd_from_addr:
-                self.logger.warning(
-                    '%s: received response from  %s, expected response from '
-                    '%s. Discarding response.' % (
-                        hostname, recvd_from_addr, expected_recvd_from_addr))
-                return None
-            # check the opcode of the response i.e. first two bytes
-            if response_payload[:2] == '\xff\xff':
-                self.logger.warning('%s: received unsupported opcode: 0xffff. '
-                                    'Discarding response.' % hostname)
-                return None
-            # check response packet size
-            if (len(response_payload)/2) != request_object.num_response_words:
-                self.logger.warning("%s: incorrect response packet size. "
-                                    "Discarding response" % hostname)
+                self.logger.debug('%s: response from %s = %s' % (
+                    hostname, str(address), repr(response_payload)))
 
-                # self.logger.pdebug("Response packet not of correct size. "
-                self.logger.debug("Response packet not of correct size. "
-                                  "Expected %i words, got %i words.\n "
-                                  "Incorrect Response: %s" % (
-                                    request_object.num_response_words,
-                                    (len(response_payload)/2),
-                                    repr(response_payload)))
-                # self.logger.pdebug("%s: command ID - expected (%i) got (%i)" %
-                self.logger.debug("%s: command ID - expected (%i) got (%i)" %
-                                  (hostname, request_object.type + 1,
-                                   (struct.unpack('!H', response_payload[:2]))[0]))
-                # self.logger.pdebug("%s: sequence num - expected (%i) got (%i)" %
-                self.logger.debug("%s: sequence num - expected (%i) got (%i)" %
-                                  (hostname, sequence_number,
-                                   (struct.unpack('!H', response_payload[2:4]))[0]))
-                return None
+                # check if response is from the expected SKARAB
+                recvd_from_addr = address[0]
+                expected_recvd_from_addr = \
+                    self._skarab_control_sock.getpeername()[0]
+                if recvd_from_addr != expected_recvd_from_addr:
+                    self.logger.warning(
+                        '%s: received response from  %s, expected response from '
+                        '%s. Discarding response.' % (
+                            hostname, recvd_from_addr, expected_recvd_from_addr))
+                    return None
+                # check the opcode of the response i.e. first two bytes
+                if response_payload[:2] == '\xff\xff':
+                    self.logger.warning('%s: received unsupported opcode: 0xffff. '
+                                        'Discarding response.' % hostname)
+                    return None
+                # check response packet size
+                if (len(response_payload)/2) != request_object.num_response_words:
+                    self.logger.warning("%s: incorrect response packet size. "
+                                        "Discarding response" % hostname)
 
-            # unpack the response before checking it
-            response_object = request_object.response.from_raw_data(
-                response_payload, request_object.num_response_words,
-                request_object.pad_words)
-            self.logger.debug('%s: response from %s, with seq num %i' % (
-                hostname, str(address),
-                response_object.seq_num))
-            expected_response_id = request_object.type + 1
-            if response_object.type != expected_response_id:
-                self.logger.warning('%s: incorrect command ID in response. Expected'
-                               '(%i) got(%i). Discarding response.' % (
-                                   hostname, expected_response_id,
-                                   response_object.type))
-                return None
-            elif response_object.seq_num != sequence_number:
-                self.logger.debug('%s: incorrect sequence number in response. '
-                               'Expected(%i,%i), got(%i). Discarding '
-                               'response.' % (
-                                   hostname, sequence_number,
-                                   request_object.packet['seq_num'],
-                                   response_object.seq_num))
-                return None
-            return response_object
-        else:
-            errmsg = '%s: timeout; no packet received for seq %i. Will ' \
-                     'retransmit as seq %i.' % (
-                         hostname, sequence_number, sequence_number + 1)
-            self.logger.debug(errmsg)
-            raise SkarabResponseNotReceivedError(errmsg)
+                    # self.logger.pdebug("Response packet not of correct size. "
+                    self.logger.debug("Response packet not of correct size. "
+                                      "Expected %i words, got %i words.\n "
+                                      "Incorrect Response: %s" % (
+                                        request_object.num_response_words,
+                                        (len(response_payload)/2),
+                                        repr(response_payload)))
+                    # self.logger.pdebug("%s: command ID - expected (%i) got (%i)" %
+                    self.logger.debug("%s: command ID - expected (%i) got (%i)" %
+                                      (hostname, request_object.type + 1,
+                                       (struct.unpack('!H', response_payload[:2]))[0]))
+                    # self.logger.pdebug("%s: sequence num - expected (%i) got (%i)" %
+                    self.logger.debug("%s: sequence num - expected (%i) got (%i)" %
+                                      (hostname, sequence_number,
+                                       (struct.unpack('!H', response_payload[2:4]))[0]))
+                    return None
+
+                # unpack the response before checking it
+                response_object = request_object.response.from_raw_data(
+                    response_payload, request_object.num_response_words,
+                    request_object.pad_words)
+                self.logger.debug('%s: response from %s, with seq num %i' % (
+                    hostname, str(address),
+                    response_object.seq_num))
+                expected_response_id = request_object.type + 1
+                if response_object.type != expected_response_id:
+                    self.logger.warning('%s: incorrect command ID in response. Expected'
+                                   '(%i) got(%i). Discarding response.' % (
+                                       hostname, expected_response_id,
+                                       response_object.type))
+                    return None
+                elif response_object.seq_num != sequence_number:
+                    self.logger.debug('%s: incorrect sequence number in response. '
+                                   'Expected(%i,%i), got(%i). Discarding '
+                                   'response.' % (
+                                       hostname, sequence_number,
+                                       request_object.packet['seq_num'],
+                                       response_object.seq_num))
+                    return None
+                return response_object
+            else:
+                errmsg = '%s: timeout; no packet received for seq %i. Will ' \
+                         'retransmit as seq %i.' % (
+                             hostname, sequence_number, sequence_number + 1)
+                self.logger.debug(errmsg)
+                raise SkarabResponseNotReceivedError(errmsg)
+
+        except KeyboardInterrupt:
+            self.logger.warning('{}: keyboard interrupt, clearing '
+                            'buffer.'.format(hostname))
+            # wait to receive incoming responses
+            time.sleep(1)
+            _ = self._skarab_control_sock.recvfrom(4096)
+            self.logger.info('{}: cleared recv buffer.'.format(hostname))
+            raise KeyboardInterrupt
 
     # low level access functions
     def reboot_fpga(self):
@@ -1737,6 +1754,8 @@ class SkarabTransport(Transport):
         by skarab_fileops.py
         :param flash_address: 32-bit Address in the NOR flash to
         start programming from
+            - flash_address = DEFUALT_START_ADDRESS is for programming the Multiboot Image
+            - flash_address = 0x0 is for programming the Golden Image
         :param blind_reconfig: Reconfigure the board and don't wait to
         verify what has been written
         :return: Success/Fail - 0/1
@@ -2336,6 +2355,103 @@ class SkarabTransport(Transport):
 
     # endregion
 
+    # region --- SKARAB ADC-related methods ---
+
+    # region === Direct SPI Write ===
+    # - Perform an SPI write on the SKARAB ADC mezzanine
+    def direct_spi_write(self, mezzanine_site, spi_destination, address, data):
+        i2c_interface = mezzanine_site + 1
+
+        # Write ADDRESS
+        write_byte = (address >> 8) & 0xFF
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_ADDRESS_MSB_REG, write_byte)
+
+        write_byte = (address & 0xFF)
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_ADDRESS_LSB_REG, write_byte)
+
+        # Write DATA
+        write_byte = (data >> 8) & 0xFF
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_MSB_REG, write_byte)
+
+        write_byte = (data & 0xFF)
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_LSB_REG, write_byte)
+
+        write_byte = spi_destination
+        # Write, so read/not write bit is 0
+        write_byte = write_byte | sd.START_DIRECT_SPI_ACCESS
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG, write_byte)
+
+        # Wait for the update to complete
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        timeout = 0
+        while ((read_byte[0] & sd.START_DIRECT_SPI_ACCESS) != 0) and (timeout < 1000):
+            self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+            read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+            timeout += 1
+
+        if timeout == 1000:
+            print("direct_spi_write ERROR: Timeout waiting for the SPI transaction to complete.")
+
+
+    # region === Direct SPI Read ===
+    # - Perform an SPI read on the SKARAB ADC mezzanine
+    def direct_spi_read(self, mezzanine_site, spi_destination, address):
+        """
+		Low-level SPI read function used within other functions of this class.
+        :param spi_destination:
+        :param address:
+        :return:
+		"""
+        i2c_interface = mezzanine_site + 1
+        # Write ADDRESS
+        write_byte = (address >> 8) & 0xFF
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 
+                                    sd.DIRECT_SPI_ADDRESS_MSB_REG, write_byte)
+
+        write_byte = (address & 0xFF)
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
+                                    sd.DIRECT_SPI_ADDRESS_LSB_REG, write_byte)
+
+
+        write_byte = spi_destination | START_DIRECT_SPI_ACCESS | DIRECT_SPI_READ_NOT_WRITE
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
+                                    sd.DIRECT_SPI_CONTROL_REG, write_byte)
+
+        # Wait for the update to complete
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        timeout = 0
+        while (((read_byte[0] & sd.START_DIRECT_SPI_ACCESS) != 0) and (timeout < 1000)):
+            self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+            read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+            timeout = timeout + 1
+
+        if timeout == 1000:
+            print("DirectSpiWrite ERROR: Timeout waiting for the SPI transaction to complete.")
+
+        # Now get the read data
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_MSB_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        read_word = read_byte[0] << 8
+
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_LSB_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        read_word = read_word | read_byte[0]
+
+        return read_word
+
+    # endregion
+
+    # endregion
+    
+    
     # region --- board level functions ---
 
     def check_programming_packet_count(self,
@@ -2779,11 +2895,9 @@ class SkarabTransport(Transport):
             :param value: fan speed value
             :return: OK, WARNING or ERROR
             """
-            # TODO - this statement it too long and unreadable!
-            if value > ((self.sensor_data[fan_name.replace('_rpm', '_pwm')] + 10.0) / 100.0) * \
-                    sd.fan_speed_ranges[fan_name][0] or value < ((self.sensor_data[fan_name.replace('_rpm','_pwm')] - 10.0) / 100.0) * \
-                    sd.fan_speed_ranges[fan_name][0]:
-                return 'ERROR'
+            if value > sd.fan_speed_ranges[fan_name][0] or value < \
+                        sd.fan_speed_ranges[fan_name][1]:
+                return 'WARNING'
             else:
                 return 'OK'
 
@@ -2885,7 +2999,8 @@ class SkarabTransport(Transport):
                             '!I', struct.pack('!4B',
                                               *raw_sensor_data[value:value+4]))[0]
                         self.sensor_data[key] = (temperature,
-                                                 check_temperature(key, temperature, inlet_ref=0), 'degC')
+                                                 'degC',
+                                                 check_temperature(key, temperature, inlet_ref=0))
 
                     else:
                         temperature = temperature_value_check(
@@ -3443,4 +3558,365 @@ class SkarabTransport(Transport):
         signature = struct.unpack('!I', struct.pack('!4B', *selected_data))[0]
 
         return signature
+
+    # TODO: only declare this function once! Will have to be global
+    @staticmethod
+    def _sign_extend(value, bits):
+        """
+        Performs 2's compliment sign extension
+        :param value: value to sign extend
+        :param bits: number of bits making up the value
+        :return: sign extended value
+        """
+        sign_bit = 1 << (bits - 1)
+        return (value & (sign_bit - 1)) - (value & sign_bit)
+
+    def _voltage_handler_logging(self, voltage, scale_factor, device_page):
+        """
+        Handles the data returned by the voltage monitor for the various
+        board voltages. Returns actual voltages extracted from this data.
+        :param raw_sensor_data: array containing raw sensor data
+        :param index: index at which next voltage sensor data begins
+        :return: extracted voltage
+        """
+
+        if (scale_factor & 0x10) != 0:
+            scale_factor = self._sign_extend(scale_factor, 5)
+        scale_factor = int(scale_factor)
+        val = float(voltage) * float(pow(2.0, float(scale_factor)))
+        return round(val * sd.voltage_scaling[str(device_page)], 2)
+
+    def _current_handler_logging(self, current, scale_factor, device_page):
+        """
+        Handles the data returned by the current monitor for the various
+        board currents. Returns actual current extracted from this data.
+        :param raw_sensor_data: array containing raw sensor data
+        :param index: index at which next current sensor data begins
+        :return: extracted current
+        """
+
+        if (scale_factor & 0x10) != 0:
+            scale_factor = self._sign_extend(scale_factor, 5)
+        scale_factor = int(scale_factor)
+        val = float(current) * float(pow(2.0, float(scale_factor)))
+
+        return round(
+            val * sd.current_scaling[str(device_page)], 2)
+
+    def get_max31785_hw_logs(self, timeout=None, retries=None):
+        """
+        Retrieve the non-volatile logs from the MAX31785 fan controller on the
+        SKARAB.
+        :param timeout:
+        :param retries:
+        :return: log data in the form [FAULT_LOG_INDEX, FAULT_LOG_COUNT,
+        STATUS_WORD, STATUS_VOUT Pages 17/18,
+        STATUS_VOUT Pages 19/20, STATUS_VOUT Pages 21/22,
+        STATUS_MFR_SPECIFIC Pages 6/7, STATUS_MFR_SPECIFIC Pages 8/9,
+        STATUS_MFR_SPECIFIC Pages 10/11, STATUS_MFR_SPECIFIC Pages 12/13,
+        STATUS_MFR_SPECIFIC Pages 14/15, STATUS_MFR_SPECIFIC Pages 16/00h,
+        STATUS_FANS_1_2 Pages 0/1, STATUS_FANS_1_2 Pages 2/3,
+        STATUS_FANS_1_2 Pages 4/5]
+        """
+
+        request = sd.GetFanControllerLogsReq()
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check if logs were read successfully
+        if not response.packet['log_entry_success']:
+            err = 'fan controller non-volatile log retrieval failed'
+            raise NonVolatileLogRetrievalError(err)
+
+        """
+        log entry structure:
+        log[0] - fault log index
+        log[1] - fault log count
+        log[2] - status word
+        log[3] - status_vout pages 18/17
+        log[4] - status_vout pages 20/19
+        log[5] - status_vout pages 22/21
+        log[6] - status_mfr_specific pages 7/6
+        log[7] - status_mfr_specific pages 9/8
+        log[8] - status_mfr_specific pages 11/10
+        log[9] - status_mfr_specific pages 13/12
+        log[10] - status_mfr_specific pages 15/14
+        log[11] - status_mfr_specific pages 00h/16
+        log[12] - status_fans_1_2 pages 1/0
+        log[13] - status_fans_1_2 pages 3/2
+        log[14] - status_fans_1_2 pages 5/4
+        """
+
+        # list to store the parsed log data
+        log_data = []
+
+        log_entries = [(entry, data) for entry, data in enumerate(response.packet['fan_cont_mon_logs'])]
+
+        # parse each of the 15 log entries
+        # each log is of form [entry number, [log data]]
+        for log in log_entries:
+            # check if a log entry is empty
+            if log[1].count(0xFFFF) == len(log[1]):
+                # log entry is empty
+                fault_summary = (log[0], None)
+            else:
+                idx_of_faulty_page = next(
+                    (i + 3 for i, val in enumerate(log[1][3:]) if val), None)
+
+                # determine the fault register
+                fault_log_field = sd.fault_log_fields[idx_of_faulty_page]
+                if 'status_mfr_specific' in fault_log_field:
+                    fault_reg = sd.status_mfr_specific
+                elif 'status_fans_1_2' in fault_log_field:
+                    fault_reg = sd.status_fans_1_2
+                elif 'status_vout' in fault_log_field:
+                    fault_reg = sd.status_vout
+                else:
+                    err = 'unknown fault registered detected. cannot interpret' \
+                          'failure'
+                    raise NonVolatileLogRetrievalError(err)
+
+                # parse page data
+                upper_page = log[1][idx_of_faulty_page] >> 8
+                lower_page = log[1][idx_of_faulty_page] & 0xFF
+
+                if upper_page:
+                    fault_page = int(
+                        fault_log_field.split('_')[-1].split('/')[0])
+                    fault_value = upper_page
+                elif lower_page:
+                    fault_page = int(
+                        fault_log_field.split('_')[-1].split('/')[1])
+                    fault_value = lower_page
+                else:
+                    err = 'retrieved log data is invalid'
+                    raise NonVolatileLogRetrievalError(err)
+
+                device_page = sd.fan_controller_pages[fault_page]
+
+                # find the type of fault
+                # convert to 8-bit binary number and reverse order to make python indexing match msb indexing
+                fault_data_bits = '{0:08b}'.format(fault_value)[::-1]
+
+                # look for the bit that is set
+                for bit, val in enumerate(fault_data_bits):
+                    if int(val):
+                        fault_event = fault_reg[bit]
+
+                # need one of these per log entry, then parse in a separate function
+                fault_summary = (log[0], device_page, fault_event)
+
+            log_data.append(fault_summary)
+
+        return log_data
+
+    def clear_max31785_hw_logs(self, timeout=None, retries=None):
+        """
+        Clear the error logs of the MAX31785 fan controller.
+        The controller only stores 15 logs. Once this is full, the logs
+        must be cleared to catch new faults.
+        :param timeout:
+        :param retries:
+        :return: True if completed successfuly, otherwise, raises error
+        """
+
+        request = sd.ClearFanControllerLogsReq()
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check the status
+        if response.packet['status']:
+            self.logger.info('MAX31785 fan controller logs cleared successfully')
+            return True
+        else:
+            err = 'MAX31785 fan controller logs not cleared!'
+            raise SkarabFanControllerClearError(err)
+
+    def get_ucd90120a_hw_logs(self, device, timeout=None, retries=None):
+        """
+        Retrieve the non-volatile logs from the UCD90120A hardware monitoring devices
+        on the SKARAB. There are two devices: a voltage monitor and a current monitor.
+        These must be specified using the device parameter.
+        :param device: 'current' or 'voltage'
+        :param timeout:
+        :param retries:
+        :return: log data in the form [page specific, fault type, device page,
+        fault value, scaling, runtime seconds since fault]
+        """
+
+        #TODO: fix up docstrings
+
+        # initialisation depending on device type
+        if device == 'current':
+            request = sd.GetCurrentLogsReq()
+            packet_field = 'current_mon_logs'
+            handler = self._current_handler_logging
+            page_dict = sd.current_monitor_pages
+        elif device == 'voltage':
+            request = sd.GetVoltageLogsReq()
+            packet_field = 'voltage_mon_logs'
+            handler = self._voltage_handler_logging
+            page_dict = sd.voltage_monitor_pages
+        else:
+            err = "Invalid device type specified. device must either be 'current' or 'voltage'"
+            raise InvalidDeviceType(err)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        """
+        log entry structure:
+        log[0] - Page Specific
+        log[1] - Fault Type
+        log[2] - Device Page
+        log[3] - Fault Value (unscaled)
+        log[4] - Scaling Factor
+        log[5] - Runtime Seconds Since Fault - MSW
+        log[6] - Runtime Seconds Since Fault - LSW
+        """
+
+        status_bits = list(
+            '{:016b}'.format(response.packet['log_entry_success']))
+
+        log_entries = list(range(16, 0, -1))
+
+        log_data = [[log_entries.pop(), page_dict[log[2]],
+                     self._check_fault_type(log[0], log[1], sensor=device),
+                     handler(log[3], log[4], log[2]),
+                     sd.log_entry_success_codes[status_bits.pop()],
+                     self.get_fault_timestamp(log[5], log[6])]
+                    if log[0] != 0xFFFF
+                    else [log_entries.pop(), None,
+                          sd.log_entry_success_codes[status_bits.pop()]]
+                    for log in response.packet[packet_field]]
+
+        log_data.reverse()
+
+        return log_data
+
+    @staticmethod
+    def _check_fault_type(page_specifc, fault_type, sensor='voltage'):
+        """
+        Check the fault on the UCD90120A device
+        :param page_specifc: page specific flag
+        :param fault_type: fault code
+        :return: fault_type (str)
+        """
+
+        if not page_specifc:
+            return sd.non_page_specific_faults[fault_type]
+        else:
+            if sensor == 'current':
+                if fault_type == 0 or fault_type == 1:
+                    fault_type += 3
+
+            return sd.page_specific_faults[fault_type]
+
+    @staticmethod
+    def get_fault_timestamp(seconds_msw, seconds_lsw):
+        """
+        Get the timestamp of the fault
+        :param seconds_msw: most significant word of the seconds since fault
+        :param seconds_lsw: least significant word of the seconds since fault
+        :return: seconds
+        """
+        return struct.unpack('!I', struct.pack('!2H', seconds_msw, seconds_lsw))[0]
+
+    def display_skarab_hw_logs(self, log_data, device_logged, units):
+        """
+        Display the skarab hardware logs in an easily readable format
+        :param log_data: the log data retrieved from the skarab
+        :param device_logged: the name of the device logged
+        :param units: the unit of the measured value, where applicable
+        :return:
+        """
+
+        title = 'Hardware Log Data for {skarab} - Device: {device_logged}'.format(
+            skarab=self.host, device_logged=device_logged)
+
+        print('\n{title:^94}\n'.format(title=title))
+
+        if device_logged == 'MAX31785 Fan Controller':
+            print(
+                '{entry:^10} {device:^25} {event:^25}'.format(
+                    entry='Log Entry', device='Device Page',
+                    event='Fault Event'))
+
+            for log in log_data:
+                if log[1] is None:
+                    print(
+                        '{entry:^10} {data:-^51}'.format(
+                            entry=log[0], data='No Log Data'))
+                else:
+
+                    print(
+                        '{entry:^10} {device:^25} {event:^25}'.format(
+                            entry=log[0], device=log[1], event=log[2]))
+        else:
+
+            print(
+            '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+                entry='Log Entry', device='Device Page', event='Fault Event',
+                fault_value='Fault Value ({})'.format(units),
+                entry_success='Log Entry Success?',
+                timestamp='Runtime Since Fault'))
+
+            for log in log_data:
+                if log[1] is None:
+                    print(
+                        '{entry:^10} {data:-^93} {entry_success:^15}'.format(
+                            entry=log[0], data='No Log Data',
+                            entry_success=log[2]))
+                else:
+
+                    # make timestamp human readable
+                    min, sec = divmod(log[5], 60)
+                    hours, min = divmod(min, 60)
+                    timestamp = '{hours:02d}h{minutes:02d}m{seconds:02d}s'.format(
+                        hours=hours, minutes=min, seconds=sec)
+
+                    print(
+                        '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+                            entry=log[0], device=log[1], event=log[2],
+                            fault_value=log[3], entry_success=log[4],timestamp=timestamp))
+
+    def display_voltage_monitor_logs(self):
+        """
+        Retrieve and display the NV logs of the voltage monitor
+        :param voltage_mon_logs:
+        :return: None
+        """
+
+        # retrieve log data
+        log_data = self.get_ucd90120a_hw_logs('voltage')
+
+        # display log data
+        self.display_skarab_hw_logs(log_data=log_data, device_logged='UCD90120A Voltage Monitor', units='V')
+
+    def display_current_monitor_logs(self):
+        """
+        Retrieve and display the NV logs of the current monitor
+        :return: None
+        """
+
+        # retrieve log data
+        log_data = self.get_ucd90120a_hw_logs('current')
+
+        # display log data
+        self.display_skarab_hw_logs(log_data=log_data, device_logged='UCD90120A Current Monitor', units='A')
+
+    def display_fan_controller_logs(self):
+        """
+        Retrieve and display the NV logs from the MAX31785 fan controller
+        :return:
+        """
+
+        # retrieve log data
+        try:
+            log_data = self.get_max31785_hw_logs()
+
+            # display log data
+            self.display_skarab_hw_logs(log_data=log_data,
+                                        device_logged='MAX31785 Fan Controller',
+                                        units=None)
+
+        except NonVolatileLogRetrievalError:
+            self.logger.error('Failed to retrieve fan controller log data')
+
 # end

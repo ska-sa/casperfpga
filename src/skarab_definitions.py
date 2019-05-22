@@ -129,6 +129,10 @@ SET_FAN_SPEED = 0x0045
 BIG_READ_WISHBONE = 0x0047
 BIG_WRITE_WISHBONE = 0x0049
 SDRAM_PROGRAM_WISHBONE = 0x0051
+GET_CURRENT_LOGS = 0x0057
+GET_VOLTAGE_LOGS = 0x0059
+GET_FAN_CONT_LOGS = 0x005B
+CLEAR_FAN_CONT_LOGS = 0x005D
 
 
 # FOR VIRTEX FLASH RECONFIG
@@ -168,6 +172,132 @@ MEZZANINE_3_I2C_BUS_ID = 0x4
 # STM I2C DEFINES
 STM_I2C_DEVICE_ADDRESS = 0x0C  # 0x18 shifted down by 1 bit
 STM_I2C_BOOTLOADER_DEVICE_ADDRESS = 0x08  # 0x10 shifted down by 1 bit
+
+# region --- SKARAB ADC Definitions ---
+
+CURRENT_ADC_MAJOR_VERSION = 1
+CURRENT_ADC_MINOR_VERSION = 3
+ADC_FIRMWARE_MAJOR_VERSION_REG = 0x7E
+ADC_FIRMWARE_MINOR_VERSION_REG = 0x7F
+
+# I2C REGISTER ADDRESSES
+MEZ_RESET_INITIALISE_REG = 0x00
+MEZ_CONTROL_REG = 0x01
+I2C_SLAVE_REG = 0x02
+DEBUG_LED_REG = 0x03
+VALID_REG = 0x04
+FIXED_TEST_REG = 0x05
+VOLTAGE_1V9_AVDD_MSB_REG = 0x06
+VOLTAGE_1V9_AVDD_LSB_REG = 0x07
+VOLTAGE_1V15_AVDD_MSB_REG = 0x08
+VOLTAGE_1V15_AVDD_LSB_REG = 0x09
+VOLTAGE_1V15_DVDD_MSB_REG = 0x0A
+VOLTAGE_1V15_DVDD_LSB_REG = 0x0B
+VOLTAGE_3V3_CLK_MSB_REG = 0x0C
+VOLTAGE_3V3_CLK_LSB_REG = 0x0D
+TIMESTAMP_SECONDS_MSB_REG = 0x10
+TIMESTAMP_SECONDS_1_REG = 0x11
+TIMESTAMP_SECONDS_2_REG = 0x12
+TIMESTAMP_SECONDS_LSB_REG = 0x13
+TIMESTAMP_MICROSECONDS_MSB_REG = 0x14
+TIMESTAMP_MICROSECONDS_1_REG = 0x15
+TIMESTAMP_MICROSECONDS_2_REG = 0x16
+TIMESTAMP_MICROSECONDS_LSB_REG = 0x17
+GAIN_CONTROL_REG = 0x18
+DECIMATION_RATE_REG = 0x19
+DDC0_NCO_SETTING_MSB_REG = 0x1A
+DDC0_NCO_SETTING_LSB_REG = 0x1B
+DDC1_NCO_SETTING_MSB_REG = 0x1C
+DDC1_NCO_SETTING_LSB_REG = 0x1D
+DDC_CONTROL_REG = 0x1E
+DIRECT_SPI_ADDRESS_MSB_REG = 0x20
+DIRECT_SPI_ADDRESS_LSB_REG = 0x21
+DIRECT_SPI_DATA_MSB_REG = 0x22
+DIRECT_SPI_DATA_LSB_REG = 0x23
+DIRECT_SPI_CONTROL_REG = 0x24
+HOST_PLL_GPIO_CONTROL_REG = 0x26
+
+REAL_DDC_OUTPUT_SELECT = 0x40 # ADD SUPPORT FOR REAL DDC OUTPUT SAMPLES
+
+PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE = 0x00E6
+PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE = 0x010E
+PLL_CLOCK_OUTPUT_PHASE_STATUS = 0x04
+ADC_MASTER_PDN_SYSREF = 0x0020
+PLL_ALARM_READBACK = 0x007D
+
+# I2C REGISTER BIT DEFINITIONS
+RESET_ADCS = 0x01
+RESET_PLL = 0x02
+POWER_DOWN_ADCS = 0x04
+INITIALISE_PLL = 0x08
+INITIALISE_ADCS = 0x10
+ENABLE_PLL_SYNC = 0x01
+ENABLE_ADC_SYNC = 0x02
+UPDATE_VOLTAGE_READINGS = 0x04
+UPDATE_TIMESTAMP_REGISTERS = 0x08
+ENABLE_FAULT_OUTPUT = 0x40
+ENABLE_INTERRUPT_OUTPUT = 0x80
+DEBUG_LED_0 = 0x01
+DEBUG_LED_1 = 0x02
+DEBUG_LED_2 = 0x04
+HOST_DEBUG_LED_CONTROL = 0x40
+UPDATE_DEBUG_LEDS = 0x80
+FIXED_REG_VALUE = 0xAC
+UPDATE_GAIN = 0x80
+DDC_ADC_SELECT = 0x01
+DDC_CHANNEL_SELECT = 0x02
+DUAL_BAND_ENABLE = 0x04
+SECOND_NYQUIST_ZONE_SELECT = 0x08
+UPDATE_DDC_CHANGE = 0x80
+DIRECT_SPI_READ_NOT_WRITE = 0x10
+START_DIRECT_SPI_ACCESS = 0x80
+HOST_PLL_GPIO_CONTROL = 0x80
+HOST_PLL_GPIO1 = 0x01
+HOST_PLL_GPIO2 = 0x02
+HOST_PLL_GPIO3 = 0x04
+HOST_PLL_GPIO4 = 0x08
+
+MEMORY_MAP_CHANGED = 0x1
+MEMORY_MAP_UNCHANGED = 0x0
+
+ADC_POWER_DOWN = 0x1
+ADC_RUNNING = 0x0
+
+PLL_SYNC_ENABLED = 0x1
+PLL_SYNC_DISABLED = 0x0
+
+ADC_SYNC_ENABLED = 0x1
+ADC_SYNC_DISABLED = 0x0
+
+OUTPUT_INTERRUPT_ENABLED = 0x1
+OUTPUT_INTERRUPT_DISABLED = 0x0
+
+ADC_0_SELECT = 0x0
+ADC_1_SELECT = 0x1
+ADC_CHANNEL_A_SELECT = 0x0
+ADC_CHANNEL_B_SELECT = 0x1
+ADC_GAIN_CHANNEL_0 = 0x1
+ADC_GAIN_CHANNEL_1 = 0x0
+ADC_GAIN_CHANNEL_2 = 0x3
+ADC_GAIN_CHANNEL_3 = 0x2
+SPI_DESTINATION_PLL = 0x0
+SPI_DESTINATION_NotUsed = 0x1
+SPI_DESTINATION_ADC_0 = 0x2
+SPI_DESTINATION_ADC_1 = 0x3
+SPI_DESTINATION_GAIN_0 = 0x4
+SPI_DESTINATION_GAIN_1 = 0x5
+SPI_DESTINATION_GAIN_2 = 0x6
+SPI_DESTINATION_GAIN_3 = 0x7
+SPI_DESTINATION_DUAL_ADC = 0x8
+
+ADC_GENERAL_MASTER_PAGE_SEL = 0x0012
+ADC_GENERAL_ADC_PAGE_SEL = 0x0011
+ADC_ADC_FIXED_REG_22 = 0x0022
+ADC_ADC_FIXED_REG_32 = 0x0032
+ADC_ADC_FIXED_REG_33 = 0x0033
+ADC_ADC_FIXED_REG_42 = 0x0042
+
+# endregion
 
 # PCA9546 DEFINES
 PCA9546_I2C_DEVICE_ADDRESS = 0x70  # Address without read/write bit
@@ -216,7 +346,6 @@ HMC_MEZZANINE_SITES = [1, 2, 3]
 HMC_CARD_I2C_PORT_MAP = {0: 0x1,
                          1: 0x2,
                          2: 0x3}
-
 # flash pages
 MEZZANINE_SIGNATURES_PAGE = 0
 TUNABLE_PARAMETERS_PAGE = 15
@@ -305,6 +434,100 @@ P1V8_MGTVCCAUX_CURRENT_MON_PAGE = 8
 P1V0_MGTAVCC_CURRENT_MON_PAGE = 9
 P1V2_MGTAVTT_CURRENT_MON_PAGE = 10
 P1V8_CURRENT_MON_PAGE = 11
+
+# non volatile logging error parsing
+
+# UCD90120A Devices
+log_entry_success_codes = {'0': 'fail', '1': 'ok'}
+
+non_page_specific_faults = {0: 'Reserved', 1: 'Reserved', 2: 'Resequence Error',
+                            3: 'Watchdog Timeout', 4: 'Fan 1 Fault',
+                            5: 'Fan 2 Fault', 6: 'Fan 3 Fault', 7: 'Fan 4 Fault' }
+
+page_specific_faults = {0: 'VOUT Over Voltage Fault', 1: 'VOUT Under Voltage Fault',
+                        2: 'TON MAX Fault', 3: 'IOUT Over Current Fault',
+                        4: 'IOUT Under Current Fault', 5: 'Over Temperature Fault',
+                        6: 'SEQ TIMEOUT Fault', 7: 'Reserved'}
+
+# max 31785 devices
+
+fan_controller_pages = {
+    LEFT_FRONT_FAN_PAGE: 'LEFT_FRONT_FAN',
+    LEFT_MIDDLE_FAN_PAGE: 'LEFT_MIDDLE_FAN',
+    LEFT_BACK_FAN_PAGE: 'LEFT_BACK_FAN',
+    RIGHT_BACK_FAN_PAGE: 'RIGHT_BACK_FAN',
+    FPGA_FAN: 'FPGA_FAN',
+    FPGA_TEMP_DIODE_ADC_PAGE: 'FPGA_TEMP_DIODE_ADC',
+    FAN_CONT_TEMP_SENSOR_PAGE: 'FAN_CONT_TEMP_SENSOR',
+    INLET_TEMP_SENSOR_PAGE: 'INLET_TEMP_SENSOR',
+    OUTLET_TEMP_SENSOR_PAGE: 'OUTLET_TEMP_SENSOR',
+    MEZZANINE_0_TEMP_ADC_PAGE: 'MEZZANINE_0_TEMP',
+    MEZZANINE_1_TEMP_ADC_PAGE: 'MEZZANINE_1_TEMP',
+    MEZZANINE_2_TEMP_ADC_PAGE: 'MEZZANINE_2_TEMP',
+    MEZZANINE_3_TEMP_ADC_PAGE: 'MEZZANINE_3_TEMP'
+}
+
+fault_log_fields = {
+    0: 'fault_log_index',
+    1: 'fault_log_count',
+    2: 'status_word',
+    3: 'status_vout_pages_18/17',
+    4: 'status_vout_pages_20/19',
+    5: 'status_vout_pages_22/21',
+    6: 'status_mfr_specific_pages_7/6',
+    7: 'status_mfr_specific_pages_9/8',
+    8: 'status_mfr_specific_pages_11/10',
+    9: 'status_mfr_specific_pages_13/12',
+    10: 'status_mfr_specific_pages_15/14',
+    11: 'status_mfr_specific_pages_00h/16',
+    12: 'status_fans_1_2_pages_1/0',
+    13: 'status_fans_1_2_pages_3/2',
+    14: 'status_fans_1_2_pages_5/4'
+}
+
+# status_vout
+status_vout = {7: 'VOUT Over Voltage Fault', 6: 'VOUT Over Voltage Warning',
+               5: 'VOUT Uner Voltage Warning', 4: 'VOUT Under Voltage Fault'}
+
+# status_mfr_specific
+status_mfr_specific = {6: 'Over Temperature Warning', 5: 'Over Temperature Fault',
+                       4: 'Watchdog Reset'}
+
+# status_fans_1_2
+status_fans_1_2 = {7: 'Fan Fault', 5: 'Fan Warning'}
+
+
+current_monitor_pages = {
+    P12V2_CURRENT_MON_PAGE: 'P12V2_CURRENT',
+    P12V_CURRENT_MON_PAGE: 'P12V_CURRENT',
+    P5V_CURRENT_MON_PAGE: 'P5V_CURRENT',
+    P3V3_CURRENT_MON_PAGE: 'P3V3_CURRENT',
+    P2V5_CURRENT_MON_PAGE: 'P2V5_CURRENT',
+    P3V3_CONFIG_CURRENT_MON_PAGE: 'P3V3_CONFIG_CURRENT',
+    P1V2_CURRENT_MON_PAGE: 'P1V2_CURRENT',
+    P1V0_CURRENT_MON_PAGE: 'P1V0_CURRENT',
+    P1V8_MGTVCCAUX_CURRENT_MON_PAGE: 'P1V8_MGTVCCAUX_CURRENT',
+    P1V0_MGTAVCC_CURRENT_MON_PAGE: 'P1V0_MGTAVCC_CURRENT',
+    P1V2_MGTAVTT_CURRENT_MON_PAGE: 'P1V2_MGTAVTT_CURRENT',
+    P1V8_CURRENT_MON_PAGE: 'P1V8_CURRENT'
+}
+
+voltage_monitor_pages = {
+    P12V2_VOLTAGE_MON_PAGE: 'P12V2_VOLTAGE',
+    P12V_VOLTAGE_MON_PAGE: 'P12V_VOLTAGE',
+    P5V_VOLTAGE_MON_PAGE: 'P5V_VOLTAGE',
+    P3V3_VOLTAGE_MON_PAGE: 'P3V3_VOLTAGE',
+    P2V5_VOLTAGE_MON_PAGE: 'P2V5_VOLTAGE',
+    P1V8_VOLTAGE_MON_PAGE: 'P1V8_VOTLAGE',
+    P1V2_VOLTAGE_MON_PAGE: 'P1V2_VOLTAGE',
+    P1V0_VOLTAGE_MON_PAGE: 'P1V0_VOLTAGE',
+    P1V8_MGTVCCAUX_VOLTAGE_MON_PAGE: 'P1V8_MGTVCCAUX_VOLTAGE',
+    P1V0_MGTAVCC_VOLTAGE_MON_PAGE: 'P1V0_MGTAVCC_VOLTAGE',
+    P1V2_MGTAVTT_VOLTAGE_MON_PAGE: 'P1V2_MGTAVTT_VOLTAGE',
+    P3V3_CONFIG_VOLTAGE_MON_PAGE: 'P3V3_CONFIG_VOLTAGE',
+    PLUS3V3CONFIG02_ADC_PAGE: 'PLUS3v3CONFIG02_ADC_VOLTAGE',
+    P5VAUX_VOLTAGE_MON_PAGE: 'P5VAUX_VOLTAGE'
+}
 
 voltage_scaling = {
     str(P12V2_VOLTAGE_MON_PAGE): 6100.0 / 1000.0,
@@ -416,7 +639,7 @@ current_ranges = {
     '2V5_current': (0.55, 0.001),
     '1V8_current': (0.88, 0.001),
     '1V2_current': (0.22, 0.001),
-    '1V0_current': (24.2, 0.001),
+    '1V0_current': (33.0, 0.001),
     '1V8_MGTVCCAUX_current': (0.33, 0.001),
     '1V0_MGTAVCC_current': (15.84, 0.001),
     '1V2_MGTAVTT_current': (5.83, 0.001),
@@ -442,13 +665,14 @@ temperature_ranges = {
 }
 
 # fan_rpm: (rating, max, min)
+# fan_rpm: (max, min)
 # fan_pwm: (max, min)
 fan_speed_ranges = {
-    'left_front_fan_rpm': (23000, 2000, -4000),
-    'left_middle_fan_rpm': (23000, 2000, -4000),
-    'left_back_fan_rpm': (23000, 2000, -4000),
-    'right_back_fan_rpm': (23000, 2000, -4000),
-    'fpga_fan_rpm': (6000, 2000, -2000),
+    'left_front_fan_rpm': (200000, 100),
+    'left_middle_fan_rpm': (200000, 100),
+    'left_back_fan_rpm': (200000, 100),
+    'right_back_fan_rpm': (200000, 100),
+    'fpga_fan_rpm': (200000, 100),
     'left_front_fan_pwm': (100, 0),
     'left_middle_fan_pwm': (100, 0),
     'left_back_fan_pwm': (100, 0),
@@ -1479,6 +1703,91 @@ class SdramProgramWishboneResp(Response):
         self.packet['chunk_id'] = chunk_id
         self.packet['ack'] = ack
         self.packet['padding'] = padding
+
+
+class GetCurrentLogsReq(Command):
+    def __init__(self):
+        super(GetCurrentLogsReq, self).__init__(GET_CURRENT_LOGS)
+        self.expect_response = True
+        self.response = GetCurrentLogsResp
+        self.num_response_words = 115
+        self.pad_words = 0
+
+
+class GetCurrentLogsResp(Response):
+    def __init__(self, command_id, seq_num, current_mon_logs, status):
+        super(GetCurrentLogsResp, self).__init__(command_id, seq_num)
+        self.packet['current_mon_logs'] = current_mon_logs
+        self.packet['log_entry_success'] = status
+
+    @staticmethod
+    def unpack_process(unpacked_data):
+        log_data = unpacked_data[2:114]
+        log_data = [list(log_data)[i*7:(i+1)*7] for i in range(0, 16)]
+        unpacked_data[2:114] = [log_data]
+        return unpacked_data
+
+
+class GetVoltageLogsReq(Command):
+    def __init__(self):
+        super(GetVoltageLogsReq, self).__init__(GET_VOLTAGE_LOGS)
+        self.expect_response = True
+        self.response = GetVoltageLogsResp
+        self.num_response_words = 115
+        self.pad_words = 0
+
+
+class GetVoltageLogsResp(Response):
+    def __init__(self, command_id, seq_num, voltage_mon_logs, status):
+        super(GetVoltageLogsResp, self).__init__(command_id, seq_num)
+        self.packet['voltage_mon_logs'] = voltage_mon_logs
+        self.packet['log_entry_success'] = status
+
+    @staticmethod
+    def unpack_process(unpacked_data):
+        log_data = unpacked_data[2:114]
+        log_data = [list(log_data)[i*7:(i+1)*7] for i in range(0, 16)]
+        unpacked_data[2:114] = [log_data]
+        return unpacked_data
+
+
+class GetFanControllerLogsReq(Command):
+    def __init__(self):
+        super(GetFanControllerLogsReq, self).__init__(GET_FAN_CONT_LOGS)
+        self.expect_response = True
+        self.response = GetFanControllerLogsResp
+        self.num_response_words = 231
+        self.pad_words = 3
+
+
+class GetFanControllerLogsResp(Response):
+    def __init__(self, command_id, seq_num, fan_cont_mon_logs, status, padding):
+        super(GetFanControllerLogsResp, self).__init__(command_id, seq_num)
+        self.packet['fan_cont_mon_logs'] = fan_cont_mon_logs
+        self.packet['log_entry_success'] = status
+        self.packet['padding'] = padding
+
+    @staticmethod
+    def unpack_process(unpacked_data):
+        log_data = unpacked_data[2:227]
+        log_data = [list(log_data)[i*15:(i+1)*15] for i in range(0, 15)]
+        unpacked_data[2:227] = [log_data]
+        return unpacked_data
+
+
+class ClearFanControllerLogsReq(Command):
+    def __init__(self):
+        super(ClearFanControllerLogsReq, self).__init__(CLEAR_FAN_CONT_LOGS)
+        self.expect_response = True
+        self.response = ClearFanControllerLogsResp
+        self.num_response_words = 11
+        self.pad_words = 8
+
+
+class ClearFanControllerLogsResp(Response):
+    def __init__(self, command_id, seq_num, status, padding):
+        super(ClearFanControllerLogsResp, self).__init__(command_id, seq_num)
+        self.packet['status'] = status
 
 
 # Mezzanine Site Identifiers

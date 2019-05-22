@@ -32,10 +32,10 @@ class FortyGbe(Gbe):
                             'ip'             : 0x14,
                             'fabric_port'    : 0x30,
                             'fabric_en'      : 0x2C,
-                            'subnet_mask'    : 0x24,
+                            'subnet_mask'    : 0x1C,
                             'gateway_ip'     : 0x18,
-                            'multicast_ip'   : 0x1C,
-                            'multicast_mask' : 0x20}
+                            'multicast_ip'   : 0x20,
+                            'multicast_mask' : 0x24}
         else:
             self.reg_map = {'mac'            : 0x02,
                             'ip'             : 0x10,
@@ -252,9 +252,9 @@ class FortyGbe(Gbe):
                 #     'tx_swing': pd[0x2b]},
                 'multicast': {
                     'base_ip': IpAddress('%i.%i.%i.%i' % (
-                        pd[0x1C], pd[0x1D], pd[0x1E], pd[0x1F])),
+                        pd[0x20], pd[0x21], pd[0x22], pd[0x23])),
                     'ip_mask': IpAddress('%i.%i.%i.%i' % (
-                        pd[0x20], pd[0x21], pd[0x22], pd[0x23]))}
+                        pd[0x24], pd[0x25], pd[0x26], pd[0x27]))}
             }
         possible_addresses = [int(returnval['multicast']['base_ip'])]
         mask_int = int(returnval['multicast']['ip_mask'])
@@ -296,15 +296,25 @@ class FortyGbe(Gbe):
         group join request.
         :param ip_str: A dotted decimal string representation of the base
         mcast IP address.
-        :param group_size: An integer for how many mcast addresses from
-        base to respond to.
+        :param group_size: An integer for how many additional mcast addresses 
+        (from base) to subscribe to. Must be (2^N-1), ie 0, 1, 3, 7, 15 etc.
         :param port: The UDP port on which you want to receive. Note 
         that only one port is possible per interface (ie it's global
         and will override any other port you may have configured).
         :return:
         """
         ip = IpAddress(ip_str)
-        mask = IpAddress('255.255.255.%i' % (256 - group_size))
+        if (group_size < 0):
+            raise RuntimeError("Can't subscribe to a negative number of addresses!")
+        elif (group_size==0):
+            mask = "255.255.255.255"
+        else:
+            import numpy
+            if ((numpy.log2(group_size+1)%1)!=0):
+                raise RuntimeError("You tried to subscribe to {}+{}. Must subscribe to a binary multiple of addresses.".format(ip_str,group_size))
+            if ((group_size+1)>256):
+                raise RuntimeError("You tried to subscribe to {}+{}. Can't subscribe to more than 256 addresses.".format(ip_str,group_size))
+            mask = IpAddress('255.255.255.%i' % (255 - group_size))
         self.parent.transport.multicast_receive(self.name, ip, mask)
         self.set_port(port)
 
