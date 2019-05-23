@@ -2897,9 +2897,9 @@ class SkarabTransport(Transport):
             """
             if value > sd.fan_speed_ranges[fan_name][0] or value < \
                         sd.fan_speed_ranges[fan_name][1]:
-                return 'WARNING'
+                return 'warning'
             else:
-                return 'OK'
+                return 'nominal'
 
         def check_temperature(sensor_name, value, inlet_ref):
             """
@@ -2910,19 +2910,25 @@ class SkarabTransport(Transport):
             temperature thresholds
             :return: OK, WARNING or ERROR
             """
+
             if sensor_name == 'inlet_temperature_degC':
                 if value > sd.temperature_ranges[sensor_name][0] or value < \
                         sd.temperature_ranges[sensor_name][1]:
-                    return 'ERROR'
+                    return 'error'
                 else:
-                    return 'OK'
+                    return 'nominal'
             else:
+                # handle hmc die temperatures of unintialised HMC cores
+                if 'hmc' in sensor_name:
+                    if value == 0xffeeddcc:
+                        # umc unitialised
+                        return 'unknown'
                 if value > inlet_ref + sd.temperature_ranges[sensor_name][
                     0] or value < inlet_ref + \
                         sd.temperature_ranges[sensor_name][1]:
-                    return 'ERROR'
+                    return 'error'
                 else:
-                    return 'OK'
+                    return 'nominal'
 
         def check_current(current_name, value):
             """
@@ -2934,12 +2940,12 @@ class SkarabTransport(Transport):
 
             if value > sd.current_ranges[current_name][0] or value < \
                     sd.current_ranges[current_name][1]:
-                # return '\033[0;31m{}\033[00m'.format('ERROR')
-                return 'ERROR'
+                # return '\033[0;31m{}\033[00m'.format('error')
+                return 'error'
 
             else:
-                # return '\033[0;31m{}\033[00m'.format('OK')
-                return 'OK'
+                # return '\033[0;31m{}\033[00m'.format('nominal')
+                return 'nominal'
 
         def check_voltage(voltage_name, value):
             """
@@ -2951,11 +2957,11 @@ class SkarabTransport(Transport):
 
             if value > sd.voltage_ranges[voltage_name][0] or value < \
                     sd.voltage_ranges[voltage_name][1]:
-                # return '\033[0;31m{}\033[00m'.format('ERROR')
-                return 'ERROR'
+                # return '\033[0;31m{}\033[00m'.format('error')
+                return 'error'
             else:
-                # return '\033[0;31m{}\033[00m'.format('OK')
-                return 'OK'
+                # return '\033[0;31m{}\033[00m'.format('nominal')
+                return 'nominal'
 
         def parse_fan_speeds_rpm(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -2975,9 +2981,9 @@ class SkarabTransport(Transport):
                 if 'fan_pwm' in key:
                     pwm_value = round(raw_sensor_data[value] / 100.0, 2);
                     if(pwm_value > 100 or pwm_value < 0):
-                        message = 'ERROR'
+                        message = 'error'
                     else:
-                        message = 'OK'
+                        message = 'nominal'
                     self.sensor_data[key] = (
                             pwm_value, '%',message)
 
@@ -2998,7 +3004,7 @@ class SkarabTransport(Transport):
                         temperature = struct.unpack(
                             '!I', struct.pack('!4B',
                                               *raw_sensor_data[value:value+4]))[0]
-                        self.sensor_data[key] = (temperature,
+                        self.sensor_data[key] = (-1 if temperature==0xffeeddcc else temperature,
                                                  'degC',
                                                  check_temperature(key, temperature, inlet_ref=0))
 
