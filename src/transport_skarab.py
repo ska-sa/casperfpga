@@ -3371,7 +3371,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                             page=sd.TUNABLE_PARAMETERS_PAGE,
-                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
                                             device_rom=None, skip_rom_address=1,
                                             offset=offset, timeout=None, retries=None,
                                             force_page_zero_write=False)
@@ -3401,7 +3401,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                        page=sd.TUNABLE_PARAMETERS_PAGE,
-                                       one_wire_port=sd.MB_I2C_BUS_ID,
+                                       one_wire_port=sd.MB_ONE_WIRE_PORT,
                                         device_rom=None, skip_rom_address=1,
                                         offset=offset, timeout=None, retries=None,
                                         force_page_zero_write=False)
@@ -3432,7 +3432,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                             page=sd.TUNABLE_PARAMETERS_PAGE,
-                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
                                             device_rom=None,
                                             skip_rom_address=1,
                                             offset=offset, timeout=None,
@@ -3458,7 +3458,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                             page=sd.TUNABLE_PARAMETERS_PAGE,
-                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
                                             device_rom=None,
                                             skip_rom_address=1,
                                             offset=offset, timeout=None,
@@ -3492,7 +3492,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                             page=sd.TUNABLE_PARAMETERS_PAGE,
-                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
                                             device_rom=None,
                                             skip_rom_address=1,
                                             offset=offset, timeout=None,
@@ -3500,6 +3500,26 @@ class SkarabTransport(Transport):
                                             force_page_zero_write=False)
 
         return rv
+
+    def get_tunable_parameters(self):
+        """
+        Read back the current values of the tuneable parameters (dhcp init time,
+        dhcp rety rate, hmc reconfig timeout, hmc reconfig max retries, link mon
+        timeout)
+        :return: dict
+        """
+
+        # get the data, 9 bytes to be read
+        data = self.one_wire_ds2433_read_mem(sd.MB_ONE_WIRE_PORT, 9,
+                                             sd.TUNABLE_PARAMETERS_PAGE)
+
+        tunable_params = {'dhcp_init_time': (data[0] + (data[1] << 8))/10.0,
+                          'dhcp_retry_rate': (data[2] + (data[3] << 8))/10.0,
+                          'hmc_reconfig_timeout': (data[4] + (data[5] << 8))/10.0,
+                          'hmc_reconfig_max_retries': data[6],
+                          'link_mon_timeout': (data[7] + (data[8] << 8))/10.0}
+
+        return tunable_params
 
     # for retrieving the HMC reconfiguration statistics
 
