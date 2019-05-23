@@ -194,20 +194,19 @@ class RedisTapcpDaemon(object):
         filename = command["file"]
         timeout = command["timeout"]
         response = {"time": message["time"], "id": command["id"]}
-        if host not in self.tftp_connections.keys():
-            self._logger.debug("Initializing TFTP connection to %s" % host)
-            self.tftp_connections[host] = tftpy.TftpClient(host, 69)
         if host not in self.hostq.keys():
             self._logger.debug("Initializing queue for %s" % host)
             self.hostq[host] = Queue()
-            self.workers[host] = Thread(target=self._process_queue, args=(self.hostq[host],))
+            self.workers[host] = Thread(target=self._process_queue, args=(self.hostq[host],host))
             self.workers[host].setDaemon(True)
             self.workers[host].start()
         self._logger.debug("Queuing task ID %d for host %s" % (command["id"], host))
         self.hostq[host].put(message)
             
 
-    def _process_queue(self, q):
+    def _process_queue(self, q, host):
+        self._logger.debug("Initializing TFTP connection to %s" % host)
+        conn = tftpy.TftpClient(host, 69)
         while True:
             message = q.get()
             command = message["command"]
@@ -218,18 +217,18 @@ class RedisTapcpDaemon(object):
             response = {"time": message["time"], "id": command["id"]}
             if cmd_type == "read":
                 self._logger.debug("Processing read command (ID %d)" % command["id"])
-                self.process_read_cmd(filename, timeout, response, host)
+                self.process_read_cmd(filename, timeout, response, conn)
             elif cmd_type == "write":
                 self._logger.debug("Processing write command (ID %d)" % command["id"])
                 data = command["data"]
-                self.process_write_cmd(filename, timeout, response, host, data)
+                self.process_write_cmd(filename, timeout, response, conn, data)
             self._logger.debug("Marking task %d done" % command["id"])
             q.task_done()
 
-    def process_read_cmd(self, filename, timeout, response, host):
+    def process_read_cmd(self, filename, timeout, response, conn):
         try:
             buf = StringIO()
-            self.tftp_connections[host].download(filename, buf, timeout=timeout)
+            conn.download(filename, buf, timeout=timeout)
             response["response"] = base64.b64encode(buf.getvalue())
             response["status"] = SUCCESS
             self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
@@ -239,16 +238,16 @@ class RedisTapcpDaemon(object):
             response["status"] = FAIL
             self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
             try:
-                self.tftp_connections[host].context.end()
+                conn.context.end()
             except:
                 pass
         return
 
-    def process_write_cmd(self, filename, timeout, response, host, data):
+    def process_write_cmd(self, filename, timeout, response, conn, data):
         try:
             buf = StringIO(base64.b64decode(data))
             self._logger.info("Writing %d bytes" % buf.len)
-            self.tftp_connections[host].upload(filename, buf, timeout=timeout)
+            conn.upload(filename, buf, timeout=timeout)
             response["response"] = None
             response["status"] = SUCCESS
             self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
@@ -258,7 +257,7 @@ class RedisTapcpDaemon(object):
             response["status"] = FAIL
             self.r.publish(REDIS_RESPONSE_CHANNEL, json.dumps(response))
             try:
-                self.tftp_connections[host].context.end()
+                conn.context.end()
             except:
                 pass
         return

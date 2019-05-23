@@ -8,17 +8,6 @@ logger = logging.getLogger(__name__)
 
 # Some codes and docstrings are copied from https://github.com/UCBerkeleySETI/snap_control
 class SNAPADC(object):
-
-    RESOLUTION  = 8
-
-    adc = None
-    lmx = None
-    clksw = None
-    ram = None
-
-    # Current delay tap settings for all IDELAYE2
-    curDelay = None
-
     # Wishbone address and mask for read
     WB_DICT = [None] * ((0b11 << 2) + 1)
 
@@ -55,6 +44,15 @@ class SNAPADC(object):
     ERROR_RAMP = 5
 
     def __init__(self, interface, ADC='HMCAD1511', ref=None, resolution=8):
+        self.RESOLUTION  = 8
+        self.adc = None
+        self.lmx = None
+        self.clksw = None
+        self.ram = None
+
+        # Current delay tap settings for all IDELAYE2
+        self.curDelay = None
+        
         # interface => casperfpga.CasperFpga(hostname/ip)
 
         self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
