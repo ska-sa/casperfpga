@@ -3859,6 +3859,7 @@ class SkarabTransport(Transport):
         print('\n{title:^94}\n'.format(title=title))
 
         if device_logged == 'MAX31785 Fan Controller':
+            print('WARNING: Clear the MAX31785 Fan Controller logs manually after debugging to prevent losing new fault logs.\nUse the clear_max31785_hw_logs command\n')
             print(
                 '{entry:^10} {device:^25} {event:^25}'.format(
                     entry='Log Entry', device='Device Page',
