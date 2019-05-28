@@ -11,6 +11,7 @@ import snap
 import tengbe
 import fortygbe
 import qdr
+import hmc
 import katadc
 import skarabadc
 
@@ -34,6 +35,7 @@ CASPER_MEMORY_DEVICES = {
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
+    'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
 }
 
 CASPER_ADC_DEVICES = {
@@ -62,9 +64,6 @@ CASPER_OTHER_DEVICES = {
     'casper:xeng':                  'xeng',
     'xps:xsg':                      'xps',
 }
-
-
-
 
 class UnknownTransportError(Exception):
     pass
@@ -127,6 +126,7 @@ class CasperFpga(object):
         self.other_devices = None
         self.sbrams = None
         self.qdrs = None
+        self.hmcs = None
         self.registers = None
         self.gbes = None
         self.snapshots = None
@@ -256,14 +256,11 @@ class CasperFpga(object):
         return self.transport.set_igmp_version(version)
 
     def upload_to_ram_and_program(self, filename=None, wait_complete=True,
-                                  legacy_reg_map=True, chunk_size=1988,
-                                  initialise_objects=False):
+                                  chunk_size=1988, initialise_objects=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: The file to upload
         :param wait_complete: Do not wait for this operation, just return
-        :param legacy_reg_map: Older fpg files have a different register mapping,
-                                set this flag to true for these
         :param chunk_size: The SKARAB supports 1988, 3976 and 7952 byte programming packets,
                            but old bitfiles only support 1988 (the default)
                            after upload
@@ -282,7 +279,7 @@ class CasperFpga(object):
             return True
         if self.bitstream:
             if self.bitstream[-3:] == 'fpg':
-                self.get_system_information(filename, legacy_reg_map=legacy_reg_map,
+                self.get_system_information(filename,
                                             initialise_objects=initialise_objects)
 
         return rv
@@ -623,7 +620,7 @@ class CasperFpga(object):
         return getattr(self, container)
 
     def get_system_information(self, filename=None, fpg_info=None,
-                               legacy_reg_map=True, initialise_objects=False, **kwargs):
+                               initialise_objects=False, **kwargs):
         """
         Get information about the design running on the FPGA.
         If filename is given, get it from file, otherwise query the
