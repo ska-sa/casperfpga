@@ -137,9 +137,9 @@ class I2C:
         I2C_ENABLE_OFFSET = 7
         self.fpga.write_int(self.controller_name, 0<<I2C_ENABLE_OFFSET, word_offset=controlReg, blindwrite=True)
 
-    def _itf_write(self,addr,data):
+    def _itf_write(self,addr,data,check_ack=True):
         self.fpga.write_int(self.controller_name, data, word_offset=addr, blindwrite=True)
-        if addr == commandReg:
+        if addr == commandReg and check_ack:
             while (self.getStatus()["TIP"]):
                 time.sleep(self._retry_wait)
 
@@ -301,6 +301,51 @@ class I2C:
             self._write(addr,cmd+data)
         else:
             raise ValueError("Invalid parameter")
+
+    def _probe(self,addr):
+        """ Test if a device with addr is present on the I2C bus
+
+        1. Generate a start signal
+        2. Send address
+        3. Send read/write bit
+        4. Read ACK status
+        5. Send a Stop signal
+        6. Return true is ACK==0
+
+        addr: 7-bit integer, address of the slave device
+        The return is a boolean when a device exists at addr
+
+        E.g.
+            _read(0x20) # Return true is a device is available at 0x20
+        """
+
+        # Set address and read bit (can be a write bit as well)
+        self._itf_write(transmitReg,    (addr<<1)|READ_BIT, check_ack=False)
+        # Send start signal and start write address to the bus
+        self._itf_write(commandReg, CMD_START|CMD_WRITE, check_ack=False)
+        # Check the 9th bit, i.e. ACK, is low
+        while (self.getStatus()["TIP"]):
+            pass
+        ack = self.getStatus()['ACK']
+        # Send a Stop signal
+        self._itf_write(commandReg, CMD_STOP)
+
+        return ack==0
+
+    def probe(self):
+        import sys
+        print ('   00  01  02  03  04  05  06  07  08  09  10  11  12  13  14  15')
+        for row in range(8):
+            sys.stdout.write('{}'.format(row))
+            sys.stdout.flush()
+            for col in range(16):
+                addr = row << 4 | col
+                mark = '{:02x}'.format(addr) if self._probe(addr) else '  '
+                sys.stdout.write('  ' + mark)
+                sys.stdout.flush()
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+
 
 class I2C_SMBUS:
 
@@ -551,7 +596,7 @@ class I2C_PIGPIO:
         else:
             raise ValueError("Invalid parameter")
 
-class I2C_DEVICE():
+class I2C_DEVICE(object):
     """ I2C device base class """
 
     DICT = dict()

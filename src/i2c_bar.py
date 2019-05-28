@@ -122,12 +122,12 @@ class MS5611_01B:
         data = self.read(0x00,3)
         data = (data[0]<<16)|(data[1]<<8)|data[2]
 
-        dt = data - self.prom[5] * 256.0
+        dt = data - self.prom[5] * (1<<8) * 1.0
 
         data = 2000 + dt * self.prom[6] / (1<<23)
 
         if raw==False:
-            data /= 100.
+            return data / 100.
         else:
             return data,dt
 

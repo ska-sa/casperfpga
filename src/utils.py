@@ -420,7 +420,6 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
         errmsg = 'Ran \'%s\' on hosts. Did not get a response ' \
                  'from %s.' % (target_function[0].__name__, hosts_missing)
         LOGGER.error(errmsg)
-        raise RuntimeError(errmsg)
     return returnval
 
 
