@@ -1,9 +1,7 @@
 import time,numpy as np,logging,struct
 from i2c import I2C_DEVICE
 
-logger = logging.getLogger(__name__)
-
-class LTC2990():
+class LTC2990(I2C_DEVICE):
     """ Quad I2C Voltage, Current and Temperature Monitor """
 
     DICT = dict()
@@ -59,14 +57,16 @@ class LTC2990():
     VCCBIAS = 2.5
     TEMPFACTOR = 16.0
 
+
     fmt = 0 # celsius -> 0, kelvin -> 1
     repeat = 1 # repeat -> 0, single -> 1
     mode1 = 0b11 # mode1 -> mode[4:3], 0b11 for all measurements per mode[2:0]
     mode0 = 0b0 # mode0 -> mode[2:0], 0b0 for V1, V2, TR2
 
     def __init__(self, itf, addr=0x4f):
-        self.itf=itf
-        self.addr=addr
+        super(LTC2990, self).__init__(itf, addr)
+
+        self._tsampling = 0.05
 
     def init(self,fmt='celsius',repeat=False,mode1=3,mode0=7):
         """ Initialise LTC2990
@@ -89,16 +89,12 @@ class LTC2990():
         """
 
         if fmt not in ['celsius','kelvin']:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if repeat not in [False,True]:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if mode1 not in range(4):
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if mode0 not in range(8):
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
         self.fmt = 0 if fmt == 'celsius' else 1
@@ -144,14 +140,15 @@ class LTC2990():
         name='TINT'
 
         self.setWord('TRIGGER',0xff)
-        cnt=0
-        while self.getStatus('BUSY'):
-            cnt+=1
-            time.sleep(0.01)
-            if cnt>10:
-                msg = "Voltage sensor at address {} failed to read its temperature!".format(hex(self.addr))
-                logger.warning(msg)
-                return float('nan')
+
+        for i in range(self._retry+1):
+            if not self.getStatus('BUSY'):
+                break
+            elif i == self._retry:
+                raise IOError('Failed to read temperature, voltage sensor always busy!')
+            else:
+                time.sleep(self._tsampling)
+
         msb = self.getWord(name+'MSB')
         lsb = self.getWord(name+'LSB')
 
@@ -182,7 +179,6 @@ class LTC2990():
         """
         name = name.lower()
         if name not in self.MODE0[self.mode0]+['vcc']:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
         if name != 'vcc':
@@ -192,14 +188,15 @@ class LTC2990():
             reg = 'VCC'
 
         self.setWord('TRIGGER',0xff)
-        cnt=0
-        while self.getStatus('BUSY'):
-            cnt+=1
-            time.sleep(0.01)
-            if cnt>10:
-                msg = "Voltage sensor at address {} failed to read {}!".format(hex(self.addr),name)
-                logger.warning(msg)
-                return float('nan')
+
+        for i in range(self._retry+1):
+            if not self.getStatus('BUSY'):
+                break
+            elif i == self._retry:
+                raise IOError('Failed to read volt, voltage sensor always busy!')
+            else:
+                time.sleep(self._tsampling)
+
         msb = self.getWord(reg+'MSB')
         lsb = self.getWord(reg+'LSB')
 
@@ -218,7 +215,6 @@ class LTC2990():
     def getStatus(self,name=None):
 
         if name not in self.DICT[0].keys() + [None]:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
         data = self.read(0x0)
@@ -235,7 +231,6 @@ class LTC2990():
             rval = self.read(rid)
             return {name: self._get(rval,mask) for name, mask in self.DICT[rid].items()}
         else:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
     def getWord(self,name):
@@ -253,7 +248,7 @@ class LTC2990():
             self.write(rid,data)
 
 
-class INA219():
+class INA219(I2C_DEVICE):
     """ INA219 Zero-Drift, Bidirectional Current/Power Monitor With I2C Interface """
 
     DICT = dict()
@@ -296,9 +291,9 @@ class INA219():
             64 : 0b1110,
             128 : 0b1111, }
 
-    def __init__(self, itf, addr=0x45):
-        self.itf=itf
-        self.addr=addr
+    def __init__(self, itf, addr=0x45, **kwargs):
+        super(INA219, self).__init__(itf, addr, **kwargs)
+        self._tsampling = 0.001
 
     def init(self,brng=16,pg=320,badc=128,sadc=128,mode=0b011):
         """ Initialise INA219
@@ -330,19 +325,14 @@ class INA219():
         """
 
         if brng not in self.BRNG:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if pg not in self.PG:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if badc not in self.ADC:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if sadc not in self.ADC:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
         if mode not in range(8):
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
         rid, mask = self._getMask(self.DICT, 'BRNG')
@@ -395,7 +385,6 @@ class INA219():
         """
         name = name.lower()
         if name not in ['shunt','bus']:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
         # trigger
@@ -403,14 +392,13 @@ class INA219():
         self.setWord('configuration',conf)
 
         # check availability
-        cnt=0
-        while not self.getStatus('CNVR'):
-            cnt+=1
-            time.sleep(0.01)
-            if cnt>10:
-                msg = "Voltage sensor at address {} reading timeout!".format(hex(self.addr))
-                logger.warning(msg)
-                return float('nan')
+        for i in range(self._retry+1):
+            if not self.getStatus('CNVR'):
+                break
+            elif i == self._retry:
+                raise IOError('Failed to read voltage, conversion not ready!')
+            else:
+                time.sleep(self._tsampling)
 
         # read and interpret
         if name == 'shunt':
@@ -425,7 +413,6 @@ class INA219():
     def getStatus(self,name='CNVR'):
 
         if name not in ['CNVR','OVF']:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
         return self.getWord(name)
@@ -437,7 +424,6 @@ class INA219():
             rval = self.read(rid)
             return {name: self._get(rval,mask) for name, mask in self.DICT[rid].items()}
         else:
-            logger.error('Invalid parameter')
             raise ValueError("Invalid parameter")
 
     def getWord(self,name):
