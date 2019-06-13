@@ -24,6 +24,7 @@
 
 # compiled python
 *.pyc
+build/
 
 # pycharm files
 .idea/
