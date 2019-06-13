@@ -79,12 +79,20 @@ class TapcpTransport(Transport):
         except ImportError:
             raise ImportError('You need to install tftpy to use TapcpTransport')
         Transport.__init__(self, **kwargs)
-        set_log_level(logging.ERROR)
-        self.t = tftpy.TftpClient(kwargs['host'], 69)
+
         try:
-            self.logger = kwargs['logger']
+            self.parent = kwargs['parent_fpga']
+            self.logger = self.parent.logger
         except KeyError:
-            self.logger = logging.getLogger(__name__)
+            errmsg = 'parent_fpga argument not supplied when creating tapcp device'
+            raise RuntimeError(errmsg)
+
+        #set_log_level(logging.ERROR)
+        self.t = tftpy.TftpClient(kwargs['host'], 69)
+        #try:
+        #    self.logger = kwargs['logger']
+        #except KeyError:
+        #    self.logger = logging.getLogger(__name__)
 
         new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
         self.logger.info(new_connection_msg)
@@ -98,21 +106,14 @@ class TapcpTransport(Transport):
         :return:
         """
         try:
-            board = TapcpTransport(host=host_ip, timeout=0.1)
-        except ImportError:
-            # LOGGER.error('tftpy is not installed, do not know if %s is a Tapcp'
-            #              'client or not' % str(host_ip))
-            return False
-        # Temporarily turn off logging so if tftp doesn't respond
-        # there's no error. Remember the existing log level so that
-        # it can be re-set afterwards if tftp connects ok.
-        log_level = get_log_level()
-        set_log_level(logging.CRITICAL)
-        if board.is_connected():
-            set_log_level(log_level)
-            # LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
+            import tftpy
+            board = tftpy.TftpClient(host_ip, 69)
+            buf = StringIO()
+            board.download('%s.%x.%x' % ('sys_clkcounter', 0, 1),
+                           buf, timeout=3)
             return True
-        return False
+        except Exception:
+            return False
 
     def listdev(self):
         buf = StringIO()

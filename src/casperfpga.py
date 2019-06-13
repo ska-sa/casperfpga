@@ -109,7 +109,11 @@ class CasperFpga(object):
         kwargs['parent_fpga'] = self
 
         # Setup logger to be propagated through transports
-        self.logger.setLevel(logging.NOTSET)
+        # either set log level manually or default to error
+        try:
+            self.set_log_level(log_level=kwargs['log_level'])
+        except KeyError:
+            self.set_log_level(log_level='ERROR')
 
         # was the transport specified?
         transport = get_kwarg('transport', kwargs)
@@ -137,9 +141,6 @@ class CasperFpga(object):
         self._reset_device_info()
         self.logger.debug('%s: now a CasperFpga' % self.host)
 
-        # Set log level to ERROR
-        self.logger.setLevel(logging.ERROR)
-
         
     def choose_transport(self, host_ip):
         """
@@ -154,12 +155,12 @@ class CasperFpga(object):
             if SkarabTransport.test_host_type(host_ip):
                 self.logger.debug('%s seems to be a SKARAB' % host_ip)
                 return SkarabTransport
-            elif TapcpTransport.test_host_type(host_ip):
-                self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
-                return TapcpTransport
             elif KatcpTransport.test_host_type(host_ip):
                 self.logger.debug('%s seems to be ROACH' % host_ip)
                 return KatcpTransport
+            elif TapcpTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
+                return TapcpTransport
             else:
                 errmsg = 'Possible that host does not follow one of the \
                             defined casperfpga transport protocols'

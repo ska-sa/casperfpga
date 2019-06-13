@@ -92,10 +92,17 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         Transport.__init__(self, **kwargs)
 
         # Create instance of self.logger
+        # try:
+        #     self.logger = kwargs['logger']
+        # except KeyError:
+        #     self.logger = logging.getLogger(__name__)
+
         try:
-            self.logger = kwargs['logger']
+            self.parent = kwargs['parent_fpga']
+            self.logger = self.parent.logger
         except KeyError:
-            self.logger = logging.getLogger(__name__)
+            errmsg = 'parent_fpga argument not supplied when creating katcp device'
+            raise RuntimeError(errmsg)
 
         new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
         self.logger.info(new_connection_msg)
@@ -121,13 +128,17 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             board = katcp.CallbackClient(host=host_ip, port=7147, timeout=timeout, auto_reconnect=False)
             board.setDaemon(True)
             board.start()
-
             connected = board.wait_connected(timeout)
+            board.stop()
+
             if not connected:
-                board.stop()
                 return False
             else:
                 return True
+
+        except AttributeError:
+                raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
+
         except Exception:
             return False
 
@@ -184,8 +195,9 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                 self.setDaemon(True)
                 self.start()
             except AttributeError:
-                # old style
-                self.start(daemon=True)
+                # old style katcp-python
+                # self.start(daemon=True)
+                raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
             connected = self.wait_connected(timeout)
             if not connected:
                 err_msg = 'Connection to {} not established within {}s'.format(
@@ -344,6 +356,23 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         reply, _ = self.katcprequest(
             name='read', request_timeout=self._timeout, require_ok=True,
             request_args=(device_name, str(offset), str(size)))
+        return reply.arguments[1]
+
+    def wordread(self, device_name, size=1, word_offset=0, bit_offset=0):
+        """
+
+        :param device_name: name of memory device from which to read
+        :param word_count: how many words to read
+        :param word_offset: start at this word offset
+        :param bit_offset: start at this bit offset
+        :return: value in hexadecimal
+        """
+
+        reply, _ = self.katcprequest(
+            name='wordread', request_timeout=self._timeout, require_ok=True,
+            request_args=(device_name, str(word_offset)+':'+str(bit_offset),
+                          str(size))
+        )
         return reply.arguments[1]
 
     def blindwrite(self, device_name, data, offset=0):
