@@ -416,7 +416,6 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         # raise DeprecationWarning('This does not seem to be used anymore.'
         #                          'Use upload_to_ram_and_program')
-        # TODO - The logic here is for broken TCPBORPHSERVER, needs fixing
         if 'program_filename' in self.system_info.keys():
             if filename is None:
                 filename = self.system_info['program_filename']
@@ -462,11 +461,15 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             raise RuntimeError('%s: progdev request %s failed.' %
                                (self.host, filename))
         if filename[-3:] == 'fpg':
-            self.get_system_information()
+            #TODO: fix this
+            # self.get_system_information()
+            pass
         else:
             self.logger.info('%s: %s is not an fpg file, could not parse '
                         'system information.' % (self.host, filename))
         self.logger.info('%s: programmed %s okay.' % (self.host, filename))
+        self.prog_info['last_programmed'] = filename
+        self.prog_info['last_uploaded'] = ''
 
     def deprogram(self):
         """
@@ -484,6 +487,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             time.sleep(0.05)
             reply, _ = self.katcprequest(name='progdev', require_ok=True)
             self.logger.info('%s: deprogrammed okay' % self.host)
+            self.prog_info['last_programmed'] = ''
         except KatcpRequestError as exc:
             self.logger.exception('{}: could not deprogram FPGA, katcp request '
                              'failed:'.format(self.host))
@@ -595,6 +599,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.unhandled_inform_handler = None
         self._timeout = old_timeout
         self.prog_info['last_programmed'] = filename
+        self.prog_info['last_uploaded'] = filename
         return True
 
     def upload_to_flash(self, binary_file, port=-1, force_upload=False,
@@ -661,6 +666,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         if (request_result != '') or (upload_result != ''):
             raise Exception('Error: request(%s), upload(%s)' %
                             (request_result, upload_result))
+        self.prog_info['last_uploaded'] = filename
         return
 
     def _delete_bof(self, filename):

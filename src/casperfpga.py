@@ -274,10 +274,19 @@ class CasperFpga(object):
             self.bitstream = filename
         else:
             filename = self.bitstream
-        rv = self.transport.upload_to_ram_and_program(
-            filename=filename, wait_complete=wait_complete, chunk_size=chunk_size)
+
+        # TODO: only skarab needs chunk_size, and it can break function calls to to other transport layers
+        # TODO: this is a quick fix for now. A more elegant solution is required.
+        if self.transport == SkarabTransport:
+            rv = self.transport.upload_to_ram_and_program(
+                filename=filename, wait_complete=wait_complete, chunk_size=chunk_size)
+        else:
+            rv = self.transport.upload_to_ram_and_program(
+                filename=filename, wait_complete=wait_complete)
+
         if not wait_complete:
             return True
+
         if self.bitstream:
             if self.bitstream[-3:] == 'fpg':
                 self.get_system_information(filename,
