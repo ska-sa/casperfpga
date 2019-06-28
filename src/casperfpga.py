@@ -727,19 +727,21 @@ class CasperFpga(object):
         if '77777_svn' in device_dict:
             self.rcs_info['svn'] = device_dict['77777_svn']
 
-        # Determine if the new or old register map is used
-        new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
-        old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
+        legacy_reg_map = False
+        if type(self.transport) is SkarabTransport:
+            # Determine if the new or old register map is used
+            new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
+            old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
 
-        if(new_reg_map_mac_word1_hex == 0x650):
-            self.logger.debug('Using new 40GbE core register map')
-            legacy_reg_map = False
-        elif(old_reg_map_mac_word1_hex == 0x650):
-            self.logger.debug('Using old 40GbE core register map')
-            legacy_reg_map = True
-        else:
-            self.logger.error('Unknown 40GbE core register map')
-            raise ValueError('Unknown register map')
+            if(new_reg_map_mac_word1_hex == 0x650):
+                self.logger.debug('Using new 40GbE core register map')
+                legacy_reg_map = False
+            elif(old_reg_map_mac_word1_hex == 0x650):
+                self.logger.debug('Using old 40GbE core register map')
+                legacy_reg_map = True
+            else:
+                self.logger.error('Unknown 40GbE core register map')
+                raise ValueError('Unknown register map')
 
         # Create Register Map
         self._create_memory_devices(device_dict, memorymap_dict,
