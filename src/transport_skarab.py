@@ -255,8 +255,9 @@ class SkarabTransport(Transport):
         self.logger.error(errmsg)
         raise SkarabUnknownDeviceError(errmsg)
 
-    def read(self, device_name, size, offset=0, use_bulk=True,
-             timeout=None, retries=None, unsigned=False):
+    def read(self, device_name, size, offset=0,
+             use_bulk=True, timeout=None, retries=None,
+             unsigned=False, return_unpacked=False):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
@@ -267,7 +268,9 @@ class SkarabTransport(Transport):
                         - Default value is None, uses initialised value
         :param retries: value specifying number of retries should instruction fail
                         - Default value is None, uses initialised value
-        :param unsigned: flag to specify the data read as signed or unsigned
+        :param unsigned: Flag to specify the data read as signed or unsigned
+        :param return_unpacked: Flag to specify whether to unpack data before returning
+                                - Combating issue with Memory and Snap reads (_process_data)
         :return: binary data string
         """
         if timeout is None: timeout=self.timeout
@@ -305,11 +308,17 @@ class SkarabTransport(Transport):
             addr_start += 4
         # return the number of bytes requested
         # return data[offset_diff: offset_diff + size]
-        # Now unpacking data here before returning
-        data_format = 'I' if unsigned else 'i'
-        struct_format = '{}{}'.format(self.endianness, data_format)
-        data_unpacked = struct.unpack(struct_format, data)
-        return data_unpacked
+
+        if return_unpacked:
+            # Now unpacking data here before returning
+            data_format = 'I' if unsigned else 'i'
+            struct_format = '{}{}'.format(self.endianness, data_format)
+            data_unpacked = struct.unpack(struct_format,
+                                    data[offset_diff: offset_diff + size])
+            return data_unpacked
+        else:
+            # Return like the good old days
+            return data[offset_diff: offset_diff + size]
         
 
     def _bulk_read_req(self, address, words_to_read,

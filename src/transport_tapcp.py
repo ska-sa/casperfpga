@@ -166,7 +166,8 @@ class TapcpTransport(Transport):
         """
         raise NotImplementedError
 
-    def read(self, device_name, size, offset=0, use_bulk=True, unsigned=False):
+    def read(self, device_name, size, offset=0, use_bulk=True, 
+             unsigned=False, return_unpacked=False):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
@@ -174,16 +175,21 @@ class TapcpTransport(Transport):
         :param offset: start at this offset, offset in bytes
         :param use_bulk: Does nothing. Kept for API compatibility
         :param unsigned: flag to specify the data read as signed or unsigned
+        :param return_unpacked: flag to specify whether to unpack the read-data
+                                before returning
         :return: binary data string
         """
         buf = StringIO()
         self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
-        # Now unpacking in the transport layer before returning
-        # return buf.getvalue()
         
-        data_format = 'I' if unsigned else 'i'
-        struct_format = '{}{}'.format(self.endianness, data_format)
-        data_unpacked = struct.unpack(struct_format, buf.getvalue())
+        if return_unpacked:
+            # Now unpacking in the transport layer before returning
+            data_format = 'I' if unsigned else 'i'
+            struct_format = '{}{}'.format(self.endianness, data_format)
+            data_unpacked = struct.unpack(struct_format, buf.getvalue())
+        else:
+            return buf.getvalue()
+
 
     def blindwrite(self, device_name, data, offset=0, use_bulk=True):
         """

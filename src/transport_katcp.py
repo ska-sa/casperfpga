@@ -343,7 +343,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                    (self.host, val, val2))
         return True
 
-    def read(self, device_name, size, offset=0, unsigned=False):
+    def read(self, device_name, size, offset=0, unsigned=False, return_unpacked=False):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
@@ -355,12 +355,15 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             name='read', request_timeout=self._timeout, require_ok=True,
             request_args=(device_name, str(offset), str(size)))
         
-        # Now unpacking in the transport layer before returning
-        data_format = 'I' if unsigned else 'i'
-        struct_format = '{}{}'.format(self.endianness, data_format)
-        data_unpacked = struct.unpack(struct_format, reply.arguments[1])
+        if return_unpacked:
+            # Now unpacking in the transport layer before returning
+            data_format = 'I' if unsigned else 'i'
+            struct_format = '{}{}'.format(self.endianness, data_format)
+            data_unpacked = struct.unpack(struct_format, reply.arguments[1])
 
-        return data_unpacked
+            return data_unpacked
+        else:
+            return reply.arguments[1]
 
     def wordread(self, device_name, size=1, word_offset=0, bit_offset=0):
         """
