@@ -307,7 +307,6 @@ class MPU9250:
         # This is an effective way of detecting connectivity of I2C bus
         if self.whoami() is not self.WHOAMI:
             msg = "MPU9250 at address {} is not ready!".format(addr)
-            logger.error(msg)
             raise IOError(msg)
 
     def init(self,gyro=True,accel=True,lowpower=False):
@@ -1001,7 +1000,7 @@ class AK8963:
         self.addr = addr
 
         if self.whoami() is not self.WHOAMI:
-            logger.error("AK893 at address {} is not ready!".format(addr))
+            raise IOError("AK893 at address {} is not ready!".format(addr))
 
     def init(self):
         """ Initialise AKB8963
