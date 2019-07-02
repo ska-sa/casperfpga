@@ -215,6 +215,15 @@ class Snap(Memory):
         :param read_nowait: do not wait for the snap to finish reading
         """
         rawdata, rawtime = self.read_raw(**kwargs)
+        if self.parent.endianness == '':
+            # Probably Red Pitaya
+            repacked_data = ''
+            for i in range(0, len(rawdata['data']), 4):
+                four_bytes = rawdata['data'][i:i+4]
+                repacked_data += four_bytes[::-1]
+
+            rawdata['data'] = repacked_data
+        # else: Continue!
         processed = self._process_data(rawdata['data'])
         if 'offset' in rawdata.keys():
             offset = rawdata['offset']
