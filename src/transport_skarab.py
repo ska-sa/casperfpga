@@ -114,6 +114,7 @@ class SkarabTransport(Transport):
         try:
             # Entry point is always via casperfpga.CasperFpga
             self.parent = kwargs['parent_fpga']
+            self.endianness = self.parent.endianness
             self.logger = self.parent.logger
         except KeyError:
             errmsg = 'parent_fpga argument not supplied when creating skarab'
@@ -254,9 +255,9 @@ class SkarabTransport(Transport):
         self.logger.error(errmsg)
         raise SkarabUnknownDeviceError(errmsg)
 
-    def read(self, device_name, size, offset=0, use_bulk=True,
-             timeout=None,
-             retries=None):
+    def read(self, device_name, size, offset=0,
+             use_bulk=True, timeout=None, retries=None,
+             unsigned=False, return_unpacked=False):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
@@ -267,6 +268,9 @@ class SkarabTransport(Transport):
                         - Default value is None, uses initialised value
         :param retries: value specifying number of retries should instruction fail
                         - Default value is None, uses initialised value
+        :param unsigned: Flag to specify the data read as signed or unsigned
+        :param return_unpacked: Flag to specify whether to unpack data before returning
+                                - Combating issue with Memory and Snap reads (_process_data)
         :return: binary data string
         """
         if timeout is None: timeout=self.timeout
@@ -303,7 +307,19 @@ class SkarabTransport(Transport):
             # increment addr_start by four
             addr_start += 4
         # return the number of bytes requested
-        return data[offset_diff: offset_diff + size]
+        # return data[offset_diff: offset_diff + size]
+
+        if return_unpacked:
+            # Now unpacking data here before returning
+            data_format = 'I' if unsigned else 'i'
+            struct_format = '{}{}'.format(self.endianness, data_format)
+            data_unpacked = struct.unpack(struct_format,
+                                    data[offset_diff: offset_diff + size])
+            return data_unpacked
+        else:
+            # Return like the good old days
+            return data[offset_diff: offset_diff + size]
+        
 
     def _bulk_read_req(self, address, words_to_read,
                        timeout=None,
@@ -526,7 +542,7 @@ class SkarabTransport(Transport):
         """
         Unchecked data write.
         :param device_name: the memory device to which to write
-        :param data: the byte string to write
+        :param data: integer or binary-packed string data to be written
         :param offset: the offset, in bytes, at which to write
         :param use_bulk: use the bulk write function
         :param timeout: value in seconds to wait before aborting instruction
@@ -537,8 +553,12 @@ class SkarabTransport(Transport):
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
+        
+        if type(data) is not str:
+            data_format = 'i' if data < 0 else 'I'
+            struct_format = '{}{}'.format(self.endianness, data_format)
+            data = struct.pack(struct_format, data)
 
-        assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
 

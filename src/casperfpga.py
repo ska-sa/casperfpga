@@ -105,11 +105,30 @@ class CasperFpga(object):
                     errmsg = 'Problem creating logger for {}'.format(self.host)
                     raise ValueError(errmsg)
 
+        # Allow for different network endianness formats
+        try:
+            '''
+            Should be a character of the following type:
+                '@', 'native, native'
+                '=', 'native, standard'
+                '<', 'little-endian'
+                '>', 'big-endian'
+                '!', 'network'
+            '''
+            self.endianness = kwargs['endianness']
+        except KeyError:
+            # Default to big-endian
+            self.endianness = '>'
+
         # some transports, e.g. Skarab, need to know their parent
         kwargs['parent_fpga'] = self
 
         # Setup logger to be propagated through transports
-        self.logger.setLevel(logging.NOTSET)
+        # either set log level manually or default to error
+        try:
+            self.set_log_level(log_level=kwargs['log_level'])
+        except KeyError:
+            self.set_log_level(log_level='ERROR')
 
         # was the transport specified?
         transport = get_kwarg('transport', kwargs)
@@ -137,9 +156,6 @@ class CasperFpga(object):
         self._reset_device_info()
         self.logger.debug('%s: now a CasperFpga' % self.host)
 
-        # Set log level to ERROR
-        self.logger.setLevel(logging.ERROR)
-
         
     def choose_transport(self, host_ip):
         """
@@ -154,12 +170,12 @@ class CasperFpga(object):
             if SkarabTransport.test_host_type(host_ip):
                 self.logger.debug('%s seems to be a SKARAB' % host_ip)
                 return SkarabTransport
-            elif TapcpTransport.test_host_type(host_ip):
-                self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
-                return TapcpTransport
             elif KatcpTransport.test_host_type(host_ip):
                 self.logger.debug('%s seems to be ROACH' % host_ip)
                 return KatcpTransport
+            elif TapcpTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
+                return TapcpTransport
             else:
                 errmsg = 'Possible that host does not follow one of the \
                             defined casperfpga transport protocols'
@@ -213,7 +229,7 @@ class CasperFpga(object):
         self.logger.info(infomsg)
         return True
 
-    def read(self, device_name, size, offset=0, **kwargs):
+    def read(self, device_name, size, offset=0, unsigned=False, **kwargs):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
@@ -222,7 +238,7 @@ class CasperFpga(object):
         :param kwargs:
         :return:
         """
-        return self.transport.read(device_name, size, offset, **kwargs)
+        return self.transport.read(device_name, size, offset, unsigned=unsigned, **kwargs)
 
     def blindwrite(self, device_name, data, offset=0, **kwargs):
         return self.transport.blindwrite(device_name, data, offset, **kwargs)
@@ -273,10 +289,19 @@ class CasperFpga(object):
             self.bitstream = filename
         else:
             filename = self.bitstream
-        rv = self.transport.upload_to_ram_and_program(
-            filename=filename, wait_complete=wait_complete, chunk_size=chunk_size)
+
+        # TODO: only skarab needs chunk_size, and it can break function calls to to other transport layers
+        # TODO: this is a quick fix for now. A more elegant solution is required.
+        if self.transport == SkarabTransport:
+            rv = self.transport.upload_to_ram_and_program(
+                filename=filename, wait_complete=wait_complete, chunk_size=chunk_size)
+        else:
+            rv = self.transport.upload_to_ram_and_program(
+                filename=filename, wait_complete=wait_complete)
+
         if not wait_complete:
             return True
+
         if self.bitstream:
             if self.bitstream[-3:] == 'fpg':
                 self.get_system_information(filename,
@@ -427,18 +452,45 @@ class CasperFpga(object):
         :return:
         """
         self.blindwrite(device_name, data, offset)
-        new_data = self.read(device_name, len(data), offset)
-        if new_data != data:
-            # TODO - this error message won't show you the problem if
-            # it's not in the first word
-            unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
-            unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
-            err_str = 'Verification of write to %s at offset %d failed. ' \
-                      'Wrote 0x%08x... but got back 0x%08x.' % (
-                          device_name, offset,
-                          unpacked_wrdata, unpacked_rddata)
-            self.logger.error(err_str)
-            raise ValueError(err_str)
+        
+        # TODO: Move this check into the transport layers
+        data_format = 'i' if data < 0 else 'I'
+        struct_format = '{}{}'.format(self.endianness, data_format)
+        str_data = struct.pack(struct_format, data)
+        new_data = self.read(device_name, len(str_data), offset, return_unpacked=True)
+        
+        if new_data[0] != data:
+            errmsg = 'Verification of write to {} at offset {} failed. ' \
+                    'Wrote 0x{:02X}, read 0x{:02X}'.format(device_name, offset, data, new_data[0])
+            self.logger.error(errmsg)
+            raise ValueError(errmsg)
+
+        '''
+        if type(data) is str:
+        
+            data_format = 'i' if data < 0 else 'I'
+            struct_format = '{}{}'.format(self.endianness, data_format)
+            new_data = struct.pack(struct_format, new_data)
+            
+            
+            if new_data != data:
+                # TODO - this error message won't show you the problem if
+                # it's not in the first word
+                # unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
+                # unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
+                # Breaking backwards compatibility
+                data_format = 'L'
+                struct_format = '{}{}'.format(self.endianness, data_format)
+                unpacked_wrdata = struct.unpack(struct_format, data[0:4])[0]
+                unpacked_rddata = struct.unpack(struct_format, new_data[0:4])[0]
+                err_str = 'Verification of write to %s at offset %d failed. ' \
+                        'Wrote 0x%08x... but got back 0x%08x.' % (
+                            device_name, offset,
+                            unpacked_wrdata, unpacked_rddata)
+                self.logger.error(err_str)
+                raise ValueError(err_str)
+        '''
+
 
     def read_int(self, device_name, word_offset=0):
         """
@@ -449,8 +501,11 @@ class CasperFpga(object):
         :param word_offset: the 32-bit word offset at which to read
         :return: signed 32-bit integer
         """
-        data = self.read(device_name, 4, word_offset * 4)
-        return struct.unpack('>i', data)[0]
+        data = self.read(device_name, 4, word_offset * 4, 
+                            return_unpacked=True)
+        # return struct.unpack('>i', data)[0]
+        # Breaking backwards compatibility
+        return data[0]
 
     def read_uint(self, device_name, word_offset=0):
         """
@@ -459,8 +514,11 @@ class CasperFpga(object):
         :param word_offset: the 32-bit word offset at which to read
         :return: unsigned 32-bit integer
         """
-        data = self.read(device_name, 4, word_offset * 4)
-        return struct.unpack('>I', data)[0]
+        data = self.read(device_name, 4, word_offset * 4,
+                            unsigned=True, return_unpacked=True)
+        # return struct.unpack('>I', data)[0]
+        # Breaking backwards compatibility
+        return data[0]
 
     def write_int(self, device_name, integer, blindwrite=False, word_offset=0):
         """
@@ -476,16 +534,18 @@ class CasperFpga(object):
         # negative, must be signed int; if positive over 2^16, must be unsigned
         # int.
         try:
-            data = struct.pack('>i' if integer < 0 else '>I', integer)
+            # data = struct.pack('>i' if integer < 0 else '>I', integer)
+            # Breaking backwards compatibility
+            if blindwrite:
+                self.blindwrite(device_name, integer, word_offset * 4)
+            else:
+                self.write(device_name, integer, word_offset * 4)
         except Exception as ve:
             self.logger.error('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
             raise ValueError('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
-        if blindwrite:
-            self.blindwrite(device_name, data, word_offset * 4)
-        else:
-            self.write(device_name, data, word_offset * 4)
+        
         self.logger.debug('Write_int %8x to register %s at word offset %d '
                           'okay%s.' % (integer, device_name, word_offset,
                           ' (blind)' if blindwrite else ''))
@@ -667,19 +727,21 @@ class CasperFpga(object):
         if '77777_svn' in device_dict:
             self.rcs_info['svn'] = device_dict['77777_svn']
 
-        # Determine if the new or old register map is used
-        new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
-        old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
+        legacy_reg_map = False
+        if type(self.transport) is SkarabTransport:
+            # Determine if the new or old register map is used
+            new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
+            old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
 
-        if(new_reg_map_mac_word1_hex == 0x650):
-            self.logger.debug('Using new 40GbE core register map')
-            legacy_reg_map = False
-        elif(old_reg_map_mac_word1_hex == 0x650):
-            self.logger.debug('Using old 40GbE core register map')
-            legacy_reg_map = True
-        else:
-            self.logger.error('Unknown 40GbE core register map')
-            raise ValueError('Unknown register map')
+            if(new_reg_map_mac_word1_hex == 0x650):
+                self.logger.debug('Using new 40GbE core register map')
+                legacy_reg_map = False
+            elif(old_reg_map_mac_word1_hex == 0x650):
+                self.logger.debug('Using old 40GbE core register map')
+                legacy_reg_map = True
+            else:
+                self.logger.error('Unknown 40GbE core register map')
+                raise ValueError('Unknown register map')
 
         # Create Register Map
         self._create_memory_devices(device_dict, memorymap_dict,

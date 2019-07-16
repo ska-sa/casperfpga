@@ -91,11 +91,16 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         timeout = get_kwarg('timeout', kwargs, 10)
         Transport.__init__(self, **kwargs)
 
-        # Create instance of self.logger
         try:
-            self.logger = kwargs['logger']
+            self.parent = kwargs['parent_fpga']
+            self.logger = self.parent.logger
         except KeyError:
-            self.logger = logging.getLogger(__name__)
+            errmsg = 'parent_fpga argument not supplied when creating katcp device'
+            raise RuntimeError(errmsg)
+
+        # Breaking backwards compatibility with ROACH/2
+        self.endianness = ''
+        self.parent.endianness = ''
 
         new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
         self.logger.info(new_connection_msg)
@@ -121,13 +126,17 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             board = katcp.CallbackClient(host=host_ip, port=7147, timeout=timeout, auto_reconnect=False)
             board.setDaemon(True)
             board.start()
-
             connected = board.wait_connected(timeout)
+            board.stop()
+
             if not connected:
-                board.stop()
                 return False
             else:
                 return True
+
+        except AttributeError:
+                raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
+
         except Exception:
             return False
 
@@ -184,8 +193,9 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                 self.setDaemon(True)
                 self.start()
             except AttributeError:
-                # old style
-                self.start(daemon=True)
+                # old style katcp-python
+                # self.start(daemon=True)
+                raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
             connected = self.wait_connected(timeout)
             if not connected:
                 err_msg = 'Connection to {} not established within {}s'.format(
@@ -333,7 +343,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                    (self.host, val, val2))
         return True
 
-    def read(self, device_name, size, offset=0):
+    def read(self, device_name, size, offset=0, unsigned=False, return_unpacked=False):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
         :param device_name: name of memory device from which to read
@@ -344,18 +354,55 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         reply, _ = self.katcprequest(
             name='read', request_timeout=self._timeout, require_ok=True,
             request_args=(device_name, str(offset), str(size)))
+        
+        if return_unpacked:
+            # Now unpacking in the transport layer before returning
+            data_format = 'I' if unsigned else 'i'
+            struct_format = '{}{}'.format(self.endianness, data_format)
+            data_unpacked = struct.unpack(struct_format, reply.arguments[1])
+
+            return data_unpacked
+        else:
+            return reply.arguments[1]
+
+    def wordread(self, device_name, size=1, word_offset=0, bit_offset=0):
+        """
+
+        :param device_name: name of memory device from which to read
+        :param word_count: how many words to read
+        :param word_offset: start at this word offset
+        :param bit_offset: start at this bit offset
+        :return: value in hexadecimal
+        """
+
+        reply, _ = self.katcprequest(
+            name='wordread', request_timeout=self._timeout, require_ok=True,
+            request_args=(device_name, str(word_offset)+':'+str(bit_offset),
+                          str(size))
+        )
         return reply.arguments[1]
+
+        # Now unpacking in the transport layer before returning
+        # data_format = 'I' if unsigned else 'i'
+        # struct_format = '{}{}'.format(self.endianness, data_format)
+        # data_unpacked = struct.unpack(struct_format, reply.arguments[1])
+
+        # return data_unpacked
 
     def blindwrite(self, device_name, data, offset=0):
         """
         Unchecked data write.
-        :param device_name: the memory device to which to write
-        :param data: the byte string to write
-        :param offset: the offset, in bytes, at which to write
+        :param device_name: the memory device to be written
+        :param data: integer or binary-packed string data to be written
+        :param offset: the offset, in bytes, to be written to
         :return: <nothing>
         """
-        assert(type(data) == str), 'You need to supply binary packed ' \
-                                   'string data!'
+        
+        if type(data) is not str:
+            data_format = 'i' if data < 0 else 'I'
+            struct_format = '{}{}'.format(self.endianness, data_format)
+            data = struct.pack(struct_format, data)
+
         assert(len(data) % 4) == 0, 'You must write 32-bit-bounded words!'
         assert((offset % 4) == 0), 'You must write 32-bit-bounded words!'
         self.katcprequest(name='write', request_timeout=self._timeout,
@@ -387,7 +434,6 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         # raise DeprecationWarning('This does not seem to be used anymore.'
         #                          'Use upload_to_ram_and_program')
-        # TODO - The logic here is for broken TCPBORPHSERVER, needs fixing
         if 'program_filename' in self.system_info.keys():
             if filename is None:
                 filename = self.system_info['program_filename']
@@ -433,11 +479,15 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             raise RuntimeError('%s: progdev request %s failed.' %
                                (self.host, filename))
         if filename[-3:] == 'fpg':
-            self.get_system_information()
+            #TODO: fix this
+            # self.get_system_information()
+            pass
         else:
             self.logger.info('%s: %s is not an fpg file, could not parse '
                         'system information.' % (self.host, filename))
         self.logger.info('%s: programmed %s okay.' % (self.host, filename))
+        self.prog_info['last_programmed'] = filename
+        self.prog_info['last_uploaded'] = ''
 
     def deprogram(self):
         """
@@ -455,6 +505,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             time.sleep(0.05)
             reply, _ = self.katcprequest(name='progdev', require_ok=True)
             self.logger.info('%s: deprogrammed okay' % self.host)
+            self.prog_info['last_programmed'] = ''
         except KatcpRequestError as exc:
             self.logger.exception('{}: could not deprogram FPGA, katcp request '
                              'failed:'.format(self.host))
@@ -566,6 +617,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.unhandled_inform_handler = None
         self._timeout = old_timeout
         self.prog_info['last_programmed'] = filename
+        self.prog_info['last_uploaded'] = filename
         return True
 
     def upload_to_flash(self, binary_file, port=-1, force_upload=False,
@@ -632,6 +684,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         if (request_result != '') or (upload_result != ''):
             raise Exception('Error: request(%s), upload(%s)' %
                             (request_result, upload_result))
+        self.prog_info['last_uploaded'] = filename
         return
 
     def _delete_bof(self, filename):
