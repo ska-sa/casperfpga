@@ -1,20 +1,7 @@
-certifi==2017.7.27.1
-chardet==3.0.4
-cycler==0.10.0
-decorator==4.1.2
-docutils==0.14
-enum34==1.1.6
-functools32==3.2.3.post2
 future==0.16.0
-futures==3.1.1
 ipython==5.3.0
 katcp==0.6.2
 numpy==1.13.3
 odict==1.6.2
-pathlib2==2.3.0
-ProxyTypes==0.9
-PyYAML==3.12
-tornado>4.3, <4.5
-traceback2==1.4.0
-urllib3==1.22
+tornado<5
 -e git://github.com/casper-astro/tftpy.git#egg=tftpy-0.6.3_fork-py2.7.egg

@@ -1,5 +1,4 @@
 import setuptools
-from distutils.core import Extension
 import glob
 import sysconfig
 import os
@@ -9,7 +8,7 @@ DESCRIPTION = 'Talk to CASPER hardware devices using katcp or dcp. See https://g
 URL = 'https://github.com/casper-astro/casperfpga'
 EMAIL = 'apatel@ska.ac.za'
 AUTHOR = 'Paul Prozesky'
-VERSION = '0.0.16' # Need to adopt the __version__.py format
+VERSION = '0.0.17' # Need to adopt the __version__.py format
 
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -26,7 +25,6 @@ except Exception as exc:
 
 # extra_compile_args = sysconfig.get_config_var('CFLAGS').split()
 extra_compile_args = ['-O2', '-Wall']
-#progska_extension = Extension(
 progska_extension = setuptools.Extension(
     'casperfpga.progska',
     # sources=['progska/_progska.c', 'progska/progska.c', 'progska/th.c',
@@ -49,12 +47,16 @@ setuptools.setup(
     url=URL,
     download_url='https://pypi.org/project/casperfpga',
     license='GNU GPLv2',
-    # long_description=long_description,
-    # long_description_content_type='text/markdown',
+    long_description=long_description,
+    long_description_content_type='text/markdown',
+    # Specify version in-line here
     install_requires=[
-        'katcp',
+        'katcp==0.6.2',
         'numpy',
         'odict',
+        'setuptools',
+        # 'tornado>4.3, <4.5',
+        'tornado<5',
     ],
     packages=['casperfpga', 'casperfpga.progska'],
     package_dir={'casperfpga': 'src', 'casperfpga.progska': 'progska'},
