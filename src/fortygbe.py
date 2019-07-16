@@ -55,17 +55,16 @@ class FortyGbe(Gbe):
         self.snaps = {'tx': None, 'rx': None}
         snapnames = self.parent.snapshots.names()
         for txrx in ['r', 't']:
-            name = self.name + '_%sxs0_ss' % txrx
-            if name in snapnames:
-                if (self.name + '_%sxs1_ss' % txrx not in snapnames) or \
-                        (self.name + '_%sxs2_ss' % txrx not in snapnames):
-                    self.logger.error('%sX snapshots misconfigured: %s' % (
-                        txrx.upper(), snapnames))
+            snapshot_index=0
+            self.snaps['%sx' % txrx]=[]
+            name = self.name + '_%sxs%i_ss' %(txrx,snapshot_index)
+            snapshot_found=True
+            while snapshot_found:
+                if name in snapnames:
+                    self.snaps['%sx' % txrx].append(self.parent.snapshots[self.name + '_%sxs%i_ss' %(txrx,snapshot_index)])
+                    snapshot_index+=1
                 else:
-                    self.snaps['%sx' % txrx] = [
-                        self.parent.snapshots[self.name + '_%sxs0_ss' % txrx],
-                        self.parent.snapshots[self.name + '_%sxs1_ss' % txrx],
-                        self.parent.snapshots[self.name + '_%sxs2_ss' % txrx]]
+                   snapshot_found=False
         self.get_gbe_core_details()
 
     @classmethod
@@ -421,20 +420,20 @@ class FortyGbe(Gbe):
         return [(w128 >> (64-(ctr*64))) & (2 ** 64 - 1) for ctr in range(2)]
 
     @staticmethod
-    def process_snap_data(d, d1, d2):
+    def process_snap_data(d):
         # convert the 256-bit data to 64-bit data
         d64 = {k: [] for k in d.keys()}
         d64['data'] = []
-        for ctr in range(len(d1['data_msw'])):
+        for ctr in range(len(d['data_msw'])):
+            d64['data'].extend(FortyGbe.convert_128_to_64(d['data_msw'][ctr]))
+            d64['data'].extend(FortyGbe.convert_128_to_64(d['data_lsw'][ctr]))
             for k in d.keys():
                 if k == 'eof':
                     d64[k].extend([0] * 3)
                     d64[k].append(d[k][ctr])
-                else:
+                elif ((k!='data_msw') and (k!='data_lsw') and (k!='data')):
                     for ctr4 in range(4):
                         d64[k].append(d[k][ctr])
-            d64['data'].extend(FortyGbe.convert_128_to_64(d1['data_msw'][ctr]))
-            d64['data'].extend(FortyGbe.convert_128_to_64(d2['data_lsw'][ctr]))
         return d64
 
     def read_txsnap(self):
@@ -443,9 +442,9 @@ class FortyGbe(Gbe):
         :return:
         """
         d = self.snaps['tx'][0].read()['data']
-        d1 = self.snaps['tx'][1].read(arm=False)['data']
-        d2 = self.snaps['tx'][2].read(arm=False)['data']
-        return FortyGbe.process_snap_data(d, d1, d2)
+        for snap in self.snaps['tx'][1:]:
+            d.update(snap.read(arm=False)['data'])
+        return FortyGbe.process_snap_data(d)
 
     def read_rxsnap(self):
         """
@@ -453,12 +452,12 @@ class FortyGbe(Gbe):
         :return:
         """
         d = self.snaps['rx'][0].read()['data']
-        d1 = self.snaps['rx'][1].read(arm=False)['data']
-        d2 = self.snaps['rx'][2].read(arm=False)['data']
+        for snap in self.snaps['rx'][1:]:
+            d.update(snap.read(arm=False)['data'])
         for key in ['eof_in', 'valid_in', 'ip_in', ]:
             if key in d:
                 d[key.replace('_in', '')] = d[key]
                 d.pop(key)
-        return FortyGbe.process_snap_data(d, d1, d2)
+        return FortyGbe.process_snap_data(d)
 
 # end

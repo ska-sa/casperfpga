@@ -2897,9 +2897,9 @@ class SkarabTransport(Transport):
             """
             if value > sd.fan_speed_ranges[fan_name][0] or value < \
                         sd.fan_speed_ranges[fan_name][1]:
-                return 'WARNING'
+                return 'warning'
             else:
-                return 'OK'
+                return 'nominal'
 
         def check_temperature(sensor_name, value, inlet_ref):
             """
@@ -2910,19 +2910,25 @@ class SkarabTransport(Transport):
             temperature thresholds
             :return: OK, WARNING or ERROR
             """
+
             if sensor_name == 'inlet_temperature_degC':
                 if value > sd.temperature_ranges[sensor_name][0] or value < \
                         sd.temperature_ranges[sensor_name][1]:
-                    return 'ERROR'
+                    return 'error'
                 else:
-                    return 'OK'
+                    return 'nominal'
             else:
+                # handle hmc die temperatures of unintialised HMC cores
+                if 'hmc' in sensor_name:
+                    if value == 0xffeeddcc:
+                        # umc unitialised
+                        return 'unknown'
                 if value > inlet_ref + sd.temperature_ranges[sensor_name][
                     0] or value < inlet_ref + \
                         sd.temperature_ranges[sensor_name][1]:
-                    return 'ERROR'
+                    return 'error'
                 else:
-                    return 'OK'
+                    return 'nominal'
 
         def check_current(current_name, value):
             """
@@ -2934,12 +2940,12 @@ class SkarabTransport(Transport):
 
             if value > sd.current_ranges[current_name][0] or value < \
                     sd.current_ranges[current_name][1]:
-                # return '\033[0;31m{}\033[00m'.format('ERROR')
-                return 'ERROR'
+                # return '\033[0;31m{}\033[00m'.format('error')
+                return 'error'
 
             else:
-                # return '\033[0;31m{}\033[00m'.format('OK')
-                return 'OK'
+                # return '\033[0;31m{}\033[00m'.format('nominal')
+                return 'nominal'
 
         def check_voltage(voltage_name, value):
             """
@@ -2951,11 +2957,11 @@ class SkarabTransport(Transport):
 
             if value > sd.voltage_ranges[voltage_name][0] or value < \
                     sd.voltage_ranges[voltage_name][1]:
-                # return '\033[0;31m{}\033[00m'.format('ERROR')
-                return 'ERROR'
+                # return '\033[0;31m{}\033[00m'.format('error')
+                return 'error'
             else:
-                # return '\033[0;31m{}\033[00m'.format('OK')
-                return 'OK'
+                # return '\033[0;31m{}\033[00m'.format('nominal')
+                return 'nominal'
 
         def parse_fan_speeds_rpm(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -2975,9 +2981,9 @@ class SkarabTransport(Transport):
                 if 'fan_pwm' in key:
                     pwm_value = round(raw_sensor_data[value] / 100.0, 2);
                     if(pwm_value > 100 or pwm_value < 0):
-                        message = 'ERROR'
+                        message = 'error'
                     else:
-                        message = 'OK'
+                        message = 'nominal'
                     self.sensor_data[key] = (
                             pwm_value, '%',message)
 
@@ -2998,7 +3004,7 @@ class SkarabTransport(Transport):
                         temperature = struct.unpack(
                             '!I', struct.pack('!4B',
                                               *raw_sensor_data[value:value+4]))[0]
-                        self.sensor_data[key] = (temperature,
+                        self.sensor_data[key] = (-1 if temperature==0xffeeddcc else temperature,
                                                  'degC',
                                                  check_temperature(key, temperature, inlet_ref=0))
 
@@ -3371,7 +3377,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                             page=sd.TUNABLE_PARAMETERS_PAGE,
-                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
                                             device_rom=None, skip_rom_address=1,
                                             offset=offset, timeout=None, retries=None,
                                             force_page_zero_write=False)
@@ -3401,7 +3407,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                        page=sd.TUNABLE_PARAMETERS_PAGE,
-                                       one_wire_port=sd.MB_I2C_BUS_ID,
+                                       one_wire_port=sd.MB_ONE_WIRE_PORT,
                                         device_rom=None, skip_rom_address=1,
                                         offset=offset, timeout=None, retries=None,
                                         force_page_zero_write=False)
@@ -3432,7 +3438,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                             page=sd.TUNABLE_PARAMETERS_PAGE,
-                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
                                             device_rom=None,
                                             skip_rom_address=1,
                                             offset=offset, timeout=None,
@@ -3458,7 +3464,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                             page=sd.TUNABLE_PARAMETERS_PAGE,
-                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
                                             device_rom=None,
                                             skip_rom_address=1,
                                             offset=offset, timeout=None,
@@ -3492,7 +3498,7 @@ class SkarabTransport(Transport):
 
         rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
                                             page=sd.TUNABLE_PARAMETERS_PAGE,
-                                            one_wire_port=sd.MB_I2C_BUS_ID,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
                                             device_rom=None,
                                             skip_rom_address=1,
                                             offset=offset, timeout=None,
@@ -3500,6 +3506,26 @@ class SkarabTransport(Transport):
                                             force_page_zero_write=False)
 
         return rv
+
+    def get_tunable_parameters(self):
+        """
+        Read back the current values of the tuneable parameters (dhcp init time,
+        dhcp rety rate, hmc reconfig timeout, hmc reconfig max retries, link mon
+        timeout)
+        :return: dict
+        """
+
+        # get the data, 9 bytes to be read
+        data = self.one_wire_ds2433_read_mem(sd.MB_ONE_WIRE_PORT, 9,
+                                             sd.TUNABLE_PARAMETERS_PAGE)
+
+        tunable_params = {'dhcp_init_time': (data[0] + (data[1] << 8))/10.0,
+                          'dhcp_retry_rate': (data[2] + (data[3] << 8))/10.0,
+                          'hmc_reconfig_timeout': (data[4] + (data[5] << 8))/10.0,
+                          'hmc_reconfig_max_retries': data[6],
+                          'link_mon_timeout': (data[7] + (data[8] << 8))/10.0}
+
+        return tunable_params
 
     # for retrieving the HMC reconfiguration statistics
 
@@ -3833,6 +3859,7 @@ class SkarabTransport(Transport):
         print('\n{title:^94}\n'.format(title=title))
 
         if device_logged == 'MAX31785 Fan Controller':
+            print('WARNING: Clear the MAX31785 Fan Controller logs manually after debugging to prevent losing new fault logs.\nUse the clear_max31785_hw_logs command\n')
             print(
                 '{entry:^10} {device:^25} {event:^25}'.format(
                     entry='Log Entry', device='Device Page',
