@@ -99,8 +99,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             raise RuntimeError(errmsg)
 
         # Breaking backwards compatibility with ROACH/2
-        self.endianness = ''
-        self.parent.endianness = ''
+        # self.endianness = ''
+        # self.parent.endianness = ''
 
         new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
         self.logger.info(new_connection_msg)
@@ -358,7 +358,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         if return_unpacked:
             # Now unpacking in the transport layer before returning
             data_format = 'I' if unsigned else 'i'
-            struct_format = '{}{}'.format(self.endianness, data_format)
+            struct_format = '{}{}'.format(self.parent.endianness, data_format)
             data_unpacked = struct.unpack(struct_format, reply.arguments[1])
 
             return data_unpacked
@@ -384,7 +384,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
         # Now unpacking in the transport layer before returning
         # data_format = 'I' if unsigned else 'i'
-        # struct_format = '{}{}'.format(self.endianness, data_format)
+        # struct_format = '{}{}'.format(self.parent.endianness, data_format)
         # data_unpacked = struct.unpack(struct_format, reply.arguments[1])
 
         # return data_unpacked
@@ -400,7 +400,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         
         if type(data) is not str:
             data_format = 'i' if data < 0 else 'I'
-            struct_format = '{}{}'.format(self.endianness, data_format)
+            struct_format = '{}{}'.format(self.parent.endianness, data_format)
             data = struct.pack(struct_format, data)
 
         assert(len(data) % 4) == 0, 'You must write 32-bit-bounded words!'

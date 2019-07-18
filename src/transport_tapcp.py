@@ -83,7 +83,6 @@ class TapcpTransport(Transport):
 
         try:
             self.parent = kwargs['parent_fpga']
-            self.endianness = self.parent.endianness
             self.logger = self.parent.logger
         except KeyError:
             errmsg = 'parent_fpga argument not supplied when creating tapcp device'
@@ -131,7 +130,7 @@ class TapcpTransport(Transport):
         # address shifts down because we operate in 32-bit addressing mode
         # see xilinx docs. Todo, fix this microblaze side
         data_format = 'L'
-        struct_format = '{}{}'.format(self.endianness, data_format)
+        struct_format = '{}{}'.format(self.parent.endianness, data_format)
         buf = StringIO(struct.pack(struct_format, addr >> 8))
         try:
             self.t.upload('/progdev', buf, timeout=self.timeout)
@@ -142,7 +141,7 @@ class TapcpTransport(Transport):
         buf = StringIO()
         self.t.download('/temp', buf)
         data_format = 'f'
-        struct_format = '{}{}'.format(self.endianness, data_format)
+        struct_format = '{}{}'.format(self.parent.endianness, data_format)
         return struct.unpack(struct_format, buf.getvalue())[0]
 
     def is_connected(self):
@@ -185,7 +184,7 @@ class TapcpTransport(Transport):
         if return_unpacked:
             # Now unpacking in the transport layer before returning
             data_format = 'I' if unsigned else 'i'
-            struct_format = '{}{}'.format(self.endianness, data_format)
+            struct_format = '{}{}'.format(self.parent.endianness, data_format)
             data_unpacked = struct.unpack(struct_format, buf.getvalue())
         else:
             return buf.getvalue()
@@ -204,7 +203,7 @@ class TapcpTransport(Transport):
         # Now unpacking in the transport layer
         if type(data) is not str:
             data_format = 'i' if data < 0 else 'I'
-            struct_format = '{}{}'.format(self.endianness, data_format)
+            struct_format = '{}{}'.format(self.parent.endianness, data_format)
             data = struct.pack(struct_format, data)
 
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'

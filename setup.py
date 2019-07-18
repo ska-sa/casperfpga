@@ -8,7 +8,7 @@ DESCRIPTION = 'Talk to CASPER hardware devices using katcp or dcp. See https://g
 URL = 'https://github.com/casper-astro/casperfpga'
 EMAIL = 'apatel@ska.ac.za'
 AUTHOR = 'Paul Prozesky'
-VERSION = '0.0.17' # Need to adopt the __version__.py format
+VERSION = '0.0.27' # Need to adopt the __version__.py format
 
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -55,7 +55,7 @@ setuptools.setup(
         'numpy',
         'odict',
         'setuptools',
-        # 'tornado>4.3, <4.5',
+	'tftpy>0.6.2,<0.7.0',
         'tornado<5',
     ],
     packages=['casperfpga', 'casperfpga.progska'],
@@ -65,7 +65,8 @@ setuptools.setup(
     use_katversion=False,
     ext_modules=[progska_extension],
     # Required for PyPI
-    dependency_links=['https://github.com/casper-astro/tftpy#egg=tftpy-0.6.3_fork-py2.7.egg'],
+    dependency_links=['git+https://github.com/casper-astro/tftpy@master#egg=tftpy-0.6.3_fork'],
+    # dependency_links=['git://github.com/casper-astro/tftpy.git@master#egg=tftpy-0.6.3'],
     keywords='casper ska meerkat fpga',
     classifiers=[
         "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",

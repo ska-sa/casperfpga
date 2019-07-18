@@ -114,7 +114,6 @@ class SkarabTransport(Transport):
         try:
             # Entry point is always via casperfpga.CasperFpga
             self.parent = kwargs['parent_fpga']
-            self.endianness = self.parent.endianness
             self.logger = self.parent.logger
         except KeyError:
             errmsg = 'parent_fpga argument not supplied when creating skarab'
@@ -312,7 +311,7 @@ class SkarabTransport(Transport):
         if return_unpacked:
             # Now unpacking data here before returning
             data_format = 'I' if unsigned else 'i'
-            struct_format = '{}{}'.format(self.endianness, data_format)
+            struct_format = '{}{}'.format(self.parent.endianness, data_format)
             data_unpacked = struct.unpack(struct_format,
                                     data[offset_diff: offset_diff + size])
             return data_unpacked
@@ -556,7 +555,7 @@ class SkarabTransport(Transport):
         
         if type(data) is not str:
             data_format = 'i' if data < 0 else 'I'
-            struct_format = '{}{}'.format(self.endianness, data_format)
+            struct_format = '{}{}'.format(self.parent.endianness, data_format)
             data = struct.pack(struct_format, data)
 
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
