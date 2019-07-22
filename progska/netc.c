@@ -223,27 +223,54 @@ int net_connect(char *name, int port, int flags)
       fprintf(stderr,"connect: cannot set keepalive socket option\n");
       return -1;
     }
-#ifdef TCP_KEEPIDLE
+
+
+    #ifdef __APPLE__
+      #ifdef TCP_KEEPIDLE
+      option = 10;
+      if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &option, sizeof(option)) < 0){
+        fprintf(stderr,"connect: cannot set keepalive socket option\n");
+        return -1;
+      }
+      #endif
+      #ifdef TCP_KEEPINTVL
+      option = 10;
+      if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &option, sizeof(option)) < 0){
+        fprintf(stderr,"connect: cannot set keepalive socket option\n");
+        return -1;
+      }
+      #endif
+      #ifdef TCP_KEEPCNT
+      option = 3;
+      if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &option, sizeof(option)) < 0){
+        fprintf(stderr,"connect: cannot set keepalive socket option\n");
+        return -1;
+      }
+      #endif
+  #elif __linux__
+    #ifdef TCP_KEEPIDLE
     option = 10;
     if (setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, &option, sizeof(option)) < 0){
       fprintf(stderr,"connect: cannot set keepalive socket option\n");
       return -1;
     }
-#endif
-#ifdef TCP_KEEPINTVL
+    #endif
+    #ifdef TCP_KEEPINTVL
     option = 10;
     if (setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, &option, sizeof(option)) < 0){
       fprintf(stderr,"connect: cannot set keepalive socket option\n");
       return -1;
     }
-#endif
-#ifdef TCP_KEEPCNT
+    #endif
+    #ifdef TCP_KEEPCNT
     option = 3;
     if (setsockopt(fd, SOL_TCP, TCP_KEEPCNT, &option, sizeof(option)) < 0){
       fprintf(stderr,"connect: cannot set keepalive socket option\n");
       return -1;
     }
-#endif
+    #endif
+
+  #endif
   }
 
   len = sizeof(struct sockaddr_in);

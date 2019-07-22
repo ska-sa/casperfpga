@@ -23,7 +23,7 @@ class Sbram(Memory):
         LOGGER.debug('New Sbram %s' % self.__str__())
 
     @classmethod
-    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict, **kwargs):
         """
         Process device info and the memory map to get all necessary info
         and return a Sbram instance.

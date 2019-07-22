@@ -10,26 +10,41 @@ class FortyGbe(Gbe):
 
     """
 
-    def __init__(self, parent, name, address=0x50000, length_bytes=0x4000,
-                 device_info=None, position=None):
+    def __init__(self, parent, name, address=0x54000, length_bytes=0x4000,
+                 device_info=None, position=None, legacy_reg_map=True):
         """
         Implements the Gbe class. This is normally initialised from_device_info.
 
         :param parent: The parent object, normally a CasperFpga instance
         :param name: The name of the device
-        :param position: defaulted to None
-        :type position: Optional
-        :param address: defaulted to 0x50000
-        :type address: Optional int
-        :param length_bytes: defaulted to 0x4000
-        :type length_bytes: Optional 
-        :type length_bytes: Optional int
+        :param position: Optional - defaulted to None
+        :param address: Integer - Optional - defaulted to 0x54000
+        :param length_bytes: Integer - Optional - defaulted to 0x4000
         :param device_info: Information about the device
         """
         super(FortyGbe, self).__init__(
             parent, name, address, length_bytes, device_info)
         self.position = position
         self.logger = parent.logger
+        self.legacy_reg_map = legacy_reg_map
+        if self.legacy_reg_map == False:
+            self.reg_map = {'mac'            : 0x0E,
+                            'ip'             : 0x14,
+                            'fabric_port'    : 0x30,
+                            'fabric_en'      : 0x2C,
+                            'subnet_mask'    : 0x1C,
+                            'gateway_ip'     : 0x18,
+                            'multicast_ip'   : 0x20,
+                            'multicast_mask' : 0x24}
+        else:
+            self.reg_map = {'mac'            : 0x02,
+                            'ip'             : 0x10,
+                            'fabric_port'    : 0x20,
+                            'fabric_en'      : 0x20,
+                            'subnet_mask'    : 0x38,
+                            'gateway_ip'     : 0x0C,
+                            'multicast_ip'   : 0x30,
+                            'multicast_mask' : 0x34}
 
     def post_create_update(self, raw_device_info):
         """
@@ -41,21 +56,20 @@ class FortyGbe(Gbe):
         self.snaps = {'tx': None, 'rx': None}
         snapnames = self.parent.snapshots.names()
         for txrx in ['r', 't']:
-            name = self.name + '_%sxs0_ss' % txrx
-            if name in snapnames:
-                if (self.name + '_%sxs1_ss' % txrx not in snapnames) or \
-                        (self.name + '_%sxs2_ss' % txrx not in snapnames):
-                    self.logger.error('%sX snapshots misconfigured: %s' % (
-                        txrx.upper(), snapnames))
+            snapshot_index=0
+            self.snaps['%sx' % txrx]=[]
+            name = self.name + '_%sxs%i_ss' %(txrx,snapshot_index)
+            snapshot_found=True
+            while snapshot_found:
+                if name in snapnames:
+                    self.snaps['%sx' % txrx].append(self.parent.snapshots[self.name + '_%sxs%i_ss' %(txrx,snapshot_index)])
+                    snapshot_index+=1
                 else:
-                    self.snaps['%sx' % txrx] = [
-                        self.parent.snapshots[self.name + '_%sxs0_ss' % txrx],
-                        self.parent.snapshots[self.name + '_%sxs1_ss' % txrx],
-                        self.parent.snapshots[self.name + '_%sxs2_ss' % txrx]]
+                   snapshot_found=False
         self.get_gbe_core_details()
 
     @classmethod
-    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict, legacy_reg_map=True):
         """
         Process device info and the memory map to get all necessary info 
         and return a TenGbe instance.
@@ -67,9 +81,9 @@ class FortyGbe(Gbe):
         :return: a TenGbe object
         """
         # TODO: fix this hard-coding!
-        address = 0x50000
+        address = 0x54000
         length_bytes = 0x4000
-        return cls(parent, device_name, address, length_bytes, device_info, 0)
+        return cls(parent, device_name, address, length_bytes, device_info, 0, legacy_reg_map=legacy_reg_map)
 
     def _wbone_rd(self, addr):
         """
@@ -88,28 +102,30 @@ class FortyGbe(Gbe):
 
     def fabric_enable(self):
         """
-        Enables 40G core.
+        Enables 40G corei fabric interface.
+        :return: 
         """
-        en_port = self._wbone_rd(self.address + 0x20)
-        if en_port >> 16 == 1:
+        en_port = self._wbone_rd(self.address + self.reg_map['fabric_en'])
+        if en_port & 0xF == 1:
             return
-        en_port_new = (1 << 16) + (en_port & (2 ** 16 - 1))
-        self._wbone_wr(self.address + 0x20, en_port_new)
-        if self._wbone_rd(self.address + 0x20) != en_port_new:
+        en_port_new = en_port | 0x1
+        self._wbone_wr(self.address + self.reg_map['fabric_en'], en_port_new)
+        if self._wbone_rd(self.address + self.reg_map['fabric_en']) != en_port_new:
             errmsg = 'Error enabling 40gbe port'
             self.logger.error(errmsg)
             raise ValueError(errmsg)
 
     def fabric_disable(self):
         """
-        Disables 40G core.
+        Disables 40G core fabric interface.
+        :return: 
         """
-        en_port = self._wbone_rd(self.address + 0x20)
-        if en_port >> 16 == 0:
+        en_port = self._wbone_rd(self.address + self.reg_map['fabric_en'])
+        if en_port & 0xF == 0:
             return
-        old_port = en_port & (2 ** 16 - 1)
-        self._wbone_wr(self.address + 0x20, old_port)
-        if self._wbone_rd(self.address + 0x20) != old_port:
+        old_port = en_port >> 1 << 1
+        self._wbone_wr(self.address + self.reg_map['fabric_en'], old_port)
+        if self._wbone_rd(self.address + self.reg_map['fabric_en']) != old_port:
             errmsg = 'Error disabling 40gbe port'
             self.logger.error(errmsg)
             raise ValueError(errmsg)
@@ -129,7 +145,7 @@ class FortyGbe(Gbe):
 
         :return: IpAddress object
         """
-        ip = self._wbone_rd(self.address + 0x10)
+        ip = self._wbone_rd(self.address + self.reg_map['ip'])
         self.ip_address = IpAddress(ip)
         return self.ip_address
 
@@ -139,7 +155,7 @@ class FortyGbe(Gbe):
 
         :return:  int
         """
-        en_port = self._wbone_rd(self.address + 0x20)
+        en_port = self._wbone_rd(self.address + self.reg_map['fabric_port'])
         self.port = en_port & (2 ** 16 - 1)
         return self.port
 
@@ -148,12 +164,12 @@ class FortyGbe(Gbe):
 
         :param port:
         """
-        en_port = self._wbone_rd(self.address + 0x20)
+        en_port = self._wbone_rd(self.address + self.reg_map['fabric_port'])
         if en_port & (2 ** 16 - 1) == port:
             return
         en_port_new = ((en_port >> 16) << 16) + port
-        self._wbone_wr(self.address + 0x20, en_port_new)
-        if self._wbone_rd(self.address + 0x20) != en_port_new:
+        self._wbone_wr(self.address + self.reg_map['fabric_port'], en_port_new)
+        if self._wbone_rd(self.address + self.reg_map['fabric_port']) != en_port_new:
             errmsg = 'Error setting 40gbe port to 0x%04x' % port
             self.logger.error(errmsg)
             raise ValueError(errmsg)
@@ -175,36 +191,70 @@ class FortyGbe(Gbe):
             gbebytes.append((d >> 8) & 0xff)
             gbebytes.append((d >> 0) & 0xff)
         pd = gbebytes
-        returnval = {
-            # no longer meaningful, since subnet can be less than 256?
-            # 'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
-            'ip': IpAddress('%i.%i.%i.%i' % (
-                pd[0x10], pd[0x11], pd[0x12], pd[0x13])),
-            'subnet_mask': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x38], pd[0x39], pd[0x3a], pd[0x3b])),
-            'mac': Mac('%i:%i:%i:%i:%i:%i' % (
-                pd[0x02], pd[0x03], pd[0x04], pd[0x05], pd[0x06], pd[0x07])),
-            'gateway_ip': IpAddress('%i.%i.%i.%i' % (
-                pd[0x0c], pd[0x0d], pd[0x0e], pd[0x0f])),
-            'fabric_port': ((pd[0x22] << 8) + (pd[0x23])),
-            'fabric_en': bool(pd[0x21] & 1),
-            'xaui_lane_sync': [
-                bool(pd[0x27] & 4), bool(pd[0x27] & 8),
-                bool(pd[0x27] & 16), bool(pd[0x27] & 32)],
-            'xaui_status': [
-                pd[0x24], pd[0x25], pd[0x26], pd[0x27]],
-            'xaui_chan_bond': bool(pd[0x27] & 64),
-            'xaui_phy': {
-                'rx_eq_mix': pd[0x28],
-                'rx_eq_pol': pd[0x29],
-                'tx_preemph': pd[0x2a],
-                'tx_swing': pd[0x2b]},
-            'multicast': {
-                'base_ip': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x30], pd[0x31], pd[0x32], pd[0x33])),
-                'ip_mask': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x34], pd[0x35], pd[0x36], pd[0x37]))}
-        }
+        
+        if self.legacy_reg_map:
+            returnval = {
+                # no longer meaningful, since subnet can be less than 256?
+                # 'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
+                'ip': IpAddress('%i.%i.%i.%i' % (
+                    pd[0x10], pd[0x11], pd[0x12], pd[0x13])),
+                'subnet_mask': IpAddress('%i.%i.%i.%i' % (
+                        pd[0x38], pd[0x39], pd[0x3a], pd[0x3b])),
+                'mac': Mac('%i:%i:%i:%i:%i:%i' % (
+                    pd[0x02], pd[0x03], pd[0x04], pd[0x05], pd[0x06], pd[0x07])),
+                'gateway_ip': IpAddress('%i.%i.%i.%i' % (
+                    pd[0x0c], pd[0x0d], pd[0x0e], pd[0x0f])),
+                'fabric_port': ((pd[0x22] << 8) + (pd[0x23])),
+                'fabric_en': bool(pd[0x21] & 1),
+                'xaui_lane_sync': [
+                    bool(pd[0x27] & 4), bool(pd[0x27] & 8),
+                    bool(pd[0x27] & 16), bool(pd[0x27] & 32)],
+                'xaui_status': [
+                    pd[0x24], pd[0x25], pd[0x26], pd[0x27]],
+                'xaui_chan_bond': bool(pd[0x27] & 64),
+                'xaui_phy': {
+                    'rx_eq_mix': pd[0x28],
+                    'rx_eq_pol': pd[0x29],
+                    'tx_preemph': pd[0x2a],
+                    'tx_swing': pd[0x2b]},
+                'multicast': {
+                    'base_ip': IpAddress('%i.%i.%i.%i' % (
+                        pd[0x30], pd[0x31], pd[0x32], pd[0x33])),
+                    'ip_mask': IpAddress('%i.%i.%i.%i' % (
+                        pd[0x34], pd[0x35], pd[0x36], pd[0x37]))}
+            }
+
+        else:
+            returnval = {
+                # no longer meaningful, since subnet can be less than 256?
+                # 'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
+                'ip': IpAddress('%i.%i.%i.%i' % (
+                    pd[0x14], pd[0x15], pd[0x16], pd[0x17])),
+                'subnet_mask': IpAddress('%i.%i.%i.%i' % (
+                        pd[0x24], pd[0x25], pd[0x26], pd[0x27])),
+                'mac': Mac('%i:%i:%i:%i:%i:%i' % (
+                    pd[0x0E], pd[0x0F], pd[0x10], pd[0x11], pd[0x12], pd[0x13])),
+                'gateway_ip': IpAddress('%i.%i.%i.%i' % (
+                    pd[0x18], pd[0x19], pd[0x20], pd[0x21])),
+                'fabric_port': ((pd[0x2E] << 8) + (pd[0x2F])),
+                'fabric_en': bool(pd[0x29] & 1),
+                # 'xaui_lane_sync': [
+                #     bool(pd[0x27] & 4), bool(pd[0x27] & 8),
+                #     bool(pd[0x27] & 16), bool(pd[0x27] & 32)],
+                # 'xaui_status': [
+                #     pd[0x24], pd[0x25], pd[0x26], pd[0x27]],
+                # 'xaui_chan_bond': bool(pd[0x27] & 64),
+                # 'xaui_phy': {
+                #     'rx_eq_mix': pd[0x28],
+                #     'rx_eq_pol': pd[0x29],
+                #     'tx_preemph': pd[0x2a],
+                #     'tx_swing': pd[0x2b]},
+                'multicast': {
+                    'base_ip': IpAddress('%i.%i.%i.%i' % (
+                        pd[0x20], pd[0x21], pd[0x22], pd[0x23])),
+                    'ip_mask': IpAddress('%i.%i.%i.%i' % (
+                        pd[0x24], pd[0x25], pd[0x26], pd[0x27]))}
+            }
         possible_addresses = [int(returnval['multicast']['base_ip'])]
         mask_int = int(returnval['multicast']['ip_mask'])
         for ctr in range(32):
@@ -247,15 +297,25 @@ class FortyGbe(Gbe):
         group join request.
 
         :param ip_str: A dotted decimal string representation of the base
-            mcast IP address.
-        :param group_size: An integer for how many mcast addresses from
-            base to respond to.
+                       mcast IP address.
+        :param group_size: An integer for how many additional mcast addresses 
+                           (from base) to subscribe to. Must be (2^N-1), ie 0, 1, 3, 7, 15 etc.
         :param port: The UDP port on which you want to receive. Note 
-            that only one port is possible per interface (ie it's global
-            and will override any other port you may have configured).
+                     that only one port is possible per interface (ie it's global
+                     and will override any other port you may have configured).
         """
         ip = IpAddress(ip_str)
-        mask = IpAddress('255.255.255.%i' % (256 - group_size))
+        if (group_size < 0):
+            raise RuntimeError("Can't subscribe to a negative number of addresses!")
+        elif (group_size==0):
+            mask = "255.255.255.255"
+        else:
+            import numpy
+            if ((numpy.log2(group_size+1)%1)!=0):
+                raise RuntimeError("You tried to subscribe to {}+{}. Must subscribe to a binary multiple of addresses.".format(ip_str,group_size))
+            if ((group_size+1)>256):
+                raise RuntimeError("You tried to subscribe to {}+{}. Can't subscribe to more than 256 addresses.".format(ip_str,group_size))
+            mask = IpAddress('255.255.255.%i' % (255 - group_size))
         self.parent.transport.multicast_receive(self.name, ip, mask)
         self.set_port(port)
 
@@ -360,20 +420,20 @@ class FortyGbe(Gbe):
         return [(w128 >> (64-(ctr*64))) & (2 ** 64 - 1) for ctr in range(2)]
 
     @staticmethod
-    def process_snap_data(d, d1, d2):
+    def process_snap_data(d):
         # convert the 256-bit data to 64-bit data
         d64 = {k: [] for k in d.keys()}
         d64['data'] = []
-        for ctr in range(len(d1['data_msw'])):
+        for ctr in range(len(d['data_msw'])):
+            d64['data'].extend(FortyGbe.convert_128_to_64(d['data_msw'][ctr]))
+            d64['data'].extend(FortyGbe.convert_128_to_64(d['data_lsw'][ctr]))
             for k in d.keys():
                 if k == 'eof':
                     d64[k].extend([0] * 3)
                     d64[k].append(d[k][ctr])
-                else:
+                elif ((k!='data_msw') and (k!='data_lsw') and (k!='data')):
                     for ctr4 in range(4):
                         d64[k].append(d[k][ctr])
-            d64['data'].extend(FortyGbe.convert_128_to_64(d1['data_msw'][ctr]))
-            d64['data'].extend(FortyGbe.convert_128_to_64(d2['data_lsw'][ctr]))
         return d64
 
     def read_txsnap(self):
@@ -381,21 +441,21 @@ class FortyGbe(Gbe):
         Read the TX snapshot embedded in this GbE yellow block
         """
         d = self.snaps['tx'][0].read()['data']
-        d1 = self.snaps['tx'][1].read(arm=False)['data']
-        d2 = self.snaps['tx'][2].read(arm=False)['data']
-        return FortyGbe.process_snap_data(d, d1, d2)
+        for snap in self.snaps['tx'][1:]:
+            d.update(snap.read(arm=False)['data'])
+        return FortyGbe.process_snap_data(d)
 
     def read_rxsnap(self):
         """
         Read the RX snapshot embedded in this GbE yellow block
         """
         d = self.snaps['rx'][0].read()['data']
-        d1 = self.snaps['rx'][1].read(arm=False)['data']
-        d2 = self.snaps['rx'][2].read(arm=False)['data']
+        for snap in self.snaps['rx'][1:]:
+            d.update(snap.read(arm=False)['data'])
         for key in ['eof_in', 'valid_in', 'ip_in', ]:
             if key in d:
                 d[key.replace('_in', '')] = d[key]
                 d.pop(key)
-        return FortyGbe.process_snap_data(d, d1, d2)
+        return FortyGbe.process_snap_data(d)
 
 # end

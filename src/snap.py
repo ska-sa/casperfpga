@@ -32,7 +32,7 @@ class Snap(Memory):
         LOGGER.debug('New Snap %s' % self)
 
     @classmethod
-    def from_device_info(cls, parent, device_name, device_info, memorymap_dict):
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict, **kwargs):
         """
         Process device info and the memory map to get all necessary
         info and return a Snap instance.
@@ -225,6 +225,15 @@ class Snap(Memory):
         :param read_nowait: do not wait for the snap to finish reading
         """
         rawdata, rawtime = self.read_raw(**kwargs)
+        if self.parent.endianness == '':
+            # Probably Red Pitaya
+            repacked_data = ''
+            for i in range(0, len(rawdata['data']), 4):
+                four_bytes = rawdata['data'][i:i+4]
+                repacked_data += four_bytes[::-1]
+
+            rawdata['data'] = repacked_data
+        # else: Continue!
         processed = self._process_data(rawdata['data'])
         if 'offset' in rawdata.keys():
             offset = rawdata['offset']
