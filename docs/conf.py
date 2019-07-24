@@ -14,6 +14,7 @@
 #
 import os
 import sys
+from sphinx.apidoc import main as sphinx_apidoc_main
 # add casperfpga directory to sys.path so autodoc can document its modules.
 casperfpga_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'casperfpga'))
 sys.path.insert(0, casperfpga_path)
@@ -29,14 +30,14 @@ def setup(app):
 
 # -- Project information -----------------------------------------------------
 
-project = u'casperfpga'
-copyright = u'2018, Collaboration for Astronomy Signal Processing and Electronics Research'
-author = u'Collaboration for Astronomy Signal Processing and Electronics Research'
+project = 'casperfpga'
+copyright = '2018, Collaboration for Astronomy Signal Processing and Electronics Research'
+author = 'Collaboration for Astronomy Signal Processing and Electronics Research'
 
 # The short X.Y version
-version = u''
+version = ''
 # The full version, including alpha/beta/rc tags
-release = u'0.1'
+release = '0.1'
 
 
 # -- General configuration ---------------------------------------------------
@@ -57,7 +58,7 @@ extensions = [
     'sphinx.ext.imgmath',
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
-    'sphinx.ext.githubpages',
+    'sphinx.ext.githubpages'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -85,7 +86,7 @@ language = None
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path .
-exclude_patterns = [u'_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'README.md']
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
@@ -154,8 +155,8 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'casperfpga.tex', u'casperfpga Documentation',
-     u'Collaboration for Astronomy Signal Processing and Electronics Research', 'manual'),
+    (master_doc, 'casperfpga.tex', 'casperfpga Documentation',
+     'Collaboration for Astronomy Signal Processing and Electronics Research', 'manual'),
 ]
 
 
@@ -164,7 +165,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'casperfpga', u'casperfpga Documentation',
+    (master_doc, 'casperfpga', 'casperfpga Documentation',
      [author], 1)
 ]
 
@@ -175,7 +176,7 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'casperfpga', u'casperfpga Documentation',
+    (master_doc, 'casperfpga', 'casperfpga Documentation',
      author, 'casperfpga', 'One line description of project.',
      'Miscellaneous'),
 ]
