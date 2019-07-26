@@ -39,7 +39,7 @@ Unfortunately the success of your installation using ``pip`` depends on the host
 
 .. code-block:: bash
 
-    $ git clone https://github.com/ska-sa/casperfpga.git
+    $ git clone https://github.com/casper-astro/casperfpga.git
     $ cd casperfpga
     $ sudo pip install -r requirements.txt
     $ sudo python setup.py install
@@ -62,6 +62,7 @@ If you receive any errors after this please feel free to contact anyone on the `
 Usage
 #####
 The introductory tutorials for `ROACH <https://casper.berkeley.edu/wiki/Introduction_to_Simulink>`__, `ROACH2 <https://casper.berkeley.edu/wiki/Introduction_to_Simulink_ROACH2>`__ and `SKARAB <https://casper.berkeley.edu/wiki/Introduction_to_Simulink_SKARAB>`__ serve as a guide to the entire process of:
+
 * Creating an FPGA design in Simulink using the CASPER and Xilinx Blocksets
 * Building the design using the toolflow, and lastly
 * Reconfiguring your CASPER Hardware with the generated .fpg file using `casperfpga`
