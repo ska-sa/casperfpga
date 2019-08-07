@@ -460,9 +460,9 @@ class CasperFpga(object):
         data_format = 'i' if data < 0 else 'I'
         struct_format = '{}{}'.format(self.endianness, data_format)
         str_data = struct.pack(struct_format, data)
-        new_data = self.read(device_name, len(str_data), offset, return_unpacked=True)
+        new_data = self.read(device_name, len(str_data), offset)[0]
         
-        if new_data[0] != data:
+        if new_data != data:
             errmsg = 'Verification of write to {} at offset {} failed. ' \
                     'Wrote 0x{:02X}, read 0x{:02X}'.format(device_name, offset, data, new_data[0])
             self.logger.error(errmsg)
@@ -505,8 +505,7 @@ class CasperFpga(object):
         :param word_offset: the 32-bit word offset at which to read
         :return: signed 32-bit integer
         """
-        data = self.read(device_name, 4, word_offset * 4, 
-                            return_unpacked=True)
+        data = self.read(device_name, 4, word_offset * 4)
         # return struct.unpack('>i', data)[0]
         # Breaking backwards compatibility
         return data[0]
@@ -519,8 +518,7 @@ class CasperFpga(object):
         :param word_offset: the 32-bit word offset at which to read
         :return: unsigned 32-bit integer
         """
-        data = self.read(device_name, 4, word_offset * 4,
-                            unsigned=True, return_unpacked=True)
+        data = self.read(device_name, 4, word_offset * 4, unsigned=True)
         # return struct.unpack('>I', data)[0]
         # Breaking backwards compatibility
         return data[0]
