@@ -257,7 +257,8 @@ class SkarabTransport(Transport):
         raise SkarabUnknownDeviceError(errmsg)
 
     def read(self, device_name, size, offset=0, use_bulk=True,
-             timeout=None, retries=None, unsigned=False):
+             timeout=None,
+             retries=None):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
 
@@ -269,7 +270,6 @@ class SkarabTransport(Transport):
                         - Default value is None, uses initialised value
         :param retries: value specifying number of retries should instruction fail
                         - Default value is None, uses initialised value
-        :param unsigned: flag to specify the data read as signed or unsigned
         :return: binary data string
         """
         if timeout is None: timeout=self.timeout
@@ -534,7 +534,7 @@ class SkarabTransport(Transport):
         Unchecked data write.
 
         :param device_name: the memory device to which to write
-        :param data: integer or binary-packed string data to be written
+        :param data: the byte string to write
         :param offset: the offset, in bytes, at which to write
         :param use_bulk: use the bulk write function
         :param timeout: value in seconds to wait before aborting instruction
@@ -544,12 +544,8 @@ class SkarabTransport(Transport):
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
-        
-        if type(data) is not str:
-            data_format = 'i' if data < 0 else 'I'
-            struct_format = '{}{}'.format(self.parent.endianness, data_format)
-            data = struct.pack(struct_format, data)
 
+        assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
 

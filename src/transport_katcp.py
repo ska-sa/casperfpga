@@ -90,16 +90,18 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         timeout = get_kwarg('timeout', kwargs, 10)
         Transport.__init__(self, **kwargs)
 
+        # Create instance of self.logger
+        # try:
+        #     self.logger = kwargs['logger']
+        # except KeyError:
+        #     self.logger = logging.getLogger(__name__)
+
         try:
             self.parent = kwargs['parent_fpga']
             self.logger = self.parent.logger
         except KeyError:
             errmsg = 'parent_fpga argument not supplied when creating katcp device'
             raise RuntimeError(errmsg)
-
-        # Breaking backwards compatibility with ROACH/2
-        # self.endianness = ''
-        # self.parent.endianness = ''
 
         new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
         self.logger.info(new_connection_msg)
@@ -343,7 +345,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                    (self.host, val, val2))
         return True
 
-    def read(self, device_name, size, offset=0, unsigned=False):
+    def read(self, device_name, size, offset=0):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
        
@@ -374,27 +376,16 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         )
         return reply.arguments[1]
 
-        # Now unpacking in the transport layer before returning
-        # data_format = 'I' if unsigned else 'i'
-        # struct_format = '{}{}'.format(self.parent.endianness, data_format)
-        # data_unpacked = struct.unpack(struct_format, reply.arguments[1])
-
-        # return data_unpacked
-
     def blindwrite(self, device_name, data, offset=0):
         """
         Unchecked data write.
-        :param device_name: the memory device to be written
-        :param data: integer or binary-packed string data to be written
-        :param offset: the offset, in bytes, to be written to
+        :param device_name: the memory device to which to write
+        :param data: the byte string to write
+        :param offset: the offset, in bytes, at which to write
         :return: <nothing>
         """
-        
-        if type(data) is not str:
-            data_format = 'i' if data < 0 else 'I'
-            struct_format = '{}{}'.format(self.parent.endianness, data_format)
-            data = struct.pack(struct_format, data)
-
+        assert(type(data) == str), 'You need to supply binary packed ' \
+                                   'string data!'
         assert(len(data) % 4) == 0, 'You must write 32-bit-bounded words!'
         assert((offset % 4) == 0), 'You must write 32-bit-bounded words!'
         self.katcprequest(name='write', request_timeout=self._timeout,

@@ -20,8 +20,7 @@ def get_log_level():
 
 
 def get_core_info_payload(payload_str):
-    struct_format = '{}{}'.format(endianness, data_format)
-    x = struct.unpack(struct_format, payload_str)
+    x = struct.unpack('>LLB', payload_str)
     rw      = x[0] & 0x3
     addr    = x[0] & 0xfffffffa
     size    = x[1]
@@ -152,9 +151,7 @@ class TapcpTransport(Transport):
     def progdev(self, addr=0):
         # address shifts down because we operate in 32-bit addressing mode
         # see xilinx docs. Todo, fix this microblaze side
-        data_format = 'L'
-        struct_format = '{}{}'.format(self.parent.endianness, data_format)
-        buf = StringIO(struct.pack(struct_format, addr >> 8))
+        buf = StringIO(struct.pack('>L', addr >> 8))
         try:
             self.t.upload('/progdev', buf, timeout=self.timeout)
         except:
@@ -173,9 +170,7 @@ class TapcpTransport(Transport):
     def get_temp(self):
         buf = StringIO()
         self.t.download('/temp', buf)
-        data_format = 'f'
-        struct_format = '{}{}'.format(self.parent.endianness, data_format)
-        return struct.unpack(struct_format, buf.getvalue())[0]
+        return struct.unpack('>f', buf.getvalue())[0]
 
     def is_connected(self):
         try:
@@ -385,7 +380,7 @@ class TapcpTransport(Transport):
         """
         raise NotImplementedError
 
-    def read(self, device_name, size, offset=0, use_bulk=True, unsigned=False):
+    def read(self, device_name, size, offset=0, use_bulk=True):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
        
@@ -393,7 +388,6 @@ class TapcpTransport(Transport):
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
         :param use_bulk: Does nothing. Kept for API compatibility
-        :param unsigned: flag to specify the data read as signed or unsigned
         :return: binary data string
         """
         for retry in range(self.retries - 1):
@@ -417,17 +411,11 @@ class TapcpTransport(Transport):
         Unchecked data write.
         
         :param device_name: the memory device to which to write
-        :param data: integer or binary-packed string data to be written
+        :param data: the byte string to write
         :param offset: the offset, in bytes, at which to write
         :param use_bulk: Does nothing. Kept for API compatibility
         """
-        
-        # Now unpacking in the transport layer
-        if type(data) is not str:
-            data_format = 'i' if data < 0 else 'I'
-            struct_format = '{}{}'.format(self.parent.endianness, data_format)
-            data = struct.pack(struct_format, data)
-
+        assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
         for retry in range(self.retries - 1):
