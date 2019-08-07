@@ -123,6 +123,14 @@ class CasperFpga(object):
             transport_class = self.choose_transport(self.host)
             self.transport = transport_class(**kwargs)
 
+        # The Red Pitaya doesn't respect network-endianness. It should.
+        # For now, detect this board so that an endianness flip can be
+        # inserted between the CasperFpga and the underlying transport layer
+        try:
+            self.is_little_endian = self._detect_little_endianness()
+        except:
+            self.is_little_endian = False
+
         # this is just for code introspection
         self.devices = None
         self.memory_devices = None
@@ -223,9 +231,26 @@ class CasperFpga(object):
         :param offset: start at this offset, offset in bytes
         :param kwargs:
         """
-        return self.transport.read(device_name, size, offset, **kwargs)
+        data = self.transport.read(device_name, size, offset, **kwargs)
+        if self.is_little_endian:
+            assert ((len(data) % 4) == 0), \
+                "Can only read multiples of 4 bytes because CasperFpga is doing an endianness flip"
+            # iterate through 32-bit words and flip them
+            data_byte_swapped = ""
+            for i in range(0, len(data), 4):
+                data_byte_swapped = data[i:i+4][::-1]
+                return data_byte_swapped
+        return data
 
     def blindwrite(self, device_name, data, offset=0, **kwargs):
+        if self.is_little_endian:
+            assert ((len(data) % 4) == 0), \
+                "Can only write multiples of 4 bytes because CasperFpga is doing an endianness flip"
+            # iterate through 32-bit words and flip them
+            data_byte_swapped = ""
+            for i in range(0, len(data), 4):
+                data_byte_swapped = data[i:i+4][::-1]
+                return self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
         return self.transport.blindwrite(device_name, data, offset, **kwargs)
 
     def listdev(self):
@@ -308,6 +333,20 @@ class CasperFpga(object):
         :return:
         """
         return self.transport.is_running()
+
+    def _detect_little_endianness(self):
+        """
+        Return True if the board being used is little endian.
+        False otherwise.
+        This method works by interrogating the board_id of the system.
+        It doesn't do anything truly generic, but looks to see if the
+        MSB of the board ID is zero. If it isn't (and the LSB is) then
+        we assume this is a little endian board.
+        """
+        board_id = self.read_uint('sys_board_id')
+        msb = (board_id >> 24) & 0xff
+        lsb = board_id & 0xff
+        return (lsb == 0) and (msb > 0)
 
     def _reset_device_info(self):
         """
