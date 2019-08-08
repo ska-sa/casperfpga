@@ -7,6 +7,73 @@ from gbe import Gbe
 
 LOGGER = logging.getLogger(__name__)
 
+# Offsets for fields in the memory map, in bytes
+OFFSET_CORE_TYPE   = 0x0
+OFFSET_BUFFER_SIZE = 0x4
+OFFSET_WORD_LEN    = 0x8
+OFFSET_MAC_ADDR    = 0xc
+OFFSET_IP_ADDR     = 0x14
+OFFSET_GW_ADDR     = 0x18
+OFFSET_NETMASK     = 0x1c
+OFFSET_MC_IP       = 0x20
+OFFSET_MC_MASK     = 0x24
+OFFSET_BUF_VLD     = 0x28
+OFFSET_FLAGS       = 0x2c
+OFFSET_PORT        = 0x30
+OFFSET_STATUS      = 0x34
+OFFSET_CONTROL     = 0x40
+OFFSET_ARP_SIZE    = 0x44
+OFFSET_TX_PKT_RATE = 0x48
+OFFSET_TX_PKT_CNT  = 0x4c
+OFFSET_TX_VLD_RATE = 0x50
+OFFSET_TX_VLD_CNT  = 0x54
+OFFSET_TX_OF_CNT   = 0x58
+OFFSET_TX_AF_CNT   = 0x5c
+OFFSET_RX_PKT_RATE = 0x60
+OFFSET_RX_PKT_CNT  = 0x64
+OFFSET_RX_VLD_RATE = 0x68
+OFFSET_RX_VLD_CNT  = 0x6c
+OFFSET_RX_OF_CNT   = 0x70
+OFFSET_RX_AF_CNT   = 0x74
+OFFSET_COUNT_RST   = 0x78
+
+OFFSET_ARP_CACHE   = 0x1000
+OFFSET_TX_BUFFER   = 0x4000
+OFFSET_RX_BUFFER   = 0x8000
+
+# Sizes for fields in the memory map, in bytes
+SIZE_CORE_TYPE   = 0x4
+SIZE_BUFFER_SIZE = 0x4
+SIZE_WORD_LEN    = 0x4
+SIZE_MAC_ADDR    = 0x8
+SIZE_IP_ADDR     = 0x4
+SIZE_GW_ADDR     = 0x4
+SIZE_NETMASK     = 0x4
+SIZE_MC_IP       = 0x4
+SIZE_MC_MASK     = 0x4
+SIZE_BUF_AVAIL   = 0x4
+SIZE_FLAGS       = 0x4
+SIZE_PORT        = 0x4
+SIZE_STATUS      = 0x8
+SIZE_CONTROL     = 0x8
+SIZE_ARP_SIZE    = 0x4
+SIZE_TX_PKT_RATE = 0x4
+SIZE_TX_PKT_CNT  = 0x4
+SIZE_TX_VLD_RATE = 0x4
+SIZE_TX_VLD_CNT  = 0x4
+SIZE_TX_OF_CNT   = 0x4
+SIZE_TX_AF_CNT   = 0x4
+SIZE_RX_PKT_RATE = 0x4
+SIZE_RX_PKT_CNT  = 0x4
+SIZE_RX_VLD_RATE = 0x4
+SIZE_RX_VLD_CNT  = 0x4
+SIZE_RX_OF_CNT   = 0x4
+SIZE_RX_AF_CNT   = 0x4
+SIZE_COUNT_RST   = 0x4
+
+SIZE_ARP_CACHE   = 0x3000
+SIZE_TX_BUFFER   = 0x4000
+SIZE_RX_BUFFER   = 0x4000
 
 class TenGbe(Memory, Gbe):
     """
@@ -24,6 +91,22 @@ class TenGbe(Memory, Gbe):
         """
         Memory.__init__(self, name, 32, address, length_bytes)
         Gbe.__init__(self, parent, name, address, length_bytes, device_info)
+        self.memmap_compliant = self._check_memmap_compliance()
+
+    def _check_memmap_compliance(self):
+        """
+        Look at the first word of the core's memory map and try to
+        figure out if it compliant with the harmonized ethernet map.
+        This isn't flawless, but unless the user sets a very weird
+        MAC address for their core (which is what the old core's map
+        stored in register 0, it should be OK).
+        """
+        x = self.parent.read(self.name, 4)
+        cpu_tx_en, cpu_rx_en, rev, core_type = struct.unpack('4B', x)
+        if (cpu_tx_en > 1) or (cpu_rx_en > 1) or (core_type != 2):
+            return False
+        else:
+            return True
 
     def post_create_update(self, raw_device_info):
         """
@@ -262,14 +345,23 @@ class TenGbe(Memory, Gbe):
 
         :param target_val:
         """
-        # 0x20 or (0x20 / 4)? What was the /4 for?
-        word_bytes = list(
-            struct.unpack('>4B', self.parent.read(self.name, 4, 0x20)))
-        if word_bytes[1] == target_val:
-            return
-        word_bytes[1] = target_val
-        word_packed = struct.pack('>4B', *word_bytes)
-        self.parent.write(self.name, word_packed, 0x20)
+        if self.memmap_compliant:
+            word_bytes = list(
+                struct.unpack('>4B', self.parent.read(self.name, 4, OFFSET_FLAGS)))
+            if word_bytes[3] == target_val:
+                return
+            word_bytes[3] = target_val
+            word_packed = struct.pack('>4B', *word_bytes)
+            self.parent.write(self.name, word_packed, OFFSET_FLAGS)
+        else:
+            # 0x20 or (0x20 / 4)? What was the /4 for?
+            word_bytes = list(
+                struct.unpack('>4B', self.parent.read(self.name, 4, 0x20)))
+            if word_bytes[1] == target_val:
+                return
+            word_bytes[1] = target_val
+            word_packed = struct.pack('>4B', *word_bytes)
+            self.parent.write(self.name, word_packed, 0x20)
 
     def fabric_enable(self):
         """
@@ -287,20 +379,36 @@ class TenGbe(Memory, Gbe):
         """
         Toggle the fabric soft reset
         """
-        word_bytes = struct.unpack('>4B', self.parent.read(self.name, 4, 0x20))
-        word_bytes = list(word_bytes)
+        if self.memmap_compliant:
+            word_bytes = struct.unpack('>4B', self.parent.read(self.name, 4, OFFSET_FLAGS))
+            word_bytes = list(word_bytes)
 
-        def write_val(val):
-            word_bytes[0] = val
-            word_packed = struct.pack('>4B', *word_bytes)
-            if val == 0:
-                self.parent.write(self.name, word_packed, 0x20)
-            else:
-                self.parent.blindwrite(self.name, word_packed, 0x20)
-        if word_bytes[0] == 1:
+            def write_val(val):
+                word_bytes[1] = val
+                word_packed = struct.pack('>4B', *word_bytes)
+                if val == 0:
+                    self.parent.write(self.name, word_packed, OFFSET_FLAGS)
+                else:
+                    self.parent.blindwrite(self.name, word_packed, OFFSET_FLAGS)
+            if word_bytes[1] == 1:
+                write_val(0)
+            write_val(1)
             write_val(0)
-        write_val(1)
-        write_val(0)
+        else:
+            word_bytes = struct.unpack('>4B', self.parent.read(self.name, 4, 0x20))
+            word_bytes = list(word_bytes)
+
+            def write_val(val):
+                word_bytes[0] = val
+                word_packed = struct.pack('>4B', *word_bytes)
+                if val == 0:
+                    self.parent.write(self.name, word_packed, 0x20)
+                else:
+                    self.parent.blindwrite(self.name, word_packed, 0x20)
+            if word_bytes[0] == 1:
+                write_val(0)
+            write_val(1)
+            write_val(0)
 
     def get_gbe_core_details(self, read_arp=False, read_cpu=False):
         """
@@ -366,46 +474,69 @@ class TenGbe(Memory, Gbe):
             #self.add_field(Bitfield.Field('buffer_rx', 0,       0x1000 * word_width,        0, 0x2000 * word_width))
             #self.add_field(Bitfield.Field('arp_table', 0,       0x1000 * word_width,        0, 0x3000 * word_width))
         """
-        data = self.parent.read(self.name, 16384)
-        data = list(struct.unpack('>16384B', data))
-        returnval = {
-            'ip_prefix': '%i.%i.%i.' % (data[0x10], data[0x11], data[0x12]),
-            'ip': IpAddress('%i.%i.%i.%i' % (data[0x10], data[0x11], 
-                                             data[0x12], data[0x13])),
-            'subnet_mask': IpAddress('%i.%i.%i.%i' % (
-                              data[0x38], data[0x39], data[0x3a], data[0x3b])),
-            'mac': Mac('%i:%i:%i:%i:%i:%i' % (data[0x02], data[0x03],
-                                              data[0x04], data[0x05],
-                                              data[0x06], data[0x07])),
-            'gateway_ip': IpAddress('%i.%i.%i.%i' % (data[0x0c], data[0x0d],
-                                                     data[0x0e], data[0x0f])),
-            'fabric_port': ((data[0x22] << 8) + (data[0x23])),
-            'fabric_en': bool(data[0x21] & 1),
-            'xaui_lane_sync': [bool(data[0x27] & 4), bool(data[0x27] & 8),
-                               bool(data[0x27] & 16), bool(data[0x27] & 32)],
-            'xaui_status': [data[0x24], data[0x25], data[0x26], data[0x27]],
-            'xaui_chan_bond': bool(data[0x27] & 64),
-            'xaui_phy': {'rx_eq_mix': data[0x28], 'rx_eq_pol': data[0x29],
-                         'tx_preemph': data[0x2a], 'tx_swing': data[0x2b]},
-            'multicast': {'base_ip': IpAddress('%i.%i.%i.%i' % (
-                data[0x30], data[0x31], data[0x32], data[0x33])),
-                          'ip_mask': IpAddress('%i.%i.%i.%i' % (
-                              data[0x34], data[0x35], data[0x36], data[0x37])),
-                          'rx_ips': []}
-        }
-        possible_addresses = [int(returnval['multicast']['base_ip'])]
-        mask_int = int(returnval['multicast']['ip_mask'])
-        for ctr in range(32):
-            mask_bit = (mask_int >> ctr) & 1
-            if not mask_bit:
-                new_ips = []
-                for ip in possible_addresses:
-                    new_ips.append(ip & (~(1 << ctr)))
-                    new_ips.append(new_ips[-1] | (1 << ctr))
-                possible_addresses.extend(new_ips)
-        tmp = list(set(possible_addresses))
-        for ip in tmp:
-            returnval['multicast']['rx_ips'].append(IpAddress(ip))
+        if self.memmap_compliant:
+            data = self.parent.read(self.name, 16384)
+            data = list(struct.unpack('>16384B', data))
+            returnval = {
+                'ip_prefix': '%i.%i.%i.' % (data[0x14], data[0x15], data[0x16]),
+                'ip': IpAddress('%i.%i.%i.%i' % (data[0x14], data[0x15], 
+                                                 data[0x16], data[0x17])),
+                'subnet_mask': IpAddress('%i.%i.%i.%i' % (
+                                  data[0x1c], data[0x1d], data[0x1e], data[0x1f])),
+                'mac': Mac('%i:%i:%i:%i:%i:%i' % (data[0x0e], data[0x0f],
+                                                  data[0x10], data[0x11],
+                                                  data[0x12], data[0x13])),
+                'gateway_ip': IpAddress('%i.%i.%i.%i' % (data[0x18], data[0x19],
+                                                         data[0x1a], data[0x1b])),
+                'fabric_port': ((data[0x32] << 8) + (data[0x33])),
+                'fabric_en': bool(data[0x2f] & 1),
+                'multicast': {'base_ip': IpAddress('%i.%i.%i.%i' % (
+                    data[0x20], data[0x21], data[0x22], data[0x23])),
+                              'ip_mask': IpAddress('%i.%i.%i.%i' % (
+                                  data[0x24], data[0x25], data[0x26], data[0x27])),
+                              'rx_ips': []}
+            }
+        else:
+            data = self.parent.read(self.name, 16384)
+            data = list(struct.unpack('>16384B', data))
+            returnval = {
+                'ip_prefix': '%i.%i.%i.' % (data[0x10], data[0x11], data[0x12]),
+                'ip': IpAddress('%i.%i.%i.%i' % (data[0x10], data[0x11], 
+                                                 data[0x12], data[0x13])),
+                'subnet_mask': IpAddress('%i.%i.%i.%i' % (
+                                  data[0x38], data[0x39], data[0x3a], data[0x3b])),
+                'mac': Mac('%i:%i:%i:%i:%i:%i' % (data[0x02], data[0x03],
+                                                  data[0x04], data[0x05],
+                                                  data[0x06], data[0x07])),
+                'gateway_ip': IpAddress('%i.%i.%i.%i' % (data[0x0c], data[0x0d],
+                                                         data[0x0e], data[0x0f])),
+                'fabric_port': ((data[0x22] << 8) + (data[0x23])),
+                'fabric_en': bool(data[0x21] & 1),
+                'xaui_lane_sync': [bool(data[0x27] & 4), bool(data[0x27] & 8),
+                                   bool(data[0x27] & 16), bool(data[0x27] & 32)],
+                'xaui_status': [data[0x24], data[0x25], data[0x26], data[0x27]],
+                'xaui_chan_bond': bool(data[0x27] & 64),
+                'xaui_phy': {'rx_eq_mix': data[0x28], 'rx_eq_pol': data[0x29],
+                             'tx_preemph': data[0x2a], 'tx_swing': data[0x2b]},
+                'multicast': {'base_ip': IpAddress('%i.%i.%i.%i' % (
+                    data[0x30], data[0x31], data[0x32], data[0x33])),
+                              'ip_mask': IpAddress('%i.%i.%i.%i' % (
+                                  data[0x34], data[0x35], data[0x36], data[0x37])),
+                              'rx_ips': []}
+            }
+            possible_addresses = [int(returnval['multicast']['base_ip'])]
+            mask_int = int(returnval['multicast']['ip_mask'])
+            for ctr in range(32):
+                mask_bit = (mask_int >> ctr) & 1
+                if not mask_bit:
+                    new_ips = []
+                    for ip in possible_addresses:
+                        new_ips.append(ip & (~(1 << ctr)))
+                        new_ips.append(new_ips[-1] | (1 << ctr))
+                    possible_addresses.extend(new_ips)
+            tmp = list(set(possible_addresses))
+            for ip in tmp:
+                returnval['multicast']['rx_ips'].append(IpAddress(ip))
         if read_arp:
             returnval['arp'] = self.get_arp_details(data)
         if read_cpu:
@@ -420,6 +551,11 @@ class TenGbe(Memory, Gbe):
         :param port_dump: A list of raw bytes from interface memory.
         :type port_dump: list
         """
+        if self.memmap_compliant:
+            arp_addr = OFFSET_ARP_CACHE
+        else:
+            arp_addr = 0x3000
+
         if port_dump is None:
             port_dump = self.parent.read(self.name, 16384)
             port_dump = list(struct.unpack('>16384B', port_dump))
@@ -427,7 +563,7 @@ class TenGbe(Memory, Gbe):
         for addr in range(256):
             mac = []
             for ctr in range(2, 8):
-                mac.append(port_dump[0x3000 + (addr * 8) + ctr])
+                mac.append(port_dump[arp_addr + (addr * 8) + ctr])
             returnval.append(mac)
         return returnval
 
@@ -437,6 +573,7 @@ class TenGbe(Memory, Gbe):
 
         :param port_dump:
         """
+        #TODO Not memmap compliant
         if port_dump is None:
             port_dump = self.parent.read(self.name, 16384)
             port_dump = list(struct.unpack('>16384B', port_dump))
@@ -460,8 +597,12 @@ class TenGbe(Memory, Gbe):
         is passed such that the zeroth element is the MAC address of the
         device with IP XXX.XXX.XXX.0, and element N is the MAC address of the
         device with IP XXX.XXX.XXX.N"""
+        if self.memmap_compliant:
+            arp_addr = OFFSET_ARP_CACHE
+        else:
+            arp_addr = 0x3000
         macs = list(macs)
         macs_pack = struct.pack('>%dQ' % (len(macs)), *macs)
-        self.parent.write(self.name, macs_pack, offset=0x3000)
+        self.parent.write(self.name, macs_pack, offset=arp_addr)
 
 # end
