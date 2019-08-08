@@ -30,3 +30,9 @@
 
 # ignore docs build directory
 docs/_build/
+
+# python build directories
+.eggs/
+build/
+casperfpga.egg-info/
+dist/
