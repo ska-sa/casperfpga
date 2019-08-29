@@ -133,7 +133,7 @@ GET_CURRENT_LOGS = 0x0057
 GET_VOLTAGE_LOGS = 0x0059
 GET_FAN_CONT_LOGS = 0x005B
 CLEAR_FAN_CONT_LOGS = 0x005D
-
+RESET_DHCP_SM = 0x005F
 
 # FOR VIRTEX FLASH RECONFIG
 DEFAULT_START_ADDRESS = 0x3000000
@@ -1790,6 +1790,24 @@ class ClearFanControllerLogsResp(Response):
     def __init__(self, command_id, seq_num, status, padding):
         super(ClearFanControllerLogsResp, self).__init__(command_id, seq_num)
         self.packet['status'] = status
+
+
+class ResetDHCPStateMachineReq(Command):
+    def __init__(self, link_id):
+        super(ResetDHCPStateMachineReq, self).__init__(RESET_DHCP_SM)
+        self.expect_response = True
+        self.response = ResetDHCPStateMachineResp
+        self.num_response_words = 11
+        self.pad_words = 7
+        self.packet['link_id'] = link_id
+
+
+class ResetDHCPStateMachineResp(Response):
+    def __init__(self, command_id, seq_num, link_id, reset_error, padding):
+        super(ResetDHCPStateMachineResp, self).__init__(command_id, seq_num)
+        self.packet['link_id'] = link_id
+        self.packet['reset_error'] = reset_error
+        self.packet['padding'] = padding
 
 
 # Mezzanine Site Identifiers

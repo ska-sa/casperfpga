@@ -3674,6 +3674,34 @@ class SkarabTransport(Transport):
 
         return signature
 
+    def reset_dhcp_state_machine(self, link_id=1, timeout=None, retries=None):
+        """
+        Resets the DHCP State Machine for the given link
+        :param link_id: id of the interface on which DHCP is to be reset
+        1 - 40GbE
+        0 - 1GbE
+        :return: True if reset issued successfully
+        """
+
+        error_dictionary = {1: 'No such link id',
+                            2: 'Specified link is down'}
+
+        request = sd.ResetDHCPStateMachineReq(link_id)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check if the request was successful
+        if not response.packet['reset_error']:
+            self.logger.info(
+                'DHCP state machine reset issued on link_id: {}'.format(
+                    response.packet['link_id']))
+            return True
+        else:
+            err = 'DHCP state machine reset on link_id: {} failed! {}.'.format(
+                response.packet['link_id'],
+                error_dictionary[response.packet['reset_error']])
+            raise SkarabUnknownDeviceError(err)
+
     # TODO: only declare this function once! Will have to be global
     @staticmethod
     def _sign_extend(value, bits):
