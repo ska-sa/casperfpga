@@ -64,8 +64,8 @@ The distribution on the Python Package Index is, of course, a built-distribution
 
 Unfortunately the success of your installation using `pip` depends on the host OS of the installation, and you might need to rebuild the utility using the C-compiler native to your OS. In short, follow the more traditional method of installing custom Python packages.
 
-```python
-$ git clone https://github.com/ska-sa/casperfpga.git
+```shell
+$ git clone https://github.com/casper-astro/casperfpga.git
 $ cd casperfpga
 $ sudo pip install -r requirements.txt
 $ sudo python setup.py install
