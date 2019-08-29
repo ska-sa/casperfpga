@@ -8,6 +8,7 @@ import string
 import register
 import sbram
 import snap
+import onegbe
 import tengbe
 import fortygbe
 import qdr
@@ -35,6 +36,7 @@ CASPER_MEMORY_DEVICES = {
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:ten_gbe':      {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
+    'xps:onegbe':       {'class': onegbe.OneGbe,     'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
     'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
 }
@@ -105,21 +107,6 @@ class CasperFpga(object):
                     errmsg = 'Problem creating logger for {}'.format(self.host)
                     raise ValueError(errmsg)
 
-        # Allow for different network endianness formats
-        try:
-            '''
-            Should be a character of the following type:
-                '@', 'native, native'
-                '=', 'native, standard'
-                '<', 'little-endian'
-                '>', 'big-endian'
-                '!', 'network'
-            '''
-            self.endianness = kwargs['endianness']
-        except KeyError:
-            # Default to big-endian
-            self.endianness = '>'
-
         # some transports, e.g. Skarab, need to know their parent
         kwargs['parent_fpga'] = self
 
@@ -155,6 +142,15 @@ class CasperFpga(object):
 
         self._reset_device_info()
         self.logger.debug('%s: now a CasperFpga' % self.host)
+
+        # The Red Pitaya doesn't respect network-endianness. It should.
+        # For now, detect this board so that an endianness flip can be
+        # inserted between the CasperFpga and the underlying transport layer.
+        # We try detection again after programming, in case this fails here.
+        try:
+            self._detect_little_endianness()
+        except:
+            pass
 
         
     def choose_transport(self, host_ip):
@@ -229,7 +225,7 @@ class CasperFpga(object):
         self.logger.info(infomsg)
         return True
 
-    def read(self, device_name, size, offset=0, unsigned=False, **kwargs):
+    def read(self, device_name, size, offset=0, **kwargs):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
 
@@ -238,9 +234,26 @@ class CasperFpga(object):
         :param offset: start at this offset, offset in bytes
         :param kwargs:
         """
-        return self.transport.read(device_name, size, offset, unsigned=unsigned, **kwargs)
+        data = self.transport.read(device_name, size, offset, **kwargs)
+        if self.is_little_endian:
+            assert ((len(data) % 4) == 0), \
+                "Can only read multiples of 4 bytes because CasperFpga is doing an endianness flip"
+            # iterate through 32-bit words and flip them
+            data_byte_swapped = ""
+            for i in range(0, len(data), 4):
+                data_byte_swapped += data[i:i+4][::-1]
+            return data_byte_swapped
+        return data
 
     def blindwrite(self, device_name, data, offset=0, **kwargs):
+        if self.is_little_endian:
+            assert ((len(data) % 4) == 0), \
+                "Can only write multiples of 4 bytes because CasperFpga is doing an endianness flip"
+            # iterate through 32-bit words and flip them
+            data_byte_swapped = ""
+            for i in range(0, len(data), 4):
+                data_byte_swapped += data[i:i+4][::-1]
+                return self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
         return self.transport.blindwrite(device_name, data, offset, **kwargs)
 
     def listdev(self):
@@ -308,7 +321,16 @@ class CasperFpga(object):
                 self.get_system_information(filename,
                                             initialise_objects=initialise_objects)
 
-        return rv
+        
+        # The Red Pitaya doesn't respect network-endianness. It should.
+        # For now, detect this board so that an endianness flip can be
+        # inserted between the CasperFpga and the underlying transport layer
+        # This check is in upload_to_ram and program because if we connected
+        # to a board that wasn't programmed the detection in __init__ won't have worked.
+        try:
+            self._detect_little_endianness()
+        except:
+            pass
 
     def is_connected(self, **kwargs):
         """
@@ -323,6 +345,22 @@ class CasperFpga(object):
         :return:
         """
         return self.transport.is_running()
+
+    def _detect_little_endianness(self):
+        """
+        Return True if the board being used is little endian.
+        False otherwise.
+        This method works by interrogating the board_id of the system.
+        It doesn't do anything truly generic, but looks to see if the
+        MSB of the board ID is zero. If it isn't or the whole id is zero
+        (which is the case for the red pitaya) we assume this is a little endian board.
+        implicitly sets the is_little_endian attribute
+        """
+        self.is_little_endian = False
+        board_id = self.read_uint('sys_board_id')
+        msb = (board_id >> 24) & 0xff
+        self.is_little_endian = (msb > 0) or (board_id == 0)
+        return self.is_little_endian
 
     def _reset_device_info(self):
         """
@@ -455,45 +493,18 @@ class CasperFpga(object):
         :param offset: offset at which to write, in bytes
         """
         self.blindwrite(device_name, data, offset)
-        
-        # TODO: Move this check into the transport layers
-        data_format = 'i' if data < 0 else 'I'
-        struct_format = '{}{}'.format(self.endianness, data_format)
-        str_data = struct.pack(struct_format, data)
-        new_data = self.read(device_name, len(str_data), offset, return_unpacked=True)
-        
-        if new_data[0] != data:
-            errmsg = 'Verification of write to {} at offset {} failed. ' \
-                    'Wrote 0x{:02X}, read 0x{:02X}'.format(device_name, offset, data, new_data[0])
-            self.logger.error(errmsg)
-            raise ValueError(errmsg)
-
-        '''
-        if type(data) is str:
-        
-            data_format = 'i' if data < 0 else 'I'
-            struct_format = '{}{}'.format(self.endianness, data_format)
-            new_data = struct.pack(struct_format, new_data)
-            
-            
-            if new_data != data:
-                # TODO - this error message won't show you the problem if
-                # it's not in the first word
-                # unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
-                # unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
-                # Breaking backwards compatibility
-                data_format = 'L'
-                struct_format = '{}{}'.format(self.endianness, data_format)
-                unpacked_wrdata = struct.unpack(struct_format, data[0:4])[0]
-                unpacked_rddata = struct.unpack(struct_format, new_data[0:4])[0]
-                err_str = 'Verification of write to %s at offset %d failed. ' \
-                        'Wrote 0x%08x... but got back 0x%08x.' % (
-                            device_name, offset,
-                            unpacked_wrdata, unpacked_rddata)
-                self.logger.error(err_str)
-                raise ValueError(err_str)
-        '''
-
+        new_data = self.read(device_name, len(data), offset)
+        if new_data != data:
+            # TODO - this error message won't show you the problem if
+            # it's not in the first word
+            unpacked_wrdata = struct.unpack('>L', data[0:4])[0]
+            unpacked_rddata = struct.unpack('>L', new_data[0:4])[0]
+            err_str = 'Verification of write to %s at offset %d failed. ' \
+                      'Wrote 0x%08x... but got back 0x%08x.' % (
+                          device_name, offset,
+                          unpacked_wrdata, unpacked_rddata)
+            self.logger.error(err_str)
+            raise ValueError(err_str)
 
     def read_int(self, device_name, word_offset=0):
         """
@@ -505,11 +516,8 @@ class CasperFpga(object):
         :param word_offset: the 32-bit word offset at which to read
         :return: signed 32-bit integer
         """
-        data = self.read(device_name, 4, word_offset * 4, 
-                            return_unpacked=True)
-        # return struct.unpack('>i', data)[0]
-        # Breaking backwards compatibility
-        return data[0]
+        data = self.read(device_name, 4, word_offset * 4)
+        return struct.unpack('>i', data)[0]
 
     def read_uint(self, device_name, word_offset=0):
         """
@@ -519,11 +527,8 @@ class CasperFpga(object):
         :param word_offset: the 32-bit word offset at which to read
         :return: unsigned 32-bit integer
         """
-        data = self.read(device_name, 4, word_offset * 4,
-                            unsigned=True, return_unpacked=True)
-        # return struct.unpack('>I', data)[0]
-        # Breaking backwards compatibility
-        return data[0]
+        data = self.read(device_name, 4, word_offset * 4)
+        return struct.unpack('>I', data)[0]
 
     def write_int(self, device_name, integer, blindwrite=False, word_offset=0):
         """
@@ -539,18 +544,16 @@ class CasperFpga(object):
         # negative, must be signed int; if positive over 2^16, must be unsigned
         # int.
         try:
-            # data = struct.pack('>i' if integer < 0 else '>I', integer)
-            # Breaking backwards compatibility
-            if blindwrite:
-                self.blindwrite(device_name, integer, word_offset * 4)
-            else:
-                self.write(device_name, integer, word_offset * 4)
+            data = struct.pack('>i' if integer < 0 else '>I', integer)
         except Exception as ve:
             self.logger.error('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
             raise ValueError('Writing integer %i failed with error: %s' % (
                 integer, ve.message))
-        
+        if blindwrite:
+            self.blindwrite(device_name, data, word_offset * 4)
+        else:
+            self.write(device_name, data, word_offset * 4)
         self.logger.debug('Write_int %8x to register %s at word offset %d '
                           'okay%s.' % (integer, device_name, word_offset,
                           ' (blind)' if blindwrite else ''))

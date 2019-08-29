@@ -75,7 +75,7 @@ SIZE_ARP_CACHE   = 0x3000
 SIZE_TX_BUFFER   = 0x4000
 SIZE_RX_BUFFER   = 0x4000
 
-class TenGbe(Memory, Gbe):
+class OneGbe(Memory, Gbe):
     """
     To do with the CASPER ten GBE yellow block implemented on FPGAs,
     and interfaced-to via KATCP memory reads/writes.
@@ -348,9 +348,9 @@ class TenGbe(Memory, Gbe):
         if self.memmap_compliant:
             word_bytes = list(
                 struct.unpack('>4B', self.parent.read(self.name, 4, OFFSET_FLAGS)))
-            if word_bytes[3] == target_val:
+            if word_bytes[0] == target_val:
                 return
-            word_bytes[3] = target_val
+            word_bytes[0] = target_val
             word_packed = struct.pack('>4B', *word_bytes)
             self.parent.write(self.name, word_packed, OFFSET_FLAGS)
         else:
@@ -384,13 +384,13 @@ class TenGbe(Memory, Gbe):
             word_bytes = list(word_bytes)
 
             def write_val(val):
-                word_bytes[1] = val
+                word_bytes[2] = val
                 word_packed = struct.pack('>4B', *word_bytes)
                 if val == 0:
                     self.parent.write(self.name, word_packed, OFFSET_FLAGS)
                 else:
                     self.parent.blindwrite(self.name, word_packed, OFFSET_FLAGS)
-            if word_bytes[1] == 1:
+            if word_bytes[2] == 1:
                 write_val(0)
             write_val(1)
             write_val(0)
@@ -524,19 +524,19 @@ class TenGbe(Memory, Gbe):
                                   data[0x34], data[0x35], data[0x36], data[0x37])),
                               'rx_ips': []}
             }
-            possible_addresses = [int(returnval['multicast']['base_ip'])]
-            mask_int = int(returnval['multicast']['ip_mask'])
-            for ctr in range(32):
-                mask_bit = (mask_int >> ctr) & 1
-                if not mask_bit:
-                    new_ips = []
-                    for ip in possible_addresses:
-                        new_ips.append(ip & (~(1 << ctr)))
-                        new_ips.append(new_ips[-1] | (1 << ctr))
-                    possible_addresses.extend(new_ips)
-            tmp = list(set(possible_addresses))
-            for ip in tmp:
-                returnval['multicast']['rx_ips'].append(IpAddress(ip))
+        possible_addresses = [int(returnval['multicast']['base_ip'])]
+        mask_int = int(returnval['multicast']['ip_mask'])
+        for ctr in range(32):
+            mask_bit = (mask_int >> ctr) & 1
+            if not mask_bit:
+                new_ips = []
+                for ip in possible_addresses:
+                    new_ips.append(ip & (~(1 << ctr)))
+                    new_ips.append(new_ips[-1] | (1 << ctr))
+                possible_addresses.extend(new_ips)
+        tmp = list(set(possible_addresses))
+        for ip in tmp:
+            returnval['multicast']['rx_ips'].append(IpAddress(ip))
         if read_arp:
             returnval['arp'] = self.get_arp_details(data)
         if read_cpu:
