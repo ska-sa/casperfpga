@@ -1,7 +1,5 @@
 import logging
 import struct
-import time
-import tftpy
 from StringIO import StringIO
 import zlib
 import hashlib
@@ -11,14 +9,15 @@ from transport import Transport
 __author__ = 'jackh'
 __date__ = 'June 2017'
 
-LOGGER = logging.getLogger(__name__)
-tftpy.setLogLevel(logging.CRITICAL)
+TFTPY = None
 
 def set_log_level(level):
-    tftpy.setLogLevel(level)
+    TFTPY.setLogLevel(level)
+
 
 def get_log_level():
-    return tftpy.log.level
+    return TFTPY.log.level
+
 
 def get_core_info_payload(payload_str):
     x = struct.unpack('>LLB', payload_str)
@@ -26,7 +25,7 @@ def get_core_info_payload(payload_str):
     addr    = x[0] & 0xfffffffa
     size    = x[1]
     typenum = x[2]
-    return {'rw' : rw, 'addr' : addr, 'size' : size, 'typenum' : typenum}
+    return {'rw': rw, 'addr': addr, 'size': size, 'typenum': typenum}
 
 
 def decode_csl_pl(csl):
@@ -56,6 +55,7 @@ def decode_csl_pl(csl):
         prev_str = this_str[:]
     return regs
 
+
 def decode_csl(csl):
     x = decode_csl_pl(csl).keys()
     x.sort()
@@ -69,16 +69,74 @@ class TapcpTransport(Transport):
     def __init__(self, **kwargs):
         """
         Initialized Tapcp FPGA object
-        :param host: IP Address of the targeted Board
-        :return: none
-        """
-        Transport.__init__(self, **kwargs)
 
+        :param host: IP Address of the targeted Board
+        """
+        try:
+            import tftpy
+            global TFTPY
+            TFTPY = tftpy
+            TFTPY.setLogLevel(logging.CRITICAL)
+        except ImportError:
+            raise ImportError('You need to install tftpy to use TapcpTransport')
+        
+        Transport.__init__(self, **kwargs)
+        set_log_level(logging.ERROR)
         self.t = tftpy.TftpClient(kwargs['host'], 69)
-        self._logger = LOGGER
-        self.timeout = kwargs.get('timeout', 0.025) # 1/4 the timeout of the MB
+	    
+        try:
+            self.parent = kwargs['parent_fpga']
+            self.logger = self.parent.logger
+        except KeyError:
+            errmsg = 'parent_fpga argument not supplied when creating tapcp device'
+            raise RuntimeError(errmsg)
+
+        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+        self.logger.info(new_connection_msg)
+        self.timeout = kwargs.get('timeout', 3)
         self.server_timeout = 0.1 # Microblaze timeout period. So that if a command fails we can wait for the microblaze to terminate the connection before retrying
         self.retries = kwargs.get('retries', 8) # These are retries of a complete transaction (each of which has it's ofw TFTP retries).
+
+    @staticmethod
+    def test_host_type(host_ip):
+        """
+        Is this host_ip assigned to a Tapcp board?
+
+        :param host_ip:
+        """
+        try:
+            board = TapcpTransport(host=host_ip, timeout=0.1)
+        except ImportError:
+            LOGGER.error('tftpy is not installed, do not know if %s is a Tapcp'
+                         'client or not' % str(host_ip))
+            return False
+        # Temporarily turn off logging so if tftp doesn't respond
+        # there's no error. Remember the existing log level so that
+        # it can be re-set afterwards if tftp connects ok.
+        log_level = get_log_level()
+        set_log_level(logging.CRITICAL)
+        if board.is_connected():
+            set_log_level(log_level)
+            LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
+            return True
+        return False
+
+    @staticmethod
+    def test_host_type(host_ip):
+        """
+        Is this host_ip assigned to a Tapcp board?
+
+        :param host_ip:
+        """
+        try:
+            import tftpy
+            board = tftpy.TftpClient(host_ip, 69)
+            buf = StringIO()
+            board.download('%s.%x.%x' % ('sys_clkcounter', 0, 1),
+                           buf, timeout=3)
+            return True
+        except Exception:
+            return False
 
     def listdev(self):
         buf = StringIO()
@@ -131,7 +189,6 @@ class TapcpTransport(Transport):
         """
         Extract the header and program bitstream from the input file provided.
         """
-
         with open(filename, 'r') as fh:
             fpg = fh.read()
 
@@ -288,9 +345,11 @@ class TapcpTransport(Transport):
         """
         Program a new golden image (i.e., the image stored at the
         start of the flash.
-        Beware: If this command fails, and you reboot your
+
+        **Beware:** If this command fails, and you reboot your
         board, chances are it will require JTAG intervention
         to being back to life!
+
         :param imagefile: A .bin file containing a golden image
         """
         sector_size = 0x10000
@@ -314,18 +373,17 @@ class TapcpTransport(Transport):
         # return timeout to what it used to be
         self.timeout = old_timeout
     
-
     def _get_device_address(self, device_name):
         """
         
         :param device_name: 
-        :return: 
         """
         raise NotImplementedError
 
     def read(self, device_name, size, offset=0, use_bulk=True):
         """
         Return size_bytes of binary data with carriage-return escape-sequenced.
+       
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
@@ -340,6 +398,7 @@ class TapcpTransport(Transport):
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
+                self.t.context.end()
                 time.sleep(self.server_timeout)
                 LOGGER.info('Tftp error on read -- retrying.')
         LOGGER.warning('Several Tftp errors on read -- final retry.')
@@ -350,11 +409,11 @@ class TapcpTransport(Transport):
     def blindwrite(self, device_name, data, offset=0, use_bulk=True):
         """
         Unchecked data write.
+        
         :param device_name: the memory device to which to write
         :param data: the byte string to write
         :param offset: the offset, in bytes, at which to write
         :param use_bulk: Does nothing. Kept for API compatibility
-        :return: <nothing>
         """
         assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
@@ -367,6 +426,7 @@ class TapcpTransport(Transport):
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
+                self.t.context.end()
                 time.sleep(self.server_timeout)
                 LOGGER.info('Tftp error on write -- retrying')
         LOGGER.warning('Several Tftp errors on write-- final retry.')
@@ -377,16 +437,16 @@ class TapcpTransport(Transport):
         """
         Deprogram the FPGA.
         This actually reboots & boots from the Golden Image
-        :return: nothing
         """
         # trigger reboot of FPGA
         self.progdev(0)
-        LOGGER.info('%s: deprogrammed okay' % self.host)
+        self.logger.info('Skarab deprogrammed okay')
 
     def write_wishbone(self, wb_address, data):
         """
         Used to perform low level wishbone write to a wishbone slave. Gives
         low level direct access to wishbone bus.
+        
         :param wb_address: address of the wishbone slave to write to
         :param data: data to write
         :return: response object
@@ -396,6 +456,7 @@ class TapcpTransport(Transport):
     def read_wishbone(self, wb_address):
         """
         Used to perform low level wishbone read from a Wishbone slave.
+        
         :param wb_address: address of the wishbone slave to read from
         :return: Read Data or None
         """
@@ -404,14 +465,16 @@ class TapcpTransport(Transport):
     def get_firmware_version(self):
         """
         Read the version of the firmware
+        
         :return: golden_image, multiboot, firmware_major_version,
-        firmware_minor_version
+            firmware_minor_version
         """
         raise NotImplementedError
 
     def get_soc_version(self):
         """
         Read the version of the soc
+        
         :return: golden_image, multiboot, soc_major_version, soc_minor_version
         """
         raise NotImplementedError

@@ -4,7 +4,9 @@ from i2c import I2C_DEVICE
 logger = logging.getLogger(__name__)
 
 class LTC2990():
-    """ Quad I2C Voltage, Current and Temperature Monitor """
+    """ 
+    Quad I2C Voltage, Current and Temperature Monitor 
+    """
 
     DICT = dict()
 
@@ -69,23 +71,40 @@ class LTC2990():
         self.addr=addr
 
     def init(self,fmt='celsius',repeat=False,mode1=3,mode0=7):
-        """ Initialise LTC2990
+        """ 
+        Initialise LTC2990
 
-        mode0   Description
-        #0  V1, V2, TR2(Default)
-        #1  V1-V2, TR2
-        #2  V1-V2, V3, V4
-        #3  TR1, V3, V4
-        #4  TR1, V3-V4
-        #5  TR1, TR2
-        #6  V1-V2, V3-V4
-        #7  V1, V2, V3, V4
+        +-------+----------------------+
+        | mode0 | Description          |
+        +-------+----------------------+
+        | 0     | V1, V2, TR2(Default) |
+        +-------+----------------------+
+        | 1     | V1-V2, TR2           |
+        +-------+----------------------+
+        | 2     | V1-V2, V3, V4        |
+        +-------+----------------------+
+        | 3     | TR1, V3, V4          |
+        +-------+----------------------+
+        | 4     | TR1, V3-V4           |
+        +-------+----------------------+
+        | 5     | TR1, TR2             |
+        +-------+----------------------+
+        | 6     | V1-V2, V3-V4         |
+        +-------+----------------------+
+        | 7     | V1, V2, V3, V4       |
+        +-------+----------------------+
 
-        mode1   Description
-        #0  Internal Temperature Only (Default)
-        #1  TR1, V1 or V1-V2 Only per Mode[2:0]
-        #2  TR2, V3 or V3-V4 Only per Mode[2:0]
-        #3  All Measurements per Mode[2:0]
+        +-------+-------------------------------------+
+        | mode1 | Description                         |
+        +-------+-------------------------------------+
+        | 0     | Internal Temperature Only (Default) |
+        +-------+-------------------------------------+
+        | 1     | TR1, V1 or V1-V2 Only per Mode[2:0] |
+        +-------+-------------------------------------+
+        | 2     | TR2, V3 or V3-V4 Only per Mode[2:0] |
+        +-------+-------------------------------------+
+        | 3     | All Measurements per Mode[2:0]      |
+        +-------+-------------------------------------+
         """
 
         if fmt not in ['celsius','kelvin']:
@@ -165,19 +184,23 @@ class LTC2990():
         return data
 
     def readVolt(self,name):
-        """ Read Voltage
+        """ 
+        Read Voltage
 
         Please switch to corresponding modes using init() before measuring voltage.
+        
         Possible options are:
-            vcc
-            v1
-            v2
-            v3
-            v4
-            v1-v2
-            v3-v4
 
-            E.g.
+        * vcc
+        * v1
+        * v2
+        * v3
+        * v4
+        * v1-v2
+        * v3-v4
+
+        .. code-block:: python
+
             readVolt('v1-v2')
         """
         name = name.lower()
@@ -499,7 +522,7 @@ class MAX11644(I2C_DEVICE):
         self.write(data=val)
 
         _reg = 0x0  # config
-        _scan= 0x0  # Scans up from AIN0 to the input selected by CS0
+        _scan= 0b11  # Converts the input selected by CS0
         _cs  = 0x1  # select AIN1 after scaning AIN0
         _sgl = 0x1  # single-ended
 
@@ -516,31 +539,35 @@ class MAX11644(I2C_DEVICE):
         val = self._set(val, _sgl, self.DICT[0x0]['SGL'])
 
         self._config = val
-        self.write(data=self._config)
 
     def reset(self):
         self.write(data=0x80)
 
-    def readVolt(self,name=None):
+    def readVolt(self, name=None):
+        """ Read voltage
+            Possible options are
+                AIN0
+                AIN1
+        """
 
-        if name.upper() not in ['AIN0','AIN1',None]:
+        if name != None and name.upper() not in ['AIN0','AIN1']:
             raise ValueError('Invalid parameter {}'.format(name))
 
-        self.write(data=self._config)
-
-        MASK = 0x0f
-
-        d0 = self.read(length=2)
-        ain0 = (((d0[0] & MASK) << 8) | d0[1]) * self.LSB
-        d1 = self.read(length=2)
-        ain1 = (((d1[0] & MASK) << 8) | d1[1]) * self.LSB
-
-        if name.upper() == 'AIN0':
-            return ain0
-        elif name.upper() == 'AIN1':
-            return ain1
+        if name == None:
+            ain0 = self.readVolt(name='AIN0')
+            ain1 = self.readVolt(name='AIN1')
+            return ain0, ain1
         else:
-            return (ain0, ain1)
+            _cs = 0x0 if name.upper() == 'AIN0' else 0x1
+            val = self._set(self._config, _cs,  self.DICT[0x0]['CS'])
+            self.write(data=val)
+
+            MASK = 0x0f
+
+            d0 = self.read(length=2)
+            ain = (((d0[0] & MASK) << 8) | d0[1]) * self.LSB
+
+            return ain
 
 def str2int(s):
     if s.startswith('0b'):
@@ -550,4 +577,3 @@ def str2int(s):
     else:
         val=int(s)
     return val
-

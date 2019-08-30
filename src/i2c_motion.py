@@ -9,24 +9,31 @@ class IMUSimple:
 
 
     def __init__(self,bus,mpuaddr=0x69,akaddr=None,orient=[[1,0,0],[0,1,0],[0,0,1]]):
-        """ IMUSimple IMU usage demo
+        """ 
+        IMUSimple IMU usage demo
+
+        .. code-block:: python
 
             bus = i2c.I2C_IPGPIO(2,3,15000)
             imu = i2c_motion.IMUSimple(bus,0x69,0x0c)
             imu.init()
             print(imu.pose)
 
-            Default orientation:
-                x+ east
-                y+ north
-                z+ upward
-                IMU chip pin 1 in 4th quadrant
-                IMU chip top side upwards
+        Default orientation:
+
+        * x+ east
+        * y+ north
+        * z+ upward
+        * IMU chip pin 1 in 4th quadrant
+        * IMU chip top side upwards
 
 
-            provide other orientations in the following format
+        provide other orientations in the following format:
+
+        .. code-block:: python
+
             imu = IMUSimple(bus,0x69, orient =
-                       [[1,0,0],    # new x+ in old coordinate system
+                        [[1,0,0],    # new x+ in old coordinate system
                         [0,1,0],    # new y+ in old coordinate system
                         [0,0,1]])   # new z+ in old coordinate system
         """
@@ -87,7 +94,8 @@ class IMUSimple:
         return ta*180/np.pi,ph*180/np.pi
 
 class MPU9250:
-    """ 9-axis MotionTracking device that combines a 3-axis gyroscope, 3-axis accelerometer, 3-axis magnetometer and a Digital Motion Processor (DMP) all in a small 3x3x1mm package available as a pin-compatible upgrade from the MPU-6515 
+    """ 
+    9-axis MotionTracking device that combines a 3-axis gyroscope, 3-axis accelerometer, 3-axis magnetometer and a Digital Motion Processor (DMP) all in a small 3x3x1mm package available as a pin-compatible upgrade from the MPU-6515 
     """
 
     DICT = dict()
@@ -311,7 +319,8 @@ class MPU9250:
             raise IOError(msg)
 
     def init(self,gyro=True,accel=True,lowpower=False):
-        """ Initialise MPU9250
+        """ 
+        Initialise MPU9250
         """
 
         self.reset()
@@ -441,20 +450,32 @@ class MPU9250:
         time.sleep(0.1)
 
     def setAccelSamplingRate(self,conf):
-        """ Accelerometer sampling rate
+        """ 
+        Accelerometer sampling rate
 
         parameter conf is in range(9)
 
-        num bandwidth (Hz)  delay (ms)  fs (Hz)
-        #0  1130,       0.75,       4000
-        #1  460,        1.94,       1000
-        #2  184,        5.8,        1000
-        #3  92,     7.8,        1000
-        #4  41,     11.8,       1000
-        #5  20,     19.8,       1000
-        #6  10,     35.7,       1000
-        #7  5,      66.96,      1000
-        #8  460,        1.94,       1000
+        +-----+----------------+------------+---------+
+        | num | bandwidth (Hz) | delay (ms) | fs (Hz) |
+        +-----+----------------+------------+---------+
+        | 0   | 1130           | 0.75       | 4000    |
+        +-----+----------------+------------+---------+
+        | 1   | 460            | 1.94       | 1000    |
+        +-----+----------------+------------+---------+
+        | 2   | 184            | 5.8        | 1000    |
+        +-----+----------------+------------+---------+
+        | 3   | 92             | 7.8        | 1000    |
+        +-----+----------------+------------+---------+
+        | 4   | 41             | 11.8       | 1000    |
+        +-----+----------------+------------+---------+
+        | 5   | 20             | 19.8       | 1000    |
+        +-----+----------------+------------+---------+
+        | 6   | 10             | 35.7       | 1000    |
+        +-----+----------------+------------+---------+
+        | 7   | 5              | 66.96      | 1000    |
+        +-----+----------------+------------+---------+
+        | 8   | 460            | 1.94       | 1000    |
+        +-----+----------------+------------+---------+
 
         """
 
@@ -490,21 +511,34 @@ class MPU9250:
         logger.info("MPU9250 Accel sampling bandwidth={} Hz, delay={} ms, fs={} Hz".format(r[0],r[1],r[2]))
         
     def setGyroSamplingRate(self,conf):
-        """ Gyroscope sampling rate
+        """ 
+        Gyroscope sampling rate
 
         parameter conf is in range(10)
 
-        num bandwidth (Hz)  delay (ms)  fs (Hz)
-        #0  8800,       0.064,      32000
-        #1  3600,       0.11,       32000
-        #2  250,        0.97,       8000
-        #3  184,        2.9,        1000
-        #4  92,     3.9,        1000
-        #5  41,     5.9,        1000
-        #6  20,     9.9,        1000
-        #7  10,     17.85,      1000
-        #8  5,      33.48,      1000
-                #9  3600,       0.17,       8000
+        +-----+----------------+------------+---------+
+        | num | bandwidth (Hz) | delay (ms) | fs (Hz) |
+        +-----+----------------+------------+---------+
+        | 0   | 8800           | 0.064      | 32000   |
+        +-----+----------------+------------+---------+
+        | 1   | 3600           | 0.11       | 32000   |
+        +-----+----------------+------------+---------+
+        | 2   | 250            | 0.97       | 8000    |
+        +-----+----------------+------------+---------+
+        | 3   | 184            | 2.9        | 1000    |
+        +-----+----------------+------------+---------+
+        | 4   | 92             | 3.9        | 1000    |
+        +-----+----------------+------------+---------+
+        | 5   | 41             | 5.9        | 1000    |
+        +-----+----------------+------------+---------+
+        | 6   | 20             | 9.9        | 1000    |
+        +-----+----------------+------------+---------+
+        | 7   | 10             | 17.85      | 1000    |
+        +-----+----------------+------------+---------+
+        | 8   | 5              | 33.48      | 1000    |
+        +-----+----------------+------------+---------+
+        | 9   | 3600           | 0.17       | 8000    |
+        +-----+----------------+------------+---------+
         """
 
         vals=[  [8800,  0.064,  32000],
@@ -646,9 +680,11 @@ class MPU9250:
         return data
 
     def readFIFO(self,types,length=None,filename=None,raw=False,wait=0.001):
-        """ read FIFO and sort data into categories according to given types
+        """ 
+        read FIFO and sort data into categories according to given types
 
-            E.g.
+        .. code-block:: python
+
             readFIFO({'accel':True,'gyro':True})
             readFIFO({'accel':True,'gyro':True},length=1200)
             readFIFO({'accel':True,'slv0':8},filename='/tmp/data.txt')
@@ -677,9 +713,11 @@ class MPU9250:
                 
 
     def sortFIFOData(self,types,data=None):
-        """ Sort a serial of data into categories according to given types
+        """ 
+        Sort a serial of data into categories according to given types
 
-            E.g.
+        .. code-block:: python
+
             sortFIFOData({'accel':True,'gyro':True},[0,0,16383,0,0,0])
         """
 
@@ -745,7 +783,8 @@ class MPU9250:
             return results
 
     def _readFIFO2File(self,handle,length=None,wait=0.001,verbose=True):
-        """ Redirect FIFO into a file
+        """ 
+        Redirect FIFO into a file
         """
         rid, mask = self._getMask(self.DICT, 'fifo_r_w')
 
@@ -778,7 +817,8 @@ class MPU9250:
                 print(str(percent[0])+'%')
 
     def _readFIFO2MEM(self,length=None,wait=0.001,verbose=True):
-        """ read FIFO into memory
+        """ 
+        read FIFO into memory
         """
         rid, mask = self._getMask(self.DICT, 'fifo_r_w')
         data = []
@@ -916,7 +956,8 @@ class MPU9250:
 
 
     def calibrate(self,WRITE_OFFSET_REG=True):
-        """ Not working
+        """ 
+        Not working
         """
 
         self.init(gyro=True,accel=True)
@@ -991,7 +1032,8 @@ class AK8963:
     adj=np.asarray([0,0,0])
 
     def __init__(self, itf, addr=0x0c):
-        """ AK8963 magnetometer
+        """ 
+        AK8963 magnetometer
 
         If integrated with mpu9250, make an instance of mpu9250 and enable aux i2c
         before using AK8963
@@ -1004,7 +1046,8 @@ class AK8963:
             logger.error("AK893 at address {} is not ready!".format(addr))
 
     def init(self):
-        """ Initialise AKB8963
+        """ 
+        Initialise AKB8963
         """
         self.reset()
         self.adj = self.getAdjustment()
@@ -1145,9 +1188,11 @@ class AK8963:
             return data * 0.15
 
 def signed(data,bitwidth):
-    """ Convert an unsigned data into a 32-bit signed data
+    """ 
+    Convert an unsigned data into a 32-bit signed data
 
-        E.g.
+    .. code-block:: python
+
         signed(0xfff,12) # it's -1
         signed(0xff,12) # it's 255
     """

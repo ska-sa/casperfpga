@@ -5,28 +5,28 @@ import logging
 import struct
 import time
 import os
-import zlib
-import hashlib
+import random
+import contextlib
+
+from threading import Lock
 
 import skarab_definitions as sd
-
+import skarab_fileops as skfops
 from transport import Transport
+from network import IpAddress
+
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
 
-LOGGER = logging.getLogger(__name__)
 
+# region -- Custom Errors and Return Values for SKARAB --
 
 class SkarabSendPacketError(ValueError):
     pass
 
 
-class InvalidSkarabBitstream(ValueError):
-    pass
-
-
-class UploadChecksumMismatch(ValueError):
+class SkarabUploadChecksumMismatch(ValueError):
     pass
 
 
@@ -34,65 +34,118 @@ class SkarabSdramError(RuntimeError):
     pass
 
 
-class InvalidResponse(ValueError):
+class SkarabInvalidResponse(ValueError):
     pass
 
 
-class ReadFailed(ValueError):
+class SkarabReadFailed(ValueError):
     pass
 
 
-class WriteFailed(ValueError):
+class SkarabWriteFailed(ValueError):
     pass
 
 
-class ProgrammingError(ValueError):
+class SkarabSequenceSetError(RuntimeError):
     pass
 
 
-class SequenceSetError(RuntimeError):
+class SkarabUnknownDeviceError(ValueError):
     pass
 
 
-class UnknownDeviceError(ValueError):
+class SkarabResponseNotReceivedError(RuntimeError):
     pass
+
+
+class SkarabReorderWarning(ValueError):
+    pass
+
+
+class SkarabReorderError(ValueError):
+    pass
+
+
+class SkarabSpeadWarning(ValueError):
+    pass
+
+
+class SkarabSpeadError(ValueError):
+    pass
+
+
+class SkarabInvalidHostname(RuntimeError):
+    pass
+
+class InvalidDeviceType(ValueError):
+    pass
+
+class SkarabFanControllerClearError(ValueError):
+    pass
+
+class NonVolatileLogRetrievalError(ValueError):
+    pass
+
+# endregion
 
 
 class SkarabTransport(Transport):
     """
     The network transport for a SKARAB-type interface.
     """
-    # create dictionary of skarab_definitions module
-    sd_dict = vars(sd)
 
     def __init__(self, **kwargs):
         """
         Initialized SKARAB FPGA object
+
         :param host: IP Address of the targeted SKARAB Board
-        :return: none
+        :param parent_fpga: Instance of parent_fpga
+        :param timeout: Send packet timeout in seconds,
+                        defaults to CONTROL_RESPONSE_TIMEOUT
+                        in skarab_definitions.py
+        :param retries: Send packet retries, defaults to
+                        CONTROL_RESPONSE_RETRIES in skarab_definitions.py
+        :param blocking: True (default)/False. If True a SKARAB comms
+                         check will be performed. If False only the
+                         instance will be created.
         """
         Transport.__init__(self, **kwargs)
 
-        # sequence number for control packets
-        self._seq_num = 0
+        try:
+            # Entry point is always via casperfpga.CasperFpga
+            self.parent = kwargs['parent_fpga']
+            self.logger = self.parent.logger
+        except KeyError:
+            errmsg = 'parent_fpga argument not supplied when creating skarab'
+            # Pointless trying to log to a logger
+            raise RuntimeError(errmsg)
+        
+        new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+        self.logger.debug(new_connection_msg)
+        
+        try:
+            self.timeout = kwargs['timeout']
+        except KeyError:
+            self.timeout = sd.CONTROL_RESPONSE_TIMEOUT
+        try:
+            self.retries = kwargs['retries']
+        except KeyError:
+            self.retries = sd.CONTROL_RESPONSE_RETRIES
+        try:
+            self.blocking = kwargs['blocking']
+        except KeyError:
+            self.blocking = True
 
-        # initialize UDP socket for ethernet control packets
-        self.skarab_ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # prevent socket from blocking
-        self.skarab_ctrl_sock.setblocking(0)
+        # sequence number for control packets
+        self._seq_num = None
+        self.reset_seq_num()
 
         # create tuple for ethernet control packet address
-        self.skarab_eth_ctrl_port = (
+        self.skarab_eth_ctrl_addr = (
             self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS)
 
-        # initialize UDP socket for fabric packets
-        self.skarab_fpga_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # self.skarab_fpga_sock.setsockopt(socket.SOL_SOCKET,
-        #                                  socket.SO_SNDBUF, 1)
-        self.skarab_ctrl_sock.setblocking(0)
-
         # create tuple for fabric packet address
-        self.skarab_fpga_port = (self.host, sd.ETHERNET_FABRIC_PORT_ADDRESS)
+        self.skarab_fpga_addr = (self.host, sd.ETHERNET_FABRIC_PORT_ADDRESS)
 
         # flag for keeping track of SDRAM state
         self._sdram_programmed = False
@@ -100,81 +153,128 @@ class SkarabTransport(Transport):
         # dict for sensor data, empty at initialization
         self.sensor_data = {}
 
-        # check if connected to host
-        if self.is_connected():
-            LOGGER.info(
-                '%s: port(%s) created %s.' % (
-                    self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS, '& connected'))
-        else:
-            LOGGER.info('Error connecting to %s: port%s' % (
-                self.host, sd.ETHERNET_CONTROL_PORT_ADDRESS))
+        # create, and connect to, a socket for the skarab object
+        self._skarab_control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            self._skarab_control_sock.connect(self.skarab_eth_ctrl_addr)
+        except socket.gaierror:
+            errmsg = 'Hostname invalid, check leases or resource-list'
+            self.logger.error(errmsg)
+            raise SkarabInvalidHostname(errmsg)
 
+        self._skarab_control_sock.setblocking(0)
+        self._lock=Lock()
+
+        # check if connected to host
+        if self.blocking:
+            if self.is_connected():
+                self.logger.info('Port({}) created & connected.'.format(
+                    sd.ETHERNET_CONTROL_PORT_ADDRESS))
+            else:
+                self.logger.error('Error connecting to {}: port{}'.format(self.host,
+                    sd.ETHERNET_CONTROL_PORT_ADDRESS))
+
+        # self.image_chunks, self.local_checksum = None, None
         # TODO - add the one_gbe
         # self.gbes = []
         # self.gbes.append(FortyGbe(self, 0))
-        # # self.gbes.append(FortyGbe(self, 0, 0x50000 - 0x4000))
+        # # self.gbes.append(FortyGbe(self, 0, 0x54000 - 0x4000))
 
-    def is_connected(self, retries=3):
+    @staticmethod
+    def test_host_type(host_ip):
+        """
+        Is a given IP assigned to a SKARAB?
+
+        :param host_ip:
+        """
+        with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as sctrl_sock:
+            sctrl_sock.setblocking(0)
+            skarab_eth_ctrl_port = (host_ip, sd.ETHERNET_CONTROL_PORT_ADDRESS)
+            request_object = sd.ReadRegReq(sd.BOARD_REG, sd.C_RD_VERSION_ADDR)
+            request_payload = request_object.create_payload(0xffff)
+            sctrl_sock.sendto(request_payload, skarab_eth_ctrl_port)
+            data_ready = select.select([sctrl_sock], [], [], 1)
+            if len(data_ready[0]) > 0:
+                # self.logger.debug('%s seems to be a SKARAB' % host_ip)
+                return True
+        return False
+
+    def is_connected(self,
+                     timeout=None,
+                     retries=None):
         """
         'ping' the board to see if it is connected and running.
         Tries to read a register
-        :return: True or False
+
+        :return: Boolean - True/False - Succes/Fail
         """
-        data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=retries)
-        return True if data else False
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        try:
+            data = self.read_board_reg(sd.C_RD_VERSION_ADDR, retries=retries,
+                                       timeout=timeout)
+            return True if data else False
+        except ValueError as vexc:
+            self.logger.debug('Skarab is not connected: %s' % vexc.message)
+            return False
 
     def is_running(self):
         """
-        Is the FPGA programmed and running?
+        Is the FPGA programmed and running a toolflow image?
+
         :return: True or False
         """
-        [golden_img, multiboot, version] = self.get_firmware_version()
+        [golden_img, multiboot, version] = self.get_virtex7_firmware_version()
         if golden_img == 0 and multiboot == 0:
             return True
         return False
 
-    def loopbacktest(self, iface):
+    def loopbacktest(self, iface, timeout=None,
+                     retries=None):
         """
         Run the loopback test.
+
         :param iface:
-        :return:
         """
-        request = sd.DebugLoopbackTestReq(self.seq_num, iface, 0x77)
-        resp = self.send_packet(
-            payload=request.create_payload(),
-            response_type='DebugLoopbackTestResp',
-            expect_response=True,
-            command_id=sd.DEBUG_LOOPBACK_TEST,
-            number_of_words=11, pad_words=5,
-            timeout=sd.CONTROL_RESPONSE_TIMEOUT, retries=1)
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        request = sd.DebugLoopbackTestReq(iface, 0x77)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         raise RuntimeError('Not yet tested')
 
     def _get_device_address(self, device_name):
-        """
-        
-        :param device_name: 
-        :return: 
-        """
         # map device name to address, if can't find, bail
         if device_name in self.memory_devices:
             return self.memory_devices[device_name].address
         elif (type(device_name) == int) and (0 <= device_name < 2 ** 32):
             # also support absolute address values
-            LOGGER.warning('Absolute address given: 0x%06x' % device_name)
+            self.logger.warning('Absolute address given: 0x%06x' % device_name)
             return device_name
         errmsg = 'Could not find device: %s' % device_name
-        LOGGER.error(errmsg)
-        raise UnknownDeviceError(errmsg)
+        self.logger.error(errmsg)
+        raise SkarabUnknownDeviceError(errmsg)
 
-    def read(self, device_name, size, offset=0, use_bulk=True):
+    def read(self, device_name, size, offset=0, use_bulk=True,
+             timeout=None,
+             retries=None):
         """
-        Return size_bytes of binary data with carriage-return escape-sequenced.
+        Read size-bytes of binary data with carriage-return escape-sequenced.
+
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
         :param use_bulk: use the bulk read function
+        :param timeout: value in seconds to wait before aborting instruction
+                        - Default value is None, uses initialised value
+        :param retries: value specifying number of retries should instruction fail
+                        - Default value is None, uses initialised value
         :return: binary data string
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         if (size > 4) and use_bulk:
             # use a bulk read if more than 4 bytes are requested
             return self._bulk_read(device_name, size, offset)
@@ -186,7 +286,7 @@ class SkarabTransport(Transport):
         num_bytes_corrected = size + offset_diff
         num_reads = int(math.ceil(num_bytes_corrected / 4.0))
         addr_start = addr + offset - offset_diff
-        # LOGGER.info('size(%i) offset(%i) addr(0x%06x) => '
+        # self.logger.info('size(%i) offset(%i) addr(0x%06x) => '
         #             'offset_corrected(%i) size_corrected(%i) '
         #             'addr_start(0x%06x) numreads(%i)' % (
         #     size, offset, addr, offset_bytes, num_bytes_corrected,
@@ -195,15 +295,12 @@ class SkarabTransport(Transport):
         data = ''
         for readctr in range(num_reads):
             addr_high, addr_low = self.data_split_and_pack(addr_start)
-            # create payload packet structure for read request
-            request = sd.ReadWishboneReq(self.seq_num, addr_high, addr_low)
-            resp = self.send_packet(
-                payload=request.create_payload(),
-                response_type='ReadWishboneResp', expect_response=True,
-                command_id=sd.READ_WISHBONE, number_of_words=11, pad_words=5)
+            request = sd.ReadWishboneReq(addr_high, addr_low)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
-            new_read = struct.pack('!H', resp.read_data_high) + \
-                struct.pack('!H', resp.read_data_low)
+            read_low = struct.pack('!H', response.packet['read_data_low'])
+            read_high = struct.pack('!H', response.packet['read_data_high'])
+            new_read = read_high + read_low
             # append current read to read data
             data += new_read
             # increment addr_start by four
@@ -211,58 +308,58 @@ class SkarabTransport(Transport):
         # return the number of bytes requested
         return data[offset_diff: offset_diff + size]
 
-    def _bulk_read_req(self, address, words_to_read):
+    def _bulk_read_req(self, address, words_to_read,
+                       timeout=None,
+                       retries=None):
         """
-        
+
         :param address: the address at which to read
         :param words_to_read: how many 32-bit words should be read
-        :return: binary data string 
+        :return: binary data string
         """
-        # LOGGER.info('reading @ 0x%06x - %i words' % (address, words_to_read))
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        # self.logger.info('reading @ 0x%06x - %i words' % (address, words_to_read))
         if words_to_read > sd.MAX_READ_32WORDS:
             raise RuntimeError('Cannot read more than %i words - '
                                'asked for %i' % (sd.MAX_READ_32WORDS,
                                                  words_to_read))
         start_addr_high, start_addr_low = self.data_split_and_pack(address)
-        # create payload packet structure for read request
         # the uBlaze will only read as much as you tell it to, but will
         # return the the whole lot, zeros in the rest
-        request = sd.BigReadWishboneReq(
-            self.seq_num, start_addr_high, start_addr_low, words_to_read)
-        # send read request
-        response = self.send_packet(
-            payload=request.create_payload(),
-            response_type='BigReadWishboneResp', expect_response=True,
-            command_id=sd.BIG_READ_WISHBONE, number_of_words=999,
-            pad_words=0)
+        request = sd.BigReadWishboneReq(start_addr_high, start_addr_low,
+                                        words_to_read)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is None:
             errmsg = 'Bulk read failed.'
-            raise ReadFailed(errmsg)
+            raise SkarabReadFailed(errmsg)
         # response.read_data is a list of 16-bit words, pack it
-        read_data = response.read_data[0:words_to_read*2]
+        read_data = response.packet['read_data'][0:words_to_read*2]
         return struct.pack('>%iH' % len(read_data), *read_data)
 
     def _bulk_read(self, device_name, size, offset=0):
         """
-        Return size_bytes of binary data with carriage-return escape-sequenced.
+        Read size-bytes of binary data with carriage-return escape-sequenced.
+       
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
         :return: binary data string
         """
         addr = self._get_device_address(device_name)
-        # LOGGER.info('addr(0x%06x) size(%i) offset(%i)' % (addr, size,
+        # self.logger.info('addr(0x%06x) size(%i) offset(%i)' % (addr, size,
         # offset))
         bounded_offset = int(math.floor(offset / 4.0) * 4.0)
         offset_diff = offset - bounded_offset
-        # LOGGER.info('bounded_offset(%i)' % bounded_offset)
+        # self.logger.info('bounded_offset(%i)' % bounded_offset)
         addr += bounded_offset
         size += offset_diff
-        # LOGGER.info('offset_addr(0x%06x) offset_size(%i)' % (addr, size))
+        # self.logger.info('offset_addr(0x%06x) offset_size(%i)' % (addr, size))
         num_words_to_read = int(math.ceil(size / 4.0))
         maxreadwords = 1.0 * sd.MAX_READ_32WORDS
         num_reads = int(math.ceil(num_words_to_read / maxreadwords))
-        # LOGGER.info('words_to_read(0x%06x) loops(%i)' % (num_words_to_read,
+        # self.logger.info('words_to_read(0x%06x) loops(%i)' % (num_words_to_read,
         #                                                  num_reads))
         data = ''
         data_left = num_words_to_read
@@ -272,61 +369,55 @@ class SkarabTransport(Transport):
             data += self._bulk_read_req(addr, to_read)
             data_left -= sd.MAX_READ_32WORDS
             addr += to_read * 4
-        # LOGGER.info('returning data[%i:%i]' % (offset_diff, size))
+        # self.logger.info('returning data[%i:%i]' % (offset_diff, size))
         # return the number of bytes requested
         return data[offset_diff: size]
 
-    def _bulk_write_req(self, address, data, words_to_write):
+    def _bulk_write_req(self, address, data, words_to_write,
+                        timeout=None,
+                        retries=None):
         """
         Unchecked data write. Maximum of 1988 bytes per transaction
+
         :param address: memory device to which to write
         :param data: byte string to write
         :param words_to_write: number of 32-bit words to write
         :return: number of 32-bit writes done
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         if words_to_write > sd.MAX_WRITE_32WORDS:
             raise RuntimeError('Cannot write more than %i words - '
                                'asked to write %i' % (sd.MAX_WRITE_32WORDS,
                                                       words_to_write))
-
         start_addr_high, start_addr_low = self.data_split_and_pack(address)
-
-        LOGGER.debug('\nAddress High: {}\nAddress Low: {}'
+        self.logger.debug('\nAddress High: {}\nAddress Low: {}'
                      '\nWords To Write: {}'.format(repr(start_addr_high),
                                                    repr(start_addr_low),
                                                    words_to_write))
-
-        request = sd.BigWriteWishboneReq(self.seq_num, start_addr_high,
+        request = sd.BigWriteWishboneReq(start_addr_high,
                                          start_addr_low, data, words_to_write)
-
-        # send read request
-        response = self.send_packet(
-            payload=request.create_payload(),
-            response_type='BigWriteWishboneResp',
-            expect_response=True,
-            command_id=sd.BIG_WRITE_WISHBONE,
-            number_of_words=11,
-            pad_words=6)
-
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is None:
             errmsg = 'Bulk write failed. No response from SKARAB.'
-            raise WriteFailed(errmsg)
-        if response.number_of_writes_done != words_to_write:
+            raise SkarabWriteFailed(errmsg)
+        if response.packet['number_of_writes_done'] != words_to_write:
             errmsg = 'Bulk write failed. Not all words written.'
-            raise WriteFailed(errmsg)
+            raise SkarabWriteFailed(errmsg)
 
-        LOGGER.debug('Number of writes dones: %d' %
-                     response.number_of_writes_done)
+        self.logger.debug('Number of writes dones: %d' %
+                     response.packet['number_of_writes_done'])
 
-        return response.number_of_writes_done
+        return response.packet['number_of_writes_done']
 
     def _bulk_write(self, device_name, data, offset):
         """
         Data write. Supports > 4 bytes written per transaction.
+
         :param device_name: memory device to which to write
         :param data: byte string to write
         :param offset: the offset, in bytes, at which to write
-        :return: <nothing>
         """
 
         # TODO: writing data not bounded to 32-bit words
@@ -346,60 +437,69 @@ class SkarabTransport(Transport):
         size += offset_diff
 
         num_words_to_write = int(math.ceil(size / 4.0))
-        maxwritewords = 1.0 * sd.MAX_WRITE_32WORDS
-        num_writes = int(math.ceil(num_words_to_write / maxwritewords))
-        LOGGER.debug('words_to_write(%i) loops(%i)' % (num_words_to_write,
-                                                       num_writes))
-
+        max_write_words = 1.0 * sd.MAX_WRITE_32WORDS
+        num_writes = int(math.ceil(num_words_to_write / max_write_words))
+        self.logger.debug('words_to_write(%i) loops(%i)' % (num_words_to_write,
+                                                            num_writes))
         write_data_left = num_words_to_write
         data_start = 0
         number_of_writes_done = 0
         for wrctr in range(num_writes):
-            LOGGER.debug('In write loop %i' % wrctr)
+            self.logger.debug('In write loop %i' % wrctr)
             # determine the number of 32-bit words to write
             to_write = (sd.MAX_WRITE_32WORDS if write_data_left >
                         sd.MAX_WRITE_32WORDS
                         else write_data_left)
 
-            LOGGER.debug('words to write ..... %i' % to_write)
+            self.logger.debug('words to write ..... %i' % to_write)
 
             # get the data that is to be written in the next transaction
             write_data = data[data_start: data_start + to_write*4]
-            LOGGER.debug('Write Data Size: %i' % (len(write_data)/4))
+            self.logger.debug('Write Data Size: %i' % (len(write_data)/4))
 
             if to_write < sd.MAX_WRITE_32WORDS:
                 # if writing less than the max number of words we need to pad
                 # to the request packet size
                 padding = (sd.MAX_READ_32WORDS - to_write)
-                LOGGER.debug('we are padding . . . %i . . . 32-bit words . . '
+                self.logger.debug('we are padding . . . %i . . . 32-bit words . . '
                              '.' % padding)
                 write_data += '\x00\x00\x00\x00' * padding
 
             number_of_writes_done += self._bulk_write_req(address, write_data,
                                                           to_write)
-
             write_data_left -= to_write
             # increment address and point to start of next 32-bit word
             address += to_write * 4
             data_start += to_write * 4
 
-        LOGGER.debug('Number of writes dones: %d' % number_of_writes_done)
+        self.logger.debug('Number of writes dones: %d' % number_of_writes_done)
         if number_of_writes_done != num_words_to_write:
             errmsg = 'Bulk write failed. Only %i . . . of %i . . . 32-bit ' \
                      'words written' % (number_of_writes_done,
                                         num_words_to_write)
-            raise WriteFailed(errmsg)
+            raise SkarabWriteFailed(errmsg)
 
-    def read_byte_level(self, device_name, size, offset=0):
+    def read_byte_level(self, device_name, size, offset=0,
+                        timeout=None,
+                        retries=None):
         """
-        Byte_level read. Sorts out reads overlapping registers, and
+        Byte-level read. Sorts out reads overlapping registers, and
         reading specific bytes.
-        Return size_bytes of binary data with carriage-return escape-sequenced.
+
+        Read size-bytes of binary data with carriage-return escape-sequenced.
+        
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset
+        :param timeout: value in seconds to wait before aborting instruction
+                        - Default value is None, uses initialised value
+        :param retries: value specifying number of retries should instruction fail
+                        - Default value is None, uses initialised value
         :return: binary data string
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # can only read 32-bits (4 bytes) at a time
         # work out how many reads we require, each read req reads a 32-bit reg
         # need to determine how many registers need to be read
@@ -414,37 +514,36 @@ class SkarabTransport(Transport):
             # get correct address and pack into binary format
             # TODO: sort out memory mapping of device_name
             addr_high, addr_low = self.data_split_and_pack(addr)
-
-            # create payload packet structure for read request
-            request = sd.ReadWishboneReq(self.seq_num, addr_high, addr_low)
-            resp = self.send_packet(payload=request.create_payload(),
-                                    response_type='ReadWishboneResp',
-                                    expect_response=True,
-                                    command_id=sd.READ_WISHBONE,
-                                    number_of_words=11, pad_words=5)
-
+            request = sd.ReadWishboneReq(addr_high, addr_low)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
-            new_read = struct.pack('!H', resp.read_data_high) + \
-                struct.pack('!H', resp.read_data_low)
-
+            read_high = struct.pack('!H', response.packet['read_data_high'])
+            read_low = struct.pack('!H', response.packet['read_data_low'])
+            new_read = read_high + read_low
             # append current read to read data
             data += new_read
-
             # increment addr by 4 to read the next 4 bytes (next 32-bit reg)
             addr += 4
-
         # return the number of bytes requested
         return data[offset:offset + size]
 
-    def blindwrite(self, device_name, data, offset=0, use_bulk=True):
+    def blindwrite(self, device_name, data, offset=0, use_bulk=True,
+                   timeout=None,
+                   retries=None):
         """
         Unchecked data write.
+
         :param device_name: the memory device to which to write
         :param data: the byte string to write
         :param offset: the offset, in bytes, at which to write
         :param use_bulk: use the bulk write function
-        :return: <nothing>
+        :param timeout: value in seconds to wait before aborting instruction
+                        - Default value is None, uses initialised value
+        :param retries: value specifying number of retries should instruction fail
+                        - Default value is None, uses initialised value
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
         assert (type(data) == str), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
@@ -461,397 +560,166 @@ class SkarabTransport(Transport):
             # split the data into two 16-bit words
             data_high = data[:2]
             data_low = data[2:]
-
             addr += offset
             addr_high, addr_low = self.data_split_and_pack(addr)
-
-            # create payload packet structure for write request
-            request = sd.WriteWishboneReq(self.seq_num, addr_high,
-                                          addr_low, data_high, data_low)
-            self.send_packet(payload=request.create_payload(),
-                             response_type='WriteWishboneResp',
-                             expect_response=True,
-                             command_id=sd.WRITE_WISHBONE,
-                             number_of_words=11, pad_words=5)
+            request = sd.WriteWishboneReq(addr_high, addr_low,
+                                          data_high, data_low)
+            self.send_packet(request, timeout=timeout, retries=retries)
 
     def deprogram(self):
         """
         Deprogram the FPGA.
         This actually reboots & boots from the Golden Image
-        :return: nothing
         """
         # trigger reboot of FPGA
         self.reboot_fpga()
-        LOGGER.info('%s: deprogrammed okay' % self.host)
+        self.logger.info('Skarab deprogrammed okay')
 
     def program_from_flash(self):
         """
         Program the FPGA from flash memory.
         This is achieved with a reboot of the board.
         The SKARAB boots from flash on start up.
-        :return:
         """
         self.reboot_fpga()
 
     def boot_from_sdram(self):
         """
         Triggers a reboot of the Virtex7 FPGA and boot from SDRAM.
-        :return:
         """
         # check if sdram was programmed prior
         if not self._sdram_programmed:
             errmsg = 'SDRAM not programmed.'
-            LOGGER.error(errmsg)
+            self.logger.error(errmsg)
             raise SkarabSdramError(errmsg)
         # trigger reboot
         self._complete_sdram_configuration()
-        LOGGER.info('Booting from SDRAM.')
+        # self.logger.info('Booting from SDRAM.')
         # clear sdram programmed flag
         self._sdram_programmed = False
         # still update programming info
         self.prog_info['last_programmed'] = self.prog_info['last_uploaded']
         self.prog_info['last_uploaded'] = ''
 
-    def _upload_to_ram_prepare_image(self, filename):
+    def upload_to_ram(self, filename, verify=True, chunk_size=1988):
         """
+        Upload a bitstream to the SKARAB via the wishone --> SDRAM interface
         
-        :param filename: 
-        :return: 
+        :param filename: fpga image to upload
+        :param verify: calculate the hash of the local file and compare it
+        to the stored one.
+        :return: Boolean - True/False - Success/Fail
         """
-        # check file extension to see what we're dealing with
-        file_extension = os.path.splitext(filename)[1]
-        if file_extension == '.fpg':
-            LOGGER.info('.fpg detected. Extracting .bin.')
-            image_to_program = self.extract_bitstream(filename)
-        elif file_extension == '.hex':
-            LOGGER.info('.hex detected. Converting to .bin.')
-            image_to_program = self.convert_hex_to_bin(filename)
-        elif file_extension == '.bit':
-            LOGGER.info('.bit file detected. Converting to .bin.')
-            image_to_program = self.convert_bit_to_bin(filename)
-        elif file_extension == '.bin':
-            LOGGER.info('Reading .bin file.')
-            (result, image_to_program) = self.check_bitstream(
-                open(filename, 'rb').read())
-            if not result:
-                LOGGER.info('Incompatible .bin file.')
-        else:
-            raise TypeError('Invalid file type. Only use .fpg, .bit, '
-                            '.hex or .bin files')
-        # check the generated bitstream
-        (result, image_to_program) = self.check_bitstream(image_to_program)
-        if not result:
-            errmsg = 'Incompatible image file. Cannot program SKARAB.'
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
-        LOGGER.info('Valid bitstream detected.')
-        return image_to_program
+        # Make sure filename isn't empty
+        if filename == '' or filename is None:
+            # Problem
+            errmsg = 'Filename not specified!'
+            self.logger.error(errmsg)
+            raise ValueError(errmsg)
+        # else: Check if the file exists
+        abs_path = os.path.abspath(filename)
+        if not os.path.exists(abs_path):
+            # Problem
+            errmsg = '{} does not exist'.format(filename)
+            self.logger.error(errmsg)
+            raise ValueError(errmsg)
+        # else: Continue!
 
-    def _upload_to_ram_send_image(self, image_to_program):
+        upload_time = skfops.upload_to_ram_progska(filename, [self.parent], chunk_size)
+        self.logger.debug('Uploaded bitstream in %.1f seconds.' % upload_time)
+        return upload_time
+
+    def check_running_firmware(self, timeout=None, retries=None):
         """
+        Check what image is running on the FPGA and its corresponding
+        firmware version.
         
-        :param image_to_program: 
-        :return: 
+        :param timeout: value in seconds to wait before aborting instruction
+                        - Default value is None, uses initialised value
+        :param retries: value specifying number of retries should instruction fail
+                        - Default value is None, uses initialised value
+        :return: Tuple - (Boolean, String) where:
+                       -> Boolean is True if Toolflow Image, False otherwise
+                       -> String is the firmware version
         """
-        # split image into chunks of 4096 words (one word is two bytes)
-        image_size = len(image_to_program)
-        image_chunks = [
-            image_to_program[ctr:ctr + 8192] for ctr in
-            range(0, image_size, 8192)
-        ]
-        sent_pkt_counter = 0
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
-        # check if the bin file requires padding
-        padding = (image_size % 8192 != 0)
-
-        # loop over chunks of 4096 words
-        for chunkctr in range(image_size / 8192):
-            if chunkctr == 0:
-                # flag first packet
-                first_packet_in_image = 1
-                last_packet_in_image = 0
-            elif chunkctr == (image_size / 8192 - 1) and not padding:
-                # flag last packet
-                last_packet_in_image = 1
-                first_packet_in_image = 0
-            else:
-                # clear first/last packet flags for other packets
-                first_packet_in_image = 0
-                last_packet_in_image = 0
-
-            # select a 4096 chunk of words from bin file
-            image_chunk = image_chunks[chunkctr]
-            # upload chunk of bin file to sdram
-            try:
-                self.sdram_program(first_packet_in_image,
-                                   last_packet_in_image, image_chunk)
-                time.sleep(0.010)
-                # print('tick %i' % sent_pkt_counter)
-                sent_pkt_counter += 1
-            except Exception as exc:
-                LOGGER.error('Uploading to SDRAM failed.')
-                raise exc
-
-        # if the bin file provided requires padding to 4096 word boundary
-        if padding:
-            # get last packet
-            image_chunk = image_chunks[-1]
-            first_packet_in_image = 0
-            last_packet_in_image = 1  # flag last packet in stream
-            # pad last packet to 4096 word boundary with 0xFFFF
-            image_chunk += '\xff' * (8192 - len(image_chunk))
-            try:
-                self.sdram_program(first_packet_in_image,
-                                   last_packet_in_image, image_chunk)
-                sent_pkt_counter += 1
-            except Exception as exc:
-                LOGGER.error('Uploading to SDRAM Failed.')
-                raise exc
-
-        # check if all bytes in bin file uploaded successfully before trigger
-        if not (sent_pkt_counter == (image_size / 8192)
-                or sent_pkt_counter == (image_size / 8192 + 1)):
-            errmsg = 'Error uploading FPGA image to SDRAM: ' \
-                     'sent_pkt_counter(%i)' % sent_pkt_counter
-            LOGGER.error(errmsg)
-            raise SkarabSdramError(errmsg)
-
-        # check number of frames that have been programmed into the SDRAM
-        rx_pkt_counts = self.check_programming_packet_count()
-        LOGGER.debug('Sent %i packets, %i received.' % (
-            sent_pkt_counter, rx_pkt_counts['Ethernet Frames']))
-        if sent_pkt_counter != rx_pkt_counts['Ethernet Frames']:
-            self.clear_sdram()
-            errmsg1 = 'Error programming bitstream into SDRAM: sent(%i) ' \
-                     'received(%i)' % (sent_pkt_counter,
-                                       rx_pkt_counts['Ethernet Frames'])
-            LOGGER.error(errmsg1)
-            errmsg2 = 'Ensure that 1) You are programming via the correct port/connection; ' \
-                      'and \n2) all Network Switches and endpoints are configured to ' \
-                      'support MTU Size of 9000 (Jumbo Packet size).'
-            LOGGER.error(errmsg2)
-            raise ProgrammingError(errmsg1 + '.\n' + errmsg2)
-        LOGGER.info('Bitstream successfully programmed into SDRAM.')
-
-    def upload_to_ram(self, filename, verify=False, retries=3):
-        """
-        Opens a bitfile from which to program FPGA. Reads bitfile
-        in chunks of 4096 16-bit words.
-
-        Pads last packet to a 4096 word boundary.
-        Sends chunks of bitfile to fpga via sdram_program method
-        :param filename: file to upload
-        :param verify: flag to enable verification of uploaded bitstream (slow)
-        :param retries: how many times to attempt to reprogram the board,
-        minimum value = 1
-        :return:
-        """
-
-        if retries < 1:
-            errmsg = 'Minimum number of programming attempts must be 1!'
-            raise ValueError(errmsg)
-
-        # process the given file and get an image ready to send
-        image_to_program = self._upload_to_ram_prepare_image(filename)
-
-        # prepare SDRAM for programming
-        self._prepare_sdram_ram_for_programming()
-
-        # get the md5sum from the fpg file
-        if os.path.splitext(filename)[1] == '.fpg':
-            (md5_header, md5_bitstream) = self.extract_md5_from_fpg(filename)
-            if md5_header is not None and md5_bitstream is not None:
-                # Calculate and compare MD5 sums here, before carrying on
-                # system_info is a dictionary
-                bitstream_md5sum = hashlib.md5(image_to_program).hexdigest()
-                if bitstream_md5sum != md5_bitstream:
-                    errmsg = "bitstream_md5sum != fpgfile_md5sum"
-                    LOGGER.error(errmsg)
-                    raise InvalidSkarabBitstream(errmsg)
-            else:
-                # .fpg file was created using an older version of mlib_devel
-                errmsg = 'An older version of mlib_devel generated ' + \
-                         filename + '. Please update to include the md5sum ' \
-                                    'on the bitstream in the .fpg header.'
-                LOGGER.error(errmsg)
-                raise InvalidSkarabBitstream(errmsg)
-
-        # send the image to the Skarab
-        while retries > 0:
-            try:
-                # try to upload the image to sdram
-                self._upload_to_ram_send_image(image_to_program)
-
-                # after uploading, check the checksums
-                spartan_checksum = self.get_spartan_checksum()
-                if spartan_checksum == 0:
-                    errmsg = 'Spartan Checksum returned 0, i.e. Packets were not received ' \
-                             'on the correct port. Ensure you are programming via the ' \
-                             'correct port/connection.'
-                    LOGGER.error(errmsg)
-                    raise ProgrammingError(errmsg)
-                # else: spartan_checksum has a value, Continue
-
-                LOGGER.debug('Spartan bitstream checksum: %s' % spartan_checksum)
-                local_checksum = self.calculate_checksum_using_bitstream(
-                    image_to_program)
-                LOGGER.debug('Calculated bitstream checksum: %s' % local_checksum)
-                if spartan_checksum != local_checksum:
-                    self.clear_sdram()
-                    errmsg = 'Checksum mismatch: spartan(%s) local(%s). Will not ' \
-                             'attempt to boot from SDRAM. Ensure all Network Switches ' \
-                             'and endpoints are configured to support MTU Size of 9000 ' \
-                             '(Jumbo Packet size).' % (local_checksum, spartan_checksum)
-                    raise UploadChecksumMismatch(errmsg)
-                # else: All good, Continue
-                LOGGER.debug('Checksum match. Bitstream uploaded successfully.')
-
-                # if success, set retries to 0
-                retries = 0
-
-            except (ProgrammingError, UploadChecksumMismatch):
-                # if programming failure or checksum mismatch, attempt to
-                # reprogram
-                warnmsg = 'ERROR with SDRAM contents. Attempting to reprogram'
-                LOGGER.warning(warnmsg)
-                # decrement retry counter
-                retries -= 1
-                if retries == 0:
-                    errmsg = 'Exhausted all retry attempts. Programming ' \
-                             'unsuccessful'
-                    LOGGER.error(errmsg)
-                    raise ProgrammingError(errmsg)
-                self._prepare_sdram_ram_for_programming()
-                self._upload_to_ram_send_image(image_to_program)
-
-            else:
-                # set finished writing to SDRAM
-                try:
-                    self.sdram_reconfigure(finished_writing=True)
-                except SkarabSdramError:
-                    errmsg = 'Error completing programming.'
-                    LOGGER.error(errmsg)
-                    raise ProgrammingError(errmsg)
-
-        if verify:
-            # SDRAM Verification usually takes the order of n-minutes
-            # sdram_verified = self.verify_sdram_contents(image_to_program)
-            sdram_verified = self.verify_sdram_contents(filename)
-            if not sdram_verified:
-                self.clear_sdram()
-                errmsg = 'SDRAM verification failed. Clearing SDRAM.'
-                LOGGER.error(errmsg)
-                raise SkarabSdramError(errmsg)
-            LOGGER.info('SDRAM verification passed.')
-            LOGGER.info('Programming of %s completed okay.' % filename)
+        [golden_image, multiboot, firmware_version] = \
+            self.get_virtex7_firmware_version(timeout=timeout, retries=retries)
+        if golden_image == 0 and multiboot == 0:
+            return True, firmware_version
+        elif golden_image == 1 and multiboot == 0:
+            self.logger.error(
+                'Skarab is back up, but fell back to golden image with '
+                'firmware version %s' % firmware_version)
+            return False, firmware_version
+        elif golden_image == 0 and multiboot == 1:
+            self.logger.error(
+                'Skarab is back up, but fell back to multiboot image with '
+                'firmware version %s' % firmware_version)
+            return False, firmware_version
         else:
-            LOGGER.info('%s uploaded to RAM without being verified.' % filename)
-
-        self._sdram_programmed = True
-        self.prog_info['last_uploaded'] = filename
-
-    def _forty_gbe_get_port(self, port_addr=0x50000):
-        """
-
-        :return: 
-        """
-        en_port = self.read_wishbone(port_addr + 0x20)
-        return en_port & (2 ** 16 - 1)
-
-    def _forty_gbe_set_port(self, port, port_addr=0x50000):
-        """
-
-        :param port: 
-        :return: 
-        """
-        en_port = self.read_wishbone(port_addr + 0x20)
-        if en_port & (2 ** 16 - 1) == port:
-            return
-        en_port_new = ((en_port >> 16) << 16) + port
-        self.write_wishbone(port_addr + 0x20, en_port_new)
-        if self.read_wishbone(port_addr + 0x20) != en_port_new:
-            errmsg = 'Error setting 40gbe port to 0x%04x' % port
-            LOGGER.error(errmsg)
-            raise ValueError(errmsg)
+            self.logger.error(
+                'Skarab is back up, but unknown image with firmware '
+                'version number %s' % firmware_version)
+            return False, firmware_version
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
-                                   wait_complete=True):
+                                  wait_complete=True, skip_verification=False, chunk_size=1988):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
-        *** WARNING: Do NOT attempt to upload a BSP/Flash image to the SDRAM. ***
+
+        *** WARNING: Do NOT attempt to upload a BSP/Flash image to the SDRAM.
+        
         :param filename: fpga image to upload (currently supports bin, bit
-        :param port
-        :param timeout
-        :param wait_complete
-        and hex files)
-        :return: True, if success
+                         and hex files)
+        :param port: the port to use on the rx end, -1 means a random port
+        :param timeout: how long to wait, seconds
+        :param wait_complete - wait for the board to boot after programming
+        :param skip_verification - do not verify the image after upload
+        :return: Boolean - True/False - Succes/Fail
         """
-        prog_start_time = time.time()
-
-        # TODO - can we undo this hack? i.e. dynamically find the address of
-        # the fortygbe
-        need_sleep = False
-        forty_gbe_port = 0x50000
-        if self._forty_gbe_get_port() != sd.ETHERNET_FABRIC_PORT_ADDRESS:
-            LOGGER.info('Resetting FortyGbe to 0x%04x' % (
-                sd.ETHERNET_FABRIC_PORT_ADDRESS))
-            self._forty_gbe_set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS)
-            need_sleep = True
-        one_gbe_addr = 0x50000 - 0x4000
-        if self._forty_gbe_get_port(one_gbe_addr) != \
-                sd.ETHERNET_FABRIC_PORT_ADDRESS:
-            LOGGER.info('Resetting OneGbe to 0x%04x' % (
-                sd.ETHERNET_FABRIC_PORT_ADDRESS))
-            self._forty_gbe_set_port(sd.ETHERNET_FABRIC_PORT_ADDRESS,
-                                     one_gbe_addr)
-            need_sleep = True
-        if need_sleep:
-            time.sleep(1)
-        self.upload_to_ram(filename)
+        #print('skarab_transport')
+        print(chunk_size)
+        try:
+            upload_time = self.upload_to_ram(filename, not skip_verification, chunk_size)
+            #print("completed fine")
+        except:
+            #print("failed to program")
+            self.logger.error('Failed to program.')
+            raise
+        if not wait_complete:
+            self.logger.debug('Returning immediately after programming.')
+            return True
         self.boot_from_sdram()
-
-
         # wait for board to come back up
-        # this can be reduced when the 40gbe switch issue is resolved
         timeout = timeout + time.time()
+        reboot_start_time = time.time()
         while timeout > time.time():
-            # TODO - look at this logic. Should not have a timeout and the retries in the is_connected - duplication
-            # setting the retries to 20 allows about 60s for the 40gbe switch
-            # to come back. It also prevents errors being logged when there
-            # is no response.
-            if self.is_connected(retries=20):
-                [golden_image, multiboot, firmware_version] = \
-                    self.get_firmware_version()
-                if golden_image == 0 and multiboot == 0:
-                    prog_time = time.time() - prog_start_time
-                    LOGGER.info(
-                        'SKARAB back up, in %.3f seconds with firmware version '
-                        '%s' % (prog_time, firmware_version))
+            if self.is_connected(retries=1):
+                # # configure the mux back to user_date mode
+                # self.config_prog_mux(user_data=1)
+                result, firmware_version = self.check_running_firmware()
+                if result:
+                    reboot_time = time.time() - reboot_start_time
+                    self.logger.info(
+                        'Skarab is back up, in %.1f seconds (%.1f + %.1f) with FW ver '
+                        '%s' % (upload_time + reboot_time, upload_time, reboot_time,
+                                firmware_version))
                     return True
-                elif golden_image == 1 and multiboot == 0:
-                    LOGGER.error(
-                        'SKARAB back up, but fell back to golden image with '
-                        'firmware version %s' % firmware_version)
-                    return False
-                elif golden_image == 0 and multiboot == 1:
-                    LOGGER.error(
-                        'SKARAB back up, but fell back to multiboot image with '
-                        'firmware version %s' % firmware_version)
-                    return False
                 else:
-                    LOGGER.error(
-                        'SKARAB back up, but unknown image with firmware '
-                        'version number %s' % firmware_version)
                     return False
-        LOGGER.error('SKARAB has not come back')
+            time.sleep(0.1)
+
+        self.logger.error('Skarab has not come back after programming')
         return False
 
     def clear_sdram(self):
         """
         Clears the last uploaded image from the SDRAM.
         Clears sdram programmed flag.
-        :return: Nothing
         """
         # clear sdram and ethernet counters
         self.sdram_reconfigure(clear_sdram=True, clear_eth_stats=True)
@@ -862,95 +730,18 @@ class SkarabTransport(Transport):
         # clear prog_info for last uploaded
         self.prog_info['last_uploaded'] = ''
 
-    def verify_sdram_contents(self, filename):
-        """
-        Verifies the data programmed to the SDRAM by reading this back
-        and comparing it to the bitstream used to program the SDRAM.
-
-        Verification of the bitstream programmed to SDRAM can take
-        extremely long and should only be used for debugging.
-        :param filename: bitstream used to program SDRAM (binfile)
-        :return: True if successful
-        """
-
-        # get file extension
-        file_extension = os.path.splitext(filename)[1]
-
-        # check file extension to see what we're dealing with
-        if file_extension == '.fpg':
-            LOGGER.info('.fpg detected. Extracting .bin.')
-            file_contents = self.extract_bitstream(filename)
-        elif file_extension == '.hex':
-            LOGGER.info('.hex detected. Converting to .bin.')
-            file_contents = self.convert_hex_to_bin(filename)
-        elif file_extension == '.bit':
-            LOGGER.info('.bit file detected. Converting to .bin.')
-            file_contents = self.convert_bit_to_bin(filename)
-        elif file_extension == '.bin':
-            LOGGER.info('Reading .bin file.')
-            (result, image_to_program) = self.check_bitstream(
-                open(filename, 'rb').read())
-            if not result:
-                LOGGER.info('Incompatible .bin file.')
-        else:
-            raise TypeError('Invalid file type. Only use .fpg, .bit, '
-                            '.hex or .bin files')
-
-        # check the generated bitstream
-        (result, image_to_program) = self.check_bitstream(image_to_program)
-        if not result:
-            errmsg = 'Incompatible image file. Cannot program SKARAB.'
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
-        LOGGER.info('Valid bitstream detected.')
-
-        # at this point the bitstream is in memory
-
-        # prep SDRAM for reading
-        self.sdram_reconfigure(output_mode=sd.SDRAM_READ_MODE,
-                               reset_sdram_read_addr=True, enable_debug=True)
-
-        # sdram read returns 32-bits (4 bytes)
-        # so we compare 4 bytes each time
-
-        for wordctr in range(len(file_contents) / 4):
-            # get 4 bytes
-            words_from_file = file_contents[:4]
-
-            # remove the 4 bytes already read
-            file_contents = file_contents[4:]
-
-            # read from sdram
-            sdram_data = self.sdram_reconfigure(output_mode=sd.SDRAM_READ_MODE,
-                                                enable_debug=True,
-                                                do_sdram_async_read=True)
-
-            # if mismatch, stop check and return False
-            if words_from_file != sdram_data:
-                return False
-            else:
-                continue
-
-        # reset the sdram read address
-        self.sdram_reconfigure(output_mode=sd.SDRAM_READ_MODE,
-                               reset_sdram_read_addr=True, enable_debug=True)
-
-        # exit read mode and put sdram back into program mode
-        self.sdram_reconfigure()
-
-        # entire binfile verified
-        return True
-
     @staticmethod
     def data_split_and_pack(data):
         """
         Splits 32-bit data into 2 16-bit words:
-            - dataHigh: most significant 2 bytes of data
-            - dataLow: least significant 2 bytes of data
+            
+            * dataHigh: most significant 2 bytes of data
+            * dataLow: least significant 2 bytes of data
 
         Also packs the data into a binary string for network transmission
+        
         :param data: 32 bit data to be split
-        :return: dataHigh, dataLow (packed into binary data string)
+        :return: Tuple - dataHigh, dataLow (packed into binary data string)
         """
         packer = struct.Struct('!I')
         packed_data = packer.pack(data)
@@ -965,6 +756,7 @@ class SkarabTransport(Transport):
         """
         Given 2 16-bit words (dataHigh, dataLow), merges the
         data into a 32-bit word
+
         :param data_high: most significant 2 bytes of data
         :param data_low: least significant 2 bytes of data
         :return: unpacked 32-bit data (as a native Python type)
@@ -981,195 +773,203 @@ class SkarabTransport(Transport):
         unpacker = struct.Struct('!I')
         return unpacker.unpack(data)[0]
 
-    @staticmethod
-    def unpack_payload(response_payload, response_type, number_of_words,
-                       pad_words):
+    def reset_seq_num(self):
+        with Lock():
+            self._seq_num = random.randint(0, 0xffff)
+
+    def send_packet(self, request_object, timeout=None,
+                    retries=None):
         """
-        Unpacks the data received from the SKARAB in the response packet.
+        Make send_packet thread safe
 
-        :param response_payload: payload in received response packed
-        :param response_type: type of response (from skarab_definitions)
-        :param number_of_words: number of 16-bit words in the response payload
-        :param pad_words: number of padding bytes expected in response payload
-        :return: response object with populated data fields
+        :param request_object:
+        :param timeout:
+        :param retries:
         """
-        unpacker = struct.Struct('!' + str(number_of_words) + 'H')
-        unpacked_data = list(unpacker.unpack(response_payload))
+        if timeout is None:
+            timeout = self.timeout
+        if retries is None:
+            retries = self.retries
 
-        if pad_words:
-            # isolate padding bytes as a tuple
-            padding = unpacked_data[-pad_words:]
-            unpacked_data = unpacked_data[:-pad_words]
-            unpacked_data.append(padding)
+        with Lock():
+            if self._seq_num >= 0xffff:
+                self._seq_num = 0
+            else:
+                self._seq_num += 1
+            return self._send_packet(
+                request_object, self._seq_num, addr=self.skarab_eth_ctrl_addr,
+                timeout=timeout, retries=retries, hostname=self.host
+            )
 
-        # handler for specific responses
-        # TODO: merge the I2C handlers below after testing
-        if response_type == 'ReadI2CResp':
-            read_bytes = unpacked_data[5:37]
-            unpacked_data[5:37] = [read_bytes]
-
-        if response_type == 'PMBusReadI2CBytesResp':
-            read_bytes = unpacked_data[5:37]
-            unpacked_data[5:37] = [read_bytes]
-
-        if response_type == 'WriteI2CResp':
-            write_bytes = unpacked_data[5:37]
-            unpacked_data[5:37] = [write_bytes]
-
-        if response_type == 'GetSensorDataResp':
-            read_bytes = unpacked_data[2:93]
-            unpacked_data[2:93] = [read_bytes]
-
-        if response_type == 'ReadHMCI2CResp':
-            slave_address = unpacked_data[4:8]
-            read_bytes = unpacked_data[8:12]
-            unpacked_data[4:8] = [slave_address]
-            # note the indices change after the first replacement!
-            unpacked_data[5:9] = [read_bytes]
-
-        if response_type == 'BigReadWishboneResp':
-            read_bytes = unpacked_data[5:]
-            unpacked_data[5:] = [read_bytes]
-
-        if response_type == 'ReadFlashWordsResp':
-            read_bytes = unpacked_data[5:389]
-            unpacked_data[5:389] = [read_bytes]
-
-        if response_type == 'ReadSpiPageResp':
-            read_bytes = unpacked_data[5:269]
-            unpacked_data[5:269] = [read_bytes]
-
-        if response_type == 'ProgramSpiPageResp':
-            read_bytes = unpacked_data[5:269]
-            unpacked_data[5:269] = [read_bytes]
-
-        # return response from skarab
-        return SkarabTransport.sd_dict[response_type](*unpacked_data)
-
-    @property
-    def seq_num(self):
-        return self._seq_num
-
-    @seq_num.setter
-    def seq_num(self, value):
-        self._seq_num = 0 if self._seq_num >= 0xffff else self._seq_num + 1
-
-    def send_packet(self, payload, response_type,
-                    expect_response, command_id, number_of_words,
-                    pad_words,
-                    timeout=sd.CONTROL_RESPONSE_TIMEOUT,
-                    retries=3,
-                    skarab_socket=None, port=None):
+    def _send_packet(self, request_object, sequence_number, addr,
+                     timeout=sd.CONTROL_RESPONSE_TIMEOUT,
+                     retries=sd.CONTROL_RESPONSE_RETRIES,
+                     hostname='<unknown_host>'):
         """
         Send payload via UDP packet to SKARAB
         Sends request packets then waits for response packet if expected
-        Retransmits request packet (up to 3 times) if response not received
+        Retransmits request packet if response not received
 
-        :param skarab_socket: socket object to be used
-        :param port:
-        :param payload: the data to send to SKARAB
-        :param response_type: type of response expected
-        :param expect_response: is a response expected?
-        :param command_id: command_id of the request packet
-        :param number_of_words: total number of 16-bit words expected in response
-        :param pad_words: number of padding words (16-bit) expected in response
-        :param timeout
-        :param retries
-        :return: response expected: returns response object or 'None' if no
-        response received. else returns 'ok'
+        :param request_object: object containing the data to send to SKARAB
+        :param addr: hostname and port of SKARAB
+        :param timeout: how long to wait for a response before bailing
+        :param retries: how many times to retransmit a request
+        :return: response: returns response object or 'None' if no
+            response received.
         """
-        # TODO - refactor the requests/responses into one
-        # TODO - if the packet payloads are being formed here, we don't need to pass the sequence number to every Command. Rather the command that makes the payload should take the sequence number.
-
-        # default to the control socket and port
-        skarab_socket = skarab_socket or self.skarab_ctrl_sock
-        port = port or self.skarab_eth_ctrl_port
+        self._lock.acquire()
+        # create the payload and send it
+        request_payload = request_object.create_payload(sequence_number)
         retransmit_count = 0
         while retransmit_count < retries:
-            LOGGER.debug('Retransmit attempts: {}'.format(retransmit_count))
+            self.logger.debug('{}: retransmit attempts: {}'.format(
+                hostname, retransmit_count))
             try:
-                # send the payload packet
-                skarab_socket.sendto(payload, port)
-                if not expect_response:
-                    LOGGER.debug('No response expected, returning')
-                    self.seq_num += 1
+                self.logger.debug('{}: sending pkt({}, {}) to port {}.'.format(
+                    hostname, request_object.packet['command_type'],
+                    request_object.packet['seq_num'], addr))
+                self._skarab_control_sock.send(request_payload)
+                if not request_object.expect_response:
+                    self.logger.debug(
+                        '{}: no response expected for seq {}, '
+                        'returning'.format(hostname, sequence_number))
+                    self._lock.release()
                     return None
-                LOGGER.debug('Waiting for response.')
-                # wait for response until timeout
-                data_ready = select.select([skarab_socket], [], [], timeout)
-                # if we got a response, process it
-                if data_ready[0]:
-                    data = skarab_socket.recvfrom(4096)
-                    response_payload, address = data
-                    LOGGER.debug('Response = %s' % repr(response_payload))
-                    LOGGER.debug('Response length = %d' % len(response_payload))
-
-                    # check the opcode of the response i.e. first two bytes
-                    if response_payload[:2] == '\xff\xff':
-                        # SKARAB received an unsupported opcode
-                        errmsg = 'SKARAB received unsupported opcode'
-                        raise SkarabSendPacketError(errmsg)
-
-                    response_payload = self.unpack_payload(
-                        response_payload, response_type,
-                        number_of_words, pad_words)
-                    if response_payload.header.command_type != (command_id+1):
-                        errmsg = 'Incorrect command ID in response. ' \
-                                 'Expected({}) got({})'.format(
-                                    command_id+1,
-                                    response_payload.header.command_type)
-                        LOGGER.error(errmsg)
-                        raise SkarabSendPacketError(errmsg)
-                    if response_payload.header.seq_num != self.seq_num:
-                        errmsg = 'Incorrect sequence number in response. ' \
-                                 'Expected ({}), got({})'.format(
-                                    self.seq_num,
-                                    response_payload.header.seq_num)
-                        LOGGER.error(errmsg)
-                        raise SkarabSendPacketError(errmsg)
-                    LOGGER.debug('Response packet received')
-                    self.seq_num += 1
-                    return response_payload
-                else:
-                    # no data received, retransmit
-                    LOGGER.debug('No packet received: will retransmit')
+                # get a required response
+                rx_packet = None
+                while rx_packet is None:
+                    # here we want to receive a packet from the socket
+                    # we pass the socket to the receive_packet function
+                    rx_packet = self._receive_packet(
+                        request_object, sequence_number, timeout, hostname)
+                self._lock.release()
+                return rx_packet
+            except SkarabResponseNotReceivedError:
+                # retransmit the packet
+                pass
             except KeyboardInterrupt:
-                LOGGER.warning('Keyboard interrupt, clearing buffer.')
-                time.sleep(3)  # wait to receive incoming responses
-                # clear the receive buffer
-                if self.clear_recv_buffer(skarab_socket):
-                    LOGGER.info('Cleared recv buffer.')
+                self.logger.warning('{}: keyboard interrupt, clearing '
+                               'buffer.'.format(hostname))
+                # wait to receive incoming responses
+                time.sleep(1)
+                self._lock.release()
+                self.logger.info('{}: cleared recv buffer.'.format(hostname))
                 raise KeyboardInterrupt
             retransmit_count += 1
-        errmsg = '%s: socket timeout. Response packet not received.' % self.host
-        LOGGER.error(errmsg)
+        self._lock.release()
+        errmsg = '{}: retransmit count exceeded. Giving up.'.format(hostname)
+        self.logger.debug(errmsg)
         raise SkarabSendPacketError(errmsg)
 
-    def clear_recv_buffer(self, skarab_socket):
+    def _receive_packet(self, request_object, sequence_number,
+                        timeout, hostname):
         """
-        Clears the recv buffer to discard unhandled responses from the SKARAB
-        :param skarab_socket: socket object to be used
-        :return: True when buffer empty
+        Receive a response to a packet.
+
+        :param request_object:
+        :param sequence_number:
+        :param timeout:
+        :param hostname:
+        :return: The response object, or None
         """
-        # check if there is data ready to be handled
-        while select.select([skarab_socket], [], [], 0)[0]:
-            # read away the data in the recv buffer
-            _ = skarab_socket.recvfrom(4096)
-            # increment sequence number to re-synchronize request/response msgs
-            self.seq_num += 1
-        return True
+        self.logger.debug('%s: reading response to sequence id %i.' % (
+            hostname, sequence_number))
+
+        try:
+            # wait for response until timeout
+            data_ready = select.select([self._skarab_control_sock], [], [], timeout)
+            # if we have a response, process it
+            if data_ready[0]:
+                data = self._skarab_control_sock.recvfrom(4096)
+                response_payload, address = data
+
+                self.logger.debug('%s: response from %s = %s' % (
+                    hostname, str(address), repr(response_payload)))
+
+                # check if response is from the expected SKARAB
+                recvd_from_addr = address[0]
+                expected_recvd_from_addr = \
+                    self._skarab_control_sock.getpeername()[0]
+                if recvd_from_addr != expected_recvd_from_addr:
+                    self.logger.warning(
+                        '%s: received response from  %s, expected response from '
+                        '%s. Discarding response.' % (
+                            hostname, recvd_from_addr, expected_recvd_from_addr))
+                    return None
+                # check the opcode of the response i.e. first two bytes
+                if response_payload[:2] == '\xff\xff':
+                    self.logger.warning('%s: received unsupported opcode: 0xffff. '
+                                        'Discarding response.' % hostname)
+                    return None
+                # check response packet size
+                if (len(response_payload)/2) != request_object.num_response_words:
+                    self.logger.warning("%s: incorrect response packet size. "
+                                        "Discarding response" % hostname)
+
+                    # self.logger.pdebug("Response packet not of correct size. "
+                    self.logger.debug("Response packet not of correct size. "
+                                      "Expected %i words, got %i words.\n "
+                                      "Incorrect Response: %s" % (
+                                        request_object.num_response_words,
+                                        (len(response_payload)/2),
+                                        repr(response_payload)))
+                    # self.logger.pdebug("%s: command ID - expected (%i) got (%i)" %
+                    self.logger.debug("%s: command ID - expected (%i) got (%i)" %
+                                      (hostname, request_object.type + 1,
+                                       (struct.unpack('!H', response_payload[:2]))[0]))
+                    # self.logger.pdebug("%s: sequence num - expected (%i) got (%i)" %
+                    self.logger.debug("%s: sequence num - expected (%i) got (%i)" %
+                                      (hostname, sequence_number,
+                                       (struct.unpack('!H', response_payload[2:4]))[0]))
+                    return None
+
+                # unpack the response before checking it
+                response_object = request_object.response.from_raw_data(
+                    response_payload, request_object.num_response_words,
+                    request_object.pad_words)
+                self.logger.debug('%s: response from %s, with seq num %i' % (
+                    hostname, str(address),
+                    response_object.seq_num))
+                expected_response_id = request_object.type + 1
+                if response_object.type != expected_response_id:
+                    self.logger.warning('%s: incorrect command ID in response. Expected'
+                                   '(%i) got(%i). Discarding response.' % (
+                                       hostname, expected_response_id,
+                                       response_object.type))
+                    return None
+                elif response_object.seq_num != sequence_number:
+                    self.logger.debug('%s: incorrect sequence number in response. '
+                                   'Expected(%i,%i), got(%i). Discarding '
+                                   'response.' % (
+                                       hostname, sequence_number,
+                                       request_object.packet['seq_num'],
+                                       response_object.seq_num))
+                    return None
+                return response_object
+            else:
+                errmsg = '%s: timeout; no packet received for seq %i. Will ' \
+                         'retransmit as seq %i.' % (
+                             hostname, sequence_number, sequence_number + 1)
+                self.logger.debug(errmsg)
+                raise SkarabResponseNotReceivedError(errmsg)
+
+        except KeyboardInterrupt:
+            self.logger.warning('{}: keyboard interrupt, clearing '
+                            'buffer.'.format(hostname))
+            # wait to receive incoming responses
+            time.sleep(1)
+            _ = self._skarab_control_sock.recvfrom(4096)
+            self.logger.info('{}: cleared recv buffer.'.format(hostname))
+            raise KeyboardInterrupt
 
     # low level access functions
-
     def reboot_fpga(self):
         """
-        Reboots the FPGA, booting from the NOR FLASH.
-        :return: Nothing
+        Reboots the FPGA, booting from either the NOR FLASH or SDRAM
         """
         # trigger a reboot of the FPGA
         self.sdram_reconfigure(do_reboot=True)
-        # reset sequence numbers
-        self._seq_num = 0
+        self.reset_seq_num()
         # reset the sdram programmed flag
         self._sdram_programmed = False
         # clear prog_info
@@ -1179,169 +979,188 @@ class SkarabTransport(Transport):
     def reset_fpga(self):
         """
         Reset the FPGA firmware. Resets the clks, registers, etc of the design
+        
         :return: 'ok'
         """
         output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
                                       sd.ROACH3_FPGA_RESET, False)
-        # reset seq num?
-        # self._seq_num = 0
-        # sleep to allow DHCP configuration
-        time.sleep(1)
+        # # sleep to allow DHCP configuration
+        # time.sleep(1)
         return output
 
     def shutdown_skarab(self):
         """
         Shuts the SKARAB board down
+        
         :return: 'ok'
         """
-        # should this function close the sockets and then attempt to reopen 
+        # should this function close the sockets and then attempt to reopen
         # once board is powered on? shut down requires two writes
-        LOGGER.info('Shutting board down.')
+        self.logger.info('Shutting board down.')
         self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
                              sd.ROACH3_SHUTDOWN, False)
         output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_1_ADDR,
                                       sd.ROACH3_SHUTDOWN, False)
-        # reset sequence number
-        self._seq_num = 0
+        self.reset_seq_num()
         return output
 
-    def write_board_reg(self, reg_address, data, expect_response=True):
+    def write_board_reg(self, reg_address, data, expect_response=True,
+                        timeout=None,
+                        retries=None):
         """
         Write to a board register
 
         :param reg_address: address of register to write to
         :param data: data to write
-        :param expect_response: does this write command require a response? 
-        (only false for reset and shutdown commands)
-        :return: response object - object created from the response payload 
-        (attributes = payload components)
+        :param expect_response: does this write command require a response?
+            (only false for reset and shutdown commands)
+        :return: response object - object created from the response payload
+            (attributes = payload components)
         """
-        # create payload packet structure with data
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
-        request = sd.WriteRegReq(self.seq_num, sd.BOARD_REG,
-                                 reg_address, *self.data_split_and_pack(data))
-
+        data_packed = self.data_split_and_pack(data)
+        request = sd.WriteRegReq(sd.BOARD_REG, reg_address, *data_packed)
+        # handle special writes that don't return a response
+        request.expect_response = expect_response
         # send payload via UDP pkt and return response object (if no response
         # expected should return ok)
-        response = self.send_packet(request.create_payload(), 'WriteRegResp',
-                                    expect_response, sd.WRITE_REG, 11, 5)
-        return response
+        write_reg_response = self.send_packet(request, timeout=timeout, retries=retries)
+        return write_reg_response
 
-    def read_board_reg(self, reg_address, retries=3):
+    def read_board_reg(self, reg_address,
+                       timeout=None,
+                       retries=None):
         """
         Read from a specified board register
+
         :param reg_address: address of register to read
         :param retries:
         :return: data read from register
         """
-        request = sd.ReadRegReq(self.seq_num, sd.BOARD_REG, reg_address)
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
-        read_reg_resp = self.send_packet(
-            request.create_payload(), 'ReadRegResp', True, sd.READ_REG,
-            11, 5, retries=retries)
+        request = sd.ReadRegReq(sd.BOARD_REG, reg_address)
+        read_reg_resp = self.send_packet(request, timeout=timeout, retries=retries)
         if read_reg_resp is None:
             raise ValueError('Got None reading board register '
                              '0x%010x' % reg_address)
-        return self.data_unpack_and_merge(read_reg_resp.reg_data_high,
-                                          read_reg_resp.reg_data_low)
+        return self.data_unpack_and_merge(
+            read_reg_resp.packet['reg_data_high'],
+            read_reg_resp.packet['reg_data_low'])
 
-    def write_dsp_reg(self, reg_address, data, expect_response=True):
+    def write_dsp_reg(self, reg_address, data,
+                      timeout=None,
+                      retries=None):
         """
         Write to a dsp register
+
         :param reg_address: address of register to write to
         :param data: data to write
-        :param expect_response: does this write command require a response?
         :return: response object - object created from the response payload
         """
-        # create payload packet structure with data
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
-        request = sd.WriteRegReq(self.seq_num, sd.DSP_REG,
-                                 reg_address, *self.data_split_and_pack(data))
-
+        data_packed = self.data_split_and_pack(data)
+        request = sd.WriteRegReq(sd.DSP_REG, reg_address, *data_packed)
         # send payload via UDP pkt and return response object
         # (if no response expected should return ok)
-        return self.send_packet(
-            request.create_payload(),
-            'WriteRegResp', expect_response, sd.WRITE_REG, 11, 5)
+        write_reg_response = self.send_packet(request, timeout=timeout, retries=retries)
+        return write_reg_response
 
-    def read_dsp_reg(self, reg_address):
+    def read_dsp_reg(self, reg_address,
+                     timeout=None,
+                     retries=None):
         """
         Read from a specified dsp register
+
         :param reg_address: address of register to read
         :return: data read from register
         """
-        request = sd.ReadRegReq(self.seq_num, sd.DSP_REG, reg_address)
-        read_reg_resp = self.send_packet(
-            request.create_payload(), 'ReadRegResp', True, sd.READ_REG, 11, 5)
-        if read_reg_resp:
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        request = sd.ReadRegReq(sd.DSP_REG, reg_address)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is not None:
             return self.data_unpack_and_merge(
-                read_reg_resp.reg_data_high, read_reg_resp.reg_data_low)
+                response.packet['reg_data_high'],
+                response.packet['reg_data_low'])
         return 0
 
-    def get_embedded_software_ver(self):
+    def get_embedded_software_version(self,
+                                      timeout=None,
+                                      retries=None):
         """
         Read the version of the microcontroller embedded software
-        :return: embedded software version
-        """
-        request = sd.GetEmbeddedSoftwareVersionReq(self.seq_num)
-        get_embedded_ver_resp = self.send_packet(
-            payload=request.create_payload(),
-            response_type='GetEmbeddedSoftwareVersionResp',
-            expect_response=True,
-            command_id=sd.GET_EMBEDDED_SOFTWARE_VERS,
-            number_of_words=11,
-            pad_words=4)
-        if get_embedded_ver_resp:
-            major = get_embedded_ver_resp.version_major
-            minor = get_embedded_ver_resp.version_minor
-            patch = get_embedded_ver_resp.version_patch
-            return '{}.{}.{}'.format(major, minor, patch)
-        return None
 
-    def write_wishbone(self, wb_address, data):
+        :return: String - Embedded Software Version - Major.Minor.RevisionNumber
+        """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        request = sd.GetEmbeddedSoftwareVersionReq()
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is not None:
+            major = response.packet['version_major']
+            minor = response.packet['version_minor']
+            patch = response.packet['version_patch']
+            return '{}.{}.{}'.format(major, minor, patch)
+
+    def write_wishbone(self, wb_address, data,
+                       timeout=None,
+                       retries=None):
         """
         Used to perform low level wishbone write to a wishbone slave. Gives
         low level direct access to wishbone bus.
+
         :param wb_address: address of the wishbone slave to write to
         :param data: data to write
         :return: response object
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # split data into two 16-bit words (also packs for network transmission)
         data_split = list(self.data_split_and_pack(data))
-
         # split address into two 16-bit segments: high, low
         # (also packs for network transmission)
         address_split = list(self.data_split_and_pack(wb_address))
-
         # create one tuple containing data and address
         address_and_data = address_split
         address_and_data.extend(data_split)
-        request = sd.WriteWishboneReq(self.seq_num, *address_and_data)
-        return self.send_packet(request.create_payload(), 'WriteWishboneResp',
-                                True, sd.WRITE_WISHBONE, 11, 5)
+        request = sd.WriteWishboneReq(*address_and_data)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        return response
 
-    def read_wishbone(self, wb_address):
+    def read_wishbone(self, wb_address,
+                      timeout=None,
+                      retries=None):
         """
         Used to perform low level wishbone read from a Wishbone slave.
+
         :param wb_address: address of the wishbone slave to read from
         :return: Read Data or None
         """
-        request = sd.ReadWishboneReq(
-            self.seq_num, *self.data_split_and_pack(wb_address))
-        read_wishbone_resp = self.send_packet(
-            request.create_payload(), 'ReadWishboneResp', True,
-            sd.READ_WISHBONE, 11, 5)
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
-        if read_wishbone_resp is not None:
-            return self.data_unpack_and_merge(read_wishbone_resp.read_data_high,
-                                              read_wishbone_resp.read_data_low)
-        else:
-            return None
+        request = sd.ReadWishboneReq(*self.data_split_and_pack(wb_address))
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is not None:
+            return self.data_unpack_and_merge(
+                response.packet['read_data_high'],
+                response.packet['read_data_low'])
 
     def write_i2c(self, interface, slave_address, *bytes_to_write):
         """
         Perform i2c write on a selected i2c interface.
-        Up to 32 bytes can be written in a single i2c transaction
+        Up to 33 bytes can be written in a single i2c transaction
+        (33 bytes of data allowed since the fan controller i2c
+         writes require a command byte plus 32 bytes of data)
         :param interface: identifier for i2c interface:
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
@@ -1349,14 +1168,15 @@ class SkarabTransport(Transport):
                           3 - Mezzanine 2 i2c
                           4 - Mezzanine 3 i2c
         :param slave_address: i2c address of slave to write to
-        :param bytes_to_write: 32 bytes of data to write (to be packed as
-        16-bit word each), list of bytes
+        :param bytes_to_write: 33 bytes of data to write (to be packed as
+                               16-bit word each), list of bytes
         :return: response object
         """
+        MAX_I2C_WRITE_BYTES = 33
         num_bytes = len(bytes_to_write)
-        if num_bytes > 32:
-            LOGGER.error(
-                'Maximum of 32 bytes can be written in a single transaction')
+        if num_bytes > MAX_I2C_WRITE_BYTES:
+            self.logger.error(
+                'Maximum of %s bytes can be written in a single transaction', str(MAX_I2C_WRITE_BYTES))
             return False
 
         # each byte to be written must be packaged as a 16 bit value
@@ -1369,31 +1189,31 @@ class SkarabTransport(Transport):
             packed_bytes += pack(byte)
 
         # pad the number of bytes to write to 32 bytes
-        if num_bytes < 32:
-            packed_bytes += (32 - num_bytes) * '\x00\x00'
+        if num_bytes < MAX_I2C_WRITE_BYTES:
+            packed_bytes += (MAX_I2C_WRITE_BYTES - num_bytes) * '\x00\x00'
 
         # create payload packet structure
-        request = sd.WriteI2CReq(self.seq_num, interface, slave_address,
+        request = sd.WriteI2CReq(interface, slave_address,
                                  num_bytes, packed_bytes)
-        write_i2c_resp = self.send_packet(request.create_payload(),
-                                          'WriteI2CResp', True, sd.WRITE_I2C,
-                                          39, 1)
+        response = self.send_packet(request)
         # check if the write was successful
-        if write_i2c_resp is not None:
-            if write_i2c_resp.write_success:
-                # if successful
+        if response is not None:
+            if response.packet['write_success']:
                 return True
             else:
-                LOGGER.error('I2C write failed!')
+                self.logger.error('I2C write failed!')
                 return False
         else:
-            LOGGER.error('Bad response received')
+            self.logger.error('Bad response received')
             return False
 
-    def read_i2c(self, interface, slave_address, num_bytes):
+    def read_i2c(self, interface, slave_address, num_bytes,
+                 timeout=None,
+                 retries=None):
         """
         Perform i2c read on a selected i2c interface.
         Up to 32 bytes can be read in a single i2c transaction.
+
         :param interface: identifier for i2c interface:
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
@@ -1404,31 +1224,33 @@ class SkarabTransport(Transport):
         :param num_bytes: number of bytes to read
         :return: an array of the read bytes if successful, else none
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         if num_bytes > 32:
-            LOGGER.error(
+            self.logger.error(
                 'Maximum of 32 bytes can be read in a single transaction')
             return False
 
         # create payload packet structure
-        request = sd.ReadI2CReq(self.seq_num, interface,
-                                slave_address, num_bytes)
-        read_i2c_resp = self.send_packet(
-            request.create_payload(), 'ReadI2CResp', True, sd.READ_I2C, 39, 1)
-
-        if read_i2c_resp is not None:
-            if read_i2c_resp.read_success:
-                return read_i2c_resp.read_bytes[:num_bytes]
+        request = sd.ReadI2CReq(interface, slave_address, num_bytes)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is not None:
+            if response.packet['read_success']:
+                return response.packet['read_bytes'][:num_bytes]
             else:
-                LOGGER.error('I2C read failed!')
+                self.logger.error('I2C read failed!')
                 return 0
         else:
-            LOGGER.error('Bad response received.')
+            self.logger.error('Bad response received.')
             return
 
-    def pmbus_read_i2c(self, bus, slave_address, command_code,
-                       num_bytes):
+    def pmbus_read_i2c(self, bus, slave_address, command_code, num_bytes,
+                       timeout=None,
+                       retries=None):
         """
         Perform a PMBus read of the I2C bus.
+
         :param bus: I2C bus to perform PMBus Read of
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
@@ -1440,61 +1262,53 @@ class SkarabTransport(Transport):
         :param num_bytes: Number of bytes to read
         :return: array of read bytes if successful, else none
         """
-
-        response_type = 'PMBusReadI2CBytesResp'
-        expect_response = True
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
         if num_bytes > 32:
-            LOGGER.error('Maximum of 32 bytes can be read in a '
+            self.logger.error('Maximum of 32 bytes can be read in a '
                          'single transaction')
             return
-
         # dummy read data
         read_bytes = struct.pack('!32H', *(32 * [0]))
-
         # create payload packet structure
-        pmbus_read_i2c_req = sd.PMBusReadI2CBytesReq(
-            self.seq_num, bus, slave_address, command_code,
-            read_bytes, num_bytes)
-
+        request = sd.PMBusReadI2CBytesReq(bus, slave_address, command_code,
+                                          read_bytes, num_bytes)
         # send payload and return response object
-        pmbus_read_i2c_resp = self.send_packet(
-            pmbus_read_i2c_req.create_payload(),
-            response_type, expect_response, sd.PMBUS_READ_I2C, 39, 0)
-
-        if pmbus_read_i2c_resp:
-            if pmbus_read_i2c_resp.read_success:
-                return pmbus_read_i2c_resp.read_bytes[:num_bytes]
-
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is not None:
+            if response.packet['read_success']:
+                return response.packet['read_bytes'][:num_bytes]
             else:
-                LOGGER.error('PMBus I2C read failed!')
+                self.logger.error('PMBus I2C read failed!')
                 return 0
         else:
-            LOGGER.error('Bad response received.')
+            self.logger.error('Bad response received.')
             return
 
-    def sdram_program(self, first_packet, last_packet, write_words):
+    def sdram_program(self, first_packet, last_packet, write_words,
+                      timeout=None,
+                      retries=None):
         """
-        Used to program a block of 4096 words to the boot SDRAM. 
-        These 4096 words are a chunk of the FPGA image to program to 
+        Used to program a block of 4096 words to the boot SDRAM.
+        These 4096 words are a chunk of the FPGA image to program to
         SDRAM and boot from.
 
-        This data is sent over UDP packets to the fabric UDP port, not the 
-        control port- uC does not handle these packets. 
+        This data is sent over UDP packets to the fabric UDP port, not the
+        control port- uC does not handle these packets.
         No response is generated.
 
-        :param first_packet: flag to indicate this pkt is the first pkt 
+        :param first_packet: flag to indicate this pkt is the first pkt
             of the image
-        :param last_packet: flag to indicate this pkt is the last pkt of 
+        :param last_packet: flag to indicate this pkt is the last pkt of
             the image
         :param write_words: chunk of 4096 words from FPGA Image
-        :return: None
         """
-        sdram_program_req = sd.SdramProgramReq(
-            self.seq_num, first_packet, last_packet, write_words)
-        self.send_packet(
-            sdram_program_req.create_payload(), 0, False, sd.SDRAM_PROGRAM, 0,
-            0, skarab_socket=self.skarab_fpga_sock, port=self.skarab_fpga_port,)
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        request = sd.SdramProgramReq(first_packet, last_packet, write_words)
+        self.send_packet(request, timeout=timeout, retries=retries)
 
     def sdram_reconfigure(self,
                           output_mode=sd.SDRAM_PROGRAM_MODE,
@@ -1508,73 +1322,85 @@ class SkarabTransport(Transport):
                           do_sdram_async_read=False,
                           do_continuity_test=False,
                           continuity_test_out_low=0x00,
-                          continuity_test_out_high=0x00):
+                          continuity_test_out_high=0x00,
+                          timeout=None,
+                          retries=None):
+
         """
-        Used to perform various tasks realting to programming of the boot 
+        Used to perform various tasks realting to programming of the boot
         SDRAM and config of Virtex7 FPGA from boot SDRAM
+        
         :param output_mode: specifies the mode of the flash SDRAM interface
         :param clear_sdram: clear any existing FPGA image from the SDRAM
-        :param finished_writing: indicate writing FPGA image to SDRAM 
+        :param finished_writing: indicate writing FPGA image to SDRAM
             is complete
-        :param about_to_boot: enable booting from the newly programmed image 
+        :param about_to_boot: enable booting from the newly programmed image
             in SDRAM
-        :param do_reboot: trigger reboot of the Virtex7 FPGA and boot from 
+        :param do_reboot: trigger reboot of the Virtex7 FPGA and boot from
             image in SDRAM
-        :param reset_sdram_read_addr: reset the SDRAM read address so that 
+        :param reset_sdram_read_addr: reset the SDRAM read address so that
             reading SDRAM can start at 0x0
-        :param clear_eth_stats: clear ethernet packet statistics with regards 
+        :param clear_eth_stats: clear ethernet packet statistics with regards
             to FPGA image containing packets
-        :param enable_debug: enable debug mode for reading data currently 
+        :param enable_debug: enable debug mode for reading data currently
             stored in SDRAM
-        :param do_sdram_async_read: used in debug mode to read the 32-bits 
+        :param do_sdram_async_read: used in debug mode to read the 32-bits
             of the SDRAM and advance read pointer by one
-        :param do_continuity_test: test continuity of the flash bus between 
+        :param do_continuity_test: test continuity of the flash bus between
             the Virtex7 FPGA and the Spartan 3AN FPGA
-        :param continuity_test_out_low: Used in continuity debug mode, 
+        :param continuity_test_out_low: Used in continuity debug mode,
             specify value to set lower 16 bits of the bus
-        :param continuity_test_out_high: Used in continuity debug mode, 
+        :param continuity_test_out_high: Used in continuity debug mode,
             specify value to set upper 16 bits of the bus
         :return: data read, if there was any
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # create request object
-        req = sd.SdramReconfigureReq(
-            self.seq_num, output_mode, clear_sdram, finished_writing,
+        request = sd.SdramReconfigureReq(
+            output_mode, clear_sdram, finished_writing,
             about_to_boot, do_reboot, reset_sdram_read_addr, clear_eth_stats,
             enable_debug, do_sdram_async_read, do_continuity_test,
             continuity_test_out_low, continuity_test_out_high)
-        resp = self.send_packet(req.create_payload(), 'SdramReconfigureResp',
-                                True, sd.SDRAM_RECONFIGURE, 19, 0)
-        if resp is None:
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        resp_pkt = response.packet
+        if response is None:
             args = locals()
             args.pop('req')
-            args.pop('resp')
+            args.pop('response')
             args.pop('self')
             raise SkarabSdramError('sdram_reconfigure failed, '
                                    'no response. %s' % args)
         if do_sdram_async_read:
             # process data read here
-            sdram_data = struct.pack('!H', resp.sdram_async_read_data_low) + \
-                struct.pack('!H', resp.sdram_async_read_data_high)
+            low = struct.pack('!H', resp_pkt['sdram_async_read_data_low'])
+            high = struct.pack('!H', resp_pkt['sdram_async_read_data_high'])
+            sdram_data = low + high
             return sdram_data
-        if resp is not None:
+        if response is not None:
             return True
         else:
-            LOGGER.error('Problem configuring SDRAM')
+            self.logger.error('Problem configuring SDRAM')
             return False
 
-    # Code added to implement the following:
-    #  3.8: READ_FLASH_WORDS
-    # - Request ReadFlashReq
-    # - Response ReadFlashResp
+    # region --- Virtex Flash Reconfiguration-related methods ---
 
-    def read_flash_words(self, flash_address, num_words=256):
+    # region === Read/Verify Command ===
+
+    def read_flash_words(self, flash_address, num_words=256,
+                         timeout=None,
+                         retries=None):
         """
-        Used to read a block of up to 384 16-bit words from the NOR flash on the SKARAB motherboard.
+        Used to read a block of up to 384 16-bit words from the NOR flash
+        on the SKARAB motherboard.
+        
         :param flash_address: 32-bit Address in the NOR flash to read
-        :param num_words: Number of 16-bit words to be read - Default value of 256 words
-        :return: Words read by the function call
+        :param num_words: Number of 16-bit words to be read - Default
+        value of 256 words
+        :return: String - Words read by the function call
+                        - Hex-encoded string
         """
-
         """
         ReadFlashWordsReq consists of the following:
         - Command Type: skarab_definitions.READ_FLASH_WORDS = 0x0000F
@@ -1583,133 +1409,146 @@ class SkarabTransport(Transport):
         - Lower 16 bits of NOR flash address
         - NumWords: Number of 16-bit words to be read
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
         if num_words > 384:
-            errmsg = "Failed to ReadFlashWords - Maximum of 384 16-bit words can be read from the NOR flash"
-            LOGGER.error(errmsg)
-            raise ReadFailed(errmsg)
-
+            errmsg = 'Failed to ReadFlashWords - Maximum of 384 16-bit words ' \
+                     'can be read from the NOR flash'
+            self.logger.error(errmsg)
+            raise SkarabReadFailed(errmsg)
         address_high, address_low = self.data_split_and_pack(flash_address)
-
-        # Create instance of ReadFlashWordsRequest
-        request = sd.ReadFlashWordsReq(self.seq_num,
-                                       address_high, address_low, num_words)
-
+        request = sd.ReadFlashWordsReq(address_high, address_low, num_words)
         # Make actual function call and (hopefully) return data
-        # - Number of Words to be expected in the Response: 1+1+(1+1)+1+384+(3-1) = 391
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ReadFlashWordsResp',
-                                    expect_response=True,
-                                    command_id=sd.READ_FLASH_WORDS,
-                                    number_of_words=391, pad_words=2)
-
+        # - Number of Words to be expected in the
+        # Response: 1+1+(1+1)+1+384+(3-1) = 391
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             # Then send back ReadWords[:NumWords]
-            return response.read_words[:num_words]
+            return response.packet['read_words'][:num_words]
         else:
-            errmsg = "Bad response received from SKARAB"
-            LOGGER.error(errmsg)
-            raise InvalidResponse(errmsg)
+            errmsg = 'Bad response received from SKARAB'
+            self.logger.error(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
     def verify_words(self, bitstream, flash_address=sd.DEFAULT_START_ADDRESS):
         """
-        This method reads back the programmed words from the flash device and checks it
+        This method reads back the programmed words from the flash device
+        and checks it
         against the data in the input .bin file uploaded to the Flash Memory.
-        :param bitstream: Of the input .bin file that was programmed to Flash Memory
-        :param flash_address: 32-bit Address in the NOR flash to START reading from
+        
+        :param bitstream: Of the input .bin file that was programmed to Flash
+            Memory
+        :param flash_address: 32-bit Address in the NOR flash from which to
+            START reading
         :return: Boolean success/fail
         """
+        bitstream_chunks = [
+            bitstream[i:i + 512] for i in range(0, len(bitstream), 512)
 
-        # bitstream = open(filename, 'rb').read()
-        bitstream_chunks = [bitstream[i:i+512] for i in range(0, len(bitstream), 512)]   # Now we have 512-byte chunks
-        # Using 512-byte chunks = 256-word chunks because we are reading 256 words at a time from the Flash Memory
+        ]
+        # Now we have 512-byte chunks
+        # Using 512-byte chunks = 256-word chunks because we are reading
+        # 256 words at a time from the Flash Memory
 
         # But again, make sure SDRAM is in FLASH Mode
         # - as per Line 1827, in prepare_sdram_for_programming
-        if not self.sdram_reconfigure(sd.FLASH_MODE, False, False, False, False,
-                                      False, False,
-                                      False, False, False, 0x0, 0x0):
-            errmsg = "Unable to put SDRAM into FLASH Mode"
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+        if not self.sdram_reconfigure(output_mode=sd.FLASH_MODE):
+            errmsg = 'Unable to put SDRAM into FLASH Mode'
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
-
-        # Compare against the bitstream extracted (and converted) from the .bin file
+        # Compare against the bitstream extracted (and converted)
+        # from the .bin file
         # - This will only iterate as long as there are words in the bitstream
         # - Which could (and should) be without padding to the 512-word boundary
         chunk_counter = 0
         for chunk in bitstream_chunks:
-            LOGGER.debug("Comparing image_chunk: %d", chunk_counter)
+            self.logger.debug('Comparing image_chunk: %d', chunk_counter)
 
             # Check for padding BEFORE we convert to integer words
             if len(chunk) % 512 != 0:
-                LOGGER.debug("Padding chunk")
+                self.logger.debug('Padding chunk')
                 chunk += '\xff' * (512 - (len(chunk) % 512))
             # else: Continue
 
             # Convert the 512 (string) bytes to 256 (integer) words
-            chunk_int = [struct.unpack('!H', chunk[i:i+2])[0] for i in range(0, 512, 2)]
+            chunk_int = [
+                struct.unpack('!H', chunk[i:i + 2])[0] for i in range(0, 512, 2)
+            ]
 
-            words_read = self.read_flash_words(flash_address, 256)   # Returns words as an Integer list
-
+            words_read = self.read_flash_words(flash_address, 256)
             for index in range(256):
                 if words_read[index] != chunk_int[index]:
-                    # Problem
-                    errmsg = "Flash_Word mismatch at index %d in bitstream_chunk %d", index, chunk_counter
-                    LOGGER.error(errmsg)
-                    raise ReadFailed(errmsg)
-
+                    errmsg = 'Flash_Word mismatch at index %d in ' \
+                             'bitstream_chunk %d' % (index, chunk_counter)
+                    self.logger.error(errmsg)
+                    raise SkarabReadFailed(errmsg)
             flash_address += 256
             chunk_counter += 1
-
         return True     # Words have been verified successfully
 
-    # 3.9: PROGRAM_FLASH_WORDS
-    # - Request sProgramFlashWordsReq
-    # - Response sProgramFlashWordsResp
+    # endregion
 
-    def program_flash_words(self, flash_address, total_num_words, num_words, do_buffered_prog, start_prog, finish_prog,
-                            write_words):
+    # region === Program Command ===
+
+    def program_flash_words(self, flash_address, total_num_words, num_words,
+                            do_buffered_prog, start_prog, finish_prog,
+                            write_words,
+                            timeout=None,
+                            retries=None):
         """
-        This is the low-level function, as per the FUM, to write to the Virtex Flash.
+        This is the low-level function, as per the FUM, to write to
+        the Virtex Flash.
 
         :param flash_address: 32-bit flash address to program to
-        :param total_num_words: Total number of 16-bit words to program over one or more Ethernet packets
-        :param num_words: Number of words in this (specific) Ethernet packet to program
+        :param total_num_words: Total number of 16-bit words to program over
+            one or more Ethernet packets
+        :param num_words: Number of words in this (specific) Ethernet packet
+            to program
         :param do_buffered_prog: 0/1 = Perform Buffered Programming
-        :param start_prog: 0/1 - First packet in flash programming, start programming operation in flash
-        :param finish_prog: 0/1 - Last packet in flash programming, complete programming operation in flash
+        :param start_prog: 0/1 - First packet in flash programming,
+            start programming operation in flash
+        :param finish_prog: 0/1 - Last packet in flash programming,
+            complete programming operation in flash
         :param write_words: Words to program, max = 256 Words
         :return: Boolean - Success/Fail - 1/0
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
         # First thing to check:
         if num_words > 256 or len(write_words) > 512:
-            errmsg = "Maximum of 256 words can be programmed to the Flash at once"
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+            errmsg = 'Maximum of 256 words can be programmed to the Flash ' \
+                     'at once'
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
         # else: Continue as per normal
 
         """
-        ProgramFlashWordsReq consists of the following:        
+        ProgramFlashWordsReq consists of the following:
         - Sequence Number: self.seq_num
         - Upper 16 bits of flash_address to start programming to
         - Lower 16 bits of flash_address to start programming to
-        - TotalNumWords: Total number of 16-bit words to program over one or more Ethernet packets
+        - TotalNumWords: Total number of 16-bit words to program over one or
+            more Ethernet packets
         - NumWords: Number of words in this Ethernet packet to program
         - doBufferedProgramming: 0/1 - Perform Buffered Programming
-        - StartProgram: 0/1 - First packet in flash programming, start programming operation in flash
-        - FinishProgram: 0/1 - Last packet in flash programming, complete programming operation in flash
+        - StartProgram: 0/1 - First packet in flash programming, start
+            programming operation in flash
+        - FinishProgram: 0/1 - Last packet in flash programming, complete
+            programming operation in flash
         - WriteWords[256] (WordsToWrite): Words to program, max = 256 words
         """
 
-        # Split 32-bit Flash Address into 16-bit high and low values
-        flash_address_high, flash_address_low = self.data_split_and_pack(flash_address)
+        # split 32-bit Flash Address into 16-bit high and low values
+        flash_addr_high, flash_addr_low = self.data_split_and_pack(
+            flash_address)
 
-        # Create instance of ProgramFlashWordsRequest
-        request = sd.ProgramFlashWordsReq(self.seq_num, flash_address_high, flash_address_low,
-                                          total_num_words, num_words, do_buffered_prog,
-                                          start_prog, finish_prog, write_words)
+        # create instance of ProgramFlashWordsRequest
+        request = sd.ProgramFlashWordsReq(
+            flash_addr_high, flash_addr_low, total_num_words, num_words,
+            do_buffered_prog, start_prog, finish_prog, write_words)
 
         """
         ProgramFlashWordsResp consists of the following:
@@ -1718,7 +1557,8 @@ class SkarabTransport(Transport):
         - Upper 16 bits of Flash Address
         - Lower 16 bits of Flash Address
         - Total Number of Words being Programmed
-        - Number of Words being written/that were written in the request (at the moment)
+        - Number of Words being written/that were written in the
+            request (at the moment)
         - DoBufferedProgramming
         - First Packet in Flash Programming
         - Last Packet in Flash Programming
@@ -1728,38 +1568,39 @@ class SkarabTransport(Transport):
         - Therefore Total Number of Words to be expected in the Response:
           - 1+1+1+1+1+1+1+1+1+1+(2-1) = 11 16-bit words (?)
         """
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ProgramFlashWordsResp',
-                                    expect_response=True,
-                                    command_id=sd.PROGRAM_FLASH_WORDS,
-                                    number_of_words=11, pad_words=1)
-
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             # We have some data back
-            if response.program_success:
+            if response.packet['program_success']:
                 # Job done
                 return True
             else:
                 # ProgramFlashWordsRequest was made, but unsuccessful
-                errmsg = "Failed to Program Flash Words"
-                LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
+                errmsg = 'Failed to Program Flash Words'
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
         else:
-            errmsg = "Bad response received from SKARAB"
-            LOGGER.error(errmsg)
-            raise InvalidResponse(errmsg)
+            errmsg = 'Bad response received from SKARAB'
+            self.logger.error(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
     def program_words(self, bitstream, flash_address=sd.DEFAULT_START_ADDRESS):
         """
-        Higher level function call to Program n-many words from an input .hex (eventually .bin) file.
-        This method scrolls through the words in the bitstream, and packs them into 256+256 words.
+        Higher level function call to Program n-many words from an
+        input .hex (eventually .bin) file.
+
+        This method scrolls through the words in the bitstream, and packs
+        them into 256+256 words.
+        
         :param bitstream: Of the input .bin file to write to Flash Memory
-        :param flash_address: Address in Flash Memory from where to start programming
+        :param flash_address: Address in Flash Memory from where to
+        start programming
         :return: Boolean Success/Fail - 1/0
         """
 
         # bitstream = open(filename, 'rb').read()
-        # As per upload_to_ram() except now we're programming in chunks of 512 words
+        # As per upload_to_ram() except now we're programming in chunks
+        # of 512 words
         size = len(bitstream)
         # Split image into chunks of 512 words = 1024 bytes
         image_chunks = [bitstream[i:i + 1024] for i in range(0, size, 1024)]
@@ -1777,207 +1618,225 @@ class SkarabTransport(Transport):
             # Need to program 256 words at a time, more specifically
             # - Program first half: If passed, continue; else: return
             # - Program second half: If passed, continue; else: return
-            if not self.program_flash_words(flash_address, 512, 256, True, True, False, chunk[:512]):
+            if not self.program_flash_words(flash_address, 512, 256, True, True,
+                                            False, chunk[:512]):
                 # Did not successfully program the first 256 words
-                errmsg = "Failed to program first 256 words of 512 word image block"
-                LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
-            elif not self.program_flash_words(flash_address + 256, 512, 256, True, False, True, chunk[512:]):
+                errmsg = 'Failed to program first 256 words of 512 word ' \
+                         'image block'
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
+            elif not self.program_flash_words(flash_address + 256, 512, 256,
+                                              True, False, True, chunk[512:]):
                 # Did not successfully program the first 256 words
-                errmsg = "Failed to program second 256 words of 512 word image block"
-                LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
+                errmsg = 'Failed to program second 256 words of 512 word ' \
+                         'image block'
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
 
-            flash_address += 512    # Shift the address we are writing to by 512 places
+            # Shift the address we are writing to by 512 places
+            flash_address += 512
             # Loop back to the next image chunk, repeat the process
 
-        # Now done programming the input bitstream, need to return and move on to VerifyWords()
+        # Now done programming the input bitstream, need to return and
+        # move on to VerifyWords()
         return True
 
-    # 3.10: ERASE_FLASH_WORDS:
-    # - Request sEraseFlashBlockReq
-    # - Response sEraseFlashBlockResp
-    def erase_flash_block(self, flash_address=sd.DEFAULT_START_ADDRESS):
+    # endregion
+
+    # region === Erase Command ===
+
+    def erase_flash_block(self, flash_address=sd.DEFAULT_START_ADDRESS,
+                          timeout=None,
+                          retries=None):
         """
         Used to erase a block in the NOR flash on the SKARAB motherboard
+        
         :param flash_address: 32-bit address in the NOR flash to erase
         :return: erase_success - 0/1
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
         address_high, address_low = self.data_split_and_pack(flash_address)
-
-        # Create instance of EraseFlashBlockRequest
-        request = sd.EraseFlashBlockReq(self.seq_num, address_high, address_low)
-
+        request = sd.EraseFlashBlockReq(address_high, address_low)
         # Make the actual function call and (hopefully) return data
-        # - Number of Words to be expected in the Response: 1+1+(1+1)+1+(7-1) = 11
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='EraseFlashBlockResp',
-                                    expect_response=True,
-                                    command_id=sd.ERASE_FLASH_BLOCK,
-                                    number_of_words=11, pad_words=6)
-
+        # - Number of Words to be expected in the
+        # Response: 1+1+(1+1)+1+(7-1) = 11
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
-            if response.erase_success:
+            if response.packet['erase_success']:
                 return True
             else:
                 # Erase request was made, but unsuccessful
-                errmsg = "Failed to Erase Flash Block"
-                LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
+                errmsg = 'Failed to Erase Flash Block'
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
         else:
-            errmsg = "Bad response received from SKARAB"
-            LOGGER.error(errmsg)
-            raise InvalidResponse(errmsg)
+            errmsg = 'Bad response received from SKARAB'
+            self.logger.error(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
-    # This is the "Parent function" that invokes erase_flash_block
-    def erase_blocks(self, num_flash_blocks, flash_address=sd.DEFAULT_START_ADDRESS):
+    def erase_blocks(self, num_flash_blocks,
+                     flash_address=sd.DEFAULT_START_ADDRESS):
         """
-        Higher level function call to Erase n-many Flash Blocks in preparation for program_flash_words
+        Higher level function call to Erase n-many Flash Blocks in preparation
+        for program_flash_words
         This method erases the required number of blocks in the flash
-        - Only the required number of flash blocks are erased
-        :param num_flash_blocks: Number of Flash Memory Blocks to be erased, to make space for the new image
-        :param flash_address: Start address from where to begin erasing Flash Memory
-        :return:
+        
+        * Only the required number of flash blocks are erased
+        
+        :param num_flash_blocks: Number of Flash Memory Blocks to be erased,
+            to make space for the new image
+        :param flash_address: Start address from where to begin erasing
+            Flash Memory
         """
-
-        default_value = True
-        if flash_address != sd.DEFAULT_START_ADDRESS:
-            default_value = False
-            start_address = flash_address
-
+        erase_address = flash_address
         # First, need to SdramReconfigure into 'Flash Mode'
         # - as per Line 1827, in prepare_for_sdram_for_programming
-        if not self.sdram_reconfigure(sd.FLASH_MODE, False, False, False, False,
-                                      False, False,
-                                      False, False, False, 0x0, 0x0):
-            errmsg = "Unable to put SDRAM into FLASH Mode"
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
-        # else: Continue
-
+        if not self.sdram_reconfigure(output_mode=sd.FLASH_MODE):
+            errmsg = 'Unable to put SDRAM into FLASH Mode'
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
         # Now, to do the actual erasing of Flash Memory Blocks
-        infomsg = 'Erasing Flash Blocks from flash_address = {}'.format(flash_address)
-        LOGGER.info(infomsg)
+        self.logger.info('Erasing Flash Blocks from flash_address = {}'.format(
+            erase_address))
         block_counter = 0
         while block_counter < num_flash_blocks:
-            # Erasing Flash Blocks this way because a request may timeout and result in an out-of-sequence response
-            if not self.erase_flash_block(flash_address):
+            # Erasing Flash Blocks this way because a request may timeout and
+            # result in an out-of-sequence response
+            if not self.erase_flash_block(erase_address):
                 # Problem Erasing the Flash Block
-                errmsg = 'Failed to Erase Flash Memory Block at: 0x{:02X}. Retrying now...'.format(flash_address)
-                LOGGER.error(errmsg)
-
-                # Reset the block_counter and flash_address to their initial values
+                self.logger.error('Failed to Erase Flash Memory Block at: 0x{:02X}. '
+                             'Retrying now...'.format(erase_address))
+                # Reset the block_counter and erase_address to
+                # their initial values
                 block_counter = 0
-                if default_value:
-                    flash_address = sd.DEFAULT_START_ADDRESS
-                else:
-                    flash_address = start_address
+                erase_address = flash_address
             else:
                 # All good
                 block_counter += 1
-                flash_address += int(sd.DEFAULT_BLOCK_SIZE)
-
+                erase_address += int(sd.DEFAULT_BLOCK_SIZE)
         return True
 
-    @staticmethod
-    # Only working with BPIx8 .bin files now
-    def analyse_file_virtex_flash(filename):
+    # endregion
+
+    # region === VirtexFlashReconfig ===
+    def process_flash_bin(self, filename):
         """
-        This method analyses the input .bin file to determine the number of words to program,
-        and the number of blocks to erase
-        :param filename: Input .bin to be written to the Virtex FPGA
-        :return: Tuple - num_words (in file), num_memory_blocks (required to hold this file)
+        Sends the file to skarab_fileops for processing and returns
+        number of words, number of memory blocks and image to program
+        :param filename: The actual .bin file that is to be written to
+        the Virtex FPGA
+        :returns image_to_program, num_words, num_memory_blocks
         """
-
-        contents = open(filename, 'rb').read()      # File contents are in bytes
-
-        if len(contents) % 2 != 0:
-            # Problem
-            errmsg = "Invalid file size: Number of Words is not whole"
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
-        # else: Continue
-        num_words = len(contents) / 2
-        num_memory_blocks = int(math.ceil(num_words / sd.DEFAULT_BLOCK_SIZE))
-
-        return num_words, num_memory_blocks
-
-    # This function will call all the relevant functions as per the order done in Roach3VirtexFlashReconfigApp.cpp
-    # - AnalyseFile()
-    # - EraseBlocks()
-    # - ProgramWords()
-    # - VerifyWords()
-    def virtex_flash_reconfig(self, filename, flash_address=sd.DEFAULT_START_ADDRESS, blind_reconfig=False):
-        """
-        This is the entire function that makes the necessary calls to reconfigure the Virtex7's Flash Memory
-        :param filename: The actual .bin file that is to be written to the Virtex FPGA
-        :param flash_address: 32-bit Address in the NOR flash to start programming from
-        :param blind_reconfig: Reconfigure the board and don't wait to Verify what has been written
-        :return: Success/Fail - 0/1
-        """
-
         # For completeness, make sure the input file is of a .bin disposition
         file_extension = os.path.splitext(filename)[1]
+        image_to_program = ''
 
-        if file_extension == '.hex':
-            LOGGER.info('.hex detected. Converting to .bin.')
-            image_to_program = self.convert_hex_to_bin(filename)
-        elif file_extension == '.bin':
-            LOGGER.info('.bin file detected.')
-            image_to_program = open(filename, 'rb').read()
-        else:
-            # File extension was neither .hex nor .bin
-            errmsg = 'Please use .hex or .bin file to reconfigure Flash Memory'
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
+        # Need to change file-handler to use skarab_fileops.choose_processor(filename)
+        #binname = '/tmp/fpgstream_' + str(self.parent) + '.bin'
+        processor = skfops.choose_processor(filename)
+        processor = processor(filename, extract_to_disk=False)
+        #image_to_program, binname = processor.make_bin()
+        image_to_program, _none = processor.make_bin()
 
-        (result, image_to_program) = self.check_bitstream(image_to_program)
-        if not result:
-            errmsg = "Incompatible .bin file detected."
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
-
-        LOGGER.debug("VIRTEX FLASH RECONFIG: Analysing Words")
-        # Can still analyse the filename, as the file size should still be the same
-        # Regardless of swapping the endianness
-        num_words, num_memory_blocks = self.analyse_file_virtex_flash(filename)
+        self.logger.debug('VIRTEX FLASH RECONFIG: Analysing Words')
+        # Can still analyse the filename, as the file size should still
+        # be the same, regardless of swapping the endianness
+        num_words, num_memory_blocks = skfops.analyse_file_virtex_flash(bitstream=image_to_program)
 
         if (num_words == 0) or (num_memory_blocks == 0):
             # Problem
-            errmsg = "Failed to Analyse File successfully"
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
+            errmsg = 'Failed to Analyse File successfully'
+            self.logger.error(errmsg)
+            # Remove temp bin-file wherever possible
+            #os.remove(binname)
+            raise sd.SkarabInvalidBitstream(errmsg)
         # else: Continue
 
-        LOGGER.debug("VIRTEX FLASH RECONFIG: Erasing Flash Memory Blocks")
+        #os.remove(binname)
+        return image_to_program, num_words, num_memory_blocks
+
+    def virtex_flash_reconfig(self, filename=None,
+                              image_to_program=None,
+                              num_words=None,
+                              num_memory_blocks=None,
+                              flash_address=sd.DEFAULT_START_ADDRESS,
+                              blind_reconfig=False):
+        """
+        This is the entire function that makes the necessary calls to
+        reconfigure the Virtex7's Flash Memory. Either specify a filename
+        to program or process the file separately using
+        transport_skarab.process_flash_bin and send image_to_program, num_words
+        and num_memory_blocks. Note when using this function as a thread it
+        is preferable to send image_to_program as processing a file will use
+        memory for each instance.
+        :param filename: The actual .bin file that is to be written to
+        the Virtex FPGA
+        :param image_to_program: Image processed by skarab_fileops.py
+        to program.
+        :param num_words: Number of words as processed by skarab_fileops.py
+        :param num_memory_blocks: Number of blocks to program as processed
+        by skarab_fileops.py
+        :param flash_address: 32-bit Address in the NOR flash to
+        start programming from
+            - flash_address = DEFUALT_START_ADDRESS is for programming the Multiboot Image
+            - flash_address = 0x0 is for programming the Golden Image
+        :param blind_reconfig: Reconfigure the board and don't wait to
+        verify what has been written
+        :return: Success/Fail - 0/1
+        """
+        if filename:
+            image_to_program, num_words, num_memory_blocks = self.process_flash_bin(filename)
+        elif (image_to_program is None or num_words is None or
+             num_memory_blocks is None):
+            errmsg = ('Specify either a filename or image_to_program when '
+                      'calling virtex_flash_reconfig')
+            raise sd.SkarabProgrammingError(errmsg)
+
+        if (num_words == 0) or (num_memory_blocks == 0):
+            # Problem
+            errmsg = 'num_words or num_memory_blocks incorrect'
+            self.logger.error(errmsg)
+            raise sd.SkarabInvalidBitstream(errmsg)
+
+        self.logger.debug('VIRTEX FLASH RECONFIG: Erasing Flash Memory Blocks')
         if not self.erase_blocks(num_memory_blocks, flash_address):
             # Problem
-            errmsg = "Failed to Erase Flash Memory Blocks"
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+            errmsg = 'Failed to Erase Flash Memory Blocks'
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
-        LOGGER.debug("VIRTEX FLASH RECONFIG: Programming Words to Flash Memory")
+        self.logger.debug('VIRTEX FLASH RECONFIG: Programming Words to Flash Memory')
         if not self.program_words(image_to_program, flash_address):
             # Problem
-            errmsg = "Failed to Program Flash Memory Blocks"
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+            errmsg = 'Failed to Program Flash Memory Blocks'
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
         if not blind_reconfig:
-            LOGGER.debug("VIRTEX FLASH RECONFIG: Verifying words that were written to Flash Memory")
+            self.logger.debug('VIRTEX FLASH RECONFIG: Verifying words that '
+                         'were written to Flash Memory')
             if not self.verify_words(image_to_program, flash_address):
                 # Problem
-                errmsg = "Failed to Program Flash Memory Blocks"
-                LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
+                errmsg = 'Failed to Program Flash Memory Blocks'
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
             # else: Continue
-
         return True
 
-    def read_spi_page(self, spi_address, num_bytes):
+    # endregion
+
+    # endregion
+
+    # region --- SPARTAN Flash Reconfiguration-related methods ---
+
+    # region === Read/Verify Command ===
+    def read_spi_page(self, spi_address, num_bytes,
+                      timeout=None,
+                      retries=None):
         """
         Used to read a page from the SPI flash in the Spartan 3AN FPGA on the
         SKARAB Motherboard. Up to a full page (264 bytes) can be read.
@@ -1986,53 +1845,51 @@ class SkarabTransport(Transport):
         :param num_bytes: number of bytes in page to be read (max 264 bytes)
         :return: list of read data
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
         if num_bytes > 264:
-            LOGGER.error('Maximum of 264 bytes (One full page) '
+            self.logger.error('Maximum of 264 bytes (One full page) '
                          'can be read from a single SPI Register')
             return False
-
         # split 32-bit page address into 16-bit high and low
         spi_address_high, spi_address_low = \
             self.data_split_and_pack(spi_address)
-
         # create payload packet structure for read request
-        request = sd.ReadSpiPageReq(self.seq_num, spi_address_high,
+        request = sd.ReadSpiPageReq(spi_address_high,
                                     spi_address_low, num_bytes)
-
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ReadSpiPageResp',
-                                    expect_response=True,
-                                    command_id=sd.READ_SPI_PAGE,
-                                    number_of_words=271, pad_words=1)
-
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
-            if response.read_spi_page_success:
+            if response.packet['read_spi_page_success']:
                 # Then, send back ReadBytes[:NumBytes]
-                return response.read_bytes[:num_bytes]
+                return response.packet['read_bytes'][:num_bytes]
             else:
                 # Read was made, but unsuccessful
-                LOGGER.error("SPI Read FAILED")
-                raise ReadFailed('Attempt to perform SPI Read Failed')
+                self.logger.error('SPI Read FAILED')
+                raise SkarabReadFailed('Attempt to perform SPI Read Failed')
         else:
-            LOGGER.error("Bad Response Received")
-            raise InvalidResponse('Bad response received from SKARAB')
+            self.logger.error('Bad Response Received')
+            raise SkarabInvalidResponse('Bad response received from SKARAB')
 
     def verify_bytes(self, bitstream):
-        '''
-        This is the high-level function that implements read_spi_page to verify the data from the
-        .ufp file that was written to the Spartan FPGA flash memory.
-        :param bitstream: of the input .ufp file that was used to reconfigure the Spartan 3AN FPGA
+        """
+        This is the high-level function that implements read_spi_page to
+        verify the data from the .ufp file that was written to the Spartan FPGA flash memory.
+        
+        :param bitstream: of the input .ufp file that was used to reconfigure
+            the Spartan 3AN FPGA
         :return: Boolean - True/False - Success/Fail - 1/0
-        '''
+        """
 
-        # We need to read as many sectors as there are 264-byte pages in the bitstream
+        # We need to read as many sectors as there are 264-byte pages
+        # in the bitstream
         # - Easier to manipulate the bitstream here on the fly
 
         pages = [bitstream[i:i + 528] for i in range(0, len(bitstream), 528)]
 
         page_counter = 0
-        raw_data = []      # It's a list this time because read_spi_page returns an integer list
+        # It's a list this time because read_spi_page returns an integer list
+        raw_data = []
         for page in pages:
 
             if len(page) % 528 != 0:
@@ -2046,8 +1903,9 @@ class SkarabTransport(Transport):
 
             # Define the sector address from where we will be reading data
             page_address = (page_counter << 9)
-            debugmsg = 'Now reading from SPI Address 0x{:02X}'.format(page_address)
-            LOGGER.debug(debugmsg)
+            debugmsg = 'Now reading from SPI Address 0x{:02X}'.format(
+                page_address)
+            self.logger.debug(debugmsg)
 
             # Reading one full page at a time
             # - Returns an list of integers
@@ -2055,21 +1913,23 @@ class SkarabTransport(Transport):
 
             for byte_counter in range(len(read_bytes)):
                 # Compare byte by byte
-                # debugmsg = 'Comparing Raw_Data: 0x{:02X} - Read_Data: 0x{:02X}'\
-                #            .format(raw_data[byte_counter], read_bytes[byte_counter])
-                # LOGGER.debug(debugmsg)
+                # debugmsg = 'Comparing Raw_Data: 0x{:02X} - Read_Data: ' \
+                #            '0x{:02X}'.format(raw_data[byte_counter],
+                #                              read_bytes[byte_counter])
+                # self.logger.debug(debugmsg)
 
                 if raw_data[byte_counter] != read_bytes[byte_counter]:
                     # Problem
-                    debugmsg = 'Comparing Raw_Data: 0x{:02X} - Read_Data: 0x{:02X}' \
-                        .format(raw_data[byte_counter], read_bytes[byte_counter])
-                    LOGGER.debug(debugmsg)
+                    debugmsg = 'Comparing Raw_Data: 0x{:02X} - Read_Data: ' \
+                               '0x{:02X}'.format(raw_data[byte_counter],
+                                                 read_bytes[byte_counter])
+                    self.logger.debug(debugmsg)
 
-                    errmsg = 'Byte mismatch at index: {}. ' \
-                             'Failed to reconfigure Spartan Flash successfully.'\
-                        .format(byte_counter)
-                    LOGGER.error(errmsg)
-                    raise ProgrammingError(errmsg)
+                    errmsg = 'Byte mismatch at index: {}. Failed to ' \
+                             'reconfigure Spartan Flash successfully.'.format(
+                                byte_counter)
+                    self.logger.error(errmsg)
+                    raise sd.SkarabProgrammingError(errmsg)
                 # else: Continue
 
             # Increment the page-count
@@ -2079,26 +1939,37 @@ class SkarabTransport(Transport):
 
         return True
 
-    def program_spi_page(self, spi_address, num_bytes, write_bytes):
-        '''
-        Low-level function call to program a page to the SPI Flash in the Spartan 3AN FPGA on the SKARAB.
+    # endregion
+
+    # region === Program Command ===
+
+    def program_spi_page(self, spi_address, num_bytes, write_bytes,
+                         timeout=None,
+                         retries=None):
+        """
+        Low-level function call to program a page to the SPI Flash in the
+        Spartan 3AN FPGA on the SKARAB.
         Up to a full page (264 bytes) can be programmed.
+
         :param spi_address: 32-bit address to program bytes to
         :param num_bytes: Number of bytes to program to Spartan flash
-        :param write_bytes: Data to program - max 264 bytes
+        :param write_bytes: Data to program - max 264 bytes -->
+            HEX-ENCODED STRING DATA
         :return: Boolean - Success/Fail - 1/0
-        '''
+        """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
 
         # First thing to check:
         if num_bytes > 264 or (len(write_bytes)/2) > 264:
-            errmsg = 'Maximum of 264 bytes can be programmed to an SPI Sector at once.\n' \
-                     'Num_bytes = {}, and len(write_bytes) = {}'.format(num_bytes, len(write_bytes))
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
-        # else: Continue as per normal
-
-        debugmsg = 'Data is ok continue programming to SPI Address 0x{:02X}'.format(spi_address)
-        LOGGER.debug(debugmsg)
+            errmsg = 'Maximum of 264 bytes can be programmed to an SPI Sector' \
+                     ' at once.\nNum_bytes = {}, and len(write_bytes) = {}' \
+                     ''.format(num_bytes, len(write_bytes))
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
+        self.logger.debug('Data is ok continue programming to SPI Address 0x{:02X}'
+                     ''.format(spi_address))
 
         """
         ProgramSpiPageReq consists of the following:
@@ -2106,65 +1977,81 @@ class SkarabTransport(Transport):
         - Upper 16 bits of spi_address to start programming to
         - Lower 16 bits of spi_address to start programming to
         - NumBytes: Number of bytes in page to program
-        - WriteBytes[264] (BytesToWrite): Bytes to program, max = 264 bytes (1 page)
+        - WriteBytes[264] (BytesToWrite): Bytes to program,
+            max = 264 bytes (1 page)
         """
         # Split 32-bit Flash Address into 16-bit high and low values
-        spi_address_high, spi_address_low = self.data_split_and_pack(spi_address)
+        spi_addr_high, spi_addr_low = self.data_split_and_pack(spi_address)
 
         # Create instance of ProgramFlashWordsRequest
-        request = sd.ProgramSpiPageReq(self.seq_num, spi_address_high, spi_address_low,
-                                       num_bytes=num_bytes, write_bytes=write_bytes)
+        request = sd.ProgramSpiPageReq(spi_addr_high, spi_addr_low,
+                                       num_bytes=num_bytes,
+                                       write_bytes=write_bytes)
+
+        if '\x00\xbe\x00\xaf' in write_bytes[:10]:
+            # Flash Magic Byte case - DON'T HANDLE RESPONSE
+            debugmsg = 'Making Magic Bytes request...'
+            self.logger.debug(debugmsg)
+
+            # It seems the response was still being handled after
+            # the first EraseSpiSectorRequest
+            # request.expect_response = False
+        # else: Continue
 
         """
         ProgramSpiPageResp consists of the following:
         - Command Type
         - Sequence Number
         - Upper 16 bits of Flash Address
-        - Lower 16 bits of Flash Address        
-        - Number of Bytes being written/that were written in the request (at the moment)
+        - Lower 16 bits of Flash Address
+        - Number of Bytes being written/that were written in the
+            request (at the moment)
         - VerifyBytes[264]: Verification bytes read from the same page after
-                            programming completes
+            programming completes
         - ProgramSpiPageSuccess: 0/1
         - Padding: [2]
         - Therefore Total Number of Words to be expected in the Response:
-          - 1+1+(1+1)+1+264+1+(2-1) = 271 16-bit words
+        - 1+1+(1+1)+1+264+1+(2-1) = 271 16-bit words
         """
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ProgramSpiPageResp',
-                                    expect_response=True,
-                                    command_id=sd.PROGRAM_SPI_PAGE,
-                                    number_of_words=271, pad_words=1)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if not request.expect_response:
+            # Just return True (?)
+            debugmsg = 'No response to handle...'
+            self.logger.debug(debugmsg)
+            return True
 
         if response is not None:
             # We have some data back
-            if response.program_spi_page_success:
+            if response.packet['program_spi_page_success']:
                 # Job done
                 # TODO: Implement 'Verify_on_the_fly' to verify written data
                 debugmsg = 'ProgramSpiPage returned successfully.\n' \
-                           'len(VerifyBytes) = {}'.format(len(response.verify_bytes))
-                LOGGER.debug(debugmsg)
-
+                           'len(VerifyBytes) = {}'.format(
+                            len(response.packet['verify_bytes']))
+                self.logger.debug(debugmsg)
                 return True
-                # return response.verify_bytes
             else:
                 # ProgramSpiPageRequest was made, but unsuccessful
-                errmsg = "Failed to Program Page"
-                LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
+                errmsg = 'Failed to Program Page'
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
         else:
-            errmsg = "Bad response received from SKARAB"
-            LOGGER.error(errmsg)
-            raise InvalidResponse(errmsg)
+            errmsg = 'Bad response received from SKARAB'
+            self.logger.error(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
     def program_pages(self, bitstream, num_pages):
-        '''
-        Higher level function call to Program n-many words from an input .ufp file.
+        """
+        Higher level function call to Program n-many words from an
+        input .ufp file.
         This method breaks the bitstream up into chunks of up to 264 bytes.
         - Removed 'num_sectors' parameter; doesn't seem to be needed
-        :param bitstream: Of the input .ufp file to write to SPI Sectors, without \r and \n
+        
+        :param bitstream: Of the input .ufp file to write to SPI Sectors,
+            without \r and \n
         :param num_pages: Total Number of Pages to be written to the SPI Sectors
         :return: Boolean - Success/Fail - 1/0
-        '''
+        """
 
         # Need to break up the bitstream in (up to) 264-byte chunks
         pages = [bitstream[i:i+528] for i in range(0, len(bitstream), 528)]
@@ -2176,8 +2063,8 @@ class SkarabTransport(Transport):
             errmsg = 'Error in breaking down bitstream to program...\n' \
                      'Pages_calculated = {}, Number of 264-byte pages = {}'\
                         .format(num_pages, len(pages))
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
         page_counter = 0
@@ -2205,7 +2092,7 @@ class SkarabTransport(Transport):
                 # Problem
                 errmsg = 'Failed to program page-{} to address: 0x{:02X}'\
                             .format(page_counter, page_address)
-                LOGGER.error(errmsg)
+                self.logger.error(errmsg)
             # else: Continue
 
             # Increment page_counter
@@ -2215,126 +2102,149 @@ class SkarabTransport(Transport):
 
         return True
 
-    def erase_spi_sector(self, spi_address):
-        '''
-        Used to erase a sector in the SPI Flash in the Spartan 3AN FPGA on the SKARAB.
+    # endregion
+
+    # region === Erase Command ===
+    def erase_spi_sector(self, spi_address,
+                         timeout=None,
+                         retries=None):
+        """
+        Used to erase a sector in the SPI Flash in the Spartan 3AN FPGA
+        on the SKARAB.
+        
         :param spi_address: 32-bit address to erase in the Flash
         :return: Boolean - Success/Fail - 1/0
-        '''
+        """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
         address_high, address_low = self.data_split_and_pack(spi_address)
-
         # Create instance of EraseSpiSectorRequest
-        request = sd.EraseSpiSectorReq(self.seq_num, address_high, address_low)
-
+        request = sd.EraseSpiSectorReq(address_high, address_low)
         # Make the actual function call and (hopefully) return data
-        # - Number of Words to be expected in the response: 1+1+(1+1)+1+(7-1) = 11
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='EraseSpiSectorResp',
-                                    expect_response=True,
-                                    command_id=sd.ERASE_SPI_SECTOR,
-                                    number_of_words=11, pad_words=6)
-
+        # Number of Words to be expected in the response: 1+1+(1+1)+1+(7-1) = 11
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
-            if response.erase_success:
+            if response.packet['erase_success']:
                 return True
             else:
                 # Erase request was made, but unsuccessful
-                errmsg = "Failed to Erase Flash Block"
-                LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
+                errmsg = 'Failed to Erase Flash Block'
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
         else:
-            errmsg = "Bad response received from SKARAB"
-            LOGGER.error(errmsg)
-            raise InvalidResponse(errmsg)
+            errmsg = 'Bad response received from SKARAB'
+            self.logger.error(errmsg)
+            raise SkarabInvalidResponse(errmsg)
 
     def erase_sectors(self, num_sectors):
-        '''
+        """
         Erase required number of sectors for input .ufp file
+
         :param num_sectors: Required number of sectors to be erased
         :return: Boolean - Success/Fail - 1/0
-        '''
-
+        """
         for sector_counter in range(0, num_sectors+1):
             # Get associated 32-bit pre-defined Sector Address
             sector_address = sd.SECTOR_ADDRESS[sector_counter]
             debugmsg = 'Erasing SectorAddress: 0x{:02X}'.format(sector_address)
-            LOGGER.debug(debugmsg)
+            self.logger.debug(debugmsg)
 
             if not self.erase_spi_sector(sector_address):
                 # Problem erasing SPI Sector
                 errmsg = 'Problem Erasing SPI Sector Address: 0x{:02X}'\
                     .format(sd.SECTOR_ADDRESS[sector_counter])
-                LOGGER.error(errmsg)
-                # No custom 'EraseError' to raise; raise error in main function call
+                self.logger.error(errmsg)
+                # No custom 'EraseError' to raise; raise error in main
+                # function call
                 return False
-
-            debugmsg = 'Successfully erased SPI Sector Address: 0x{:02X} - ({} of {})'\
-                .format(sd.SECTOR_ADDRESS[sector_counter], sector_counter, num_sectors)
-            LOGGER.debug(debugmsg)
-
+            self.logger.debug('Successfully erased SPI Sector Address: 0x{:02X} - '
+                         '({} of {})'.format(sd.SECTOR_ADDRESS[sector_counter],
+                                             sector_counter, num_sectors))
         return True
 
-    @staticmethod
-    def check_ufp_bitstream(filename):
-        '''
-        Utility to check bitstream of .ufp file used to program/configure Spartan Flash.
-        Also removes all escape characters, i.e. \r, \n
-        :param filename: of the input .ufp file
-        :return: tuple - (True/False, bitstream)
-        '''
+    # endregion
 
-        contents = open(filename, 'rb').read()
-        if len(contents) < 1:
-            # Problem
-            errmsg = 'Problem opening input .ufp file: %s'.format(filename)
-            LOGGER.error(errmsg)
-            return False, None
-        # else: Continue
+    # region === Enabling/Disabling Access to SPI Flash ===
 
-        # Remove all CR and LF in .ufp file
-        escape_chars = ['\r', '\n']
-        for value in escape_chars:
-            contents = contents.replace(value, '')
+    def enable_isp_flash(self):
+        """
+        This method Enables access to ISP Flash by writing two Magic Bytes
+        to a certain address space
+        """
+        # This will return the SpartanFirmwareVersion as an
+        # integer_tuple (major, minor)
+        (major_version, minor_version) = \
+            self.get_spartan_firmware_version_tuple()
 
-        return True, contents
+        # This check is done to see if the SPARTAN requires 'unlocking' to
+        # access the in-system flash
+        if ((major_version == sd.CURRENT_SPARTAN_MAJOR_VER) and
+            (minor_version >= sd.CURRENT_SPARTAN_MINOR_VER)) \
+                or (major_version > sd.CURRENT_SPARTAN_MAJOR_VER):
+            # Write Flash Magic Byte to enable access to ISP Flash
 
-    @staticmethod
-    def analyse_ufp_bitstream(bitstream):
-        '''
-        This method analyses the input .ufp file to determine the number of pages to program,
-        and the number of sectors to erase
-        :param bitstream: Input .ufp file to be written to the SPARTAN 3AN FPGA
-        :return: Tuple - (num_pages, num_sectors)
-        '''
+            flash_magic_bytes = [sd.SPARTAN_FLASH_MAGIC_BYTE_0,
+                                 sd.SPARTAN_FLASH_MAGIC_BYTE_1]
 
-        num_bytes = len(bitstream) / 2       # Number of Bytes in input .ufp file
-        num_pages = num_bytes / 264         # 1 Page = 264 bytes
-        if num_bytes % 264 != 0:
-            num_pages += 1
+            # Need to pack these magic_bytes in the format expected
+            raw_magic_bytes = ''
+            for value in flash_magic_bytes:
+                raw_magic_bytes += struct.pack('!H', value)
 
-        num_sectors = num_pages / 256       # 256 Pages/sector
-        if num_pages % 256 != 0:
-            num_sectors += 1
+            # padding just to test whether the packet needs to be 264-bytes long
+            # - 266 because testing lead to this result
+            raw_magic_bytes += (266 - (len(raw_magic_bytes) % 264)) * '\x00\xff'
 
-        debugmsg = 'Returning num_pages: {} - num_sectors: {}'.format(num_pages, num_sectors)
-        LOGGER.debug(debugmsg)
+            debugmsg = 'Writing Magic Bytes %s to Flash...' % raw_magic_bytes
+            self.logger.debug(debugmsg)
 
-        return num_pages, num_sectors
+            # Ignore result
+            self.program_spi_page(sd.SPARTAN_SPI_REG_ADDR, 2, raw_magic_bytes)
+
+    def disable_isp_flash(self):
+        """
+        This method Disables access to ISP Flash by reading from a
+        certain address space
+        (And subsequently clearing the Magic Flash Byte)
+        """
+        # This will return the SpartanFirmwareVersion as an
+        # integer_tuple (major, minor)
+        (major_version, minor_version) = \
+            self.get_spartan_firmware_version_tuple()
+        if ((major_version == sd.CURRENT_SPARTAN_MAJOR_VER) and
+            (minor_version >= sd.CURRENT_SPARTAN_MINOR_VER)) \
+                or (major_version > sd.CURRENT_SPARTAN_MAJOR_VER):
+            # Seems as though we just need to read a certain address
+            # to clear it
+            debugmsg = 'Reading address to clear Magic Bytes...'
+            self.logger.debug(debugmsg)
+            rd_addr = sd.SPARTAN_SPI_REG_ADDR + \
+                sd.SPARTAN_SPI_CLEAR_FLASH_MAGIC_BYTE_OFFSET
+            result = self.read_spi_page(rd_addr, 1)
+            if len(result) < 1:
+                # Failed to read
+                errmsg = 'Failed to disable access to ISP Flash'
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
+
+    # endregion
 
     @staticmethod
     def reverse_byte(input_byte):
-        '''
-        Method created to replicate 'SwappedByte' method in SpartanFlashReconfigApp.cpp;
-        "This is done so that the .ufp bitstream matches raw data format" (?)
+        """
+        Method created to replicate 'SwappedByte' method in
+        SpartanFlashReconfigApp.cpp;
+
+        'This is done so that the .ufp bitstream matches raw data format' (?)
         Mirrors 8-bit integer (byte) about its center-point
         e.g. 0b01010110 -> 0b01101010
+
         :param input_byte: to be byte-swapped/mirrored
         :return: Reversed-byte
-        '''
-
+        """
+        # TODO: clean this function up, better way to do this
         mirrored_byte = 0x0
-
         if (input_byte & 0x01) == 0x01:
             mirrored_byte = mirrored_byte | 0x80
         if (input_byte & 0x02) == 0x02:
@@ -2351,123 +2261,243 @@ class SkarabTransport(Transport):
             mirrored_byte = mirrored_byte | 0x02
         if (input_byte & 0x80) == 0x80:
             mirrored_byte = mirrored_byte | 0x01
-
         return mirrored_byte
 
-    @staticmethod
-    def verify_bytes_now(written_bytes, returned_bytes):
-        '''
+    def verify_bytes_now(self, written_bytes, returned_bytes):
+        """
         Used to 'Verify on the fly' the data programmed to SPARTAN Flash
         via program_spi_page.
+
         :param written_bytes:
         :param returned_bytes:
-        :return:
-        '''
-
+        """
         if len(written_bytes) != len(returned_bytes):
             # Problem
             errmsg = 'Num Written Bytes ({}) != Num Returned Bytes ({})'\
                 .format(len(written_bytes), len(returned_bytes))
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
-
         for byte_counter in range(len(written_bytes)):
             if written_bytes[byte_counter] != returned_bytes[byte_counter]:
                 # Problem - Data mismatch
                 errmsg = 'Data mismatch at index {}'.format(byte_counter)
-                LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
             # else: Continue
 
         # All data matched
         return True
 
-    def spartan_flash_reconfig(self, filename, blind_reconfig=False):
-        '''
-        This is the entire function that makes the necessary function calls to reconfigure the Spartan's Flash
-        :param filename: The actual .ufp file that is to be written to the Spartan FPGA
-        :param blind_reconfig: Reconfigure the board and don't wait to verify what has been written
-        :return: Boolean - Success/Fail - 1/0
-        '''
+    # region === SpartanFlashReconfig ===
 
-        # TODO: Figure out how we can use get_spartan_firmware_version in checking versions
+    def spartan_flash_reconfig(self, filename, blind_reconfig=False):
+        """
+        This is the entire function that makes the necessary function calls
+        to reconfigure the Spartan's Flash
+        
+        :param filename: The actual .ufp file that is to be written to
+            the Spartan FPGA
+        :param blind_reconfig: Reconfigure the board and don't wait to verify
+            what has been written
+        :return: Boolean - Success/Fail - 1/0
+        """
+        # TODO: Figure out how we can use get_spartan_firmware_version in
+        # checking versions
 
         # For completeness, make sure the input file is of a .bin disposition
         if os.path.splitext(filename)[1] != '.ufp':
             # File extension was not .ufp
             errmsg = 'Please use .ufp file to reconfigure Spartan FPGA'
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
+            self.logger.error(errmsg)
+            raise sd.SkarabInvalidBitstream(errmsg)
 
-        # Currently there is no real method of confirming the integrity of the data
-        # in the input .ufp file
-        LOGGER.debug('Checking input .ufp bitstream...')
-        (result, image_to_program) = self.check_ufp_bitstream(filename)
+        # Before we breakdown the bitstream, check the SpartanFirmwareVersion
+        self.enable_isp_flash()
+
+        # Currently there is no real method of confirming the integrity
+        # of the data in the input .ufp file
+        self.logger.debug('Checking input .ufp bitstream...')
+        (result, image_to_program) = skfops.check_ufp_bitstream(filename)
         if not result:
-            errmsg = "Incompatible .ufp file detected."
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
+            errmsg = 'Incompatible .ufp file detected.'
+            self.logger.error(errmsg)
+            raise sd.SkarabInvalidBitstream(errmsg)
 
-        LOGGER.debug('SPARTAN FLASH RECONFIG: Analysing Words')
-        num_pages, num_sectors = self.analyse_ufp_bitstream(image_to_program)
+        self.logger.debug('SPARTAN FLASH RECONFIG: Analysing Words')
+        num_pages, num_sectors = skfops.analyse_ufp_bitstream(image_to_program)
 
         if (num_pages == 0) or (num_sectors == 0):
             # Problem
             errmsg = 'Failed to Analyse File successfully'
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
+            self.logger.error(errmsg)
+            raise sd.SkarabInvalidBitstream(errmsg)
         # else: Continue
 
-        LOGGER.debug('SPARTAN FLASH RECONFIG: Erasing SPI Sectors')
+        self.logger.debug('SPARTAN FLASH RECONFIG: Erasing SPI Sectors')
         if not self.erase_sectors(num_sectors):
             # Problem
             errmsg = 'Failed to Erase SPI Sectors'
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
-        LOGGER.debug('SPARTAN FLASH RECONFIG: Programming Words to SPI Sectors')
+        # Second part of the Magic Flash Bytes
+        self.disable_isp_flash()
+
+        self.logger.debug('SPARTAN FLASH RECONFIG: Programming Words to SPI Sectors')
+        self.enable_isp_flash()
+
         # For Debug purposes
-        # (result, returned_data) = self.program_pages(image_to_program, num_pages)
+        # (result, returned_data) = self.program_pages(
+        #     image_to_program, num_pages)
         if not self.program_pages(image_to_program, num_pages):
             # Problem
             errmsg = 'Failed to Program SPI Sectors'
-            LOGGER.error(errmsg)
-            raise ProgrammingError(errmsg)
+            self.logger.error(errmsg)
+            raise sd.SkarabProgrammingError(errmsg)
         # else: Continue
 
+        self.disable_isp_flash()
+
         if not blind_reconfig:
-
-            LOGGER.debug('VIRTEX FLASH RECONFIG: Verifying words that were written '
-                         'to Flash Memory')
-
+            self.logger.debug('VIRTEX FLASH RECONFIG: Verifying words that '
+                         'were written to Flash Memory')
+            self.enable_isp_flash()
             if not self.verify_bytes(image_to_program):
                 # Problem
-                errmsg = "Failed to Verify data programmed SPI Sectors"
-                LOGGER.error(errmsg)
-                raise ProgrammingError(errmsg)
+                errmsg = 'Failed to Verify data programmed SPI Sectors'
+                self.logger.error(errmsg)
+                raise sd.SkarabProgrammingError(errmsg)
                 # else: Continue
+
+            self.disable_isp_flash()
 
         # Print new SpartanFirmwareVersion
         # new_firmware_version = self.get_spartan_firmware_version()
-        # --> Can't do that anymore! Spartan Firmware Version only updates after full power cycle!
-        debugmsg = 'Please do a full power cycle of the SKARAB in order to complete ' \
-                   'SpartanFlashReconfig Process    '
-        LOGGER.debug(debugmsg)
-
+        # --> Can't do that anymore! Spartan Firmware Version only
+        # updates after full power cycle!
+        debugmsg = 'Please do a full power cycle of the SKARAB in order to ' \
+                   'complete SpartanFlashReconfig Process'
+        self.logger.debug(debugmsg)
         return True
 
-    # board level functions
+    # endregion
 
-    def check_programming_packet_count(self):
+    # endregion
+
+    # region --- SKARAB ADC-related methods ---
+
+    # region === Direct SPI Write ===
+    # - Perform an SPI write on the SKARAB ADC mezzanine
+    def direct_spi_write(self, mezzanine_site, spi_destination, address, data):
+        i2c_interface = mezzanine_site + 1
+
+        # Write ADDRESS
+        write_byte = (address >> 8) & 0xFF
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_ADDRESS_MSB_REG, write_byte)
+
+        write_byte = (address & 0xFF)
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_ADDRESS_LSB_REG, write_byte)
+
+        # Write DATA
+        write_byte = (data >> 8) & 0xFF
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_MSB_REG, write_byte)
+
+        write_byte = (data & 0xFF)
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_LSB_REG, write_byte)
+
+        write_byte = spi_destination
+        # Write, so read/not write bit is 0
+        write_byte = write_byte | sd.START_DIRECT_SPI_ACCESS
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG, write_byte)
+
+        # Wait for the update to complete
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        timeout = 0
+        while ((read_byte[0] & sd.START_DIRECT_SPI_ACCESS) != 0) and (timeout < 1000):
+            self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+            read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+            timeout += 1
+
+        if timeout == 1000:
+            print("direct_spi_write ERROR: Timeout waiting for the SPI transaction to complete.")
+
+
+    # region === Direct SPI Read ===
+    # - Perform an SPI read on the SKARAB ADC mezzanine
+    def direct_spi_read(self, mezzanine_site, spi_destination, address):
+        """
+		Low-level SPI read function used within other functions of this class.
+        :param spi_destination:
+        :param address:
+        :return:
+		"""
+        i2c_interface = mezzanine_site + 1
+        # Write ADDRESS
+        write_byte = (address >> 8) & 0xFF
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 
+                                    sd.DIRECT_SPI_ADDRESS_MSB_REG, write_byte)
+
+        write_byte = (address & 0xFF)
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
+                                    sd.DIRECT_SPI_ADDRESS_LSB_REG, write_byte)
+
+
+        write_byte = spi_destination | START_DIRECT_SPI_ACCESS | DIRECT_SPI_READ_NOT_WRITE
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
+                                    sd.DIRECT_SPI_CONTROL_REG, write_byte)
+
+        # Wait for the update to complete
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        timeout = 0
+        while (((read_byte[0] & sd.START_DIRECT_SPI_ACCESS) != 0) and (timeout < 1000)):
+            self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_CONTROL_REG)
+            read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+            timeout = timeout + 1
+
+        if timeout == 1000:
+            print("DirectSpiWrite ERROR: Timeout waiting for the SPI transaction to complete.")
+
+        # Now get the read data
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_MSB_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        read_word = read_byte[0] << 8
+
+        self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DIRECT_SPI_DATA_LSB_REG)
+        read_byte = self.read_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+
+        read_word = read_word | read_byte[0]
+
+        return read_word
+
+    # endregion
+
+    # endregion
+    
+    
+    # region --- board level functions ---
+
+    def check_programming_packet_count(self,
+                                       timeout=None,
+                                       retries=None):
         """
         Checks the number of packets programmed into the SDRAM of SKARAB
+        
         :return: {num_ethernet_frames, num_ethernet_bad_frames,
-        num_ethernet_overload_frames}
+            num_ethernet_overload_frames}
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         sdram_reconfigure_req = sd.SdramReconfigureReq(
-            seq_num=self.seq_num,
             output_mode=sd.SDRAM_PROGRAM_MODE,
             clear_sdram=False,
             finished_writing=False,
@@ -2480,53 +2510,52 @@ class SkarabTransport(Transport):
             do_continuity_test=False,
             continuity_test_output_high=0x0,
             continuity_test_output_low=0x0)
-        sdram_reconfigure_resp = self.send_packet(
-            payload=sdram_reconfigure_req.create_payload(),
-            response_type='SdramReconfigureResp',
-            expect_response=True,
-            command_id=sd.SDRAM_RECONFIGURE,
-            number_of_words=19,
-            pad_words=0)
+        response = self.send_packet(sdram_reconfigure_req, timeout=timeout,
+                                    retries=retries)
         packet_count = {
-            'Ethernet Frames': sdram_reconfigure_resp.num_ethernet_frames,
-            'Bad Ethernet Frames':
-                sdram_reconfigure_resp.num_ethernet_bad_frames,
+            'Ethernet Frames': response.packet['num_ethernet_frames'],
+            'Bad Ethernet Frames': response.packet['num_ethernet_bad_frames'],
             'Overload Ethernet Frames':
-                sdram_reconfigure_resp.num_ethernet_overload_frames
+                response.packet['num_ethernet_overload_frames']
         }
         return packet_count
 
-    def get_firmware_version(self):
+    def get_virtex7_firmware_version(self, timeout=None, retries=None):
         """
-        Read the version of the firmware
+        Read the version of the Virtex 7 firmware
+        
         :return: golden_image, multiboot, firmware_major_version,
-        firmware_minor_version
+            firmware_minor_version
         """
-        reg_data = self.read_board_reg(sd.C_RD_VERSION_ADDR)
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        reg_data = self.read_board_reg(sd.C_RD_VERSION_ADDR, timeout=timeout,
+                                       retries=retries)
         if reg_data:
-            firmware_major_version = (reg_data >> 16) & 0x3FFF
-            firmware_minor_version = reg_data & 0xFFFF
+            firmware_major_version = (reg_data >> 16) & 0x3fff
+            firmware_minor_version = reg_data & 0xffff
             return reg_data >> 31, reg_data >> 30 & 0x1, '{}.{}'.format(
                 firmware_major_version, firmware_minor_version)
         return None, None, None
 
-    def get_soc_version(self):
+    def get_microblaze_hardware_version(self):
         """
-        Read the version of the soc
-        :return: golden_image, multiboot, soc_major_version, soc_minor_version
+        Read the version of the microblaze hardware (SoC) implementation
+        
+        :return: soc_version (string)
         """
         reg_data = self.read_board_reg(sd.C_RD_SOC_VERSION_ADDR)
         if reg_data:
-            soc_major_version = (reg_data >> 16) & 0x3FFF
-            soc_minor_version = reg_data & 0xFFFF
-            return reg_data >> 31, reg_data >> 30 & 0x1, '{}.{}'.format(
-                soc_major_version, soc_minor_version)
-        return None
+            soc_major_version = (reg_data >> 16) & 0x3fff
+            soc_minor_version = reg_data & 0xffff
+            return '{}.{}'.format(soc_major_version, soc_minor_version)
 
     def front_panel_status_leds(self, led_0_on, led_1_on, led_2_on, led_3_on,
                                 led_4_on, led_5_on, led_6_on, led_7_on):
         """
         Control front panel status LEDs
+        
         :param led_0_on: True: Turn LED 0 on, False: off
         :param led_1_on: True: Turn LED 1 on, False: off
         :param led_2_on: True: Turn LED 2 on, False: off
@@ -2535,10 +2564,8 @@ class SkarabTransport(Transport):
         :param led_5_on: True: Turn LED 5 on, False: off
         :param led_6_on: True: Turn LED 6 on, False: off
         :param led_7_on: True: Turn LED 7 on, False: off
-        :return: None
         """
         led_mask = 0
-
         if led_0_on:
             led_mask = led_mask | sd.FRONT_PANEL_STATUS_LED0
         if led_1_on:
@@ -2555,63 +2582,185 @@ class SkarabTransport(Transport):
             led_mask = led_mask | sd.FRONT_PANEL_STATUS_LED6
         if led_7_on:
             led_mask = led_mask | sd.FRONT_PANEL_STATUS_LED7
-
         self.write_board_reg(sd.C_WR_FRONT_PANEL_STAT_LED_ADDR, led_mask)
+        
+    def control_front_panel_leds_write(self, dsp_override=True):
+        """
+        Neatly packaged command that switches control of FrontPanelStatus LEDs
+        between DSP and BSP control
+        - Controlled via BSP by default
+        :param dsp_override: Boolean - 1/0 - True/False
+        :return: Boolean - 1/0 - True/False
+        """
+
+        # Easiest to just write the value, then check it
+        result = self.write_board_reg(sd.C_WR_DSP_OVERRIDE_ADDR, dsp_override)
+
+        if result.packet['reg_data_low'] != dsp_override:
+            # Problem
+            errmsg = 'Failed to switch control of FrontPanel LEDs...'
+            self.logger.error(errmsg)
+            raise SkarabWriteFailed(errmsg)
+
+        # else: Success
+        led_controller = 'DSP Design' if dsp_override else 'Board Support Package'
+        debugmsg = 'Successfully changed control of FrontPanel LEDs to {}...'.format(led_controller)
+        self.logger.debug(debugmsg)
+        print(debugmsg)
+        return True
+
+    def control_front_panel_leds_read(self):
+        """
+        Neatly packaged command that checks who is controlling FrontPanelStatus LEDs
+        - Controlled via BSP by default
+        :return:
+        """
+        result = self.read_board_reg(sd.C_RD_DSP_OVERRIDE_ADDR)
+
+        if result:
+            debugmsg = 'DSP Design is controlling FrontPanel LEDs...'
+        else:
+            debugmsg = 'Board Support Package is controlling FrontPanel LEDs...'
+
+        self.logger.debug(debugmsg)
+        print(debugmsg)
+
+    def control_front_panel_leds_write(self, dsp_override=True):
+        """
+        Neatly packaged command that switches control of FrontPanelStatus LEDs
+        between DSP and BSP control
+        - Controlled via BSP by default
+
+        :param dsp_override: Boolean - 1/0 - True/False
+        :return: Boolean - 1/0 - True/False
+        """
+
+        # Easiest to just write the value, then check it
+        result = self.write_board_reg(sd.C_WR_DSP_OVERRIDE_ADDR, dsp_override)
+
+        if result.packet['reg_data_low'] != dsp_override:
+            # Problem
+            errmsg = 'Failed to switch control of FrontPanel LEDs...'
+            self.logger.error(errmsg)
+            raise SkarabWriteFailed(errmsg)
+
+        # else: Success
+        led_controller = 'DSP Design' if dsp_override else 'Board Support Package'
+        debugmsg = 'Successfully changed control of FrontPanel LEDs to {}...'.format(led_controller)
+        self.logger.debug(debugmsg)
+        print(debugmsg)
+        return True
+
+    def control_front_panel_leds_read(self):
+        """
+        Neatly packaged command that checks who is controlling FrontPanelStatus LEDs
+        - Controlled via BSP by default
+        """
+        result = self.read_board_reg(sd.C_RD_DSP_OVERRIDE_ADDR)
+
+        if result:
+            debugmsg = 'DSP Design is controlling FrontPanel LEDs...'
+        else:
+            debugmsg = 'Board Support Package is controlling FrontPanel LEDs...'
+
+        self.logger.debug(debugmsg)
+        print(debugmsg)
 
     def _prepare_sdram_ram_for_programming(self):
         """
         Prepares the sdram for programming with FPGA image
-        :return:
         """
         # put sdram in flash mode to enable FPGA outputs
         try:
             self.sdram_reconfigure(output_mode=sd.FLASH_MODE)
         except SkarabSdramError:
             errmsg = 'Error putting SDRAM in flash mode.'
-            LOGGER.error(errmsg)
+            self.logger.error(errmsg)
             raise SkarabSdramError(errmsg)
         # clear sdram and clear ethernet counters
         try:
             self.sdram_reconfigure(clear_sdram=True, clear_eth_stats=True)
         except SkarabSdramError:
             errmsg = 'Error clearing SDRAM.'
-            LOGGER.error(errmsg)
+            self.logger.error(errmsg)
             raise SkarabSdramError(errmsg)
         # put in sdram programming mode
         try:
             self.sdram_reconfigure()
         except SkarabSdramError:
             errmsg = 'Error putting SDRAM in programming mode.'
-            LOGGER.error(errmsg)
+            self.logger.error(errmsg)
             raise SkarabSdramError(errmsg)
-        LOGGER.info('SDRAM successfully prepared.')
+        self.logger.info('SDRAM successfully prepared.')
 
     def _complete_sdram_configuration(self):
         """
         Completes sdram programming and configuration. Sets to boot from sdram
         and triggers reboot
+
         :return: True if success
         """
         try:
             self.sdram_reconfigure(about_to_boot=True)
         except SkarabSdramError:
             errmsg = 'Error enabling boot from SDRAM.'
-            LOGGER.error(errmsg)
+            self.logger.error(errmsg)
             raise SkarabSdramError(errmsg)
         try:
             self.sdram_reconfigure(do_reboot=True)
         except SkarabSdramError:
             errmsg = 'Error triggering reboot.'
-            LOGGER.error(errmsg)
+            self.logger.error(errmsg)
             raise SkarabSdramError(errmsg)
-        LOGGER.info('Rebooting from SDRAM.')
+        self.logger.info('Skarab is rebooting from SDRAM.')
+
+    def write_hmc_i2c(self, interface, slave_address, write_address, write_data,
+                     timeout=None,
+                     retries=None):
+        """
+        Write a register on the HMC device via the I2C interface
+        Also returns the data
+        :param interface: identifier for i2c interface:
+                          0 - SKARAB Motherboard i2c
+                          1 - Mezzanine 0 i2c
+                          2 - Mezzanine 1 i2c
+                          3 - Mezzanine 2 i2c
+                          4 - Mezzanine 3 i2c
+        :param slave_address: I2C slave address of device to write
+        :param write_address: register address on device to write
+        :param write_data: data to write to HMC device
+        :return: operation status: 0 - Fail, 1 - Success
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        # hmc addresses are 24/32bit, pack them as 4 Bytes (32 bits)
+        unpacked_addr = struct.unpack('!4B', struct.pack('!I', write_address))
+        write_address = ''.join([struct.pack('!H', x) for x in unpacked_addr])
+
+        unpacked_data = struct.unpack('!4B', struct.pack('!I', write_data))
+        write_data = ''.join([struct.pack('!H', x) for x in unpacked_data])
+
+        request = sd.WriteHMCI2CReq(interface, slave_address, write_address, write_data)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to HMC I2C write request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['write_success']:
+            errmsg = 'HMC I2C write failed!'
+            raise SkarabWriteFailed(errmsg)
+        return response.packet['write_success']
 
     def read_hmc_i2c(self, interface, slave_address, read_address,
-                     format_print=False):
+                     format_print=False,
+                     timeout=None,
+                     retries=None):
         """
         Read a register on the HMC device via the I2C interface
         Prints the data in binary (32-bit) and hexadecimal formats
         Also returns the data
+
         :param interface: identifier for i2c interface:
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
@@ -2620,59 +2769,86 @@ class SkarabTransport(Transport):
                           4 - Mezzanine 3 i2c
         :param slave_address: I2C slave address of device to read
         :param read_address: register address on device to read
+        :param format_print: print the read data in more readable form
         :return: read data / None if fails
         """
-        response_type = 'sReadHMCI2CResp'
-        expect_response = True
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
         # handle read address (pack it as 4 16-bit words)
         # TODO: handle this in the createPayload method
         unpacked = struct.unpack('!4B', struct.pack('!I', read_address))
         read_address = ''.join([struct.pack('!H', x) for x in unpacked])
-
-        # create payload packet structure
-        request = sd.ReadHMCI2CReq(self.seq_num, interface, slave_address,
-                                   read_address)
-        # send payload and return response object
-        response = self.send_packet(payload=request.create_payload(),
-                                    response_type='ReadHMCI2CResp',
-                                    expect_response=True,
-                                    command_id=sd.READ_HMC_I2C,
-                                    number_of_words=15, pad_words=2)
+        request = sd.ReadHMCI2CReq(interface, slave_address, read_address)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is None:
             errmsg = 'Invalid response to HMC I2C read request.'
-            raise InvalidResponse(errmsg)
-
-        if not response.read_success:
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['read_success']:
             errmsg = 'HMC I2C read failed!'
-            raise ReadFailed(errmsg)
-
-        hmc_read_bytes = response.read_bytes  # this is the 4 bytes
+            raise SkarabReadFailed(errmsg)
+        hmc_read_bytes = response.packet['read_bytes']  # this is the 4 bytes
         # read
         # from the register
         # want to create a 32 bit value
-
-        hmc_read_word = struct.unpack('!I', struct.pack('!4B', *hmc_read_bytes))[0]
+        hmc_read_word = struct.unpack(
+            '!I', struct.pack('!4B', *hmc_read_bytes))[0]
         if format_print:
-            LOGGER.info('Binary: \t {:#032b}'.format(hmc_read_word))
-            LOGGER.info('Hex:    \t ' + '0x' + '{:08x}'.format(
-                hmc_read_word))
+            self.logger.info('Binary: \t {:#032b}'.format(hmc_read_word))
+            self.logger.info('Hex:    \t ' + '0x' + '{:08x}'.format(hmc_read_word))
         return hmc_read_word
 
-    def get_sensor_data(self):
+    def get_skarab_version_info(self):
+        """
+        Get version info of all SKARAB components
+
+        :return: dictionary containing all SKARAB version numbers:
+        {
+         virtex7_firmware_version:,
+         embedded_software_version:,
+         spartan_firmware_version:,
+         soc_version:,
+         multiboot_image:,
+         golden_image:,
+         toolflow_image:
+         }
+        """
+        golden_image, multiboot_image, firmware_version = \
+            self.get_virtex7_firmware_version()
+        return {
+            'golden_image': bool(golden_image),
+            'multiboot_image': bool(multiboot_image),
+            'virtex7_firmware_version': firmware_version,
+            'toolflow_image': not (golden_image or multiboot_image),
+            'spartan_firmware_version': self.get_spartan_firmware_version(),
+            'microblaze_hardware_version':
+                self.get_microblaze_hardware_version(),
+            'microblaze_software_version': self.get_embedded_software_version(),
+        }
+
+    def get_sensor_data(self,
+                        timeout=None,
+                        retries=None):
         """
         Get sensor data.
+
         Units:
-        Fan Speed - RPM
-        Fan Speed PWM - PWM %
-        Temperature Sensors - degrees Celsius
-        Voltage - Volts (V)
-        Currents - Amps (A)
+        
+        * Fan Speed - RPM
+        * Fan Speed PWM - PWM %
+        * Temperature Sensors - degrees Celsius
+        * Voltage - Volts (V)
+        * Currents - Amps (A)
+
         :return: all sensor data rolled up into a dictionary
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
 
         def sign_extend(value, bits):
             """
             Performs 2's compliment sign extension
+
             :param value: value to sign extend
             :param bits: number of bits making up the value
             :return: sign extended value
@@ -2684,6 +2860,7 @@ class SkarabTransport(Transport):
             """
             Checks the value returned from the temperature sensor and handles
             it accordingly.
+
             :param value: value returned from temperature sensor
             :return: correct temperature value
             """
@@ -2696,6 +2873,40 @@ class SkarabTransport(Transport):
             value = float(value)
             return round(value / 100.0, 2)
 
+        def mezzanine_temperature_check_qsfp(value):
+            """
+            Checks the returned QSFP mezzanine temperatures and handles them
+            accordingly.
+
+            NB: This sensor doesn't reliably report the temperature and is omitted.
+
+            :param value: value returned from the temperature sensor
+            :return: correct mezzanine temperature value
+            """
+            # scale the measured voltage
+            temp = ((value / 1000.0) + 2.34) / 4.0
+            temp = ((temp - 0.76) / 0.0025) + 25.0
+
+            # convert to temperature
+            return round(temp, 2)
+
+        def mezzanine_temperature_check_hmc(value):
+            """
+            Checks the returned HMC mezzanine temperatures and handles them
+            accordingly.
+            :param value: value returned from the temperature sensor
+            :return: correct mezzanine temperature value
+            """
+            # scale the measured voltage
+            temp = value
+            temp = -1.0 * ((5.506 - math.sqrt(30.316036 + 0.00704 * (870.6
+                                                                     -
+                                                                     temp)))
+                           / 0.00352) + 30.0
+
+            # convert to temperature
+            return round(temp, 2)
+
         def voltage_current_monitor_temperature_check(value):
             """
             Checks the value returned for the voltage monitor temperature
@@ -2704,45 +2915,35 @@ class SkarabTransport(Transport):
             :param value: value returned by voltage monitor temperature sensor
             :return: correct temperature value
             """
-
-            mantissa = value & 0x07FF  # get lower 11 bits
-
+            # get lower 11 bits
+            mantissa = value & 0x07FF
             if (mantissa & 0x400) != 0:
-                mantissa = sign_extend(mantissa,
-                                       11)  # lower 11 bits are for mantissa
-
+                # lower 11 bits are for mantissa
+                mantissa = sign_extend(mantissa, 11)
             mantissa = int(mantissa)
-
-            exponent = (value >> 11) & 0x1F  # get upper 5 bits
-
+            # get upper 5 bits
+            exponent = (value >> 11) & 0x1F
             if (exponent & 0x10) != 0:
-                exponent = sign_extend(exponent,
-                                       5)  # upper 5 bits are for exponent
-
+                # upper 5 bits are for exponent
+                exponent = sign_extend(exponent, 5)
             exponent = int(exponent)
-
             return round(float(mantissa) * pow(2.0, float(exponent)), 2)
 
         def voltage_handler(raw_sensor_data, index):
             """
             Handles the data returned by the voltage monitor for the various
             board voltages. Returns actual voltages extracted from this data.
+            
             :param raw_sensor_data: array containing raw sensor data
             :param index: index at which next voltage sensor data begins
             :return: extracted voltage
             """
-
             voltage = raw_sensor_data[index]
-
             voltage_scale_factor = raw_sensor_data[index + 1]
-
             if (voltage_scale_factor & 0x10) != 0:
                 voltage_scale_factor = sign_extend(voltage_scale_factor, 5)
-
             voltage_scale_factor = int(voltage_scale_factor)
-
             val = float(voltage) * float(pow(2.0, float(voltage_scale_factor)))
-
             return round(
                 val * sd.voltage_scaling[str(raw_sensor_data[index + 2])],
                 2)
@@ -2751,6 +2952,7 @@ class SkarabTransport(Transport):
             """
             Handles the data returned by the current monitor for the various
             board currents. Returns actual current extracted from this data.
+            
             :param raw_sensor_data: array containing raw sensor data
             :param index: index at which next current sensor data begins
             :return: extracted current
@@ -2773,44 +2975,51 @@ class SkarabTransport(Transport):
         def check_fan_speed(fan_name, value):
             """
             Checks if a given fan is running within acceptable limits
+            
             :param fan_name: fan to be checked
             :param value: fan speed value
             :return: OK, WARNING or ERROR
             """
-            # TODO - this statement it too long and unreadable!
-            if value > ((self.sensor_data[fan_name.replace('_rpm', '_pwm')] + 10.0) / 100.0) * \
-                    sd.fan_speed_ranges[fan_name][0] or value < ((self.sensor_data[fan_name.replace('_rpm','_pwm')] - 10.0) / 100.0) * \
-                    sd.fan_speed_ranges[fan_name][0]:
-                return 'ERROR'
+            if value > sd.fan_speed_ranges[fan_name][0] or value < \
+                        sd.fan_speed_ranges[fan_name][1]:
+                return 'warning'
             else:
-                return 'OK'
+                return 'nominal'
 
         def check_temperature(sensor_name, value, inlet_ref):
             """
             Checks if a given temperature is within acceptable range
+            
             :param sensor_name: temperature to check
             :param value: temperature value
             :param inlet_ref: inlet temperature; used as reference for other
-            temperature thresholds
+                temperature thresholds
             :return: OK, WARNING or ERROR
             """
+
             if sensor_name == 'inlet_temperature_degC':
                 if value > sd.temperature_ranges[sensor_name][0] or value < \
                         sd.temperature_ranges[sensor_name][1]:
-                    return 'ERROR'
+                    return 'error'
                 else:
-                    return 'OK'
+                    return 'nominal'
             else:
+                # handle hmc die temperatures of unintialised HMC cores
+                if 'hmc' in sensor_name:
+                    if value == 0xffeeddcc:
+                        # umc unitialised
+                        return 'unknown'
                 if value > inlet_ref + sd.temperature_ranges[sensor_name][
                     0] or value < inlet_ref + \
                         sd.temperature_ranges[sensor_name][1]:
-                    return 'ERROR'
+                    return 'error'
                 else:
-                    return 'OK'
+                    return 'nominal'
 
         def check_current(current_name, value):
             """
             Checks if a given PSU current reading is within acceptable range
+            
             :param current_name: current to check
             :param value: value of the sensor
             :return: OK, WARNING or ERROR
@@ -2818,16 +3027,17 @@ class SkarabTransport(Transport):
 
             if value > sd.current_ranges[current_name][0] or value < \
                     sd.current_ranges[current_name][1]:
-                # return '\033[0;31m{}\033[00m'.format('ERROR')
-                return 'ERROR'
+                # return '\033[0;31m{}\033[00m'.format('error')
+                return 'error'
 
             else:
-                # return '\033[0;31m{}\033[00m'.format('OK')
-                return 'OK'
+                # return '\033[0;31m{}\033[00m'.format('nominal')
+                return 'nominal'
 
         def check_voltage(voltage_name, value):
             """
             Checks if a given PSU voltage reading is within acceptable range
+            
             :param voltage_name: voltage to check
             :param value: value of the sensor
             :return: OK, WARNING or ERROR
@@ -2835,11 +3045,11 @@ class SkarabTransport(Transport):
 
             if value > sd.voltage_ranges[voltage_name][0] or value < \
                     sd.voltage_ranges[voltage_name][1]:
-                # return '\033[0;31m{}\033[00m'.format('ERROR')
-                return 'ERROR'
+                # return '\033[0;31m{}\033[00m'.format('error')
+                return 'error'
             else:
-                # return '\033[0;31m{}\033[00m'.format('OK')
-                return 'OK'
+                # return '\033[0;31m{}\033[00m'.format('nominal')
+                return 'nominal'
 
         def parse_fan_speeds_rpm(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -2848,11 +3058,22 @@ class SkarabTransport(Transport):
                     self.sensor_data[key] = (
                             fan_speed, 'rpm', check_fan_speed(key, fan_speed))
 
-        def parse_fan_speeds_pwm(raw_sensor_data):
+        def parse_fan_speeds_generic(raw_sensor_data):
             for key, value in sd.sensor_list.items():
                 if 'fan_pwm' in key:
                     self.sensor_data[key] = round(
                         raw_sensor_data[value] / 100.0, 2)
+
+        def parse_fan_speeds_pwm(raw_sensor_data):
+            for key, value in sd.sensor_list.items():
+                if 'fan_pwm' in key:
+                    pwm_value = round(raw_sensor_data[value] / 100.0, 2);
+                    if(pwm_value > 100 or pwm_value < 0):
+                        message = 'error'
+                    else:
+                        message = 'nominal'
+                    self.sensor_data[key] = (
+                            pwm_value, '%',message)
 
         def parse_temperatures(raw_sensor_data):
             # inlet temp (reference)
@@ -2867,6 +3088,14 @@ class SkarabTransport(Transport):
                             key] = (temperature, 'degC',
                                     check_temperature(key, temperature,
                                                       inlet_ref))
+                    elif 'hmc' in key:
+                        temperature = struct.unpack(
+                            '!I', struct.pack('!4B',
+                                              *raw_sensor_data[value:value+4]))[0]
+                        self.sensor_data[key] = (-1 if temperature==0xffeeddcc else temperature,
+                                                 'degC',
+                                                 check_temperature(key, temperature, inlet_ref=0))
+
                     else:
                         temperature = temperature_value_check(
                             raw_sensor_data[value])
@@ -2874,6 +3103,13 @@ class SkarabTransport(Transport):
                                                  check_temperature(key,
                                                                    temperature,
                                                                    inlet_ref))
+
+        def parse_mezzanine_temperatures(raw_sensor_data):
+            for key, value in sd.sensor_list.items():
+
+                if 'mezzanine' in key:
+                    temperature = mezzanine_temperature_check_hmc(raw_sensor_data[value])
+                    self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref=0))
 
         def parse_voltages(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -2889,304 +3125,67 @@ class SkarabTransport(Transport):
                     self.sensor_data[key] = (current, 'amperes',
                                              check_current(key, current))
 
-        request = sd.GetSensorDataReq(self.seq_num)
-        get_sensor_data_resp = self.send_packet(
-            request.create_payload(), 'GetSensorDataResp', True,
-            sd.GET_SENSOR_DATA, 95, 2)
-
-        if get_sensor_data_resp is not None:
+        request = sd.GetSensorDataReq()
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is not None:
             # raw sensor data received from SKARAB
-            recvd_sensor_data_values = get_sensor_data_resp.sensor_data
+            recvd_sensor_data_values = response.packet['sensor_data']
             # parse the raw data to extract actual sensor info
-            parse_fan_speeds_pwm(recvd_sensor_data_values)
+            parse_fan_speeds_generic(recvd_sensor_data_values)
             parse_fan_speeds_rpm(recvd_sensor_data_values)
+            parse_fan_speeds_pwm(recvd_sensor_data_values)
             parse_currents(recvd_sensor_data_values)
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
+            parse_mezzanine_temperatures(recvd_sensor_data_values)
+
             return self.sensor_data
 
-        return False
+        else:
+            raise SkarabInvalidResponse('Error reading board temperatures')
 
-    def set_fan_speed(self, fan_page, pwm_setting):
+    def set_fan_speed(self, fan_page, pwm_setting,
+                      timeout=None,
+                      retries=None):
         """
         Sets the speed of a selected fan on the SKARAB motherboard. Desired
         speed is given as a PWM setting: range: 0.0 - 100.0
+        
         :param fan_page: desired fan
-        :param pwm_setting: desired PWM speed (as a value from 0.0 to 100.0
+        :param pwm_setting: desired PWM speed (as a value from 0.0 to 100.0)
         :return: (new_fan_speed_pwm, new_fan_speed_rpm)
         """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
         # check desired fan speed
         if pwm_setting > 100.0 or pwm_setting < 0.0:
-            LOGGER.error('Given speed out of expected range.')
+            self.logger.error('Given speed out of expected range.')
             return
-        request = sd.SetFanSpeedReq(self.seq_num, fan_page, pwm_setting)
-        payload = request.create_payload()
-        LOGGER.debug('Payload = %s', repr(payload))
-        set_fan_speed_resp = self.send_packet(
-            payload, 'SetFanSpeedResp', True, sd.SET_FAN_SPEED, 11, 7)
-        if set_fan_speed_resp is not None:
-            return (set_fan_speed_resp.fan_speed_pwm / 100.0,
-                    set_fan_speed_resp.fan_speed_rpm)
+        request = sd.SetFanSpeedReq(fan_page, pwm_setting)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is not None:
+            return (response.packet['fan_speed_pwm'] / 100.0,
+                    response.packet['fan_speed_rpm'])
         return
-
-    # support functions
-    @staticmethod
-    def convert_hex_to_bin(hex_file, extract_to_disk=False):
-        # TODO: error checking/handling
-        """
-        Converts a hex file to a bin file with little endianness for
-        programming to sdram, also pads to 4096 word boundary
-        :param hex_file: file name of hex file to be converted
-        :param extract_to_disk: flag whether or not bin file is extracted to
-        harddisk
-        :return: bitsream
-        """
-
-        f_in = open(hex_file, 'rb')  # read from
-        bitstream = ''  # blank string for bitstream
-
-        # for packing fpga image data into binary string use little endian
-        packer = struct.Struct('<H')
-
-        file_size = os.path.getsize(hex_file)
-
-        # group 4 chars from the hex file to create 1 word in the bin file
-        # see how many packets of 4096 words we can create without padding
-        # 16384 = 4096 * 4 (since each word consists of 4 chars from the
-        # hex file)
-        # each char = 1 nibble = 4 bits
-        # TODO - replace i and j with meaningful loop variable names
-        for i in range(file_size / 16384):
-            # create packets of 4096 words
-            for j in range(4096):
-                word = f_in.read(4)
-                # pack into binary string
-                bitstream += packer.pack(int(word, 16))
-
-        # entire file not processed yet. Remaining data needs to be padded to
-        # a 4096 word boundary in the hex file this equates to 4096*4 bytes
-
-        # get the last packet (required padding)
-        last_pkt = f_in.read().rstrip()  # strip eof '\r\n' before padding
-        last_pkt += 'f' * (16384 - len(last_pkt))  # pad to 4096 word boundary
-
-        # close the file
-        f_in.close()
-
-        # handle last data chunk
-        # TODO - replace i with meaningful loop variable names
-        for i in range(0, 16384, 4):
-            word = last_pkt[i:i + 4]  # grab 4 chars to form word
-            bitstream += packer.pack(int(word, 16))  # pack into binary string
-
-        if extract_to_disk:
-            out_file_name = os.path.splitext(hex_file)[0] + '.bin'
-            f_out = open(out_file_name, 'wb')  # write to
-            f_out.write(bitstream)
-            f_out.close()
-            LOGGER.info('Output binary filename: {}'.format(out_file_name))
-
-        return bitstream
-
-    @staticmethod
-    def convert_bit_to_bin(bit_file, extract_to_disk=False):
-        """
-        Converts a .bit file to a .bin file for programming SKARAB. .bit files
-        typically contain the .bin file with an additional prepended header.
-        :param bit_file: bit file to be converted
-        :param extract_to_disk: flag whether or not bin file is
-        extracted to harddisk
-        :return: bitstream
-        """
-        # apparently .fpg file uses the .bit file generated from implementation
-        # this function will convert the .bit file portion extracted from
-        # the .fpg file and convert it to .bin format with required endianness
-        # also strips away .bit file header
-
-        # bin file header identifier
-        header_end = '\xff' * 32  # header identifer
-
-        f_in = open(bit_file, 'rb')  # read from
-
-        # for unpacking data from bit file and repacking
-        data_format = struct.Struct('!B')
-        packer = data_format.pack
-        unpacker = data_format.unpack
-
-        data = f_in.read()
-        data = data.rstrip()  # get rid of pesky EOF chars
-        header_end_index = data.find(header_end)
-        data = data[header_end_index:]
-
-        f_in.close()  # close file
-
-        # .bit file already contains packed data: ABCD is a 2-byte hex value
-        # (size of this value is 2-bytes) .bin file requires this packing of
-        # data, but has a different bit ordering within each nibble
-        # i.e. given 1122 in .bit, require 8844 in .bin
-        # i.e. given 09DC in .bit, require B039 in .bin
-        # this equates to reversing the bits in each byte in the file
-
-        bitstream = ''
-        # TODO - replace i with meaningful loop variable names
-        for i in range(len(data)):
-            bitstream += packer(int('{:08b}'.format(unpacker(data[i])[0])[::-1]
-                                    , 2))  # reverse bits each byte
-        if extract_to_disk:
-            out_file_name = os.path.splitext(bit_file)[0] + '_from_bit.bin'
-            f_out = open(out_file_name, 'wb')  # write to
-            f_out.write(bitstream)  # write bitstream to file
-            f_out.close()
-            LOGGER.info('Output binary filename: {}'.format(out_file_name))
-
-        return bitstream
-
-    @staticmethod
-    def extract_bitstream(filename, extract_to_disk=False):
-        """
-        Loads fpg file extracts bin file. Also checks if
-        the bin file is compressed and decompresses it.
-        :param filename: fpg file to load
-        :param extract_to_disk: flag whether or not bin file is extracted
-        to harddisk
-        :return: bitstream
-        """
-        # get design name
-        name = os.path.splitext(filename)[0]
-
-        fpg_file = open(filename, 'r')
-        fpg_contents = fpg_file.read()
-        fpg_file.close()
-
-        # scan for the end of the fpg header
-        end_of_header = fpg_contents.find('?quit')
-
-        assert (end_of_header != -1), 'Not a valid fpg file!'
-
-        bitstream_start = fpg_contents.find('?quit') + len('?quit') + 1
-
-        # exract the bitstream portion of the file
-        bitstream = fpg_contents[bitstream_start:]
-
-        # check if bitstream is compressed using magic number for gzip
-        if bitstream.startswith('\x1f\x8b\x08'):
-            # decompress
-            bitstream = zlib.decompress(bitstream, 16 + zlib.MAX_WBITS)
-
-        # write binary file to disk?
-        if extract_to_disk:
-            # write to bin file
-            bin_file = open(name + '.bin', 'wb')
-            bin_file.write(bitstream)
-            bin_file.close()
-            LOGGER.info('Output binary filename: {}'.format(name + '.bin'))
-
-        return bitstream
-
-    def check_bitstream(self, bitstream):
-        """
-        Checks the bitstream to see if it is valid.
-        i.e. if it contains a known, correct substring in its header
-        If bitstream endianness is incorrect, byte-swap data and return altered bitstream
-        :param bitstream: Of the input (.bin) file to be checked
-        :return: tuple - (True/False, bitstream)
-        """
-
-        # check if filename or bitstream:
-        # if '.bin' in bitstream:
-        #    # filename given
-        #    contents = open(bitstream, 'rb')
-        #    bitstream.close()
-        # else:
-        #    contents = bitstream
-
-        # bitstream = open(filename, 'rb').read()
-        valid_string = '\xff\xff\x00\x00\x00\xdd\x88\x44\x00\x22\xff\xff'
-
-        # check if the valid header substring exists
-        if bitstream.find(valid_string) == 30:
-            return True, bitstream
-        else:
-            # Swap header endianness and compare again
-            swapped_string = '\xff\xff\x00\x00\xdd\x00\x44\x88\x22\x00'
-
-            if bitstream.find(swapped_string) == 30:
-                # Input bitstream has its endianness swapped
-                reordered_bitstream = self.reorder_bytes_in_bitstream(bitstream)
-                return True, reordered_bitstream
-
-            # else: Still problem
-            read_header = bitstream[30:41]
-            LOGGER.error(
-                'Incompatible bitstream detected.\nExpected header: {}\nRead '
-                'header: {}'.format(repr(valid_string), repr(read_header)))
-            return False, None
-
-    @staticmethod
-    def reorder_bytes_in_bin_file(filename, extract_to_disk=False):
-        """
-        Reorders the bytes in a given bin file to make it compatible for
-        programming the SKARAB. This function only handles the case where
-        the two bytes making up a word need to be swapped.
-        :param filename: bin file to reorder
-        :param extract_to_disk: flag whether or not bin file is extracted
-        to harddisk
-        :return: bitstream
-        """
-
-        f_in = open(filename, 'rb')
-        contents = f_in.read().rstrip()
-        f_in.close()
-
-        num_words = len(contents) / 2
-
-        data_format_pack = '<' + str(num_words) + 'H'
-        data_format_unpack = '>' + str(num_words) + 'H'
-
-        bitstream = struct.pack(data_format_pack, *struct.unpack(
-            data_format_unpack, contents))
-
-        if extract_to_disk:
-            # get filename name, less extension
-            name = os.path.splitext(filename)[0]
-            new_file_name = name + '_fix.bin'
-            f_out = open(new_file_name, 'wb')
-            f_out.write(bitstream)
-            f_out.close()
-            LOGGER.info('Output binary filename: {}'.format(new_file_name))
-
-        return bitstream
-
-    @staticmethod
-    def reorder_bytes_in_bitstream(bitstream):
-        """
-        Reorders the bytes in a given binary bitstream to make it compatible for
-        programming the SKARAB. This function only handles the case where
-        the two bytes making up a word need to be swapped.
-        :param bitstream: binary bitstream to reorder
-        :return: reordered_bitstream
-        """
-        num_words = len(bitstream) / 2
-        data_format_pack = '<' + str(num_words) + 'H'
-        data_format_unpack = '>' + str(num_words) + 'H'
-        unpacked_format = struct.unpack(data_format_unpack, bitstream)
-        reordered_bitstream = struct.pack(data_format_pack, *unpacked_format)
-        return reordered_bitstream
 
     def post_get_system_information(self):
         """
         Cleanup run after get_system_information
-        :return: 
         """
         # Fix the memory mapping for SKARAB registers by masking the most
         # significant bit of the register address parsed from the fpg file.
         for key in self.memory_devices.keys():
             self.memory_devices[key].address &= 0x7fffffff
 
+    # endregion
+
     # sensor functions
+
     def configure_i2c_switch(self, switch_select):
         """
         Configures the PCA9546AD I2C switch.
+        
         :param switch_select: the desired switch configuration:
                Fan Controller = 1
                Voltage/Current Monitor = 2
@@ -3197,274 +3196,871 @@ class SkarabTransport(Transport):
 
         if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
                               switch_select):
-            LOGGER.error('Failed to configure I2C switch.')
+            self.logger.error('Failed to configure I2C switch.')
             return False
         else:
-            LOGGER.debug('I2C Switch successfully configured')
+            self.logger.debug('I2C Switch successfully configured')
             return True
-
-    # fan controller functions
-    # TODO: deprecate
-    def write_fan_controller(self, command_code, num_bytes, byte_to_write):
-        """
-        Perform a PMBus write to the MAX31785 Fan Controller
-        :param command_code: desired command code
-        :param num_bytes: number of bytes in command
-        :param byte_to_write:  bytes to write
-        :return: Nothing
-        """
-
-        # house keeping
-        # if type(bytes_to_write) != list:
-        #    write_data = list()
-        #    write_data.append(bytes_to_write)
-
-        total_num_bytes = 1 + num_bytes
-
-        combined_write_bytes = list()
-
-        combined_write_bytes.append(command_code)
-        combined_write_bytes.append(byte_to_write)
-
-        # do an i2c write
-        if not self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
-                              total_num_bytes, *combined_write_bytes):
-            LOGGER.error('Failed to write to the Fan Controller')
-        else:
-            LOGGER.debug('Write to fan controller successful')
-
-    # TODO: deprecate
-    def read_fan_controller(self, command_code, num_bytes):
-        """
-        Performs PMBus read from the MAX31785 Fan Controller
-        :param command_code: desired command code
-        :param num_bytes: number of bytes in command
-        :return: Read bytes if successful
-        """
-
-        # do a PMBus i2c read
-        data = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
-                                   sd.MAX31785_I2C_DEVICE_ADDRESS, command_code
-                                   , num_bytes)
-
-        # check the received data
-        if data is None:
-            # read was unsucessful
-            LOGGER.error('Failed to read from the fan controller')
-            return None
-        else:
-            # success
-            LOGGER.debug('Read from fan controller successful')
-            return data
-
-    # TODO: deprecate
-    def read_fan_speed_rpm(self, fan, open_switch=True):
-        """
-        Read the current fan speed of a selected fan in RPM
-        :param fan: selected fan
-        :param open_switch: True if the i2c switch must be opened
-        :return: read fan speed in RPM
-        """
-
-        # find the address of the desired fan
-        if fan == 'LeftFrontFan':
-            fan_selected = sd.LEFT_FRONT_FAN_PAGE
-        elif fan == 'LeftMiddleFan':
-            fan_selected = sd.LEFT_MIDDLE_FAN_PAGE
-        elif fan == 'LeftBackFan':
-            fan_selected = sd.LEFT_BACK_FAN_PAGE
-        elif fan == 'RightBackFan':
-            fan_selected = sd.RIGHT_BACK_FAN_PAGE
-        elif fan == 'FPGAFan':
-            fan_selected = sd.FPGA_FAN
-        else:
-            LOGGER.error('Unknown fan selected')
-            return
-
-        # open switch
-        if open_switch:
-            self.configure_i2c_switch(sd.FAN_CONT_SWITCH_SELECT)
-
-        # write to fan controller
-        self.write_fan_controller(sd.PAGE_CMD, 1, fan_selected)
-
-        # read from fan controller
-
-        read_data = self.read_fan_controller(sd.READ_FAN_SPEED_1_CMD, 2)
-
-        if read_data is not None:
-            fan_speed_rpm = read_data[0] + (read_data[1] << 8)
-
-            return fan_speed_rpm
-        else:
-            return
-
-    # AP
-    def calculate_checksum_using_file(self, file_name):
-        """
-        Basically summing up all the words in the input file_name, and returning a 'Checksum'
-        :param file_name: The actual filename, and not instance of the open file
-        :return: Tally of words in the bitstream of the input file
-        """
-
-        # Need to handle how the bitstream is defined
-        file_extension = os.path.splitext(file_name)[1]
-
-        if file_extension == '.fpg':
-            bitstream = self.extract_bitstream(file_name)
-        elif file_extension == '.bin':
-            bitstream = open(file_name, 'rb').read()
-        elif file_extension == '.hex':
-            bitstream = self.convert_hex_to_bin(file_name)
-        elif file_extension == '.bit':
-            bitstream = self.convert_bit_to_bin(file_name)
-        else:
-            # Problem
-            errmsg = "Unrecognised file extension"
-            raise InvalidSkarabBitstream(errmsg)
-
-        flash_write_checksum = 0x00
-        size = len(bitstream)
-
-        # Need to scroll through file until there is nothing left to read
-        for i in range(0, size, 2):
-            # This is just getting a substring, need to convert to hex
-            two_bytes = bitstream[i:i + 2]
-            one_word = struct.unpack('!H', two_bytes)[0]
-            flash_write_checksum += one_word
-
-        if (size % 8192) != 0:
-            # padding required
-            num_padding_bytes = 8192 - (size % 8192)
-            for i in range(num_padding_bytes / 2):
-                flash_write_checksum += 0xffff
-
-        # Last thing to do, make sure it is a 16-bit word
-        flash_write_checksum &= 0xffff
-
-        return flash_write_checksum
-
-    @staticmethod
-    def calculate_checksum_using_bitstream(bitstream):
-        """
-        Summing up all the words in the input bitstream, and returning a
-        'Checksum' - Assuming that the bitstream HAS NOT been padded yet
-        :param bitstream: The actual bitstream of the file in question
-        :return: checksum
-        """
-
-        size = len(bitstream)
-
-        flash_write_checksum = 0x00
-
-        for i in range(0, size, 2):
-            # This is just getting a substring, need to convert to hex
-            two_bytes = bitstream[i:i + 2]
-            one_word = struct.unpack('!H', two_bytes)[0]
-            flash_write_checksum += one_word
-
-        if (size % 8192) != 0:
-            # padding required
-            num_padding_bytes = 8192 - (size % 8192)
-            for i in range(num_padding_bytes / 2):
-                flash_write_checksum += 0xffff
-
-        # Last thing to do, make sure it is a 16-bit word
-        flash_write_checksum &= 0xffff
-
-        return flash_write_checksum
 
     def get_spartan_checksum(self):
         """
         Method for easier access to the Spartan Checksum
+
         :return: spartan_flash_write_checksum
         """
-        upper_address, lower_address = (0x001ffe02, 0x001ffe03)
-        upper_byte = self.read_spi_page(upper_address, 1)[0]
-        lower_byte = self.read_spi_page(lower_address, 1)[0]
+        rd_addr = sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_CHECKSUM_UPPER_OFFSET
+        upper_byte = self.read_spi_page(rd_addr, 1)[0]
+        rd_addr = sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_CHECKSUM_LOWER_OFFSET
+        lower_byte = self.read_spi_page(rd_addr, 1)[0]
         spartan_flash_write_checksum = (upper_byte << 8) | lower_byte
         return spartan_flash_write_checksum
 
     def get_spartan_firmware_version(self):
         """
+        Get a string representation of the firmare_version
+        """
+        (major, minor) = self.get_spartan_firmware_version_tuple()
+        return str(major) + '.' + str(minor)
+
+    def get_spartan_firmware_version_tuple(self):
+        """
         Using read_spi_page() function to read two SPI Addresses which give
         the major and minor version numbers of the SPARTAN Firmware Version
-        :return: String containing 'Major.Minor'
+        
+        :return: Integer Tuple (Major, Minor)
         """
-        spi_address = 0x001ffe00
         # Just a heads-up, read_spi_page(address, num_bytes)
         # returns a list of bytes of length = num_bytes
-        major = self.read_spi_page(spi_address, 1)[0]
-        minor = self.read_spi_page(spi_address + 1, 1)[0]
-        version_number = str(major) + '.' + str(minor)
-        return version_number
+        rd_major = sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_MAJOR_VER_OFFSET
+        rd_minor = sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_MINOR_VER_OFFSET
+        major = self.read_spi_page(rd_major, 1)[0]
+        minor = self.read_spi_page(rd_minor, 1)[0]
+        return major, minor
+
+    def multicast_receive(self, gbename, ip, mask,
+                          timeout=None,
+                          retries=None):
+        """
+
+        :param gbename:
+        :param ip:
+        :param mask:
+        """
+        if timeout is None: timeout=self.timeout
+        if retries is None: retries=self.retries
+
+        ip_high = ip.ip_int >> 16
+        ip_low = ip.ip_int & (2 ** 16 - 1)
+        mask_high = mask.ip_int >> 16
+        mask_low = mask.ip_int & (2 ** 16 - 1)
+        request = sd.ConfigureMulticastReq(1, ip_high, ip_low,
+                                           mask_high, mask_low)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        resp_pkt = response.packet
+        resp_ip = IpAddress(resp_pkt['fabric_multicast_ip_address_high'] << 16 |
+                            resp_pkt['fabric_multicast_ip_address_low'])
+        resp_mask = IpAddress(
+            resp_pkt['fabric_multicast_ip_address_mask_high'] << 16 |
+            resp_pkt['fabric_multicast_ip_address_mask_low'])
+        self.logger.debug('%s: multicast configured: addr(%s) mask(%s)' % (
+            gbename, resp_ip.ip_str, resp_mask.ip_str))
+
+    def one_wire_read_rom(self, one_wire_port, timeout=None, retries=None):
+        """
+        Reads the 64-bit ROM address of a DS24N33 EEPROM on the specified
+        1-wire interface
+        :param one_wire_port: 1-wire interface to access
+        0 - skarab motherboard
+        1 - 4 mezzanine 0 - 3
+        :return: 64-bit ROM address
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        request = sd.OneWireReadROMReq(one_wire_port)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to One Wire Read Rom request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['read_success']:
+            errmsg = 'One Wire Rom Read failed!'
+            raise SkarabWriteFailed(errmsg)
+
+        raw_address = ''.join([struct.pack('!B', x) for x in response.packet['rom']])
+        real_address = struct.unpack('!Q', raw_address)[0]
+        return real_address
+
+    def one_wire_ds2433_write_mem(self, write_bytes, page, one_wire_port,
+                                  device_rom=None, skip_rom_address=1,
+                                  offset=0, timeout=None, retries=None,
+                                  force_page_zero_write=False):
+        """
+        Write to the EEPROM of a connected device connected on the one-wire bus
+        :param device_rom: 64-bit ROM address of device
+        :param skip_rom_address: if enable, skip using the rom to address device,
+        assumes only one device connected
+        :param write_bytes: bytes to write, maximum of 32 bytes
+        :param page: page to write [0 to 15]
+        :param offset: offset at which to start writing in the page (max 31)
+        :param one_wire_port: 1-wire interface to access
+        0 - skarab motherboard
+        1 - 4 mezzanine 0 - 3
+        :param timeout:
+        :param retries:
+        :param force_page_zero_write: set to true to force writing to page zero
+        :return: 1 if success
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        if page not in range(16):
+            raise ValueError('Selected page does not exist. Select page in range 0 - 15')
+
+        if page == 0 and force_page_zero_write is not True:
+            raise UserWarning('WARNING: trying to write to Page 0. If this is'
+                              'what you want to do, set the '
+                              'force_page_zero_write flag to true')
+
+        # if a device rom is given, disable skip-rom
+        if device_rom is not None:
+            skip_rom_address=0
+        else:
+            # then set a dummy address
+            device_rom = 0
+
+        if offset > 31:
+            raise ValueError('Maximum offset is 31 bytes')
+
+        # need to pack device rom (pack each byte
+        unpacked_device_rom = struct.unpack('!8B', struct.pack('!Q', device_rom))
+        device_rom = ''.join([struct.pack('!H', x) for x in unpacked_device_rom])
+
+        if type(write_bytes) != list:
+            tmp = write_bytes
+            write_bytes = [tmp]
+
+        num_bytes = len(write_bytes)
+
+        if num_bytes > 32:
+            raise ValueError('Maximum number of bytes that can be written is 32')
+
+        # pack the write bytes: pack each byte as a 16-bit word
+        packed_write_bytes = [struct.pack('!H', x) for x in write_bytes]
+        write_bytes = ''.join(packed_write_bytes) + ('\x00\x00' * (32-num_bytes))
+
+        # determine target address 1 and target address 2
+        target_address_1 = ((page*0x20) & 0xFF) + offset
+        target_address_2 = (page*0x20) >> 8
+        full_address = (target_address_2 << 8) + target_address_1
+
+        # check if writing over a page boundary
+        number_of_writable_bytes = 0x20 - (full_address % 0x20)
+
+        if num_bytes> number_of_writable_bytes:
+            raise ValueError('Cannot write across a page boundary!')
+
+        request = sd.OneWireDS2433WriteMemReq(device_rom, skip_rom_address,
+                                              write_bytes, num_bytes,
+                                              target_address_1,
+                                              target_address_2, one_wire_port)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to One Wire Write request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['write_success']:
+            errmsg = 'One Wire DS2433 Write failed!'
+            raise SkarabWriteFailed(errmsg)
+        return response.packet['write_success']
+
+    def one_wire_ds2433_read_mem(self, one_wire_port, num_bytes, page, offset=0,
+                                 device_rom=None, skip_rom_address=1,
+                                 timeout=None, retries=None):
+        """
+        Read from the EEPROM of a connected device connected on the one-wire bus
+        :param one_wire_port: 1-wire interface to access
+        0 - skarab motherboard
+        1 - 4 mezzanine 0 - 3
+        :param num_bytes: number of bytes to read
+        :param page: page to write [0 to 15]
+        :param offset: offset at which to start reading in the page (max 31)
+        :param device_rom: 64-bit ROM address of device
+        :param skip_rom_address: if enable, skip using the rom to address device,
+        assumes only one device connected
+        :param timeout:
+        :param retries:
+        :return: read data
+        """
+
+        if timeout is None: timeout = self.timeout
+        if retries is None: retries = self.retries
+
+        if page not in range(16):
+            raise ValueError('Selected page does not exist. Select page in range 0 - 15')
+
+        # if a device rom is given, disable skip-rom
+        if device_rom is not None:
+            skip_rom_address = 0
+        else:
+            # then set a dummy address
+            device_rom = 0
+
+        if num_bytes > 32:
+            raise ValueError('Maximum number of bytes that can be read is 32')
+
+        if offset > 31:
+            raise ValueError('Maximum offset is 31 bytes')
+
+        # need to pack device rom (pack each byte
+        unpacked_device_rom = struct.unpack('!8B',
+                                            struct.pack('!Q', device_rom))
+        device_rom = ''.join(
+            [struct.pack('!H', x) for x in unpacked_device_rom])
+
+        # determine target address 1 and target address 2
+        target_address_1 = ((page * 0x20) & 0xFF) + offset
+        target_address_2 = (page * 0x20) >> 8
+
+        request = sd.OneWireDS2433ReadMemReq(device_rom, skip_rom_address,
+                                             num_bytes, target_address_1,
+                                             target_address_2, one_wire_port)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        if response is None:
+            errmsg = 'Invalid response to One Wire Read request.'
+            raise SkarabInvalidResponse(errmsg)
+        if not response.packet['read_success']:
+            errmsg = 'One Wire DS2433 Read failed!'
+            raise SkarabWriteFailed(errmsg)
+
+        # do something clever here to return the number of bytes requested
+        return response.packet['read_bytes'][0:num_bytes]
+
+    # high level Mezzanine Flash Reads/Writes
+
+    # for adjusting tunable configuration parameters stored in flash
+
+    def set_dhcp_init_time(self, dhcp_init_time):
+        """
+        Set the init time for DHCP - time before first DHCP message is sent
+        :param dhcp_init_time: the desired dhcp init time, in seconds
+        :return: True if success, False if failed
+        """
+
+        assert(0 <= dhcp_init_time <= 120), 'DHCP init time range: 0 - 120 sec'
+
+        # the uBlaze requires a count of 100ms increments
+
+        dhcp_init_time = int((dhcp_init_time * 1000.0)/100.0)
+
+        # need to pack data in little endian
+        msb = (dhcp_init_time >> 8) & 0xff
+        lsb = dhcp_init_time & 0xff
+        write_bytes = [lsb, msb]
+
+        #dhcp init time occupies bytes 0, 1
+        offset = 0
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
+                                            device_rom=None, skip_rom_address=1,
+                                            offset=offset, timeout=None, retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def set_dhcp_retry_rate(self, dhcp_retry_rate):
+        """
+        Set the rate at which the SKARAB re-attempts to get DHCP configured
+        :param dhcp_retry_rate: the desired dhcp retry rate, in seconds
+        :return: True if success, False if failed
+        """
+
+        assert(0.5 <= dhcp_retry_rate <= 30), 'DHCP retry rate range: 0.5 - 30 sec'
+
+        # the uBlaze requires a count of 100ms increments
+
+        dhcp_retry_rate = int((dhcp_retry_rate * 1000.0) / 100.0)
+
+        # need to pack data in little endian
+        msb = (dhcp_retry_rate >> 8) & 0xff
+        lsb = dhcp_retry_rate & 0xff
+        write_bytes = [lsb, msb]
+
+        #dhcp retry rate occupies bytes 2, 3
+        offset = 2
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                       page=sd.TUNABLE_PARAMETERS_PAGE,
+                                       one_wire_port=sd.MB_ONE_WIRE_PORT,
+                                        device_rom=None, skip_rom_address=1,
+                                        offset=offset, timeout=None, retries=None,
+                                        force_page_zero_write=False)
+
+        return rv
+
+    def set_hmc_reconfig_timeout(self, hmc_reconfig_timeout=10):
+        """
+        Set the HMC reconfiguration state machine timeout,
+        before triggering a motherboard reset to attempt to initialise all HMCs
+        :param hmc_reconfig_timeout: the desired HMC reconfiguration timeout (default is 10 seconds)
+        :return: True if success, False if failed
+        """
+
+        assert(1 <= hmc_reconfig_timeout <= 60), 'HMC Reconfig timeout range: 1 - 60 sec'
+
+        # the uBlaze requires a count of 100ms increments
+
+        hmc_reconfig_timeout = int((hmc_reconfig_timeout * 1000.0) / 100.0)
+
+        # need to pack data in little endian
+        msb = (hmc_reconfig_timeout >> 8) & 0xff
+        lsb = hmc_reconfig_timeout & 0xff
+        write_bytes = [lsb, msb]
+
+        # hmc reconfig timeout occupies bytes 4, 5
+        offset = 4
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
+                                            device_rom=None,
+                                            skip_rom_address=1,
+                                            offset=offset, timeout=None,
+                                            retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def set_hmc_reconfig_max_retries(self, max_retries):
+        """
+        Set the maximum number of retires for initialisation of all HMCs.
+        Each retry is a motherboard reset.
+        :param max_retries: desired number of max retries
+        :return: True if success, False if failed
+        """
+
+        # this is an 8-bit number
+        assert(3 <= max_retries <= 255), 'Maximum number of retries must be in the range 3 - 255'
+
+        write_bytes = max_retries
+        # hmc reconfig max retries occupies byte 6
+        offset = 6
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
+                                            device_rom=None,
+                                            skip_rom_address=1,
+                                            offset=offset, timeout=None,
+                                            retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def set_link_mon_timeout(self, link_mon_timeout):
+        """
+        Set the link monitor timeout - how long to wait for the single 40GbE link
+        to show activity. After this timeout, the motherboard resets in attempt to
+        re-initialise the link. Only monitors the RX side of the link.
+        :param link_mon_timeout: desired link mon timeout, minimum time is 30 sec
+        :return: True if success, False if failed
+        """
+
+        assert(link_mon_timeout >= 30), 'Minimum link monitor timeout is 30 seconds'
+
+        # the uBlaze requires a count of 100ms increments
+
+        link_mon_timeout = int((link_mon_timeout * 1000.0) / 100.0)
+
+        # need to pack data in little endian
+        msb = (link_mon_timeout >> 8) & 0xff
+        lsb = link_mon_timeout & 0xff
+        write_bytes = [lsb, msb]
+
+        # hmc reconfig timeout occupies bytes 7, 8
+        offset = 7
+
+        rv = self.one_wire_ds2433_write_mem(write_bytes=write_bytes,
+                                            page=sd.TUNABLE_PARAMETERS_PAGE,
+                                            one_wire_port=sd.MB_ONE_WIRE_PORT,
+                                            device_rom=None,
+                                            skip_rom_address=1,
+                                            offset=offset, timeout=None,
+                                            retries=None,
+                                            force_page_zero_write=False)
+
+        return rv
+
+    def get_tunable_parameters(self):
+        """
+        Read back the current values of the tuneable parameters (dhcp init time,
+        dhcp rety rate, hmc reconfig timeout, hmc reconfig max retries, link mon
+        timeout)
+        :return: dict
+        """
+
+        # get the data, 9 bytes to be read
+        data = self.one_wire_ds2433_read_mem(sd.MB_ONE_WIRE_PORT, 9,
+                                             sd.TUNABLE_PARAMETERS_PAGE)
+
+        tunable_params = {'dhcp_init_time': (data[0] + (data[1] << 8))/10.0,
+                          'dhcp_retry_rate': (data[2] + (data[3] << 8))/10.0,
+                          'hmc_reconfig_timeout': (data[4] + (data[5] << 8))/10.0,
+                          'hmc_reconfig_max_retries': data[6],
+                          'link_mon_timeout': (data[7] + (data[8] << 8))/10.0}
+
+        return tunable_params
+
+    # for retrieving the HMC reconfiguration statistics
+
+    def get_hmc_reconfigure_stats(self, *hmcs):
+        """
+        Get the reconfiguration statistics for a specific HMC card or cards
+        :param hmc: the hmc card index (or indices) - 0, 1 or 2 - to read the stats for
+        :return: dictionary: {hmcN : {hmc_retires: # ; hmc_total_retries: #}}
+        or None if failed
+        """
+
+        hmc_reconfigure_stats = {}
+
+        for hmc in hmcs:
+            stats = {}
+            prefix = 'hmc_{}'.format(hmc)
+
+            raw_data = self.one_wire_ds2433_read_mem(one_wire_port=sd.HMC_CARD_I2C_PORT_MAP[hmc],
+                                                 num_bytes=8, page=sd.HMC_STATISTICS_PAGE, offset=0,
+                                                 device_rom=None, skip_rom_address=1,
+                                                 timeout=None, retries=None)
+
+            hmc_retries_raw = raw_data[:4]
+            hmc_total_retries_raw = raw_data[4:]
+
+            # data is stored in little endian, hence use '<' to unpack
+            hmc_retries = struct.unpack('<I', struct.pack('!4B', *hmc_retries_raw))[0]
+            hmc_total_retries = struct.unpack('<I', struct.pack('!4B', *hmc_total_retries_raw))[0]
+
+            stats['hmc_retries'] = hmc_retries
+            stats['hmc_total_retries'] = hmc_total_retries
+
+            hmc_reconfigure_stats[prefix] = stats
+
+        return hmc_reconfigure_stats
+
+    # for reading the mezzanine signatures stored in flash
+
+    def get_mezzanine_signature(self, mezzanine_card_one_wire_port):
+        """
+        Get the signature of a a specific mezzanine card
+        :param mezzanine_card_one_wire_port: one wire port of the mezzanine
+        care to read
+        :return: success: card signature (as an integer), fail: None
+        """
+
+        raw_data = self.one_wire_ds2433_read_mem(one_wire_port=mezzanine_card_one_wire_port,
+                                                 num_bytes=7, page=sd.MEZZANINE_SIGNATURES_PAGE,
+                                                 offset=0,
+                                                 device_rom=None, skip_rom_address=1,
+                                                 timeout=None, retries=None)
+
+        # select the bytes of interest
+        selected_data = [raw_data[i] for i in [0, 4, 5, 6]]
+
+        signature = struct.unpack('!I', struct.pack('!4B', *selected_data))[0]
+
+        return signature
+
+    def reset_dhcp_state_machine(self, link_id=1, timeout=None, retries=None):
+        """
+        Resets the DHCP State Machine for the given link
+        :param link_id: id of the interface on which DHCP is to be reset
+        1 - 40GbE
+        0 - 1GbE
+        :return: True if reset issued successfully
+        """
+
+        error_dictionary = {1: 'No such link id',
+                            2: 'Specified link is down'}
+
+        request = sd.ResetDHCPStateMachineReq(link_id)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check if the request was successful
+        if not response.packet['reset_error']:
+            self.logger.info(
+                'DHCP state machine reset issued on link_id: {}'.format(
+                    response.packet['link_id']))
+            return True
+        else:
+            err = 'DHCP state machine reset on link_id: {} failed! {}.'.format(
+                response.packet['link_id'],
+                error_dictionary[response.packet['reset_error']])
+            raise SkarabUnknownDeviceError(err)
+
+    # TODO: only declare this function once! Will have to be global
+    @staticmethod
+    def _sign_extend(value, bits):
+        """
+        Performs 2's compliment sign extension
+        :param value: value to sign extend
+        :param bits: number of bits making up the value
+        :return: sign extended value
+        """
+        sign_bit = 1 << (bits - 1)
+        return (value & (sign_bit - 1)) - (value & sign_bit)
+
+    def _voltage_handler_logging(self, voltage, scale_factor, device_page):
+        """
+        Handles the data returned by the voltage monitor for the various
+        board voltages. Returns actual voltages extracted from this data.
+        :param raw_sensor_data: array containing raw sensor data
+        :param index: index at which next voltage sensor data begins
+        :return: extracted voltage
+        """
+
+        if (scale_factor & 0x10) != 0:
+            scale_factor = self._sign_extend(scale_factor, 5)
+        scale_factor = int(scale_factor)
+        val = float(voltage) * float(pow(2.0, float(scale_factor)))
+        return round(val * sd.voltage_scaling[str(device_page)], 2)
+
+    def _current_handler_logging(self, current, scale_factor, device_page):
+        """
+        Handles the data returned by the current monitor for the various
+        board currents. Returns actual current extracted from this data.
+        :param raw_sensor_data: array containing raw sensor data
+        :param index: index at which next current sensor data begins
+        :return: extracted current
+        """
+
+        if (scale_factor & 0x10) != 0:
+            scale_factor = self._sign_extend(scale_factor, 5)
+        scale_factor = int(scale_factor)
+        val = float(current) * float(pow(2.0, float(scale_factor)))
+
+        return round(
+            val * sd.current_scaling[str(device_page)], 2)
+
+    def get_max31785_hw_logs(self, timeout=None, retries=None):
+        """
+        Retrieve the non-volatile logs from the MAX31785 fan controller on the
+        SKARAB.
+        :param timeout:
+        :param retries:
+        :return: log data in the form [FAULT_LOG_INDEX, FAULT_LOG_COUNT,
+        STATUS_WORD, STATUS_VOUT Pages 17/18,
+        STATUS_VOUT Pages 19/20, STATUS_VOUT Pages 21/22,
+        STATUS_MFR_SPECIFIC Pages 6/7, STATUS_MFR_SPECIFIC Pages 8/9,
+        STATUS_MFR_SPECIFIC Pages 10/11, STATUS_MFR_SPECIFIC Pages 12/13,
+        STATUS_MFR_SPECIFIC Pages 14/15, STATUS_MFR_SPECIFIC Pages 16/00h,
+        STATUS_FANS_1_2 Pages 0/1, STATUS_FANS_1_2 Pages 2/3,
+        STATUS_FANS_1_2 Pages 4/5]
+        """
+
+        request = sd.GetFanControllerLogsReq()
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check if logs were read successfully
+        if not response.packet['log_entry_success']:
+            err = 'fan controller non-volatile log retrieval failed'
+            raise NonVolatileLogRetrievalError(err)
+
+        """
+        log entry structure:
+        log[0] - fault log index
+        log[1] - fault log count
+        log[2] - status word
+        log[3] - status_vout pages 18/17
+        log[4] - status_vout pages 20/19
+        log[5] - status_vout pages 22/21
+        log[6] - status_mfr_specific pages 7/6
+        log[7] - status_mfr_specific pages 9/8
+        log[8] - status_mfr_specific pages 11/10
+        log[9] - status_mfr_specific pages 13/12
+        log[10] - status_mfr_specific pages 15/14
+        log[11] - status_mfr_specific pages 00h/16
+        log[12] - status_fans_1_2 pages 1/0
+        log[13] - status_fans_1_2 pages 3/2
+        log[14] - status_fans_1_2 pages 5/4
+        """
+
+        # list to store the parsed log data
+        log_data = []
+
+        log_entries = [(entry, data) for entry, data in enumerate(response.packet['fan_cont_mon_logs'])]
+
+        # parse each of the 15 log entries
+        # each log is of form [entry number, [log data]]
+        for log in log_entries:
+            # check if a log entry is empty
+            if log[1].count(0xFFFF) == len(log[1]):
+                # log entry is empty
+                fault_summary = (log[0], None)
+            else:
+                idx_of_faulty_page = next(
+                    (i + 3 for i, val in enumerate(log[1][3:]) if val), None)
+
+                # determine the fault register
+                fault_log_field = sd.fault_log_fields[idx_of_faulty_page]
+                if 'status_mfr_specific' in fault_log_field:
+                    fault_reg = sd.status_mfr_specific
+                elif 'status_fans_1_2' in fault_log_field:
+                    fault_reg = sd.status_fans_1_2
+                elif 'status_vout' in fault_log_field:
+                    fault_reg = sd.status_vout
+                else:
+                    err = 'unknown fault registered detected. cannot interpret' \
+                          'failure'
+                    raise NonVolatileLogRetrievalError(err)
+
+                # parse page data
+                upper_page = log[1][idx_of_faulty_page] >> 8
+                lower_page = log[1][idx_of_faulty_page] & 0xFF
+
+                if upper_page:
+                    fault_page = int(
+                        fault_log_field.split('_')[-1].split('/')[0])
+                    fault_value = upper_page
+                elif lower_page:
+                    fault_page = int(
+                        fault_log_field.split('_')[-1].split('/')[1])
+                    fault_value = lower_page
+                else:
+                    err = 'retrieved log data is invalid'
+                    raise NonVolatileLogRetrievalError(err)
+
+                device_page = sd.fan_controller_pages[fault_page]
+
+                # find the type of fault
+                # convert to 8-bit binary number and reverse order to make python indexing match msb indexing
+                fault_data_bits = '{0:08b}'.format(fault_value)[::-1]
+
+                # look for the bit that is set
+                for bit, val in enumerate(fault_data_bits):
+                    if int(val):
+                        fault_event = fault_reg[bit]
+
+                # need one of these per log entry, then parse in a separate function
+                fault_summary = (log[0], device_page, fault_event)
+
+            log_data.append(fault_summary)
+
+        return log_data
+
+    def clear_max31785_hw_logs(self, timeout=None, retries=None):
+        """
+        Clear the error logs of the MAX31785 fan controller.
+        The controller only stores 15 logs. Once this is full, the logs
+        must be cleared to catch new faults.
+        :param timeout:
+        :param retries:
+        :return: True if completed successfuly, otherwise, raises error
+        """
+
+        request = sd.ClearFanControllerLogsReq()
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check the status
+        if response.packet['status']:
+            self.logger.info('MAX31785 fan controller logs cleared successfully')
+            return True
+        else:
+            err = 'MAX31785 fan controller logs not cleared!'
+            raise SkarabFanControllerClearError(err)
+
+    def get_ucd90120a_hw_logs(self, device, timeout=None, retries=None):
+        """
+        Retrieve the non-volatile logs from the UCD90120A hardware monitoring devices
+        on the SKARAB. There are two devices: a voltage monitor and a current monitor.
+        These must be specified using the device parameter.
+        :param device: 'current' or 'voltage'
+        :param timeout:
+        :param retries:
+        :return: log data in the form [page specific, fault type, device page,
+        fault value, scaling, runtime seconds since fault]
+        """
+
+        #TODO: fix up docstrings
+
+        # initialisation depending on device type
+        if device == 'current':
+            request = sd.GetCurrentLogsReq()
+            packet_field = 'current_mon_logs'
+            handler = self._current_handler_logging
+            page_dict = sd.current_monitor_pages
+        elif device == 'voltage':
+            request = sd.GetVoltageLogsReq()
+            packet_field = 'voltage_mon_logs'
+            handler = self._voltage_handler_logging
+            page_dict = sd.voltage_monitor_pages
+        else:
+            err = "Invalid device type specified. device must either be 'current' or 'voltage'"
+            raise InvalidDeviceType(err)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        """
+        log entry structure:
+        log[0] - Page Specific
+        log[1] - Fault Type
+        log[2] - Device Page
+        log[3] - Fault Value (unscaled)
+        log[4] - Scaling Factor
+        log[5] - Runtime Seconds Since Fault - MSW
+        log[6] - Runtime Seconds Since Fault - LSW
+        """
+
+        status_bits = list(
+            '{:016b}'.format(response.packet['log_entry_success']))
+
+        log_entries = list(range(16, 0, -1))
+
+        log_data = [[log_entries.pop(), page_dict[log[2]],
+                     self._check_fault_type(log[0], log[1], sensor=device),
+                     handler(log[3], log[4], log[2]),
+                     sd.log_entry_success_codes[status_bits.pop()],
+                     self.get_fault_timestamp(log[5], log[6])]
+                    if log[0] != 0xFFFF
+                    else [log_entries.pop(), None,
+                          sd.log_entry_success_codes[status_bits.pop()]]
+                    for log in response.packet[packet_field]]
+
+        log_data.reverse()
+
+        return log_data
 
     @staticmethod
-    def extract_md5_from_fpg(filename):
+    def _check_fault_type(page_specifc, fault_type, sensor='voltage'):
         """
-        Given an FPG, extract the md5sum, if it exists
-        :param filename: 
-        :return: 
+        Check the fault on the UCD90120A device
+        :param page_specifc: page specific flag
+        :param fault_type: fault code
+        :return: fault_type (str)
         """
-        if filename[-3:] != 'fpg':
-            errstr = '%s does not seem to be an .fpg file.' % filename
-            LOGGER.error(errstr)
-            raise InvalidSkarabBitstream(errstr)
-        fptr = None
-        md5_header = None
-        md5_bitstream = None
-        try:
-            fptr = open(filename, 'rb')
-            fline = fptr.readline()
-            if not fline.startswith('#!/bin/kcpfpg'):
-                errstr = '%s does not seem to be a valid .fpg file.' % filename
-                LOGGER.error(errstr)
-                raise InvalidSkarabBitstream(errstr)
-            while not fline.startswith('?quit'):
-                fline = fptr.readline().strip('\n')
-                sep = '\t' if fline.startswith('?meta\t') else ' '
-                if 'md5_header' in fline:
-                    md5_header = fline.split(sep)[-1]
-                elif 'md5_bitstream' in fline:
-                    md5_bitstream = fline.split(sep)[-1]
-                if md5_bitstream is not None and md5_bitstream is not None:
-                    break
-        except IOError:
-            errstr = 'Could not open %s.' % filename
-            LOGGER.error(errstr)
-            raise IOError(errstr)
-        finally:
-            if fptr:
-                fptr.close()
-        return md5_header, md5_bitstream
 
-    def compare_md5_checksums(self, filename):
-        """
-        Easier way to do comparisons against the MD5 Checksums in the .fpg 
-        file header. Two MD5 Checksums:
-        - md5_header: MD5 Checksum calculated on the .fpg-header
-        - md5_bitstream: MD5 Checksum calculated on the actual bitstream, 
-            starting after '?quit'
-        :param filename: Of the input .fpg file to be analysed
-        :return: Boolean - True/False - 1/0 - Success/Fail
-        """
-        (md5_header, md5_bitstream) = self.extract_md5_from_fpg(filename)
-        if md5_header is not None and md5_bitstream is not None:
-            # Calculate and compare MD5 sums here, before carrying on
-            # Extract bitstream from the .fpg file
-            bitstream = self.extract_bitstream(filename)
-            bitstream_md5sum = hashlib.md5(bitstream).hexdigest()
-            if bitstream_md5sum != md5_bitstream:
-                errmsg = "bitstream_md5sum != fpgfile_md5sum"
-                LOGGER.error(errmsg)
-                raise InvalidSkarabBitstream(errmsg)
+        if not page_specifc:
+            return sd.non_page_specific_faults[fault_type]
         else:
-            # .fpg file was created using an older version of mlib_devel
-            errmsg = 'An older version of mlib_devel generated ' + \
-                     filename + '. Please update to include the md5sum ' \
-                                'on the bitstream in the .fpg header.'
-            LOGGER.error(errmsg)
-            raise InvalidSkarabBitstream(errmsg)
-        # If it got here, checksums matched
-        return True
+            if sensor == 'current':
+                if fault_type == 0 or fault_type == 1:
+                    fault_type += 3
+
+            return sd.page_specific_faults[fault_type]
+
+    @staticmethod
+    def get_fault_timestamp(seconds_msw, seconds_lsw):
+        """
+        Get the timestamp of the fault
+        :param seconds_msw: most significant word of the seconds since fault
+        :param seconds_lsw: least significant word of the seconds since fault
+        :return: seconds
+        """
+        return struct.unpack('!I', struct.pack('!2H', seconds_msw, seconds_lsw))[0]
+
+    def display_skarab_hw_logs(self, log_data, device_logged, units):
+        """
+        Display the skarab hardware logs in an easily readable format
+        :param log_data: the log data retrieved from the skarab
+        :param device_logged: the name of the device logged
+        :param units: the unit of the measured value, where applicable
+        :return:
+        """
+
+        title = 'Hardware Log Data for {skarab} - Device: {device_logged}'.format(
+            skarab=self.host, device_logged=device_logged)
+
+        print('\n{title:^94}\n'.format(title=title))
+
+        if device_logged == 'MAX31785 Fan Controller':
+            print('WARNING: Clear the MAX31785 Fan Controller logs manually after debugging to prevent losing new fault logs.\nUse the clear_max31785_hw_logs command\n')
+            print(
+                '{entry:^10} {device:^25} {event:^25}'.format(
+                    entry='Log Entry', device='Device Page',
+                    event='Fault Event'))
+
+            for log in log_data:
+                if log[1] is None:
+                    print(
+                        '{entry:^10} {data:-^51}'.format(
+                            entry=log[0], data='No Log Data'))
+                else:
+
+                    print(
+                        '{entry:^10} {device:^25} {event:^25}'.format(
+                            entry=log[0], device=log[1], event=log[2]))
+        else:
+
+            print(
+            '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+                entry='Log Entry', device='Device Page', event='Fault Event',
+                fault_value='Fault Value ({})'.format(units),
+                entry_success='Log Entry Success?',
+                timestamp='Runtime Since Fault'))
+
+            for log in log_data:
+                if log[1] is None:
+                    print(
+                        '{entry:^10} {data:-^93} {entry_success:^15}'.format(
+                            entry=log[0], data='No Log Data',
+                            entry_success=log[2]))
+                else:
+
+                    # make timestamp human readable
+                    min, sec = divmod(log[5], 60)
+                    hours, min = divmod(min, 60)
+                    timestamp = '{hours:02d}h{minutes:02d}m{seconds:02d}s'.format(
+                        hours=hours, minutes=min, seconds=sec)
+
+                    print(
+                        '{entry:^10} {timestamp:^25} {device:^25} {event:^25} {fault_value:^15} {entry_success:^15}'.format(
+                            entry=log[0], device=log[1], event=log[2],
+                            fault_value=log[3], entry_success=log[4],timestamp=timestamp))
+
+    def display_voltage_monitor_logs(self):
+        """
+        Retrieve and display the NV logs of the voltage monitor
+        :param voltage_mon_logs:
+        :return: None
+        """
+
+        # retrieve log data
+        log_data = self.get_ucd90120a_hw_logs('voltage')
+
+        # display log data
+        self.display_skarab_hw_logs(log_data=log_data, device_logged='UCD90120A Voltage Monitor', units='V')
+
+    def display_current_monitor_logs(self):
+        """
+        Retrieve and display the NV logs of the current monitor
+        :return: None
+        """
+
+        # retrieve log data
+        log_data = self.get_ucd90120a_hw_logs('current')
+
+        # display log data
+        self.display_skarab_hw_logs(log_data=log_data, device_logged='UCD90120A Current Monitor', units='A')
+
+    def display_fan_controller_logs(self):
+        """
+        Retrieve and display the NV logs from the MAX31785 fan controller
+        :return:
+        """
+
+        # retrieve log data
+        try:
+            log_data = self.get_max31785_hw_logs()
+
+            # display log data
+            self.display_skarab_hw_logs(log_data=log_data,
+                                        device_logged='MAX31785 Fan Controller',
+                                        units=None)
+
+        except NonVolatileLogRetrievalError:
+            self.logger.error('Failed to retrieve fan controller log data')
+
 # end

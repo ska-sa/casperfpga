@@ -3,7 +3,8 @@ import time,logging,numpy as np,struct
 logger = logging.getLogger(__name__)
 
 class EEP24XX64:
-    """ 64 Kbit Electrically Erasable PROM 
+    """ 
+    64 Kbit Electrically Erasable PROM 
     """
     size = (1<<13)
 
@@ -12,9 +13,11 @@ class EEP24XX64:
         self.addr = addr
 
     def read(self,reg,length=1):
-        """ Read byte(s) out of ROM
+        """ 
+        Read byte(s) out of ROM
 
-            E.g.
+        .. code-block:: python
+
             read(0)     # read a byte out from address 0 of the ROM
             read(0x20,16)   # read 200 bytes from address 0x20 to 0x2f
         """
@@ -26,9 +29,11 @@ class EEP24XX64:
         return self.itf.read(self.addr,[regaddrmsb,regaddrlsb],length)
 
     def write(self,reg,data):
-        """ Write byte(s) into ROM
+        """ 
+        Write byte(s) into ROM
 
-            E.g.
+        .. code-block:: python
+
             write(0,0xff)       # write 0xff to address 0x00
             write(0x10,range(8192)) # write range(8192) to address from 0x10 to 0x1fff
         """
@@ -49,13 +54,15 @@ class EEP24XX64:
             self.itf.write(self.addr,[regaddrmsb,regaddrlsb],data)
 
     def writeString(self,chars):
-        """ Write a string into the ROM
+        """ 
+        Write a string into the ROM
 
         Write the input string into the ROM. Only ASCII characters are allowed
         A character of '\0' will be appended to the string to indicate the end
         of the string.
 
-            E.g.
+        .. code-block:: python
+
             writeString('Haha')
         """
         if len(chars)+1 > self.size:
@@ -65,11 +72,11 @@ class EEP24XX64:
         self.write(0,byteList)
 
     def readString(self):
-        """ Read a string out of the ROM
+        """ 
+        Read a string out of the ROM
 
         Read byte(s) and intepret as ASCII character(s). Expect a '\0' at the
         end of the string
-
         """
         data=[]
         for i in range(0,self.size,256):

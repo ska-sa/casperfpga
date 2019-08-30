@@ -14,8 +14,10 @@ from casperfpga.casperfpga import CasperFpga
 
 try:
     import corr2
+    import os
 except ImportError:
     corr2 = None
+    os = None
 
 parser = argparse.ArgumentParser(
     description='Display TenGBE interface information about a MeerKAT '
@@ -49,24 +51,24 @@ if args.log_level != '':
 # logging.info('****************************************************')
 
 # create the devices and connect to them
-if corr2 is not None:
-    import os
-    if 'CORR2INI' in os.environ.keys() and args.hosts == '':
-        args.hosts = os.environ['CORR2INI']
-    hosts = corr2.utils.parse_hosts(args.hosts)
+if args.hosts.strip() == '':
+    if corr2 is None or 'CORR2INI' not in os.environ.keys():
+        raise RuntimeError('No hosts given and no corr2 config found. '
+                           'No hosts.')
+    fpgas = corr2.utils.script_get_fpgas(args)
 else:
     hosts = args.hosts.strip().replace(' ', '').split(',')
-if len(hosts) == 0:
-    raise RuntimeError('No good carrying on without hosts.')
-fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
-utils.threaded_fpga_function(fpgas, 10, 'test_connection')
-utils.threaded_fpga_function(fpgas, 15, 'get_system_information')
+    if len(hosts) == 0:
+        raise RuntimeError('No good carrying on without hosts.')
+    fpgas = utils.threaded_create_fpgas_from_hosts(hosts)
+    utils.threaded_fpga_function(fpgas, 15, ('get_system_information', [], {}))
+
 for fpga in fpgas:
     numgbes = len(fpga.gbes)
     if numgbes < 1:
-        raise RuntimeWarning('Host %s has no 10gbe cores', fpga.host)
-    print('%s: found %i 10gbe core%s.' % (
-        fpga.host, numgbes, '' if numgbes == 1 else 's'))
+        raise RuntimeWarning('Host %s has no gbe cores', fpga.host)
+    print('%s: found %i gbe core%s: %s' % (
+        fpga.host, numgbes, '' if numgbes == 1 else 's', fpga.gbes.keys()))
 
 if args.resetctrs:
     def reset_gbe_debug(fpga_):
@@ -107,7 +109,10 @@ def get_tap_data(fpga):
     """
     data = {}
     for gbecore in fpga.gbes.names():
-        data[gbecore] = fpga.gbes[gbecore].tap_info()
+        if hasattr(fpga.gbes[gbecore], 'tap_info'):
+            data[gbecore] = fpga.gbes[gbecore].tap_info()
+        else:
+            data[gbecore] = None
     return data
 
 # get gbe and tap data
@@ -161,6 +166,14 @@ for hdr in fpga_headers:
 
 max_1st_col_offset += 5
 
+# gbe_data = utils.threaded_fpga_operation(fpgas, 10, get_gbe_data)
+# for f in gbe_data:
+#     d = gbe_data[f]
+#     print f
+#     for core in d:
+#         print '\t', core, d[core]
+# raise RuntimeError
+
 # set up the curses scroll screen
 scroller = scroll.Scroll(debug=False)
 scroller.screen_setup()
@@ -203,9 +216,13 @@ try:
                     start_pos += pos_increment
                 scroller.add_string('', cr=True)
                 for core, core_data in fpga_data.items():
-                    tap_running = tap_data[fpga.host][core]['name'] == ''
+                    if tap_data[fpga.host][core] is not None:
+                        tap_running = tap_data[fpga.host][core]['name'] == ''
+                        fpga_data[core]['ip'] = tap_data[fpga.host][core]['ip']
+                    else:
+                        tap_running = False
+                        fpga_data[core]['ip'] = 'n/a'
                     fpga_data[core]['tap_running'] = not tap_running
-                    fpga_data[core]['ip'] = tap_data[fpga.host][core]['ip']
                     start_pos = max_1st_col_offset
                     line = scroller.add_string(core)
                     for header_register in fpga_headers:
