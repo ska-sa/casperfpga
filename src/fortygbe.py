@@ -53,19 +53,18 @@ class FortyGbe(Gbe):
         :param raw_device_info: info about this block that may be useful
         """
         super(FortyGbe, self).post_create_update(raw_device_info)
-        self.snaps = {'tx': None, 'rx': None}
+        self.snaps = {'tx': [], 'rx': []}
         snapnames = self.parent.snapshots.names()
         for txrx in ['r', 't']:
             snapshot_index=0
-            self.snaps['%sx' % txrx]=[]
-            name = self.name + '_%sxs%i_ss' %(txrx,snapshot_index)
             snapshot_found=True
             while snapshot_found:
+                name = self.name + '_%sxs%i_ss' %(txrx,snapshot_index)
                 if name in snapnames:
-                    self.snaps['%sx' % txrx].append(self.parent.snapshots[self.name + '_%sxs%i_ss' %(txrx,snapshot_index)])
+                    self.snaps['%sx' % txrx].append(self.parent.snapshots[name])
                     snapshot_index+=1
                 else:
-                   snapshot_found=False
+                    snapshot_found=False
         self.get_gbe_core_details()
 
     @classmethod
