@@ -358,8 +358,22 @@ class CasperFpga(object):
         """
         self.is_little_endian = False
         board_id = self.read_uint('sys_board_id')
+        
+        if (board_id >> 16) == 0xB00B:  # ROACH
+            return self.is_little_endian
+        
+        if (board_id >> 16) == 0xBABE:  # ROACH2
+            return self.is_little_endian
+        
+        if board_id == 0:               # red pitaya
+            self.is_little_endian = True
+            return self.is_little_endian
+        
         msb = (board_id >> 24) & 0xff
-        self.is_little_endian = (msb > 0) or (board_id == 0)
+        if msb > 0:
+            self.is_little_endian = True
+            return self.is_little_endian
+        
         return self.is_little_endian
 
     def _reset_device_info(self):
