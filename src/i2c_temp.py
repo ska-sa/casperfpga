@@ -43,8 +43,7 @@ class Si7051():
         self._setResolution(resolution)
         if not self._isVDDOK():
             msg = 'VDD has a problem'
-            logger.error(msg)
-            raise Exception(msg)
+            raise IOError(msg)
 
     def read(self,reg=None,length=1):
         return self.itf.read(self.addr, reg, length)
@@ -56,7 +55,9 @@ class Si7051():
         msb,lsb,crc = self.read(self.cmdMeasure, 3)
         _crc = self.crc8([msb,lsb],self.crcPoly,self.crcInitVal)
         if _crc != crc:
-            return -1
+            log='CRC failed for temperature sensor'
+            raise IOError(log)
+            return None
         return self._calctemp(msb,lsb)
 
     def _calctemp(self,msb,lsb):
@@ -128,7 +129,8 @@ class Si7051():
 
         _crc = self.crc8(SNA,self.crcPoly,self.crcInitVal)
         if _crc != CRCA[-1]:
-            return -1
+            log='CRC failed for temperature sensor'
+            raise IOError(log)
 
         # Silicon Labs has not used SNB currently. They fill the
         # SNB crc regs with 0xFFs So don't check the CRC of SNB
