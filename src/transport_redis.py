@@ -29,6 +29,8 @@ class RedisTftp(object):
     # This prevents multiple instances of this class
     # from creating lots and lots (and lots) of redis connections
     """
+    redis_pool = {}
+    redis_conn = {}
 
     def __init__(self, redishost, host):
         """
@@ -38,11 +40,23 @@ class RedisTftp(object):
         :return: none
         """
 
-        self.r = redis.Redis(redishost, max_connections=100)
+        if redishost not in RedisTftp.redis_pool.keys():
+            RedisTftp.redis_pool[redishost] = redis.ConnectionPool(host=redishost, port=6379, db=0)
+        if redishost not in RedisTftp.redis_conn.keys():
+            RedisTftp.redis_conn[redishost] = redis.Redis(redishost, connection_pool=RedisTftp.redis_pool[redishost])
+        self.r = RedisTftp.redis_conn[redishost]
+        # Every instance gets its own PubSub object to make sure that multiple
+        # RedisTftp instances can be threaded.
+        # These don't close when the RedisTftp object is deallocated,
+        # so they're manually closed in a `__del__` method
         self.resp_chan = self.r.pubsub()
         self.resp_chan.subscribe(REDIS_RESPONSE_CHANNEL)
         self._logger = LOGGER
         self.host = host
+    
+    def __del__(self):
+        self.resp_chan.unsubscribe()
+        self.resp_chan.close()
    
     def download(self, fname, buf, timeout):
         """
