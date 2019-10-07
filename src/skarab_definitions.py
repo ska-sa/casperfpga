@@ -346,6 +346,14 @@ HMC_MEZZANINE_SITES = [1, 2, 3]
 HMC_CARD_I2C_PORT_MAP = {0: 0x1,
                          1: 0x2,
                          2: 0x3}
+
+# default tunable parameters
+default_tunable_parameters = {'hmc_reconfig_max_retries': 4,
+                              'hmc_reconfig_timeout': 8,
+                              'link_mon_timeout': 240,
+                              'dhcp_init_time': 2,
+                              'dhcp_retry_rate': 10}
+
 # flash pages
 MEZZANINE_SIGNATURES_PAGE = 0
 TUNABLE_PARAMETERS_PAGE = 15
@@ -400,6 +408,8 @@ MFR_FAN_WARN_LIMIT_CMD = 0xF6
 MFR_FAN_RUN_TIME_CMD = 0xF7
 MFR_FAN_PWM_AVG_CMD = 0xF8
 MFR_FAN_PWM2RPM_CMD = 0xF9
+
+MFR_STATUS = 0xF3
 
 # UCD90120A VOLTAGE AND CURRENT MONITORING DEFINES
 UCD90120A_VMON_I2C_DEVICE_ADDRESS = 0x45  # Without read/write bit

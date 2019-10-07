@@ -86,6 +86,9 @@ class SkarabFanControllerClearError(ValueError):
 class NonVolatileLogRetrievalError(ValueError):
     pass
 
+class SkarabProcessorVersionError(ValueError):
+    pass
+
 # endregion
 
 
@@ -4062,5 +4065,177 @@ class SkarabTransport(Transport):
 
         except NonVolatileLogRetrievalError:
             self.logger.error('Failed to retrieve fan controller log data')
+
+    def _set_to_default_configuration(self, threshold_1v0_current=35,
+                                      tuneable_parameters_dict=sd.default_tunable_parameters):
+        """
+        Configure the SKARAB board to the SARAO default configuration parameters
+        :param: threshold_1v0_current
+        :param: tuneable_parameters_dict
+        :return: True if success, False otherwise
+        """
+
+        # check MircoBlaze version
+        major, minor, patch = self.get_embedded_software_version().split('.')
+        if (int(major) < 3) or (int(major) == 3 and int(minor) < 11):
+            raise SkarabProcessorVersionError('MicroBlaze version is too '
+                                              'old to support configuration '
+                                              'of tunable parameters')
+
+        # configure 1V0 Trip Current Threshold
+        current_threshold_set = self._set_1v0_trip_current_threshold(
+            trip_threshold=threshold_1v0_current)
+
+        if not current_threshold_set:
+            self.logger.warning('Setting trip threshold for '
+                                '1V0 current to {} failed!'.format(threshold_1v0_current))
+
+        # configure tunable parameters
+        error_dict = {}
+        self.set_hmc_reconfig_max_retries(tuneable_parameters_dict['hmc_reconfig_max_retries'])
+        self.set_hmc_reconfig_timeout(tuneable_parameters_dict['hmc_reconfig_timeout'])
+        self.set_link_mon_timeout(tuneable_parameters_dict['link_mon_timeout'])
+        self.set_dhcp_init_time(tuneable_parameters_dict['dhcp_init_time'])
+        self.set_dhcp_retry_rate(tuneable_parameters_dict['dhcp_retry_rate'])
+
+        # check if the tunable parameters were set correctly
+        set_parameters = self.get_tunable_parameters()
+        for parameter, value in set_parameters.items():
+            if value != tuneable_parameters_dict[parameter]:
+                error_dict[parameter] = value
+
+        if error_dict:
+            #  some parameters were not set correctly
+            self.logger.warning("Some parameters were not set correctly. "
+                  "These are the errorneous parameters and the "
+                  "values they are set to:{}".format(error_dict))
+        else:
+            self.logger.debug("All tunable parameters successfully configured!")
+
+        # configure fan control logic
+        # TODO: add when available
+
+        if error_dict or not current_threshold_set:
+            return False
+        else:
+            return True
+
+    def _set_1v0_trip_current_threshold(self, trip_threshold=35):
+        """
+        Reconfigure the 1V0 current trip threshold
+        :param trip_threshold: The desired 1V0 current trip threshold (Amps)
+        :return: True if success, False otherwise
+        """
+
+        # check that the desired threshold is within the acceptable range
+
+        if trip_threshold < 20:
+            self.logger.warning("Desired current limit too low! "
+                                "Threshold must be >= 20A")
+            return False
+
+        # work out the [LSB, MSB] to set the threshold
+
+        # calculation of the LSB and MSB for trip value
+        # current measured as voltage divided by sense resistor
+
+        # voltage over the 1V0 Rsense is on page 7 of i2c device 0x47 (UCD90120A)
+        # this voltage can be read with READ_VOUT cmd (0x8b) and is in the LINEAR16 format.
+        # from datasheet, UCD90xxx Sequencer and System Health Controller PMBus Command Reference:
+        #   pg. 13 par. 2.1 =>  Voltage = V x 2^x
+        #                       V is 16bit unsigned int (from READ_VOUT)
+        #                       x is signed 5-bit two's complement exponent (from VOUT_MODE)
+
+        # therefore :
+        # current = value x 2^(x) x 1/R(sense)
+
+        # for page 7:
+        # VOUT_MODE = 17 => 17 -32 = -15 two's compl 5-bit signed integer
+        # R(sense) = 100*0.00025 = 0.025
+
+        # => current (A) = value x 2^(-15) * 1/0.025
+        # => value = current / (2^(-15) * 1/0.025)
+        # e.g. 32A
+        # => value = 26,214.4 ~ 26,214 = 0x6666
+        # e.g. 35A
+        # => value = 28,672 = 0x7000
+
+        value = int(trip_threshold / (2**(-15) * 1.0/0.025))
+
+        limit_msb = value >> 8
+        limit_lsb = value & 0xff
+
+        assert limit_msb >= 0x40, "Desired current limit too low! " \
+                                  "Threshold must be >= 20A"
+
+        # set i2c switch to select current mon
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.MONITOR_SWITCH_SELECT)
+        time.sleep(0.5)
+
+        # set current monitor page to 7, which corresponds to 1V0 current
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.PAGE_CMD, sd.P1V0_CURRENT_MON_PAGE)
+        time.sleep(1)
+
+        # now set the current fault limit with the VOUT_OV_FAULT_LIMIT cmd
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.VOUT_OV_FAULT_LIMIT_CMD, limit_lsb, limit_msb)
+        time.sleep(1)
+
+        # check the new stored value
+
+        stored_threshold = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_OV_FAULT_LIMIT_CMD, 2)
+
+        time.sleep(1)
+
+        # check the set value
+        scale_factor = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_MODE_CMD, 1)
+
+        set_value = (stored_threshold[1] << 8) + stored_threshold[0]
+        set_current = set_value * pow(2, scale_factor[0]-32) * 40
+
+        if set_current == trip_threshold:
+            # new current trip threshold set successfully
+            self.logger.debug("New 1v0 current threshold "
+                              "successfully set to {}".format(set_current))
+
+            # now store the new limit as the default value
+            # store as default value into NV data memory / FLASH
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                           sd.STORE_DEFAULT_ALL_CMD)
+            time.sleep(2)
+
+            stored = False
+            count = 0
+            while not stored and count < 10:
+                status = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                             sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                             sd.MFR_STATUS,
+                                             5)  # read mfr_status
+                if (status[3] & 0x6) == 2:  # status is 32-bit word
+                    stored = True
+                time.sleep(1)
+                count = count + 1
+
+            if not stored:
+                # new default trip threshold not stored
+                self.logger.warning("New default trip threshold not stored!")
+                return False
+
+            self.logger.debug("New default trip threshold successfully stored!")
+            return True
+
+        else:
+            # new current trip threshold not set correctly
+            self.logger.error("New 1v0 current threshold not set correctly. "
+                              "Desired threshold = {} but set "
+                              "threshold = {}".format(trip_threshold,
+                                                      set_current))
+            return False
 
 # end
