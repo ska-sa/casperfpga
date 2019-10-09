@@ -146,45 +146,47 @@ class TenGbe(Memory, Gbe):
         Setup the interface by writing to the fabric directly, bypassing tap.
         :param self:
         :return:
+
+        Core offset notes:
+           0x00 - 0x07: My MAC address
+           0x08 - 0x0b: Not used
+           0x0c - 0x0f: Gateway addr
+           0x10 - 0x13: my IP addr
+           0x14 - 0x17: Not assigned
+           0x18 - 0x1b: Buffer sizes
+           0x1c - 0x1f: Not assigned
+           0x20       : soft reset (bit 0)
+           0x21       : fabric enable (bit 0)
+           0x22 - 0x23: fabric port
+
+           0x24 - 0x27: XAUI status (bit 2,3,4,5=lane sync, bit6=chan_bond)
+           0x28 - 0x2b: PHY config
+
+           0x28       : RX_eq_mix
+           0x29       : RX_eq_pol
+           0x2a       : TX_preemph
+           0x2b       : TX_diff_ctrl
+           0x38 - 0x3b: subnet mask
+
+           0x1000     : CPU TX buffer
+           0x2000     : CPU RX buffer
+           0x3000     : ARP tables start
         """
-        # assemble struct for header stuff...
-        # 0x00 - 0x07: My MAC address
-        # 0x08 - 0x0b: Not used
-        # 0x0c - 0x0f: Gateway addr
-        # 0x10 - 0x13: my IP addr
-        # 0x14 - 0x17: Not assigned
-        # 0x18 - 0x1b: Buffer sizes
-        # 0x1c - 0x1f: Not assigned
-        # 0x20       : soft reset (bit 0)
-        # 0x21       : fabric enable (bit 0)
-        # 0x22 - 0x23: fabric port
 
-        # 0x24 - 0x27: XAUI status (bit 2,3,4,5=lane sync, bit6=chan_bond)
-        # 0x28 - 0x2b: PHY config
+        ctrl_pack = struct.pack('>QLLLLLLBBH',
+                                self.mac.mac_int,
+                                0,                          # Not assigned
+                                self.gateway.ip_int,
+                                self.ip.ip_int,
+                                0,                          # Not assigned
+                                0,                          # Buffer sozes
+                                0,                          # Not assigned
+                                0,                          # Soft reset
+                                1,                          # Fabric enable
+                                self.port)
 
-        # 0x28       : RX_eq_mix
-        # 0x29       : RX_eq_pol
-        # 0x2a       : TX_preemph
-        # 0x2b       : TX_diff_ctrl
-        # 0x38 - 0x3b: subnet mask
-
-        # 0x1000     : CPU TX buffer
-        # 0x2000     : CPU RX buffer
-        # 0x3000     : ARP tables start
-
-        mac_offset     = 0x00
-        ip_offset      = 0x10
-        port_offset    = 0x22
-        subnet_offset  = 0x38
-        gateway_offset = 0x0C
-
-        self.parent.write(self.name, self.mac.packed(), offset=mac_offset)
-        self.parent.write(self.name, self.ip_address.packed(), offset=ip_offset)
-        self.parent.write(self.name, struct.pack('>HH', self.port, 0), offset=port_offset)
-        if self.subnet_mask is not None:
-            self.parent.write(self.name, self.subnet_mask.packed(), offset=subnet_offset)
-        if self.gateway is not None:
-            self.parent.write(self.name, self.gateway.packed(), offset=gateway_offset)
+        self.parent.blindwrite(self.name, ctrl_pack, offset=0)
+        self.parent.blindwrite(self.name, self.subnet_mask.packed(), offset=0x38)
 
     def dhcp_start(self):
         """
