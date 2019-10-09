@@ -8,6 +8,7 @@ import string
 import register
 import sbram
 import snap
+import onegbe
 import tengbe
 import fortygbe
 import qdr
@@ -33,7 +34,9 @@ CASPER_MEMORY_DEVICES = {
     'xps:qdr':          {'class': qdr.Qdr,           'container': 'qdrs'},
     'xps:sw_reg':       {'class': register.Register, 'container': 'registers'},
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
+    'xps:ten_gbe':      {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
+    'xps:onegbe':       {'class': onegbe.OneGbe,     'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
     'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
 }
@@ -77,7 +80,6 @@ class CasperFpga(object):
     def __init__(self, *args, **kwargs):
         """
         :param args[0] - host: the hostname of this CasperFpga
-        :return: <nothing>
         """
         if len(args) > 0:
             try:
@@ -109,7 +111,11 @@ class CasperFpga(object):
         kwargs['parent_fpga'] = self
 
         # Setup logger to be propagated through transports
-        self.logger.setLevel(logging.NOTSET)
+        # either set log level manually or default to error
+        try:
+            self.set_log_level(log_level=kwargs['log_level'])
+        except KeyError:
+            self.set_log_level(log_level='ERROR')
 
         # was the transport specified?
         transport = get_kwarg('transport', kwargs)
@@ -137,15 +143,21 @@ class CasperFpga(object):
         self._reset_device_info()
         self.logger.debug('%s: now a CasperFpga' % self.host)
 
-        # Set log level to ERROR
-        self.logger.setLevel(logging.ERROR)
+        # The Red Pitaya doesn't respect network-endianness. It should.
+        # For now, detect this board so that an endianness flip can be
+        # inserted between the CasperFpga and the underlying transport layer.
+        # We try detection again after programming, in case this fails here.
+        try:
+            self._detect_little_endianness()
+        except:
+            pass
 
         
     def choose_transport(self, host_ip):
         """
         Test whether a given host is a katcp client or a skarab
+
         :param host_ip:
-        :return:
         """
         self.logger.debug('Trying to figure out what kind of device %s is' % host_ip)
         if host_ip.startswith('CasperDummy'):
@@ -154,12 +166,12 @@ class CasperFpga(object):
             if SkarabTransport.test_host_type(host_ip):
                 self.logger.debug('%s seems to be a SKARAB' % host_ip)
                 return SkarabTransport
-            elif TapcpTransport.test_host_type(host_ip):
-                self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
-                return TapcpTransport
             elif KatcpTransport.test_host_type(host_ip):
                 self.logger.debug('%s seems to be ROACH' % host_ip)
                 return KatcpTransport
+            elif TapcpTransport.test_host_type(host_ip):
+                self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
+                return TapcpTransport
             else:
                 errmsg = 'Possible that host does not follow one of the \
                             defined casperfpga transport protocols'
@@ -173,15 +185,14 @@ class CasperFpga(object):
     def connect(self, timeout=None):
         """
         Attempt to connect to a CASPER Hardware Target
+
         :param timeout: Integer value in seconds
-        :return:
         """
         return self.transport.connect(timeout)
 
     def disconnect(self):
         """
         Attempt to disconnect from a CASPER Hardware Target
-        :return:
         """
         return self.transport.disconnect()
 
@@ -193,16 +204,17 @@ class CasperFpga(object):
         """
         Generic function to carry out a sanity check on the logging_level
         used to setup the logger
+
         :param log_level: String input defining the logging_level:
-                             Level      | Numeric Value
-                             --------------------------
-                             CRITICAL   | 50
-                             ERROR      | 40
-                             WARNING    | 30
-                             INFO       | 20
-                             DEBUG      | 10
-                             NOTSET     | 0
-        :return:
+                           
+                            Level      | Numeric Value
+                            --------------------------
+                            CRITICAL   | 50
+                            ERROR      | 40
+                            WARNING    | 30
+                            INFO       | 20
+                            DEBUG      | 10
+                            NOTSET     | 0
         """
         log_level_numeric = getattr(logging, log_level.upper(), None)
         if not isinstance(log_level_numeric, int):
@@ -216,20 +228,38 @@ class CasperFpga(object):
     def read(self, device_name, size, offset=0, **kwargs):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
+
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
         :param kwargs:
-        :return:
         """
-        return self.transport.read(device_name, size, offset, **kwargs)
+        data = self.transport.read(device_name, size, offset, **kwargs)
+        if self.is_little_endian:
+            assert ((len(data) % 4) == 0), \
+                "Can only read multiples of 4 bytes because CasperFpga is doing an endianness flip"
+            # iterate through 32-bit words and flip them
+            data_byte_swapped = ""
+            for i in range(0, len(data), 4):
+                data_byte_swapped += data[i:i+4][::-1]
+            return data_byte_swapped
+        return data
 
     def blindwrite(self, device_name, data, offset=0, **kwargs):
+        if self.is_little_endian:
+            assert ((len(data) % 4) == 0), \
+                "Can only write multiples of 4 bytes because CasperFpga is doing an endianness flip"
+            # iterate through 32-bit words and flip them
+            data_byte_swapped = ""
+            for i in range(0, len(data), 4):
+                data_byte_swapped += data[i:i+4][::-1]
+                return self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
         return self.transport.blindwrite(device_name, data, offset, **kwargs)
 
     def listdev(self):
         """
         Get a list of the memory bus items in this design.
+
         :return: a list of memory devices
         """
         try:
@@ -241,7 +271,6 @@ class CasperFpga(object):
         """
         The child class will deprogram the FPGA, we just reset out
         device information
-        :return:
         """
         self.transport.deprogram()
         self._reset_device_info()
@@ -249,9 +278,10 @@ class CasperFpga(object):
     def set_igmp_version(self, version):
         """
         Sets version of IGMP multicast protocol to use
-        - This method is only available to katcp-objects
+        
+        * This method is only available to katcp-objects
+        
         :param version: IGMP protocol version, 0 for kernel default, 1, 2 or 3
-        :return:
         """
         return self.transport.set_igmp_version(version)
 
@@ -273,16 +303,34 @@ class CasperFpga(object):
             self.bitstream = filename
         else:
             filename = self.bitstream
-        rv = self.transport.upload_to_ram_and_program(
-            filename=filename, wait_complete=wait_complete, chunk_size=chunk_size)
+
+        # TODO: only skarab needs chunk_size, and it can break function calls to to other transport layers
+        # TODO: this is a quick fix for now. A more elegant solution is required.
+        if self.transport == SkarabTransport:
+            rv = self.transport.upload_to_ram_and_program(
+                filename=filename, wait_complete=wait_complete, chunk_size=chunk_size)
+        else:
+            rv = self.transport.upload_to_ram_and_program(
+                filename=filename, wait_complete=wait_complete)
+
         if not wait_complete:
             return True
+
         if self.bitstream:
             if self.bitstream[-3:] == 'fpg':
                 self.get_system_information(filename,
                                             initialise_objects=initialise_objects)
 
-        return rv
+        
+        # The Red Pitaya doesn't respect network-endianness. It should.
+        # For now, detect this board so that an endianness flip can be
+        # inserted between the CasperFpga and the underlying transport layer
+        # This check is in upload_to_ram and program because if we connected
+        # to a board that wasn't programmed the detection in __init__ won't have worked.
+        try:
+            self._detect_little_endianness()
+        except:
+            pass
 
     def is_connected(self, **kwargs):
         """
@@ -297,6 +345,22 @@ class CasperFpga(object):
         :return:
         """
         return self.transport.is_running()
+
+    def _detect_little_endianness(self):
+        """
+        Return True if the board being used is little endian.
+        False otherwise.
+        This method works by interrogating the board_id of the system.
+        It doesn't do anything truly generic, but looks to see if the
+        MSB of the board ID is zero. If it isn't or the whole id is zero
+        (which is the case for the red pitaya) we assume this is a little endian board.
+        implicitly sets the is_little_endian attribute
+        """
+        self.is_little_endian = False
+        board_id = self.read_uint('sys_board_id')
+        msb = (board_id >> 24) & 0xff
+        self.is_little_endian = (msb > 0) or (board_id == 0)
+        return self.is_little_endian
 
     def _reset_device_info(self):
         """
@@ -346,9 +410,11 @@ class CasperFpga(object):
         Reads data from a ROACH's DRAM. Reads are done up to 1MB at a time.
         The 64MB indirect address register is automatically incremented
         as necessary.
+
         It returns a string, as per the normal 'read' function.
         ROACH has a fixed device name for the DRAM (dram memory).
         Uses dram_bulkread internally.
+
         :param size: amount of data to read, in bytes
         :param offset: offset at which to read, in bytes
         :return: binary data string
@@ -388,9 +454,9 @@ class CasperFpga(object):
         incremented as necessary.
         ROACH has a fixed device name for the DRAM (dram memory) and so the
         user does not need to specify the write register.
+
         :param data: packed binary string data to write
         :param offset: the offset at which to write
-        :return:
         """
         size = len(data)
         n_writes = 0
@@ -421,10 +487,10 @@ class CasperFpga(object):
     def write(self, device_name, data, offset=0):
         """
         Write data, then read it to confirm a successful write.
+
         :param device_name: memory device name to write
         :param data: packed binary data string to write
         :param offset: offset at which to write, in bytes
-        :return:
         """
         self.blindwrite(device_name, data, offset)
         new_data = self.read(device_name, len(data), offset)
@@ -445,6 +511,7 @@ class CasperFpga(object):
         Read an integer from memory device.
         i.e. calls self.read(device_name, size=4, offset=0) and uses
         struct to unpack it into an integer
+
         :param device_name: device from which to read
         :param word_offset: the 32-bit word offset at which to read
         :return: signed 32-bit integer
@@ -455,6 +522,7 @@ class CasperFpga(object):
     def read_uint(self, device_name, word_offset=0):
         """
         Read an unsigned integer from memory device.
+
         :param device_name: device from which to read
         :param word_offset: the 32-bit word offset at which to read
         :return: unsigned 32-bit integer
@@ -466,11 +534,11 @@ class CasperFpga(object):
         """
         Writes an integer to the device specified at the offset specified.
         A blind write is optional.
+
         :param device_name: device to be written
         :param integer: the integer to write
         :param blindwrite: True for blind write, default False
         :param word_offset: the offset at which to write, in 32-bit words
-        :return:
         """
         # careful of packing input data into 32 bit - check range: if
         # negative, must be signed int; if positive over 2^16, must be unsigned
@@ -493,11 +561,11 @@ class CasperFpga(object):
     def _create_memory_devices(self, device_dict, memorymap_dict, legacy_reg_map=True, **kwargs):
         """
         Create memory devices from dictionaries of design information.
+        
         :param device_dict: raw dictionary of information from tagged
-        blocks in Simulink design, keyed on device name
+            blocks in Simulink design, keyed on device name
         :param memorymap_dict: dictionary of information that would have been
-        in coreinfo.tab - memory bus information
-        :return:
+            in coreinfo.tab - memory bus information
         """
         # create and add memory devices to the memory device dictionary
         for device_name, device_info in device_dict.items():
@@ -589,9 +657,9 @@ class CasperFpga(object):
     def _create_other_devices(self, device_dict, **kwargs):
         """
         Store non-memory device information in a dictionary
+
         :param device_dict: raw dictionary of information from tagged
-        blocks in Simulink design, keyed on device name
-        :return:
+            blocks in Simulink design, keyed on device name
         """
         for device_name, device_info in device_dict.items():
             if device_name == '':
@@ -606,6 +674,7 @@ class CasperFpga(object):
     def device_names_by_container(self, container_name):
         """
         Return a list of devices in a certain container.
+        
         :param container_name: String to search for in containers in memory_devices
         :return: List of strings matching the description
         """
@@ -673,19 +742,21 @@ class CasperFpga(object):
         except:
             pass
 
-        # Determine if the new or old register map is used
-        new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
-        old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
+        legacy_reg_map = False
+        if type(self.transport) is SkarabTransport:
+            # Determine if the new or old register map is used
+            new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
+            old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
 
-        if(new_reg_map_mac_word1_hex == 0x650):
-            self.logger.debug('Using new 40GbE core register map')
-            legacy_reg_map = False
-        elif(old_reg_map_mac_word1_hex == 0x650):
-            self.logger.debug('Using old 40GbE core register map')
-            legacy_reg_map = True
-        else:
-            self.logger.error('Unknown 40GbE core register map')
-            raise ValueError('Unknown register map')
+            if(new_reg_map_mac_word1_hex == 0x650):
+                self.logger.debug('Using new 40GbE core register map')
+                legacy_reg_map = False
+            elif(old_reg_map_mac_word1_hex == 0x650):
+                self.logger.debug('Using old 40GbE core register map')
+                legacy_reg_map = True
+            else:
+                self.logger.error('Unknown 40GbE core register map')
+                raise ValueError('Unknown register map')
 
         # Create Register Map
         self._create_memory_devices(device_dict, memorymap_dict,
@@ -699,6 +770,7 @@ class CasperFpga(object):
     def estimate_fpga_clock(self):
         """
         Get the estimated clock of the running FPGA, in Mhz.
+
         :return: Float - FPGA Clock speed in MHz
         """
         firstpass = self.read_uint('sys_clkcounter')
@@ -712,6 +784,7 @@ class CasperFpga(object):
         """
         Check to see whether this host is transmitting packets without
         error on all its GbE interfaces.
+
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
         :return: Boolean - True/False - Success/Fail
@@ -725,9 +798,9 @@ class CasperFpga(object):
         """
         Check to see whether this host is receiving packets without
         error on all its GbE interfaces.
+
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
-        :return:
         """
         for gbecore in self.gbes:
             if not gbecore.rx_okay(wait_time=wait_time, checks=checks):
@@ -774,8 +847,7 @@ class CasperFpga(object):
 
     def __str__(self):
         """
-
-        :return:
+]
         """
         return self.host
 

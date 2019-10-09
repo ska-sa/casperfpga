@@ -14,6 +14,7 @@ LOGGER = logging.getLogger(__name__)
 def bin2fp(raw_word, bitwidth, bin_pt, signed):
     """
     Convert a raw number based on supplied characteristics.
+
     :param raw_word: the number to convert
     :param bitwidth: its width in bits
     :param bin_pt: the location of the binary point
@@ -38,11 +39,11 @@ def bin2fp(raw_word, bitwidth, bin_pt, signed):
 def fp2fixed(num, bitwidth, bin_pt, signed):
     """
     Convert a floating point number to its fixed point equivalent.
+
     :param num:
     :param bitwidth:
     :param bin_pt:
     :param signed:
-    :return:
     """
     _format = '%s%i.%i' % ('fix' if signed else 'ufix', bitwidth, bin_pt)
     if bin_pt >= bitwidth:
@@ -70,10 +71,10 @@ def cast_fixed(fpnum, bitwidth, bin_pt):
     """
     Represent a fixed point number as an unsigned number, like the Xilinx
     reinterpret block.
+
     :param fpnum:
     :param bitwidth:
     :param bin_pt:
-    :return:
     """
     if fpnum == 0:
         return 0
@@ -98,13 +99,14 @@ class Memory(bitfield.Bitfield):
     def __init__(self, name, width_bits, address, length_bytes):
         """
         A chunk of memory on a device.
+        
         :param name: a name for this memory
         :param width_bits: the width, in BITS, PER WORD
         :param address: the start address in device memory
         :param length_bytes: length, in BYTES
-        :return:
 
         e.g. a Register has width_bits=32, length_bytes=4
+
         e.g.2. a Snapblock could have width_bits=128, length_bytes=32768
         """
         bitfield.Bitfield.__init__(self, name=name, width_bits=width_bits)
@@ -135,7 +137,8 @@ class Memory(bitfield.Bitfield):
     def read_raw(self, **kwargs):
         """
         Placeholder for child classes.
-        @return: (rawdata, timestamp)
+        
+        :return: (rawdata, timestamp)
         """
         raise RuntimeError('Must be implemented by subclass.')
 
@@ -143,7 +146,8 @@ class Memory(bitfield.Bitfield):
         """
         Read raw binary data and convert it using the bitfield
         description for this memory.
-        @return : (data dictionary, read time)
+
+        :return: (data dictionary, read time)
         """
         # read the data raw, passing necessary arguments through
         rawdata, rawtime = self.read_raw(**kwargs)

@@ -1,11 +1,11 @@
 """
-Description:
-Definitions for the Skarab Motherboard.
-    - Includes
-    - OPCCODES
-    - PORTS
-    - Register Masks
-    - Data structures
+**Description:** Definitions for the Skarab Motherboard.
+
+* Includes
+* OPCCODES
+* PORTS
+* Register Masks
+* Data structures
 """
 import struct
 from odict import odict
@@ -133,7 +133,7 @@ GET_CURRENT_LOGS = 0x0057
 GET_VOLTAGE_LOGS = 0x0059
 GET_FAN_CONT_LOGS = 0x005B
 CLEAR_FAN_CONT_LOGS = 0x005D
-
+RESET_DHCP_SM = 0x005F
 
 # FOR VIRTEX FLASH RECONFIG
 DEFAULT_START_ADDRESS = 0x3000000
@@ -346,6 +346,14 @@ HMC_MEZZANINE_SITES = [1, 2, 3]
 HMC_CARD_I2C_PORT_MAP = {0: 0x1,
                          1: 0x2,
                          2: 0x3}
+
+# default tunable parameters
+default_tunable_parameters = {'hmc_reconfig_max_retries': 4,
+                              'hmc_reconfig_timeout': 8,
+                              'link_mon_timeout': 240,
+                              'dhcp_init_time': 2,
+                              'dhcp_retry_rate': 10}
+
 # flash pages
 MEZZANINE_SIGNATURES_PAGE = 0
 TUNABLE_PARAMETERS_PAGE = 15
@@ -400,6 +408,8 @@ MFR_FAN_WARN_LIMIT_CMD = 0xF6
 MFR_FAN_RUN_TIME_CMD = 0xF7
 MFR_FAN_PWM_AVG_CMD = 0xF8
 MFR_FAN_PWM2RPM_CMD = 0xF9
+
+MFR_STATUS = 0xF3
 
 # UCD90120A VOLTAGE AND CURRENT MONITORING DEFINES
 UCD90120A_VMON_I2C_DEVICE_ADDRESS = 0x45  # Without read/write bit
@@ -715,6 +725,7 @@ class Command(object):
     def __init__(self, command_id, seq_num=None):
         """
         A command will always have the following parameters/properties
+
         :param command_id: Integer value
         :param seq_num:  Integer value
         """
@@ -728,6 +739,7 @@ class Command(object):
     def create_payload(self, seq_num):
         """
         Create payload for sending via UDP Packet to SKARAB
+        
         :return: string representation of data
         """
         self.packet['seq_num'] = seq_num
@@ -1788,6 +1800,24 @@ class ClearFanControllerLogsResp(Response):
     def __init__(self, command_id, seq_num, status, padding):
         super(ClearFanControllerLogsResp, self).__init__(command_id, seq_num)
         self.packet['status'] = status
+
+
+class ResetDHCPStateMachineReq(Command):
+    def __init__(self, link_id):
+        super(ResetDHCPStateMachineReq, self).__init__(RESET_DHCP_SM)
+        self.expect_response = True
+        self.response = ResetDHCPStateMachineResp
+        self.num_response_words = 11
+        self.pad_words = 7
+        self.packet['link_id'] = link_id
+
+
+class ResetDHCPStateMachineResp(Response):
+    def __init__(self, command_id, seq_num, link_id, reset_error, padding):
+        super(ResetDHCPStateMachineResp, self).__init__(command_id, seq_num)
+        self.packet['link_id'] = link_id
+        self.packet['reset_error'] = reset_error
+        self.packet['padding'] = padding
 
 
 # Mezzanine Site Identifiers

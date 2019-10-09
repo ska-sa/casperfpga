@@ -86,6 +86,9 @@ class SkarabFanControllerClearError(ValueError):
 class NonVolatileLogRetrievalError(ValueError):
     pass
 
+class SkarabProcessorVersionError(ValueError):
+    pass
+
 # endregion
 
 
@@ -97,6 +100,7 @@ class SkarabTransport(Transport):
     def __init__(self, **kwargs):
         """
         Initialized SKARAB FPGA object
+
         :param host: IP Address of the targeted SKARAB Board
         :param parent_fpga: Instance of parent_fpga
         :param timeout: Send packet timeout in seconds,
@@ -107,7 +111,6 @@ class SkarabTransport(Transport):
         :param blocking: True (default)/False. If True a SKARAB comms
                          check will be performed. If False only the
                          instance will be created.
-        :return: none
         """
         Transport.__init__(self, **kwargs)
 
@@ -184,8 +187,8 @@ class SkarabTransport(Transport):
     def test_host_type(host_ip):
         """
         Is a given IP assigned to a SKARAB?
+
         :param host_ip:
-        :return:
         """
         with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as sctrl_sock:
             sctrl_sock.setblocking(0)
@@ -205,6 +208,7 @@ class SkarabTransport(Transport):
         """
         'ping' the board to see if it is connected and running.
         Tries to read a register
+
         :return: Boolean - True/False - Succes/Fail
         """
         if timeout is None: timeout=self.timeout
@@ -221,6 +225,7 @@ class SkarabTransport(Transport):
     def is_running(self):
         """
         Is the FPGA programmed and running a toolflow image?
+
         :return: True or False
         """
         [golden_img, multiboot, version] = self.get_virtex7_firmware_version()
@@ -232,8 +237,8 @@ class SkarabTransport(Transport):
                      retries=None):
         """
         Run the loopback test.
+
         :param iface:
-        :return: <nothing>
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
@@ -259,6 +264,7 @@ class SkarabTransport(Transport):
              retries=None):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
+
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
@@ -338,6 +344,7 @@ class SkarabTransport(Transport):
     def _bulk_read(self, device_name, size, offset=0):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
+       
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset, offset in bytes
@@ -374,6 +381,7 @@ class SkarabTransport(Transport):
                         retries=None):
         """
         Unchecked data write. Maximum of 1988 bytes per transaction
+
         :param address: memory device to which to write
         :param data: byte string to write
         :param words_to_write: number of 32-bit words to write
@@ -409,10 +417,10 @@ class SkarabTransport(Transport):
     def _bulk_write(self, device_name, data, offset):
         """
         Data write. Supports > 4 bytes written per transaction.
+
         :param device_name: memory device to which to write
         :param data: byte string to write
         :param offset: the offset, in bytes, at which to write
-        :return: <nothing>
         """
 
         # TODO: writing data not bounded to 32-bit words
@@ -480,7 +488,9 @@ class SkarabTransport(Transport):
         """
         Byte-level read. Sorts out reads overlapping registers, and
         reading specific bytes.
+
         Read size-bytes of binary data with carriage-return escape-sequenced.
+        
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset
@@ -525,6 +535,7 @@ class SkarabTransport(Transport):
                    retries=None):
         """
         Unchecked data write.
+
         :param device_name: the memory device to which to write
         :param data: the byte string to write
         :param offset: the offset, in bytes, at which to write
@@ -533,7 +544,6 @@ class SkarabTransport(Transport):
                         - Default value is None, uses initialised value
         :param retries: value specifying number of retries should instruction fail
                         - Default value is None, uses initialised value
-        :return: <nothing>
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
@@ -563,7 +573,6 @@ class SkarabTransport(Transport):
         """
         Deprogram the FPGA.
         This actually reboots & boots from the Golden Image
-        :return: <nothing>
         """
         # trigger reboot of FPGA
         self.reboot_fpga()
@@ -574,14 +583,12 @@ class SkarabTransport(Transport):
         Program the FPGA from flash memory.
         This is achieved with a reboot of the board.
         The SKARAB boots from flash on start up.
-        :return:
         """
         self.reboot_fpga()
 
     def boot_from_sdram(self):
         """
         Triggers a reboot of the Virtex7 FPGA and boot from SDRAM.
-        :return:
         """
         # check if sdram was programmed prior
         if not self._sdram_programmed:
@@ -600,10 +607,11 @@ class SkarabTransport(Transport):
     def upload_to_ram(self, filename, verify=True, chunk_size=1988):
         """
         Upload a bitstream to the SKARAB via the wishone --> SDRAM interface
+        
         :param filename: fpga image to upload
         :param verify: calculate the hash of the local file and compare it
         to the stored one.
-        :return: Boolean - True/False - Succes/Fail
+        :return: Boolean - True/False - Success/Fail
         """
         # Make sure filename isn't empty
         if filename == '' or filename is None:
@@ -628,6 +636,7 @@ class SkarabTransport(Transport):
         """
         Check what image is running on the FPGA and its corresponding
         firmware version.
+        
         :param timeout: value in seconds to wait before aborting instruction
                         - Default value is None, uses initialised value
         :param retries: value specifying number of retries should instruction fail
@@ -664,7 +673,9 @@ class SkarabTransport(Transport):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
+
         *** WARNING: Do NOT attempt to upload a BSP/Flash image to the SDRAM.
+        
         :param filename: fpga image to upload (currently supports bin, bit
                          and hex files)
         :param port: the port to use on the rx end, -1 means a random port
@@ -712,7 +723,6 @@ class SkarabTransport(Transport):
         """
         Clears the last uploaded image from the SDRAM.
         Clears sdram programmed flag.
-        :return: Nothing
         """
         # clear sdram and ethernet counters
         self.sdram_reconfigure(clear_sdram=True, clear_eth_stats=True)
@@ -727,10 +737,12 @@ class SkarabTransport(Transport):
     def data_split_and_pack(data):
         """
         Splits 32-bit data into 2 16-bit words:
-            - dataHigh: most significant 2 bytes of data
-            - dataLow: least significant 2 bytes of data
+            
+            * dataHigh: most significant 2 bytes of data
+            * dataLow: least significant 2 bytes of data
 
         Also packs the data into a binary string for network transmission
+        
         :param data: 32 bit data to be split
         :return: Tuple - dataHigh, dataLow (packed into binary data string)
         """
@@ -747,6 +759,7 @@ class SkarabTransport(Transport):
         """
         Given 2 16-bit words (dataHigh, dataLow), merges the
         data into a 32-bit word
+
         :param data_high: most significant 2 bytes of data
         :param data_low: least significant 2 bytes of data
         :return: unpacked 32-bit data (as a native Python type)
@@ -771,10 +784,10 @@ class SkarabTransport(Transport):
                     retries=None):
         """
         Make send_packet thread safe
-        :param request_object
-        :param timeout
-        :param retries
-        :return:
+
+        :param request_object:
+        :param timeout:
+        :param retries:
         """
         if timeout is None:
             timeout = self.timeout
@@ -855,6 +868,7 @@ class SkarabTransport(Transport):
                         timeout, hostname):
         """
         Receive a response to a packet.
+
         :param request_object:
         :param sequence_number:
         :param timeout:
@@ -955,7 +969,6 @@ class SkarabTransport(Transport):
     def reboot_fpga(self):
         """
         Reboots the FPGA, booting from either the NOR FLASH or SDRAM
-        :return: Nothing
         """
         # trigger a reboot of the FPGA
         self.sdram_reconfigure(do_reboot=True)
@@ -969,6 +982,7 @@ class SkarabTransport(Transport):
     def reset_fpga(self):
         """
         Reset the FPGA firmware. Resets the clks, registers, etc of the design
+        
         :return: 'ok'
         """
         output = self.write_board_reg(sd.C_WR_BRD_CTL_STAT_0_ADDR,
@@ -980,6 +994,7 @@ class SkarabTransport(Transport):
     def shutdown_skarab(self):
         """
         Shuts the SKARAB board down
+        
         :return: 'ok'
         """
         # should this function close the sockets and then attempt to reopen
@@ -1001,9 +1016,9 @@ class SkarabTransport(Transport):
         :param reg_address: address of register to write to
         :param data: data to write
         :param expect_response: does this write command require a response?
-        (only false for reset and shutdown commands)
+            (only false for reset and shutdown commands)
         :return: response object - object created from the response payload
-        (attributes = payload components)
+            (attributes = payload components)
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
@@ -1022,6 +1037,7 @@ class SkarabTransport(Transport):
                        retries=None):
         """
         Read from a specified board register
+
         :param reg_address: address of register to read
         :param retries:
         :return: data read from register
@@ -1043,6 +1059,7 @@ class SkarabTransport(Transport):
                       retries=None):
         """
         Write to a dsp register
+
         :param reg_address: address of register to write to
         :param data: data to write
         :return: response object - object created from the response payload
@@ -1062,6 +1079,7 @@ class SkarabTransport(Transport):
                      retries=None):
         """
         Read from a specified dsp register
+
         :param reg_address: address of register to read
         :return: data read from register
         """
@@ -1081,6 +1099,7 @@ class SkarabTransport(Transport):
                                       retries=None):
         """
         Read the version of the microcontroller embedded software
+
         :return: String - Embedded Software Version - Major.Minor.RevisionNumber
         """
         if timeout is None: timeout=self.timeout
@@ -1100,6 +1119,7 @@ class SkarabTransport(Transport):
         """
         Used to perform low level wishbone write to a wishbone slave. Gives
         low level direct access to wishbone bus.
+
         :param wb_address: address of the wishbone slave to write to
         :param data: data to write
         :return: response object
@@ -1124,6 +1144,7 @@ class SkarabTransport(Transport):
                       retries=None):
         """
         Used to perform low level wishbone read from a Wishbone slave.
+
         :param wb_address: address of the wishbone slave to read from
         :return: Read Data or None
         """
@@ -1151,7 +1172,7 @@ class SkarabTransport(Transport):
                           4 - Mezzanine 3 i2c
         :param slave_address: i2c address of slave to write to
         :param bytes_to_write: 33 bytes of data to write (to be packed as
-        16-bit word each), list of bytes
+                               16-bit word each), list of bytes
         :return: response object
         """
         MAX_I2C_WRITE_BYTES = 33
@@ -1195,6 +1216,7 @@ class SkarabTransport(Transport):
         """
         Perform i2c read on a selected i2c interface.
         Up to 32 bytes can be read in a single i2c transaction.
+
         :param interface: identifier for i2c interface:
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
@@ -1231,6 +1253,7 @@ class SkarabTransport(Transport):
                        retries=None):
         """
         Perform a PMBus read of the I2C bus.
+
         :param bus: I2C bus to perform PMBus Read of
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
@@ -1283,7 +1306,6 @@ class SkarabTransport(Transport):
         :param last_packet: flag to indicate this pkt is the last pkt of
             the image
         :param write_words: chunk of 4096 words from FPGA Image
-        :return: None
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
@@ -1310,6 +1332,7 @@ class SkarabTransport(Transport):
         """
         Used to perform various tasks realting to programming of the boot
         SDRAM and config of Virtex7 FPGA from boot SDRAM
+        
         :param output_mode: specifies the mode of the flash SDRAM interface
         :param clear_sdram: clear any existing FPGA image from the SDRAM
         :param finished_writing: indicate writing FPGA image to SDRAM
@@ -1374,6 +1397,7 @@ class SkarabTransport(Transport):
         """
         Used to read a block of up to 384 16-bit words from the NOR flash
         on the SKARAB motherboard.
+        
         :param flash_address: 32-bit Address in the NOR flash to read
         :param num_words: Number of 16-bit words to be read - Default
         value of 256 words
@@ -1415,10 +1439,11 @@ class SkarabTransport(Transport):
         This method reads back the programmed words from the flash device
         and checks it
         against the data in the input .bin file uploaded to the Flash Memory.
+        
         :param bitstream: Of the input .bin file that was programmed to Flash
-        Memory
+            Memory
         :param flash_address: 32-bit Address in the NOR flash from which to
-        START reading
+            START reading
         :return: Boolean success/fail
         """
         bitstream_chunks = [
@@ -1481,14 +1506,14 @@ class SkarabTransport(Transport):
 
         :param flash_address: 32-bit flash address to program to
         :param total_num_words: Total number of 16-bit words to program over
-        one or more Ethernet packets
+            one or more Ethernet packets
         :param num_words: Number of words in this (specific) Ethernet packet
-        to program
+            to program
         :param do_buffered_prog: 0/1 = Perform Buffered Programming
         :param start_prog: 0/1 - First packet in flash programming,
-        start programming operation in flash
+            start programming operation in flash
         :param finish_prog: 0/1 - Last packet in flash programming,
-        complete programming operation in flash
+            complete programming operation in flash
         :param write_words: Words to program, max = 256 Words
         :return: Boolean - Success/Fail - 1/0
         """
@@ -1509,13 +1534,13 @@ class SkarabTransport(Transport):
         - Upper 16 bits of flash_address to start programming to
         - Lower 16 bits of flash_address to start programming to
         - TotalNumWords: Total number of 16-bit words to program over one or
-        more Ethernet packets
+            more Ethernet packets
         - NumWords: Number of words in this Ethernet packet to program
         - doBufferedProgramming: 0/1 - Perform Buffered Programming
         - StartProgram: 0/1 - First packet in flash programming, start
-        programming operation in flash
+            programming operation in flash
         - FinishProgram: 0/1 - Last packet in flash programming, complete
-        programming operation in flash
+            programming operation in flash
         - WriteWords[256] (WordsToWrite): Words to program, max = 256 words
         """
 
@@ -1566,8 +1591,10 @@ class SkarabTransport(Transport):
         """
         Higher level function call to Program n-many words from an
         input .hex (eventually .bin) file.
+
         This method scrolls through the words in the bitstream, and packs
         them into 256+256 words.
+        
         :param bitstream: Of the input .bin file to write to Flash Memory
         :param flash_address: Address in Flash Memory from where to
         start programming
@@ -1626,6 +1653,7 @@ class SkarabTransport(Transport):
                           retries=None):
         """
         Used to erase a block in the NOR flash on the SKARAB motherboard
+        
         :param flash_address: 32-bit address in the NOR flash to erase
         :return: erase_success - 0/1
         """
@@ -1657,12 +1685,13 @@ class SkarabTransport(Transport):
         Higher level function call to Erase n-many Flash Blocks in preparation
         for program_flash_words
         This method erases the required number of blocks in the flash
-        - Only the required number of flash blocks are erased
+        
+        * Only the required number of flash blocks are erased
+        
         :param num_flash_blocks: Number of Flash Memory Blocks to be erased,
-        to make space for the new image
+            to make space for the new image
         :param flash_address: Start address from where to begin erasing
-        Flash Memory
-        :return:
+            Flash Memory
         """
         erase_address = flash_address
         # First, need to SdramReconfigure into 'Flash Mode'
@@ -1848,10 +1877,10 @@ class SkarabTransport(Transport):
     def verify_bytes(self, bitstream):
         """
         This is the high-level function that implements read_spi_page to
-        verify the data from the
-        .ufp file that was written to the Spartan FPGA flash memory.
+        verify the data from the .ufp file that was written to the Spartan FPGA flash memory.
+        
         :param bitstream: of the input .ufp file that was used to reconfigure
-        the Spartan 3AN FPGA
+            the Spartan 3AN FPGA
         :return: Boolean - True/False - Success/Fail - 1/0
         """
 
@@ -1924,10 +1953,11 @@ class SkarabTransport(Transport):
         Low-level function call to program a page to the SPI Flash in the
         Spartan 3AN FPGA on the SKARAB.
         Up to a full page (264 bytes) can be programmed.
+
         :param spi_address: 32-bit address to program bytes to
         :param num_bytes: Number of bytes to program to Spartan flash
         :param write_bytes: Data to program - max 264 bytes -->
-        HEX-ENCODED STRING DATA
+            HEX-ENCODED STRING DATA
         :return: Boolean - Success/Fail - 1/0
         """
         if timeout is None: timeout=self.timeout
@@ -1951,7 +1981,7 @@ class SkarabTransport(Transport):
         - Lower 16 bits of spi_address to start programming to
         - NumBytes: Number of bytes in page to program
         - WriteBytes[264] (BytesToWrite): Bytes to program,
-        max = 264 bytes (1 page)
+            max = 264 bytes (1 page)
         """
         # Split 32-bit Flash Address into 16-bit high and low values
         spi_addr_high, spi_addr_low = self.data_split_and_pack(spi_address)
@@ -1978,9 +2008,9 @@ class SkarabTransport(Transport):
         - Upper 16 bits of Flash Address
         - Lower 16 bits of Flash Address
         - Number of Bytes being written/that were written in the
-        request (at the moment)
+            request (at the moment)
         - VerifyBytes[264]: Verification bytes read from the same page after
-        programming completes
+            programming completes
         - ProgramSpiPageSuccess: 0/1
         - Padding: [2]
         - Therefore Total Number of Words to be expected in the Response:
@@ -2019,8 +2049,9 @@ class SkarabTransport(Transport):
         input .ufp file.
         This method breaks the bitstream up into chunks of up to 264 bytes.
         - Removed 'num_sectors' parameter; doesn't seem to be needed
+        
         :param bitstream: Of the input .ufp file to write to SPI Sectors,
-        without \r and \n
+            without \r and \n
         :param num_pages: Total Number of Pages to be written to the SPI Sectors
         :return: Boolean - Success/Fail - 1/0
         """
@@ -2083,6 +2114,7 @@ class SkarabTransport(Transport):
         """
         Used to erase a sector in the SPI Flash in the Spartan 3AN FPGA
         on the SKARAB.
+        
         :param spi_address: 32-bit address to erase in the Flash
         :return: Boolean - Success/Fail - 1/0
         """
@@ -2111,6 +2143,7 @@ class SkarabTransport(Transport):
     def erase_sectors(self, num_sectors):
         """
         Erase required number of sectors for input .ufp file
+
         :param num_sectors: Required number of sectors to be erased
         :return: Boolean - Success/Fail - 1/0
         """
@@ -2141,7 +2174,6 @@ class SkarabTransport(Transport):
         """
         This method Enables access to ISP Flash by writing two Magic Bytes
         to a certain address space
-        :return:
         """
         # This will return the SpartanFirmwareVersion as an
         # integer_tuple (major, minor)
@@ -2178,7 +2210,6 @@ class SkarabTransport(Transport):
         This method Disables access to ISP Flash by reading from a
         certain address space
         (And subsequently clearing the Magic Flash Byte)
-        :return:
         """
         # This will return the SpartanFirmwareVersion as an
         # integer_tuple (major, minor)
@@ -2207,9 +2238,11 @@ class SkarabTransport(Transport):
         """
         Method created to replicate 'SwappedByte' method in
         SpartanFlashReconfigApp.cpp;
+
         'This is done so that the .ufp bitstream matches raw data format' (?)
         Mirrors 8-bit integer (byte) about its center-point
         e.g. 0b01010110 -> 0b01101010
+
         :param input_byte: to be byte-swapped/mirrored
         :return: Reversed-byte
         """
@@ -2237,9 +2270,9 @@ class SkarabTransport(Transport):
         """
         Used to 'Verify on the fly' the data programmed to SPARTAN Flash
         via program_spi_page.
+
         :param written_bytes:
         :param returned_bytes:
-        :return:
         """
         if len(written_bytes) != len(returned_bytes):
             # Problem
@@ -2265,10 +2298,11 @@ class SkarabTransport(Transport):
         """
         This is the entire function that makes the necessary function calls
         to reconfigure the Spartan's Flash
+        
         :param filename: The actual .ufp file that is to be written to
-        the Spartan FPGA
+            the Spartan FPGA
         :param blind_reconfig: Reconfigure the board and don't wait to verify
-        what has been written
+            what has been written
         :return: Boolean - Success/Fail - 1/0
         """
         # TODO: Figure out how we can use get_spartan_firmware_version in
@@ -2459,8 +2493,9 @@ class SkarabTransport(Transport):
                                        retries=None):
         """
         Checks the number of packets programmed into the SDRAM of SKARAB
+        
         :return: {num_ethernet_frames, num_ethernet_bad_frames,
-        num_ethernet_overload_frames}
+            num_ethernet_overload_frames}
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
@@ -2491,8 +2526,9 @@ class SkarabTransport(Transport):
     def get_virtex7_firmware_version(self, timeout=None, retries=None):
         """
         Read the version of the Virtex 7 firmware
+        
         :return: golden_image, multiboot, firmware_major_version,
-        firmware_minor_version
+            firmware_minor_version
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
@@ -2509,6 +2545,7 @@ class SkarabTransport(Transport):
     def get_microblaze_hardware_version(self):
         """
         Read the version of the microblaze hardware (SoC) implementation
+        
         :return: soc_version (string)
         """
         reg_data = self.read_board_reg(sd.C_RD_SOC_VERSION_ADDR)
@@ -2521,6 +2558,7 @@ class SkarabTransport(Transport):
                                 led_4_on, led_5_on, led_6_on, led_7_on):
         """
         Control front panel status LEDs
+        
         :param led_0_on: True: Turn LED 0 on, False: off
         :param led_1_on: True: Turn LED 1 on, False: off
         :param led_2_on: True: Turn LED 2 on, False: off
@@ -2529,7 +2567,6 @@ class SkarabTransport(Transport):
         :param led_5_on: True: Turn LED 5 on, False: off
         :param led_6_on: True: Turn LED 6 on, False: off
         :param led_7_on: True: Turn LED 7 on, False: off
-        :return: None
         """
         led_mask = 0
         if led_0_on:
@@ -2549,7 +2586,7 @@ class SkarabTransport(Transport):
         if led_7_on:
             led_mask = led_mask | sd.FRONT_PANEL_STATUS_LED7
         self.write_board_reg(sd.C_WR_FRONT_PANEL_STAT_LED_ADDR, led_mask)
-
+        
     def control_front_panel_leds_write(self, dsp_override=True):
         """
         Neatly packaged command that switches control of FrontPanelStatus LEDs
@@ -2591,10 +2628,50 @@ class SkarabTransport(Transport):
         self.logger.debug(debugmsg)
         print(debugmsg)
 
+    def control_front_panel_leds_write(self, dsp_override=True):
+        """
+        Neatly packaged command that switches control of FrontPanelStatus LEDs
+        between DSP and BSP control
+        - Controlled via BSP by default
+
+        :param dsp_override: Boolean - 1/0 - True/False
+        :return: Boolean - 1/0 - True/False
+        """
+
+        # Easiest to just write the value, then check it
+        result = self.write_board_reg(sd.C_WR_DSP_OVERRIDE_ADDR, dsp_override)
+
+        if result.packet['reg_data_low'] != dsp_override:
+            # Problem
+            errmsg = 'Failed to switch control of FrontPanel LEDs...'
+            self.logger.error(errmsg)
+            raise SkarabWriteFailed(errmsg)
+
+        # else: Success
+        led_controller = 'DSP Design' if dsp_override else 'Board Support Package'
+        debugmsg = 'Successfully changed control of FrontPanel LEDs to {}...'.format(led_controller)
+        self.logger.debug(debugmsg)
+        print(debugmsg)
+        return True
+
+    def control_front_panel_leds_read(self):
+        """
+        Neatly packaged command that checks who is controlling FrontPanelStatus LEDs
+        - Controlled via BSP by default
+        """
+        result = self.read_board_reg(sd.C_RD_DSP_OVERRIDE_ADDR)
+
+        if result:
+            debugmsg = 'DSP Design is controlling FrontPanel LEDs...'
+        else:
+            debugmsg = 'Board Support Package is controlling FrontPanel LEDs...'
+
+        self.logger.debug(debugmsg)
+        print(debugmsg)
+
     def _prepare_sdram_ram_for_programming(self):
         """
         Prepares the sdram for programming with FPGA image
-        :return:
         """
         # put sdram in flash mode to enable FPGA outputs
         try:
@@ -2623,6 +2700,7 @@ class SkarabTransport(Transport):
         """
         Completes sdram programming and configuration. Sets to boot from sdram
         and triggers reboot
+
         :return: True if success
         """
         try:
@@ -2685,6 +2763,7 @@ class SkarabTransport(Transport):
         Read a register on the HMC device via the I2C interface
         Prints the data in binary (32-bit) and hexadecimal formats
         Also returns the data
+
         :param interface: identifier for i2c interface:
                           0 - SKARAB Motherboard i2c
                           1 - Mezzanine 0 i2c
@@ -2725,6 +2804,7 @@ class SkarabTransport(Transport):
     def get_skarab_version_info(self):
         """
         Get version info of all SKARAB components
+
         :return: dictionary containing all SKARAB version numbers:
         {
          virtex7_firmware_version:,
@@ -2754,12 +2834,15 @@ class SkarabTransport(Transport):
                         retries=None):
         """
         Get sensor data.
+
         Units:
-        Fan Speed - RPM
-        Fan Speed PWM - PWM %
-        Temperature Sensors - degrees Celsius
-        Voltage - Volts (V)
-        Currents - Amps (A)
+        
+        * Fan Speed - RPM
+        * Fan Speed PWM - PWM %
+        * Temperature Sensors - degrees Celsius
+        * Voltage - Volts (V)
+        * Currents - Amps (A)
+
         :return: all sensor data rolled up into a dictionary
         """
         if timeout is None: timeout=self.timeout
@@ -2768,6 +2851,7 @@ class SkarabTransport(Transport):
         def sign_extend(value, bits):
             """
             Performs 2's compliment sign extension
+
             :param value: value to sign extend
             :param bits: number of bits making up the value
             :return: sign extended value
@@ -2779,6 +2863,7 @@ class SkarabTransport(Transport):
             """
             Checks the value returned from the temperature sensor and handles
             it accordingly.
+
             :param value: value returned from temperature sensor
             :return: correct temperature value
             """
@@ -2851,6 +2936,7 @@ class SkarabTransport(Transport):
             """
             Handles the data returned by the voltage monitor for the various
             board voltages. Returns actual voltages extracted from this data.
+            
             :param raw_sensor_data: array containing raw sensor data
             :param index: index at which next voltage sensor data begins
             :return: extracted voltage
@@ -2869,6 +2955,7 @@ class SkarabTransport(Transport):
             """
             Handles the data returned by the current monitor for the various
             board currents. Returns actual current extracted from this data.
+            
             :param raw_sensor_data: array containing raw sensor data
             :param index: index at which next current sensor data begins
             :return: extracted current
@@ -2891,6 +2978,7 @@ class SkarabTransport(Transport):
         def check_fan_speed(fan_name, value):
             """
             Checks if a given fan is running within acceptable limits
+            
             :param fan_name: fan to be checked
             :param value: fan speed value
             :return: OK, WARNING or ERROR
@@ -2904,10 +2992,11 @@ class SkarabTransport(Transport):
         def check_temperature(sensor_name, value, inlet_ref):
             """
             Checks if a given temperature is within acceptable range
+            
             :param sensor_name: temperature to check
             :param value: temperature value
             :param inlet_ref: inlet temperature; used as reference for other
-            temperature thresholds
+                temperature thresholds
             :return: OK, WARNING or ERROR
             """
 
@@ -2933,6 +3022,7 @@ class SkarabTransport(Transport):
         def check_current(current_name, value):
             """
             Checks if a given PSU current reading is within acceptable range
+            
             :param current_name: current to check
             :param value: value of the sensor
             :return: OK, WARNING or ERROR
@@ -2950,6 +3040,7 @@ class SkarabTransport(Transport):
         def check_voltage(voltage_name, value):
             """
             Checks if a given PSU voltage reading is within acceptable range
+            
             :param voltage_name: voltage to check
             :param value: value of the sensor
             :return: OK, WARNING or ERROR
@@ -3062,6 +3153,7 @@ class SkarabTransport(Transport):
         """
         Sets the speed of a selected fan on the SKARAB motherboard. Desired
         speed is given as a PWM setting: range: 0.0 - 100.0
+        
         :param fan_page: desired fan
         :param pwm_setting: desired PWM speed (as a value from 0.0 to 100.0)
         :return: (new_fan_speed_pwm, new_fan_speed_rpm)
@@ -3083,7 +3175,6 @@ class SkarabTransport(Transport):
     def post_get_system_information(self):
         """
         Cleanup run after get_system_information
-        :return:
         """
         # Fix the memory mapping for SKARAB registers by masking the most
         # significant bit of the register address parsed from the fpg file.
@@ -3097,6 +3188,7 @@ class SkarabTransport(Transport):
     def configure_i2c_switch(self, switch_select):
         """
         Configures the PCA9546AD I2C switch.
+        
         :param switch_select: the desired switch configuration:
                Fan Controller = 1
                Voltage/Current Monitor = 2
@@ -3116,6 +3208,7 @@ class SkarabTransport(Transport):
     def get_spartan_checksum(self):
         """
         Method for easier access to the Spartan Checksum
+
         :return: spartan_flash_write_checksum
         """
         rd_addr = sd.SPARTAN_SPI_REG_ADDR + sd.SPARTAN_CHECKSUM_UPPER_OFFSET
@@ -3128,7 +3221,6 @@ class SkarabTransport(Transport):
     def get_spartan_firmware_version(self):
         """
         Get a string representation of the firmare_version
-        :return:
         """
         (major, minor) = self.get_spartan_firmware_version_tuple()
         return str(major) + '.' + str(minor)
@@ -3137,6 +3229,7 @@ class SkarabTransport(Transport):
         """
         Using read_spi_page() function to read two SPI Addresses which give
         the major and minor version numbers of the SPARTAN Firmware Version
+        
         :return: Integer Tuple (Major, Minor)
         """
         # Just a heads-up, read_spi_page(address, num_bytes)
@@ -3155,7 +3248,6 @@ class SkarabTransport(Transport):
         :param gbename:
         :param ip:
         :param mask:
-        :return:
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
@@ -3585,6 +3677,34 @@ class SkarabTransport(Transport):
 
         return signature
 
+    def reset_dhcp_state_machine(self, link_id=1, timeout=None, retries=None):
+        """
+        Resets the DHCP State Machine for the given link
+        :param link_id: id of the interface on which DHCP is to be reset
+        1 - 40GbE
+        0 - 1GbE
+        :return: True if reset issued successfully
+        """
+
+        error_dictionary = {1: 'No such link id',
+                            2: 'Specified link is down'}
+
+        request = sd.ResetDHCPStateMachineReq(link_id)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check if the request was successful
+        if not response.packet['reset_error']:
+            self.logger.info(
+                'DHCP state machine reset issued on link_id: {}'.format(
+                    response.packet['link_id']))
+            return True
+        else:
+            err = 'DHCP state machine reset on link_id: {} failed! {}.'.format(
+                response.packet['link_id'],
+                error_dictionary[response.packet['reset_error']])
+            raise SkarabUnknownDeviceError(err)
+
     # TODO: only declare this function once! Will have to be global
     @staticmethod
     def _sign_extend(value, bits):
@@ -3945,5 +4065,177 @@ class SkarabTransport(Transport):
 
         except NonVolatileLogRetrievalError:
             self.logger.error('Failed to retrieve fan controller log data')
+
+    def _set_to_default_configuration(self, threshold_1v0_current=35,
+                                      tuneable_parameters_dict=sd.default_tunable_parameters):
+        """
+        Configure the SKARAB board to the SARAO default configuration parameters
+        :param: threshold_1v0_current
+        :param: tuneable_parameters_dict
+        :return: True if success, False otherwise
+        """
+
+        # check MircoBlaze version
+        major, minor, patch = self.get_embedded_software_version().split('.')
+        if (int(major) < 3) or (int(major) == 3 and int(minor) < 11):
+            raise SkarabProcessorVersionError('MicroBlaze version is too '
+                                              'old to support configuration '
+                                              'of tunable parameters')
+
+        # configure 1V0 Trip Current Threshold
+        current_threshold_set = self._set_1v0_trip_current_threshold(
+            trip_threshold=threshold_1v0_current)
+
+        if not current_threshold_set:
+            self.logger.warning('Setting trip threshold for '
+                                '1V0 current to {} failed!'.format(threshold_1v0_current))
+
+        # configure tunable parameters
+        error_dict = {}
+        self.set_hmc_reconfig_max_retries(tuneable_parameters_dict['hmc_reconfig_max_retries'])
+        self.set_hmc_reconfig_timeout(tuneable_parameters_dict['hmc_reconfig_timeout'])
+        self.set_link_mon_timeout(tuneable_parameters_dict['link_mon_timeout'])
+        self.set_dhcp_init_time(tuneable_parameters_dict['dhcp_init_time'])
+        self.set_dhcp_retry_rate(tuneable_parameters_dict['dhcp_retry_rate'])
+
+        # check if the tunable parameters were set correctly
+        set_parameters = self.get_tunable_parameters()
+        for parameter, value in set_parameters.items():
+            if value != tuneable_parameters_dict[parameter]:
+                error_dict[parameter] = value
+
+        if error_dict:
+            #  some parameters were not set correctly
+            self.logger.warning("Some parameters were not set correctly. "
+                  "These are the errorneous parameters and the "
+                  "values they are set to:{}".format(error_dict))
+        else:
+            self.logger.debug("All tunable parameters successfully configured!")
+
+        # configure fan control logic
+        # TODO: add when available
+
+        if error_dict or not current_threshold_set:
+            return False
+        else:
+            return True
+
+    def _set_1v0_trip_current_threshold(self, trip_threshold=35):
+        """
+        Reconfigure the 1V0 current trip threshold
+        :param trip_threshold: The desired 1V0 current trip threshold (Amps)
+        :return: True if success, False otherwise
+        """
+
+        # check that the desired threshold is within the acceptable range
+
+        if trip_threshold < 20:
+            self.logger.warning("Desired current limit too low! "
+                                "Threshold must be >= 20A")
+            return False
+
+        # work out the [LSB, MSB] to set the threshold
+
+        # calculation of the LSB and MSB for trip value
+        # current measured as voltage divided by sense resistor
+
+        # voltage over the 1V0 Rsense is on page 7 of i2c device 0x47 (UCD90120A)
+        # this voltage can be read with READ_VOUT cmd (0x8b) and is in the LINEAR16 format.
+        # from datasheet, UCD90xxx Sequencer and System Health Controller PMBus Command Reference:
+        #   pg. 13 par. 2.1 =>  Voltage = V x 2^x
+        #                       V is 16bit unsigned int (from READ_VOUT)
+        #                       x is signed 5-bit two's complement exponent (from VOUT_MODE)
+
+        # therefore :
+        # current = value x 2^(x) x 1/R(sense)
+
+        # for page 7:
+        # VOUT_MODE = 17 => 17 -32 = -15 two's compl 5-bit signed integer
+        # R(sense) = 100*0.00025 = 0.025
+
+        # => current (A) = value x 2^(-15) * 1/0.025
+        # => value = current / (2^(-15) * 1/0.025)
+        # e.g. 32A
+        # => value = 26,214.4 ~ 26,214 = 0x6666
+        # e.g. 35A
+        # => value = 28,672 = 0x7000
+
+        value = int(trip_threshold / (2**(-15) * 1.0/0.025))
+
+        limit_msb = value >> 8
+        limit_lsb = value & 0xff
+
+        assert limit_msb >= 0x40, "Desired current limit too low! " \
+                                  "Threshold must be >= 20A"
+
+        # set i2c switch to select current mon
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.MONITOR_SWITCH_SELECT)
+        time.sleep(0.5)
+
+        # set current monitor page to 7, which corresponds to 1V0 current
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.PAGE_CMD, sd.P1V0_CURRENT_MON_PAGE)
+        time.sleep(1)
+
+        # now set the current fault limit with the VOUT_OV_FAULT_LIMIT cmd
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.VOUT_OV_FAULT_LIMIT_CMD, limit_lsb, limit_msb)
+        time.sleep(1)
+
+        # check the new stored value
+
+        stored_threshold = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_OV_FAULT_LIMIT_CMD, 2)
+
+        time.sleep(1)
+
+        # check the set value
+        scale_factor = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_MODE_CMD, 1)
+
+        set_value = (stored_threshold[1] << 8) + stored_threshold[0]
+        set_current = set_value * pow(2, scale_factor[0]-32) * 40
+
+        if set_current == trip_threshold:
+            # new current trip threshold set successfully
+            self.logger.debug("New 1v0 current threshold "
+                              "successfully set to {}".format(set_current))
+
+            # now store the new limit as the default value
+            # store as default value into NV data memory / FLASH
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                           sd.STORE_DEFAULT_ALL_CMD)
+            time.sleep(2)
+
+            stored = False
+            count = 0
+            while not stored and count < 10:
+                status = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                             sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                             sd.MFR_STATUS,
+                                             5)  # read mfr_status
+                if (status[3] & 0x6) == 2:  # status is 32-bit word
+                    stored = True
+                time.sleep(1)
+                count = count + 1
+
+            if not stored:
+                # new default trip threshold not stored
+                self.logger.warning("New default trip threshold not stored!")
+                return False
+
+            self.logger.debug("New default trip threshold successfully stored!")
+            return True
+
+        else:
+            # new current trip threshold not set correctly
+            self.logger.error("New 1v0 current threshold not set correctly. "
+                              "Desired threshold = {} but set "
+                              "threshold = {}".format(trip_threshold,
+                                                      set_current))
+            return False
 
 # end

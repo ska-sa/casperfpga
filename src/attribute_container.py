@@ -14,6 +14,7 @@ class AttributeContainer(object):
     def __getitem__(self, item_to_get):
         """
         This means we can access the attributes of this class like a dictionary.
+
         :param item_to_get: the name of the attribute we want to get
         :return: the attribute value
         """
@@ -60,8 +61,8 @@ class AttributeContainer(object):
     def remove_attribute(self, attribute):
         """
         Remove an attribute from this container by name.
+
         :param attribute: the name of the attribute to remove
-        :return:
         """
         self._items.pop(self._items.index(attribute))
         self.__delattr__(attribute)

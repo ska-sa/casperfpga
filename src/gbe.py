@@ -11,10 +11,10 @@ class Gbe(object):
     def __init__(self, parent, name, address, length_bytes, device_info=None):
         """
         Most of initialised from_device_info in child classes
+
         :param parent:
         :param name:
         :param device_info:
-        :return:
         """
         self.parent = parent
         self.name = name
@@ -39,6 +39,7 @@ class Gbe(object):
         """
         Process device info and the memory map to get all necessary info
         and return a Gbe instance.
+
         :param parent: the parent device, normally an FPGA instance
         :param device_name: the unique device name
         :param device_info: information about this device
@@ -69,11 +70,12 @@ class Gbe(object):
     def process_device_info(self, device_info):
         """
         Process device info to setup GbE object
+
         :param device_info: Dictionary including:
-                            - IP Address
-                            - Mac Address
-                            - Port number
-        :return:
+                            
+                            * IP Address
+                            * Mac Address
+                            * Port number
         """
         if device_info is None:
             return
@@ -102,10 +104,10 @@ class Gbe(object):
     def setup(self, mac, ipaddress, port):
         """
         Set up the MAC, IP and port for this interface
+
         :param mac: String or Integer input
         :param ipaddress: String or Integer input
         :param port: String or Integer input
-        :return:
         """
         self.mac = Mac(mac)
         self.ip_address = IpAddress(ipaddress)
@@ -114,6 +116,7 @@ class Gbe(object):
     def post_create_update(self, raw_device_info):
         """
         Update the device with information not available at creation.
+
         :param raw_device_info: info about this block that may be useful
         """
         self.registers = {'tx': [], 'rx': []}
@@ -138,14 +141,12 @@ class Gbe(object):
     def read_txsnap(self):
         """
         Read the TX snapshot embedded in this GbE yellow block
-        :return:
         """
         raise NotImplementedError
 
     def read_rxsnap(self):
         """
         Read the RX snapshot embedded in this GbE yellow block
-        :return:
         """
         raise NotImplementedError
 
@@ -181,7 +182,8 @@ class Gbe(object):
     def rx_okay(self, wait_time=0.2, checks=10):
         """
         Is this gbe core receiving okay?
-        i.e. _rxctr incrementing and _rxerrctr not incrementing
+            i.e. _rxctr incrementing and _rxerrctr not incrementing
+
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
         :return: True/False
@@ -206,7 +208,8 @@ class Gbe(object):
     def tx_okay(self, wait_time=0.2, checks=10):
         """
         Is this gbe core transmitting okay?
-        i.e. _txctr incrementing and _txerrctr not incrementing
+            i.e. _txctr incrementing and _txerrctr not incrementing
+
         :param wait_time: seconds to wait between checks
         :param checks: times to run check
         :return: True/False
@@ -230,32 +233,32 @@ class Gbe(object):
     def fabric_enable(self):
         """
         Enable the core fabric
-        :return:
         """
         raise NotImplementedError
 
     def fabric_disable(self):
         """
         Enable the core fabric
-        :return:
         """
         raise NotImplementedError
 
     def multicast_receive(self, ip_str, group_size):
         """
         Send a multicast group join request.
+
         :param ip_str: A dotted decimal string representation of the base
-        mcast IP address.
+            mcast IP address.
         :param group_size: An integer for how many mcast addresses from
-        base to respond to.
+            base to respond to.
         """
         raise NotImplementedError
 
     def multicast_remove(self, ip_str):
         """
         Send a request to be removed from a multicast group.
+
         :param ip_str: A dotted decimal string representation of the base
-        mcast IP address.
+            mcast IP address.
         """
         raise NotImplementedError
 
@@ -264,30 +267,34 @@ class Gbe(object):
 
         :param read_arp:
         :param read_cpu:
-        :return:
         """
         raise NotImplementedError
 
     def get_arp_details(self, port_dump=None):
         """
         Get ARP details from this interface.
-        :param port_dump: list - A list of raw bytes from interface memory.
+
+        :param port_dump: A list of raw bytes from interface memory.
+        :type port_dump: list
         """
         raise NotImplementedError
 
     def get_cpu_details(self, port_dump=None):
         """
         Read details of the CPU buffers.
+
         :param port_dump:
-        :return:
         """
         raise NotImplementedError
 
     def print_gbe_core_details(self, arp=False, cpu=False, refresh=True):
         """
         Prints 10GbE core details.
-        :param arp: boolean, include the ARP table
-        :param cpu: boolean, include the CPU packet buffers
+
+        :param arp: include the ARP table
+        :type arp: boolean
+        :param cpu: include the CPU packet buffers
+        :type cpu: boolean
         :param refresh: read the 10gbe details first
         """
         if refresh or (self.core_details is None):
@@ -322,9 +329,9 @@ class Gbe(object):
     def print_arp_details(self, refresh=False, only_hits=False):
         """
         Print nicely formatted ARP info.
+
         :param refresh:
         :param only_hits:
-        :return:
         """
         details = self.core_details
         if details is None:
@@ -353,8 +360,8 @@ class Gbe(object):
     def print_cpu_details(self, refresh=False):
         """
         Print nicely formatted CPU details info.
+
         :param refresh:
-        :return:
         """
         details = self.core_details
         if details is None:

@@ -9,6 +9,7 @@ from casperfpga import CasperFpga
 from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
+from transport_itpm import ItpmTransport
 from memory import Memory
 from network import IpAddress, Mac
 from qdr import Qdr
@@ -29,5 +30,7 @@ except ImportError:
 else:
     __version__ = _katversion.get_version(__path__[0])
 # END VERSION CHECK
+
+name = "casperfpga"
 
 # end

@@ -14,13 +14,13 @@ class FortyGbe(Gbe):
                  device_info=None, position=None, legacy_reg_map=True):
         """
         Implements the Gbe class. This is normally initialised from_device_info.
+
         :param parent: The parent object, normally a CasperFpga instance
         :param name: The name of the device
         :param position: Optional - defaulted to None
         :param address: Integer - Optional - defaulted to 0x54000
         :param length_bytes: Integer - Optional - defaulted to 0x4000
         :param device_info: Information about the device
-        :return: <nothing>
         """
         super(FortyGbe, self).__init__(
             parent, name, address, length_bytes, device_info)
@@ -49,22 +49,22 @@ class FortyGbe(Gbe):
     def post_create_update(self, raw_device_info):
         """
         Update the device with information not available at creation.
+
         :param raw_device_info: info about this block that may be useful
         """
         super(FortyGbe, self).post_create_update(raw_device_info)
-        self.snaps = {'tx': None, 'rx': None}
+        self.snaps = {'tx': [], 'rx': []}
         snapnames = self.parent.snapshots.names()
         for txrx in ['r', 't']:
             snapshot_index=0
-            self.snaps['%sx' % txrx]=[]
-            name = self.name + '_%sxs%i_ss' %(txrx,snapshot_index)
             snapshot_found=True
             while snapshot_found:
+                name = self.name + '_%sxs%i_ss' %(txrx,snapshot_index)
                 if name in snapnames:
-                    self.snaps['%sx' % txrx].append(self.parent.snapshots[self.name + '_%sxs%i_ss' %(txrx,snapshot_index)])
+                    self.snaps['%sx' % txrx].append(self.parent.snapshots[name])
                     snapshot_index+=1
                 else:
-                   snapshot_found=False
+                    snapshot_found=False
         self.get_gbe_core_details()
 
     @classmethod
@@ -72,6 +72,7 @@ class FortyGbe(Gbe):
         """
         Process device info and the memory map to get all necessary info 
         and return a TenGbe instance.
+
         :param parent: the parent device, normally an FPGA instance
         :param device_name: the unique device name
         :param device_info: information about this device
@@ -87,7 +88,6 @@ class FortyGbe(Gbe):
         """
 
         :param addr: 
-        :return: 
         """
         return self.parent.transport.read_wishbone(addr)
 
@@ -96,7 +96,6 @@ class FortyGbe(Gbe):
 
         :param addr: 
         :param val: 
-        :return: 
         """
         return self.parent.transport.write_wishbone(addr, val)
 
@@ -133,6 +132,7 @@ class FortyGbe(Gbe):
     def get_mac(self):
         """
         Retrieve core's configured MAC address from HW.
+
         :return: Mac object
         """
         details = self.get_gbe_core_details()
@@ -141,6 +141,7 @@ class FortyGbe(Gbe):
     def get_ip(self):
         """
         Retrieve core's IP address from HW.
+
         :return: IpAddress object
         """
         ip = self._wbone_rd(self.address + self.reg_map['ip'])
@@ -160,8 +161,7 @@ class FortyGbe(Gbe):
     def set_port(self, port):
         """
 
-        :param port: 
-        :return: 
+        :param port:
         """
         en_port = self._wbone_rd(self.address + self.reg_map['fabric_port'])
         if en_port & (2 ** 16 - 1) == port:
@@ -178,7 +178,6 @@ class FortyGbe(Gbe):
         """
         Get the details of the ethernet core from the device memory map. 
         Updates local variables as well.
-        :return: 
         """
         gbebase = self.address
         gbedata = []
@@ -282,8 +281,10 @@ class FortyGbe(Gbe):
     def get_arp_details(self, port_dump=None):
         """
         Get ARP details from this interface.
-        :param port_dump: list - A list of raw bytes from interface memory;
+
+        :param port_dump: A list of raw bytes from interface memory;
             if not supplied, fetch from hardware.
+        :type port_dump: list
         """
         # TODO
         self.logger.error('Retrieving ARP buffers not yet implemented.')
@@ -293,14 +294,14 @@ class FortyGbe(Gbe):
         """
         Send a request to KATCP to have this tap instance send a multicast
         group join request.
+
         :param ip_str: A dotted decimal string representation of the base
-        mcast IP address.
+                       mcast IP address.
         :param group_size: An integer for how many additional mcast addresses 
-        (from base) to subscribe to. Must be (2^N-1), ie 0, 1, 3, 7, 15 etc.
+                           (from base) to subscribe to. Must be (2^N-1), ie 0, 1, 3, 7, 15 etc.
         :param port: The UDP port on which you want to receive. Note 
-        that only one port is possible per interface (ie it's global
-        and will override any other port you may have configured).
-        :return:
+                     that only one port is possible per interface (ie it's global
+                     and will override any other port you may have configured).
         """
         ip = IpAddress(ip_str)
         if (group_size < 0):
@@ -348,7 +349,6 @@ class FortyGbe(Gbe):
         Print nicely formatted ARP info.
         :param refresh:
         :param only_hits:
-        :return:
         """
         self.logger.warn("Retrieving ARP details not yet implemented.")
         raise NotImplementedError
@@ -357,7 +357,6 @@ class FortyGbe(Gbe):
         """
         Retrieves some statistics for this core.
         Needs to have the debug registers compiled-in to the core at 32b.
-        :return:
         """
         rv = {}
         first = self.read_counters()
@@ -439,7 +438,6 @@ class FortyGbe(Gbe):
     def read_txsnap(self):
         """
         Read the TX snapshot embedded in this GbE yellow block
-        :return:
         """
         d = self.snaps['tx'][0].read()['data']
         for snap in self.snaps['tx'][1:]:
@@ -449,7 +447,6 @@ class FortyGbe(Gbe):
     def read_rxsnap(self):
         """
         Read the RX snapshot embedded in this GbE yellow block
-        :return:
         """
         d = self.snaps['rx'][0].read()['data']
         for snap in self.snaps['rx'][1:]:

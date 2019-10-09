@@ -85,17 +85,23 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param port:
         :param timeout:
         :param connect:
-        :return:
         """
         port = get_kwarg('port', kwargs, 7147)
         timeout = get_kwarg('timeout', kwargs, 10)
         Transport.__init__(self, **kwargs)
 
         # Create instance of self.logger
+        # try:
+        #     self.logger = kwargs['logger']
+        # except KeyError:
+        #     self.logger = logging.getLogger(__name__)
+
         try:
-            self.logger = kwargs['logger']
+            self.parent = kwargs['parent_fpga']
+            self.logger = self.parent.logger
         except KeyError:
-            self.logger = logging.getLogger(__name__)
+            errmsg = 'parent_fpga argument not supplied when creating katcp device'
+            raise RuntimeError(errmsg)
 
         new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
         self.logger.info(new_connection_msg)
@@ -113,21 +119,25 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def test_host_type(host_ip, timeout=5):
         """
         Is this host_ip assigned to a Katcp board?
+
         :param host_ip: as a String
         :param timeout: as an Integer
-        :return:
         """
         try:
             board = katcp.CallbackClient(host=host_ip, port=7147, timeout=timeout, auto_reconnect=False)
             board.setDaemon(True)
             board.start()
-
             connected = board.wait_connected(timeout)
+            board.stop()
+
             if not connected:
-                board.stop()
                 return False
             else:
                 return True
+
+        except AttributeError:
+                raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
+
         except Exception:
             return False
 
@@ -135,12 +145,12 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         Send a file to a host using sockets. Place the result of the
         action in a Queue.Queue
+
         :param filename: the file to send
         :param targethost: the host to which it must be sent
         :param port: the port the host should open
         :param result_queue: the result of the upload, nothing '' indicates success
         :param timeout:
-        :return:
         """
         with contextlib.closing(socket.socket()) as upload_socket:
             stime = time.time()
@@ -169,10 +179,9 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def connect(self, timeout=None):
         """
         Establish a connection to the KATCP server on the device.
+
         :param timeout: How many seconds should we wait? Use instance default
                         if None.
-        :return:
-
         """
         if timeout is None:
             timeout = self._timeout
@@ -184,12 +193,13 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                 self.setDaemon(True)
                 self.start()
             except AttributeError:
-                # old style
-                self.start(daemon=True)
+                # old style katcp-python
+                # self.start(daemon=True)
+                raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
             connected = self.wait_connected(timeout)
             if not connected:
                 err_msg = 'Connection to {} not established within {}s'.format(
-                    self.bind_address_string, timeout)
+                    self.host, timeout)
                 self.logger.error(err_msg)
                 raise RuntimeError(err_msg)
 
@@ -228,9 +238,10 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         Make a blocking request to the KATCP server and check the result.
         Raise an error if the reply indicates a request failure.
+
         :param name: request message to send.
         :param request_timeout: number of seconds after which the request
-        must time out
+            must time out
         :param require_ok: will we raise an exception on a response != ok
         :param request_args: request arguments.
         :return: tuple of reply and informs
@@ -261,6 +272,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def listdev(self, getsize=False, getaddress=False):
         """
         Get a list of the memory bus items in this design.
+
         :return: a list of memory devices
         """
         if getsize:
@@ -280,8 +292,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def listbof(self):
         """
-        Return a list of binary files stored on the host device.
-        :return: a list of binary files
+        :return: a list of binary files stored on the host device.
         """
         _, informs = self.katcprequest(name='listbof',
                                        request_timeout=self._timeout)
@@ -289,7 +300,6 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def status(self):
         """
-        Return the output of the 'status' request
         :return: FPGA status
         """
         reply, _ = self.katcprequest(name='status',
@@ -299,6 +309,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def ping(self):
         """
         Use the 'watchdog' request to ping the FPGA host.
+
         :return: True or False
         """
         reply, _ = self.katcprequest(name='watchdog',
@@ -313,6 +324,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def is_running(self):
         """
         Is the FPGA programmed and running?
+
         :return: True or False
         """
         reply, _ = self.katcprequest(
@@ -336,6 +348,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def read(self, device_name, size, offset=0):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
+       
         :param device_name: name of memory device from which to read
         :param size: how many bytes to read
         :param offset: start at this offset
@@ -344,6 +357,23 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         reply, _ = self.katcprequest(
             name='read', request_timeout=self._timeout, require_ok=True,
             request_args=(device_name, str(offset), str(size)))
+        return reply.arguments[1]
+
+    def wordread(self, device_name, size=1, word_offset=0, bit_offset=0):
+        """
+
+        :param device_name: name of memory device from which to read
+        :param word_count: how many words to read
+        :param word_offset: start at this word offset
+        :param bit_offset: start at this bit offset
+        :return: value in hexadecimal
+        """
+
+        reply, _ = self.katcprequest(
+            name='wordread', request_timeout=self._timeout, require_ok=True,
+            request_args=(device_name, str(word_offset)+':'+str(bit_offset),
+                          str(size))
+        )
         return reply.arguments[1]
 
     def blindwrite(self, device_name, data, offset=0):
@@ -368,6 +398,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         Uses much faster bulkread katcp command which returns data in pages
         using informs rather than one read reply, which has significant
         buffering overhead on the ROACH.
+
         :param device_name: name of the memory device from which to read
         :param size: how many bytes to read
         :param offset: the offset at which to read
@@ -381,13 +412,12 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def program(self, filename=None):
         """
         Program the FPGA with the specified binary file.
+
         :param filename: name of file to program, can vary depending on
             the formats supported by the device. e.g. fpg, bof, bin
-        :return:
         """
         # raise DeprecationWarning('This does not seem to be used anymore.'
         #                          'Use upload_to_ram_and_program')
-        # TODO - The logic here is for broken TCPBORPHSERVER, needs fixing
         if 'program_filename' in self.system_info.keys():
             if filename is None:
                 filename = self.system_info['program_filename']
@@ -433,16 +463,19 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             raise RuntimeError('%s: progdev request %s failed.' %
                                (self.host, filename))
         if filename[-3:] == 'fpg':
-            self.get_system_information()
+            #TODO: fix this
+            # self.get_system_information()
+            pass
         else:
             self.logger.info('%s: %s is not an fpg file, could not parse '
                         'system information.' % (self.host, filename))
         self.logger.info('%s: programmed %s okay.' % (self.host, filename))
+        self.prog_info['last_programmed'] = filename
+        self.prog_info['last_uploaded'] = ''
 
     def deprogram(self):
         """
         Deprogram the FPGA.
-        :return:
 
         Unsubscribes all active tap devices from any multicast groups to
         avoid confusing switch IGMP snoop tables.
@@ -455,6 +488,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             time.sleep(0.05)
             reply, _ = self.katcprequest(name='progdev', require_ok=True)
             self.logger.info('%s: deprogrammed okay' % self.host)
+            self.prog_info['last_programmed'] = ''
         except KatcpRequestError as exc:
             self.logger.exception('{}: could not deprogram FPGA, katcp request '
                              'failed:'.format(self.host))
@@ -464,7 +498,6 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def _unsubscribe_all_taps(self):
         """
         Remove all multicast subscriptions before deprogramming the ROACH
-        :return:
         """
         reply, informs = self.katcprequest(name='tap-info', require_ok=True)
         taps = [inform.arguments[0] for inform in informs]
@@ -478,6 +511,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def set_igmp_version(self, version):
         """
         Sets version of IGMP multicast protocol to use
+
         :param version: IGMP protocol version, 0 for kernel default, 1, 2 or 3
 
         Note: won't work if config keep file is present since the
@@ -492,13 +526,13 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                   skip_verification=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
+
         :param filename: the file to upload
         :param port: the port to use on the rx end, -1 means a random port
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return
-        after upload if False
+            after upload if False
         :param skip_verification: do not verify the uploaded file before reboot
-        :return:
         """
         self.logger.info('%s: uploading %s, programming when done' % (
             self.host, filename))
@@ -566,20 +600,21 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.unhandled_inform_handler = None
         self._timeout = old_timeout
         self.prog_info['last_programmed'] = filename
+        self.prog_info['last_uploaded'] = filename
         return True
 
     def upload_to_flash(self, binary_file, port=-1, force_upload=False,
                         timeout=30, wait_complete=True):
         """
         Upload the provided binary file to the flash filesystem.
+
         :param binary_file: filename of the binary file to upload
         :param port: host-side port, -1 means a random port will be used
         :param force_upload: upload the binary even if it already exists
-        on the host
+            on the host
         :param timeout: upload timeout, in seconds
         :param wait_complete: wait for the upload to complete, or just
-        kick it off
-        :return:
+            kick it off
         """
         # does the bof file exist?
         os.path.getsize(binary_file)
@@ -632,13 +667,14 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         if (request_result != '') or (upload_result != ''):
             raise Exception('Error: request(%s), upload(%s)' %
                             (request_result, upload_result))
+        self.prog_info['last_uploaded'] = filename
         return
 
     def _delete_bof(self, filename):
         """
         Delete a binary file from the device.
+
         :param filename: the file to delete
-        :return:
         """
         if filename == 'all':
             bofs = self.listbof()
@@ -654,7 +690,6 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def tap_arp_reload(self):
         """
         Have the tap driver reload its ARP table right now.
-        :return:
         """
         reply, _ = self.katcprequest(
             name='tap-arp-reload', request_timeout=-1, require_ok=True)
@@ -670,8 +705,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def _process_git_info(metalist):
         """
         Git information in the FPG must be processed.
+
         :param metalist:
-        :return:
         """
         got_git = {}
         time_pref = str(int(time.time())).replace('.', '_') + '_'
@@ -690,6 +725,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def _read_design_info_from_host(self, device=None):
         """
         Katcp request for extra system information embedded in the bitstream.
+        
         :param device: can specify a device name if you don't want everything
         :return: a dictionary of metadata
         """
@@ -733,7 +769,6 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         Get the equivalent of coreinfo.tab from the host using
         KATCP listdev commands.
-        :return:
         """
         self.logger.debug('%s: reading coreinfo' % self.host)
         memorymap_dict = {}
@@ -761,7 +796,6 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def get_system_information_from_transport(self):
         """
 
-        :return:
         """
         if not self.is_running():
             return self.bitstream, None
@@ -772,8 +806,10 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def unhandled_inform(self, msg):
         """
         Overloaded from CallbackClient
+        
         What do we do with unhandled KATCP inform messages that
         this device receives?
+
         Pass it onto the registered function, if it's not None
         """
         if self.unhandled_inform_handler is not None:
@@ -782,7 +818,6 @@ class KatcpTransport(Transport, katcp.CallbackClient):
     def check_phy_counter(self):
         """
 
-        :return:
         """
         request_args = ((0, 0), (0, 1), (1, 0), (1, 1))
         for arg in request_args:

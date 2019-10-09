@@ -39,8 +39,8 @@ class DummyTransport(Transport):
     def __init__(self, **kwargs):
         """
         Make a Dummy Transport
+
         :param host: IP Address should be 127.0.0.1 for a Dummy
-        :return: none
         """
         Transport.__init__(self, **kwargs)
         self._devices = NamedFifo(100)
@@ -52,13 +52,13 @@ class DummyTransport(Transport):
         """
 
         :param timeout:
-        :return:
         """
         return
 
     def is_running(self):
         """
         Is the FPGA programmed and running?
+
         :return: True or False
         """
         return True
@@ -66,7 +66,6 @@ class DummyTransport(Transport):
     def is_connected(self):
         """
 
-        :return:
         """
         return True
 
@@ -79,6 +78,7 @@ class DummyTransport(Transport):
     def ping(self):
         """
         Use the 'watchdog' request to ping the FPGA host.
+
         :return: True or False
         """
         return True
@@ -96,7 +96,6 @@ class DummyTransport(Transport):
         :param device_name:
         :param size:
         :param offset:
-        :return:
         """
         try:
             return self._devices.pop(device_name)
@@ -110,7 +109,6 @@ class DummyTransport(Transport):
         :param device_name:
         :param data:
         :param offset:
-        :return:
         """
         self._devices.push(device_name, data)
         return
@@ -118,6 +116,7 @@ class DummyTransport(Transport):
     def listdev(self):
         """
         Get a list of the memory bus items in this design.
+
         :return: a list of memory devices
         """
         return self.memory_devices.keys()
@@ -125,14 +124,12 @@ class DummyTransport(Transport):
     def deprogram(self):
         """
         Deprogram the FPGA connected by this transport
-        :return:
         """
         raise NotImplementedError
 
     def set_igmp_version(self, version):
         """
-        :param version
-        :return:
+        :param version:
         """
         pass
 
@@ -140,13 +137,13 @@ class DummyTransport(Transport):
                                   wait_complete=True, skip_verification=False):
         """
         Upload an FPG file to RAM and then program the FPGA.
+
         :param filename: the file to upload
         :param port: the port to use on the rx end, -1 means a random port
         :param timeout: how long to wait, seconds
         :param wait_complete: wait for the transaction to complete, return
-        after upload if False
+            after upload if False
         :param skip_verification: don't verify the image after uploading it
-        :return:
         """
         self.bitstream = filename
         return True
@@ -155,34 +152,33 @@ class DummyTransport(Transport):
                         timeout=30, wait_complete=True):
         """
         Upload the provided binary file to the flash filesystem.
+
         :param binary_file: filename of the binary file to upload
         :param port: host-side port, -1 means a random port will be used
         :param force_upload: upload the binary even if it already exists
-        on the host
+            on the host
         :param timeout: upload timeout, in seconds
         :param wait_complete: wait for the upload to complete, or just
-        kick it off
-        :return:
+            kick it off
         """
         return True
 
     def get_system_information_from_transport(self):
         """
 
-        :return:
         """
         return self.bitstream, None
 
     def post_get_system_information(self):
         """
         Cleanup run after get_system_information
-        :return:
         """
         pass
 
     def read_wishbone(self, wb_address):
         """
         Used to perform low level wishbone read from a Wishbone slave.
+
         :param wb_address: address of the wishbone slave to read from
         :return: Read Data or None
         """
@@ -196,6 +192,7 @@ class DummyTransport(Transport):
         """
         Used to perform low level wishbone write to a wishbone slave. Gives
         low level direct access to wishbone bus.
+
         :param wb_address: address of the wishbone slave to write to
         :param data: data to write
         :return: response object
@@ -210,7 +207,6 @@ class DummyTransport(Transport):
         :param gbename:
         :param ip:
         :param mask:
-        :return:
         """
         resp_ip = IpAddress(ip)
         resp_mask = IpAddress(mask)

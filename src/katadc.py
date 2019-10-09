@@ -18,12 +18,12 @@ class KatAdc(Memory):
     def __init__(self, parent, name, address, length, device_info):
         """
         Initialise a KatAdc object with the following parameters.
+
         :param parent: The owner of this block.
         :param name: The name of this block.
         :param address:
         :param length:
         :param device_info:
-        :return: <nothing>
         """
         super(KatAdc, self).__init__(name=name, width=32, address=address, length=length)
         self.parent = parent
@@ -34,6 +34,7 @@ class KatAdc(Memory):
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict, **kwargs):
         """
         Process device info and the memory map to get all necessary info and return a KatAdc instance.
+        
         :param device_name: the unique device name
         :param device_info: information about this device
         :param memorymap_dict: a dictionary containing the device memory map

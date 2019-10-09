@@ -26,6 +26,7 @@ class CheckCounter(object):
 def create_meta_dictionary(metalist):
     """
     Build a meta information dictionary from a provided raw meta info list.
+
     :param metalist: a list of all meta information about the system
     :return: a dictionary of device info, keyed by unique device name
     """
@@ -61,7 +62,6 @@ def get_hostname(**kwargs):
     """
 
     :param kwargs:
-    :return:
     """
     host = kwargs['host']
     bitstream = get_kwarg('bitstream', kwargs)
@@ -73,6 +73,7 @@ def get_hostname(**kwargs):
 def parse_fpg(filename):
     """
     Read the meta information from the FPG file.
+
     :param filename: the name of the fpg file to parse
     :return: device info dictionary, memory map info (coreinfo.tab) dictionary
     """
@@ -170,6 +171,7 @@ def pull_info_from_fpg(fpg_file, parameter):
     Available options for x-engine: 'x_fpga_clock', 'xeng_outbits',
     'xeng_accumulation_len'
     Available options for f-engine: 'n_chans', 'quant_format', 'spead_flavour'
+    
     :param fpg_file: bit file path
     :param parameter: parameter string
     :return: pattern value (string)
@@ -208,12 +210,12 @@ def pull_info_from_fpg(fpg_file, parameter):
 def check_changing_status(counters, data_function, wait_time, num_checks):
     """
     Check a changing set of status fields.
+    
     :param counters: a list of CheckCounters
     :param data_function: a function that will return a single value for the
-    fields from field_dict
+        fields from field_dict
     :param wait_time: seconds to wait between calls to data_function
     :param num_checks: times to run data_function
-    :return:
     """
     # fields = [
     #     CheckCounter('test_required_diff', False, True),
@@ -272,10 +274,10 @@ def check_changing_status(counters, data_function, wait_time, num_checks):
 def program_fpgas(fpga_list, progfile, timeout=10):
     """
     Program more than one FPGA at the same time.
+    
     :param fpga_list: a list of objects for the FPGAs to be programmed
     :param progfile: string, the file used to program the FPGAs
     :param timeout: how long to wait for a response, in seconds
-    :return: <nothing>
     """
     stime = time.time()
     if progfile is None:
@@ -298,12 +300,12 @@ def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
                                      best_effort=False, **kwargs):
     """
     Create KatcpClientFpga objects in many threads, Moar FASTAAA!
+
     :param fpga_class: the class to insantiate, usually CasperFpga
     :param host_list: a comma-seperated list of hosts
     :param port: the port on which to do network comms
     :param timeout: how long to wait, in seconds
     :param best_effort: return as many hosts as it was possible to make
-    :return:
     """
     if fpga_class is None:
         from casperfpga import CasperFpga
@@ -353,7 +355,6 @@ def _check_target_func(target_function):
     """
 
     :param target_function:
-    :return:
     """
     if isinstance(target_function, basestring):
         return target_function, (), {}
@@ -376,14 +377,15 @@ def threaded_fpga_function(fpga_list, timeout, target_function):
     """
     Thread the running of any CasperFpga function on a list of
     CasperFpga objects. Much faster.
+
     :param fpga_list: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
     :param target_function: a tuple with three parts:
+
                             1. string, the KatcpClientFpga function to
                                run e.g. 'disconnect' for fpgaobj.disconnect()
                             2. tuple, the arguments to the function
-                            3. dict, the keyword arguments to the function
-                            e.g. (func_name, (1,2,), {'another_arg': 3})
+                            3. dict, the keyword arguments to the function e.g. (func_name, (1,2,), {'another_arg': 3})
     :return: a dictionary of the results, keyed on hostname
     """
     target_function = _check_target_func(target_function)
@@ -403,14 +405,15 @@ def threaded_fpga_function(fpga_list, timeout, target_function):
 def threaded_fpga_operation(fpga_list, timeout, target_function):
     """
     Thread any operation against many FPGA objects
+
     :param fpga_list: list of KatcpClientFpga objects
     :param timeout: how long to wait before timing out
     :param target_function: a tuple with three parts:
+                            
                             1. reference, the function object that must be
                                run - MUST take FPGA object as first argument
                             2. tuple, the arguments to the function
-                            3. dict, the keyword arguments to the function
-                            e.g. (func_name, (1,2,), {'another_arg': 3})
+                            3. dict, the keyword arguments to the function e.g. (func_name, (1,2,), {'another_arg': 3})
     :return: a dictionary of the results, keyed on hostname
     """
     target_function = _check_target_func(target_function)
@@ -444,7 +447,6 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
         errmsg = 'Ran \'%s\' on hosts. Did not get a response ' \
                  'from %s.' % (target_function[0].__name__, hosts_missing)
         LOGGER.error(errmsg)
-        raise RuntimeError(errmsg)
     return returnval
 
 
@@ -452,12 +454,13 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
     """
     Make a non-blocking KatCP request to a list of KatcpClientFpgas, using
     the Asynchronous client.
+    
     :param fpga_list: list of KatcpClientFpga objects
     :param timeout: the request timeout
     :param request: the request string
     :param request_args: the arguments to the request, as a list
     :return: a dictionary, keyed by hostname, of result dictionaries containing
-    reply and informs
+        reply and informs
     """
 
     raise DeprecationWarning
@@ -527,9 +530,9 @@ def hosts_from_dhcp_leases(host_pref=None,
                            leases_file='/var/lib/misc/dnsmasq.leases'):
     """
     Get a list of hosts from a leases file.
+    
     :param host_pref: the prefix of the hosts in which we're interested
     :param leases_file: the file to read
-    :return:
     """
     hosts = []
     if host_pref is None:
@@ -551,7 +554,6 @@ def deprogram_hosts(host_list):
     """
 
     :param host_list:
-    :return:
     """
     if len(host_list) == 0:
         raise RuntimeError('No good carrying on without hosts.')

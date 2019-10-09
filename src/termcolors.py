@@ -32,6 +32,9 @@ def colorize(text='', opts=(), **kwargs):
         'noreset' - string will not be auto-terminated with the RESET code
 
     Examples:
+
+    .. code-block:: python
+    
         colorize('hello', fg='red', bg='blue', opts=('blink',))
         colorize()
         colorize('goodbye', opts=('underscore',))

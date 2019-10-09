@@ -18,11 +18,14 @@ LOGGER.setLevel(logging.ERROR)
 def getLogger(*args, **kwargs):
     """
     Custom method allowing us to add default handlers to a logger
+
     :param logger_name: Mandatory, logger needs to have a name!
     :param log_level: All Instrument-level entities log at logging.DEBUG
                     - All Board-level entities log at logging.ERROR
-    :return: Tuple - Boolean Success/Fail, True/False
-                   - Logger entity with ConsoleHandler added as default
+    :return: Tuple 
+            
+            * Boolean Success/Fail, True/False
+            * Logger entity with ConsoleHandler added as default
     """
     try:
         logger_name = kwargs['name']
@@ -53,8 +56,11 @@ def getLogger(*args, **kwargs):
 def getNewLogger(*args, **kwargs):
     """
     Custom method allowing us to add default handlers to a logger
-    :return: Tuple - Boolean Success/Fail, True/False
-                   - Logger entity with FileHandler added as default
+
+    :return: Tuple 
+
+            * Boolean Success/Fail, True/False
+            * Logger entity with FileHandler added as default
     """
     try:
         logger_name = kwargs['name']
@@ -96,18 +102,21 @@ def getNewLogger(*args, **kwargs):
 
 class CasperConsoleHandler(logging.Handler):
     """
-    Stream Log Handler for casperfpga records
-    - Trying a custom logger before incorporating into corr2
-    - This inherits from the logging.Handler - Stream or File
+    Stream Log Handler for casperfpga records 
+
+    * Trying a custom logger before incorporating into corr2
+    * This inherits from the logging.Handler - Stream or File
     """
 
     def __init__(self, name, *args, **kwargs):
         """
         New method added to test logger functionality across transport layers
-        - Need to add handlers for both Stream AND File
-        :param name: Name of the StreamHandler - string
+        
+        * Need to add handlers for both Stream AND File
+
+        :param name: Name of the StreamHandler
+        :type name: str
         :param max_len: How many log records to store in the FIFO
-        :return:
         """
         # logging.Handler.__init__(self)
         super(CasperConsoleHandler, self).__init__(*args, **kwargs)
@@ -125,8 +134,9 @@ class CasperConsoleHandler(logging.Handler):
     def emit(self, record):
         """
         Handle a log record
+        
         :param record: Log record as a string
-        :return: True/False - Success/Fail
+        :return: True/False = Success/Fail
         """
         if len(self._records) >= self._max_len:
             self._records.pop(0)
@@ -163,7 +173,6 @@ class CasperConsoleHandler(logging.Handler):
     def clear_log(self):
         """
         Clear the list of stored log messages
-        :return:
         """
         self._records = []
 
@@ -171,7 +180,6 @@ class CasperConsoleHandler(logging.Handler):
         """
 
         :param max_len:
-        :return:
         """
         self._max_len = max_len
 
@@ -179,7 +187,6 @@ class CasperConsoleHandler(logging.Handler):
         """
         Get all log messages in FIFO associated with a logger entity
         :param num_to_print:
-        :return:
         """
         log_list = []
         for ctr, record in enumerate(self._records):
@@ -195,7 +202,6 @@ class CasperConsoleHandler(logging.Handler):
         """
         Print log messages stored in FIFO
         :param num_to_print:
-        :return:
         """
 
         for ctr, record in enumerate(self._records):
@@ -225,10 +231,12 @@ class CasperConsoleHandler(logging.Handler):
 def configure_console_logging(logger_entity, console_handler_name=None):
     """
     Method to configure logging to console using the casperfpga logging entity
-    - A similar method exists in casperfpga
+
+    (A similar method exists in casperfpga)
+
     :param logger_entity: Logging entity to create and add the ConsoleHandler to
-    :param console_handler_name: Optional - will use logger_entity.name by default
-    :return:
+    :param console_handler_name: will use logger_entity.name by default
+    :type console_handler_name: Optional
     """
     # Check if a log-handler with the specified name already exists
     if console_handler_name is None:
@@ -272,11 +280,14 @@ def configure_console_logging(logger_entity, console_handler_name=None):
 def configure_file_logging(logging_entity, filename=None, file_dir=None):
     """
     Method to configure logging to file using the casperfpga logging entity
+
     :param logging_entity: Logging entity to create and add the FileHandler to
-    :param filename: Optional parameter - must be in the format of filename.log
-                                        - Will default to casperfpga_{hostname}.log
-    :param file_dir: Optional parameter - must be a valid path
-    :return:
+    :param filename:
+                    * must be in the format of filename.log
+                    * Will default to casperfpga_{hostname}.log
+    :type filename: Optional
+    :param file_dir: must be a valid path
+    :type file_dir: Optional
     """
     log_filename = None
 
