@@ -659,13 +659,19 @@ class CasperFpga(object):
         # and RCS information if included
         for device_name in device_dict:
             if device_name.startswith('77777_git'):
-                name = device_name[device_name.find('_', 10) + 1:]
                 if 'git' not in self.rcs_info:
                     self.rcs_info['git'] = {}
-                self.rcs_info['git'][name] = device_dict[device_name]
+                self.rcs_info['git'].update(device_dict[device_name])
 
-        if '77777_svn' in device_dict:
-            self.rcs_info['svn'] = device_dict['77777_svn']
+            if device_name.startswith('77777_svn'):
+                if 'svn' not in self.rcs_info:
+                    self.rcs_info['svn'] = {}
+                self.rcs_info['svn'].update(device_dict[device_name])
+
+        try:
+            self.rcs_info['git'].pop('tag')
+        except:
+            pass
 
         # Determine if the new or old register map is used
         new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
