@@ -116,8 +116,8 @@ class Gbe(object):
         self.mac         = Mac(mac)
         self.ip_address  = IpAddress(ipaddress)
         self.port        = port if isinstance(port, int) else int(port)
-        self.gateway     = IpAddress(gateway)
-        self.subnet_mask = IpAddress(subnet_mask)
+        self.gateway     = None if gateway is None else IpAddress(gateway)
+        self.subnet_mask = None if subnet_mask is None else IpAddress(subnet_mask)
 
     def post_create_update(self, raw_device_info):
         """

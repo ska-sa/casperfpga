@@ -173,7 +173,6 @@ class TenGbe(Memory, Gbe):
         # 0x2000     : CPU RX buffer
         # 0x3000     : ARP tables start
 
-
         mac_offset     = 0x00
         ip_offset      = 0x10
         port_offset    = 0x22
