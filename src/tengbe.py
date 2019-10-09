@@ -166,7 +166,6 @@ class TenGbe(Memory, Gbe):
         # 0x29       : RX_eq_pol
         # 0x2a       : TX_preemph
         # 0x2b       : TX_diff_ctrl
-
         # 0x38 - 0x3b: subnet mask
 
         # 0x1000     : CPU TX buffer
@@ -181,7 +180,7 @@ class TenGbe(Memory, Gbe):
 
         self.parent.write(self.name, self.mac.packed(), offset=mac_offset)
         self.parent.write(self.name, self.ip_address.packed(), offset=ip_offset)
-        self.parent.write_int(self.name, self.port, word_offset=port_offset)
+        self.parent.write(self.name, struct.pack('>H', self.port), offset=port_offset)
         if self.subnet_mask is not None:
             self.parent.write(self.name, self.subnet_mask.packed(), offset=subnet_offset)
         if self.gateway is not None:
