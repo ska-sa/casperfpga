@@ -141,22 +141,19 @@ class TenGbe(Memory, Gbe):
         """
         return self.snaps['rx'].read(timeout=10)['data']
 
-    # def fabric_start(self):
-    #    """
-    #    Setup the interface by writing to the fabric directly, bypassing tap.
-    #    :param self:
-    #    :return:
-    #    """
-    #    if self.tap_running():
-    #        log_runtime_error(
-    #            LOGGER, 'TAP running on %s, stop tap before '
-    #                    'accessing fabric directly.' % self.name)
-    #    mac_location = 0x00
-    #    ip_location = 0x10
-    #    port_location = 0x22
-    #    self.parent.write(self.name, self.mac.packed(), mac_location)
-    #    self.parent.write(self.name, self.ip_address.packed(), ip_location)
-    #    # self.parent.write_int(self.name, self.port, offset = port_location)
+    def fabric_start(self):
+        """
+        Setup the interface by writing to the fabric directly, bypassing tap.
+        :param self:
+        :return:
+        """
+
+        mac_offset  = 0x00
+        ip_offset   = 0x10
+        port_offset = 0x22
+        self.parent.write(self.name, self.mac.packed(), offset=mac_offset)
+        self.parent.write(self.name, self.ip_address.packed(), offset=ip_offset)
+        self.parent.write_int(self.name, self.port, offset=port_offset)
 
     def dhcp_start(self):
         """
