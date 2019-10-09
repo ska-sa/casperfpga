@@ -180,7 +180,7 @@ class TenGbe(Memory, Gbe):
 
         self.parent.write(self.name, self.mac.packed(), offset=mac_offset)
         self.parent.write(self.name, self.ip_address.packed(), offset=ip_offset)
-        self.parent.write(self.name, struct.pack('>H', self.port), offset=port_offset)
+        self.parent.write(self.name, struct.pack('>HH', self.port, 0), offset=port_offset)
         if self.subnet_mask is not None:
             self.parent.write(self.name, self.subnet_mask.packed(), offset=subnet_offset)
         if self.gateway is not None:
