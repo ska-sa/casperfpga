@@ -1,6 +1,5 @@
 from wishbonedevice import WishBoneDevice
 import fractions as _frac
-import math
 import logging
 import time
 

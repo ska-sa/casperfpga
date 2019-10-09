@@ -4,7 +4,9 @@ import collections,crcmod
 logger = logging.getLogger(__name__)
 
 class DS28CM00:
-    """ DS28CM00 I2C/SMBus Silicon Serial Number """
+    """ 
+    DS28CM00 I2C/SMBus Silicon Serial Number 
+    """
 
     crcPoly = 0b100110001
     crcInitVal = 0
@@ -12,6 +14,8 @@ class DS28CM00:
     def __init__(self,itf,addr=0x50):
         self.itf = itf
         self.addr = addr
+        # switch from SMB mode to I2C mode
+        self.write(0x8,0x0)
 
     def readSN(self):
         data = self.read(0x0,8)

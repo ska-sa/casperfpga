@@ -3,9 +3,8 @@ Playing with ncurses in Python to scroll up and down, left and right,
 through a list of data that is periodically refreshed.
 
 Revs:
-2010-12-11  JRM Added concat for status line to prevent bailing on small terminals.
-                Code cleanup to prevent modification of external variables.
-                Added left, right page controls
+    **2010-12-11:**  JRM Added concat for status line to prevent bailing on small terminals.
+    Code cleanup to prevent modification of external variables. Added left, right page controls
 """
 
 import curses
@@ -33,9 +32,8 @@ class Screenline(object):
         :param ypos: y position, -1 means at current ypos
         :param ypos: if True, start a new line after this one
         :param fixed: if True, always at this pos from top left, scrolling
-        makes no difference
+            makes no difference
         :param attributes: Curses string attributes
-        :return:
         """
         assert type(data) == str
         self.data = data
@@ -137,7 +135,6 @@ class Scroll(object):
     def cr(self):
         """
         Carriage return, go to the next line
-        :return:
         """
         self._curr_y += 1
 
@@ -145,13 +142,13 @@ class Scroll(object):
                    fixed=False, attributes=curses.A_NORMAL):
         """
         Add a string to a position on the screen.
+        
         :param new_str:
         :param xpos:
         :param ypos:
         :param cr:
         :param fixed:
         :param attributes:
-        :return:
         """
         if fixed and ((xpos == -1) or (ypos == -1)):
             # LOGGER.error('Cannot have a fixed string with undefined position: '
@@ -174,9 +171,9 @@ class Scroll(object):
     def add_line(self, new_line, attributes=curses.A_NORMAL):
         """
         Add a text line to the screen buffer.
+
         :param new_line:
         :param attributes:
-        :return:
         """
         # LOGGER.debug('Added LINE len(%i) to line %i' % (
         #     len(new_line), self._curr_y))
@@ -195,8 +192,8 @@ class Scroll(object):
     def set_current_line(self, linenum):
         """
         Set the current y position of the internal screen buffer.
+
         :param linenum:
-        :return:
         """
         self._curr_y = linenum
 
