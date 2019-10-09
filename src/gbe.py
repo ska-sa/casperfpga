@@ -23,6 +23,8 @@ class Gbe(object):
         self.mac = None
         self.ip_address = None
         self.port = None
+        self.gateway = None
+        self.subnet_mask = None
         self.fullname = self.parent.host + ':' + self.name
         self.block_info = device_info
         self.process_device_info(device_info)
@@ -101,17 +103,21 @@ class Gbe(object):
                              'have mac, ip and port.' % self.fullname)
         self.setup(mac, ip_address, port)
 
-    def setup(self, mac, ipaddress, port):
+    def setup(self, mac, ipaddress, port, gateway=None, subnet_mask=None):
         """
         Set up the MAC, IP and port for this interface
 
-        :param mac: String or Integer input
-        :param ipaddress: String or Integer input
+        :param mac: String or Integer input, MAC address (e.g. '02:00:00:00:00:01')
+        :param ipaddress: String or Integer input, IP address (eg '10.0.0.1')
         :param port: String or Integer input
+        :param gateway: String or Integer input, an IP address
+        :param subnet_mask: string or integer, subnet mask (e.g. '255.255.255.0')
         """
-        self.mac = Mac(mac)
-        self.ip_address = IpAddress(ipaddress)
-        self.port = port if isinstance(port, int) else int(port)
+        self.mac         = Mac(mac)
+        self.ip_address  = IpAddress(ipaddress)
+        self.port        = port if isinstance(port, int) else int(port)
+        self.gateway     = IpAddress(gateway)
+        self.subnet_mask = IpAddress(subnet_mask)
 
     def post_create_update(self, raw_device_info):
         """
