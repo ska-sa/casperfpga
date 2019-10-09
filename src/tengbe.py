@@ -173,11 +173,13 @@ class TenGbe(Memory, Gbe):
            0x3000     : ARP tables start
         """
 
+        gateway = 1 if self.gateway is None else self.gateway.ip_int
+
         ctrl_pack = struct.pack('>QLLLLLLBBH',
                                 self.mac.mac_int,
                                 0,                          # Not assigned
-                                self.gateway.ip_int,
-                                self.ip.ip_int,
+                                gateway,
+                                self.ip_address.ip_int,
                                 0,                          # Not assigned
                                 0,                          # Buffer sozes
                                 0,                          # Not assigned
@@ -186,7 +188,9 @@ class TenGbe(Memory, Gbe):
                                 self.port)
 
         self.parent.blindwrite(self.name, ctrl_pack, offset=0)
-        self.parent.blindwrite(self.name, self.subnet_mask.packed(), offset=0x38)
+
+        if self.subnet_mask is not None:
+            self.parent.blindwrite(self.name, self.subnet_mask.packed(), offset=0x38)
 
     def dhcp_start(self):
         """
