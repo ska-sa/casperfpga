@@ -202,6 +202,41 @@ class SnapAdc(object):
         else:
             raise ValueError("Invalid parameter")
 
+    def setGain(self, gains, use_linear_step=False, fine_gains=None, fgain_cfg=False):
+        """ Set the coarse gain of the ADC channels
+
+        Args:
+            gains (list): List of gains, e.g. [1, 2, 3, 4]
+            use_linear_step (bool): Defaults to use dB steps for values.
+            fine_gains (list): Fine gain values to set
+            fgain_cfg (bool): If fine gains are to be used, set this to True
+
+        Notes:
+            Coarse gain control (parameters in dB). Input gain must be a list of
+            integers. Coarse gain range for HMCAD1511: 0dB ~ 12dB
+        E.g.
+            cGain([1,5,9,12])       # Quad channel mode in dB step
+            cGain([32,50],use_linear_step=True)   # Dual channel mode in x step
+            cGain([10], fgain_cfg=True)  # Single channel mode in dB
+                            # step, with fine gain enabled
+
+        Coarse gain options when by default use_linear_step=False:
+            0 dB, 1 dB, 2 dB, 3 dB, 4 dB, 5 dB, 6 dB,
+            7 dB, 8 dB, 9 dB, 10 dB, 11 dB and 12 dB
+            
+        Coarse gain options when use_linear_step=True:
+            1x, 1.25x, 2x, 2.5x, 4x, 5x, 8x,
+            10x, 12.5x, 16x, 20x, 25x, 32x, 50x
+
+        TODO: Test + improve support for fine gain control
+        """
+
+        self.adc.cGain(gains, cgain_cfg=use_linear_step, fgain_cfg=fgain_cfg)
+
+        if fine_gains is not None:
+            n_channels = len(gains)
+            self.adc.fGain(fine_gains, n_channels)
+
     def setDemux(self, numChannel=1):
         """
         when mode==0: numChannel=4
