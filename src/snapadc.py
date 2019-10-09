@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 # Some codes and docstrings are copied from https://github.com/UCBerkeleySETI/snap_control
-class SNAPADC(object):
+class SnapAdc(object):
 
     RESOLUTION  = 8
 
