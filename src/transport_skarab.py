@@ -3647,8 +3647,8 @@ class SkarabTransport(Transport):
             hmc_retries = struct.unpack('<I', struct.pack('!4B', *hmc_retries_raw))[0]
             hmc_total_retries = struct.unpack('<I', struct.pack('!4B', *hmc_total_retries_raw))[0]
 
-            stats['hmc_retries'] = hmc_retries
-            stats['hmc_total_retries'] = hmc_total_retries
+            stats['hmc_init_failures_recorded'] = hmc_retries
+            stats['hmc_total_init_retries_recorded'] = hmc_total_retries
 
             hmc_reconfigure_stats[prefix] = stats
 
