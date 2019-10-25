@@ -4238,4 +4238,36 @@ class SkarabTransport(Transport):
                                                       set_current))
             return False
 
+    def _check_1v0_current_limit(self):
+        """
+        Check the set 1V0 current trip limit
+        :return: the set current limit for the 1V0 rail
+        """
+        # set i2c switch to select current mon
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.MONITOR_SWITCH_SELECT)
+        time.sleep(0.5)
+
+        # set current monitor page to 7, which corresponds to 1V0 current
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.PAGE_CMD, sd.P1V0_CURRENT_MON_PAGE)
+        time.sleep(1)
+
+        stored_threshold = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_OV_FAULT_LIMIT_CMD, 2)
+
+        time.sleep(1)
+
+        # check the set value
+        scale_factor = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                           sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                           sd.VOUT_MODE_CMD, 1)
+
+        set_value = (stored_threshold[1] << 8) + stored_threshold[0]
+        set_current = set_value * pow(2, scale_factor[0] - 32) * 40
+
+        self.logger.info('Configured 1v0 current for '
+                         'host {} is {}'.format(self.host, set_current))
+        return set_current
 # end
