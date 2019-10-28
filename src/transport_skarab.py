@@ -732,6 +732,8 @@ class SkarabTransport(Transport):
 
         # clear prog_info for last uploaded
         self.prog_info['last_uploaded'] = ''
+        self.logger.debug('SDRAM for host {host} '
+                          'cleared'.format(host=self.host))
 
     @staticmethod
     def data_split_and_pack(data):

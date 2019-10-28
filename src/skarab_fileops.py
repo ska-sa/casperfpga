@@ -251,6 +251,9 @@ def upload_to_ram_progska(filename, fpga_list, chunk_size=1988):
     processor = processor(filename, binname)
     binname = processor.make_bin()[1]
     fpga_hosts = [fpga.host for fpga in fpga_list]
+
+    # clear sdram of all fpgas before uploading
+    clear_skarabs_sdram(fpga_list)
     
     if chunk_size not in [1988, 3976, 7952]:
         raise sd.SkarabProgrammingError(
@@ -680,6 +683,15 @@ def reboot_skarabs_from_sdram(fpgas):
     # application must check to see that correct image booted.
     try:
         thop(fpgas, 5, fpga_reboot)
+    except RuntimeError:
+        pass
+
+
+def clear_skarabs_sdram(fpgas):
+    def clear_sdram(fpga):
+        fpga.transport.clear_sdram()
+    try:
+        thop(fpgas, 5, clear_sdram)
     except RuntimeError:
         pass
 
