@@ -3090,7 +3090,7 @@ class SkarabTransport(Transport):
                         self.sensor_data[
                             key] = (temperature, 'degC',
                                     check_temperature(key, temperature,
-                                                      inlet_ref))
+                                                      inlet_ref=0))
                     elif 'hmc' in key:
                         temperature = struct.unpack(
                             '!I', struct.pack('!4B',
@@ -3099,13 +3099,17 @@ class SkarabTransport(Transport):
                                                  'degC',
                                                  check_temperature(key, temperature, inlet_ref=0))
 
+                    # ignore the mezzanine temperatures as these are unreliable
+                    elif 'mezzanine' in key:
+                        continue
+
                     else:
                         temperature = temperature_value_check(
                             raw_sensor_data[value])
                         self.sensor_data[key] = (temperature, 'degC',
                                                  check_temperature(key,
                                                                    temperature,
-                                                                   inlet_ref))
+                                                                   inlet_ref=0))
 
         def parse_mezzanine_temperatures(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -3140,7 +3144,9 @@ class SkarabTransport(Transport):
             parse_currents(recvd_sensor_data_values)
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
-            parse_mezzanine_temperatures(recvd_sensor_data_values)
+
+            # disable mezzanine temperatures as these values are not reliable
+            # parse_mezzanine_temperatures(recvd_sensor_data_values)
 
             return self.sensor_data
 

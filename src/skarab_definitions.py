@@ -661,11 +661,11 @@ current_ranges = {
 # hmc die and mezzanine temps are not relative to inlet temp
 temperature_ranges = {
     'inlet_temperature_degC': (50.0, -10.0),
-    'outlet_temperature_degC': (10, -10),
-    'fpga_temperature_degC': (30, -10),
-    'fan_controller_temperature_degC': (10, -10),
-    'voltage_monitor_temperature_degC': (10, -10),
-    'current_monitor_temperature_degC': (10, -10),
+    'outlet_temperature_degC': (60.0, -10),
+    'fpga_temperature_degC': (80.0, 5.0),
+    'fan_controller_temperature_degC': (80.0, 5.0),
+    'voltage_monitor_temperature_degC': (80.0, 5.0),
+    'current_monitor_temperature_degC': (80.0, 5.0),
     'mezzanine_site_0_temperature_degC': (80.0, 5.0),
     'mezzanine_site_1_temperature_degC': (80.0, 5.0),
     'mezzanine_site_2_temperature_degC': (80.0, 5.0),
