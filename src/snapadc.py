@@ -196,6 +196,14 @@ class SNAPADC(object):
             self.logger.error('Frame clock alignment failed!')
             return False
 
+        if not self.rampTest():
+            self.logger.warning('ADC failed on ramp test')
+            return False
+
+        if not self.isLaneBonded(numChannel):
+            self.logger.error('ADC failed Lane Bonding test')
+            return False
+
         # Finally place ADC in "correct" mode
         self.setDemux(numChannel=numChannel)
 
@@ -842,19 +850,14 @@ class SNAPADC(object):
         errs = self.testPatterns(mode='ramp')
         return np.all(np.array([adc.values() for adc in errs.values()])==0)
 
-    def isLaneBonded(self, numChannel=1):
+    def isLaneBonded(self):
         """
         Using ramp test mode, check that all lanes are aligned.
         I.e., snap some data, and check that all lanes' counters are
         in sync.
-        inputs:
-            numChannel (int): Set the number of channels per ADC chip. Used
-                              to return the demux setting to the correct value
-                              after checking alignment.
         returns: True is aligned, False otherwise
         """
         self.adc.test("en_ramp")
-        self.setDemux(1)
         self.snapshot()
         d = self.readRAM(signed=False)
         ref_val = d[self.adcList[0]][0]
@@ -862,5 +865,4 @@ class SNAPADC(object):
         for adc in self.adcList:
             ok = ok and (np.all(d[adc][0] == ref_val))
         self.adc.test("off")
-        self.setDemux(numChannel)
         return ok
