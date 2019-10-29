@@ -4120,6 +4120,9 @@ class SkarabTransport(Transport):
         else:
             self.logger.debug("All tunable parameters successfully configured!")
 
+        # enable non-volatile fan controller logging
+        # TODO: implement function
+
         # configure fan control logic
         # TODO: add when available
 
@@ -4278,4 +4281,72 @@ class SkarabTransport(Transport):
         self.logger.info('Configured 1v0 current for '
                          'host {} is {}'.format(self.host, set_current))
         return set_current
+
+    def _enable_fan_controller_nv_logs(self):
+        """
+        Enable logging of fan controller faults to non-volatile memory
+        :return: True if success, False otherwise
+        """
+
+        # set i2c switch to select the fan controller
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.FAN_CONT_SWITCH_SELECT)
+
+        # clear the fault log
+        # read the control register value
+        # tmp[0] = LSB, tmp[1] = MSB
+        tmp = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                  sd.MAX31785_I2C_DEVICE_ADDRESS,
+                                  sd.MFR_MODE_CMD, 2)
+
+        # toggle bit to clear fault log
+        tmp[1] = tmp[1] | 0x40
+
+        # write new value to the control register
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                       sd.MFR_MODE_CMD, tmp[0], tmp[1])
+
+        # restore the default fan controller configuration
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                       sd.RESTORE_DEFAULT_ALL_CMD)
+
+        # enable non-volatile logging for all relevant pages (page 0 - page 22)
+        for page in range(0, 23):
+            time.sleep(0.5)
+            # select page of the fan controller
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                           sd.PAGE_CMD, page)
+
+            time.sleep(0.5)
+
+            # get the current page configuration
+            tmp = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                      sd.MAX31785_I2C_DEVICE_ADDRESS,
+                                      sd.MFR_FAULT_RESPONSE_CMD, 1)
+
+            time.sleep(0.5)
+
+            # toggle the bit to enable logging to non-volatile memory
+            tmp[0] = tmp[0] | 0x80
+
+            # write new value to the page control register
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                           sd.MFR_FAULT_RESPONSE_CMD, tmp[0])
+
+            time.sleep(0.5)
+
+        self.logger.info('Enabled Fan Controller Fault logging for'
+                         'host {}'.format(self.host))
+
+        # store the new default configuration incl. the non-volatile fault logging
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                       sd.STORE_DEFAULT_ALL_CMD)
+
+        # TODO: implement error checking and error handling
+        # check here:
+            # read the value back
+            # check the msb
+            # if it's set, return true, else return false
+
+        return True
 # end
