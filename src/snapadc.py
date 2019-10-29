@@ -200,7 +200,7 @@ class SNAPADC(object):
             self.logger.warning('ADC failed on ramp test')
             return False
 
-        if not self.isLaneBonded(numChannel):
+        if not self.isLaneBonded():
             self.logger.error('ADC failed Lane Bonding test')
             return False
 
