@@ -110,14 +110,11 @@ class SNAPADC(object):
 
         """
 
-        self.logger.debug("Reseting adc_unit")
-        self.reset()
-
-        self.selectADC()
-
         if self.lmx is not None:
             self.logger.debug("Reseting frequency synthesizer")
             self.lmx.init()
+            self.logger.debug("Disabling Synth output A")
+            self.lmx.setWord(1, "OUTA_PD")
 
             self.logger.debug("Configuring frequency synthesizer")
             if not self.lmx.setFreq(samplingRate):
@@ -130,8 +127,38 @@ class SNAPADC(object):
         else:
             self.clksw.setSwitch('b')
 
+        time.sleep(0.5)
+
+        self.logger.debug("Reseting adc_unit")
+        self.reset()
+
+        self.selectADC()
+
         self.logger.debug("Initialising ADCs")
-        self.adc.init()
+        self.adc.init() # This includes a reset, so don't set any ADC registers before here!
+
+        # SNAP only uses one of the 3 ADC chips to provide clocks, so turn the others
+        # to the lowest drive strength possible and terminate them
+        self.selectADC([1,2]) # Talk to the 2nd and 3rd ADCs
+        # Please refer to HMCAD1511 datasheet for more details
+        # LCLK Termination
+        rid, mask = self.adc._getMask('en_lvds_term')
+        val = self.adc._set(0x0, 0b1, mask)          # Enable termination. Default terminations (i.e. none)
+        rid, mask = self.adc._getMask('term_lclk')
+        val = self.adc._set(val, 0b011, mask)        # 94 ohm
+        # Frame CLK termination
+        rid, mask = self.adc._getMask('term_frame')
+        val = self.adc._set(val, 0b011, mask)        # 94 ohm
+        self.adc.write(val, rid)
+        # LCLK Drive Strength
+        rid, mask = self.adc._getMask('ilvds_lclk')
+        val = self.adc._set(0x0, 0b011, mask)        # 0.5 mA. Default Data drive strength
+        # Frame CLK Drive Strength
+        rid, mask = self.adc._getMask('ilvds_frame')
+        val = self.adc._set(val, 0b011, mask)        # 0.5 mA
+        self.adc.write(val, rid)
+        # Select all ADCs and continue initialization
+        self.selectADC()
 
         if numChannel==1 and samplingRate<240:
             lowClkFreq = True
@@ -186,12 +213,12 @@ class SNAPADC(object):
 
         # csn active low for HMCAD1511, but inverted in wb_adc16_controller
         if chipSel==None:       # Select all ADC chips
-            self.adc.csn = np.bitwise_or.reduce([0b1 << s for s in self.adcList])
+            self.adc.cs = np.bitwise_or.reduce([0b1 << s for s in self.adcList])
         elif isinstance(chipSel, list) and all(s in self.adcList for s in chipSel):
-            csnList = [0b1 << s for s in self.adcList if s in chipSel]
-            self.adc.csn = np.bitwise_or.reduce(csnList)
+            csList = [0b1 << s for s in self.adcList if s in chipSel]
+            self.adc.cs = np.bitwise_or.reduce(csList)
         elif chipSel in self.adcList:
-            self.adc.csn = 0b1 << chipSel
+            self.adc.cs = 0b1 << chipSel
         else:
             raise ValueError("Invalid parameter")
 
