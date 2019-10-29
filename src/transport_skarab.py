@@ -4306,6 +4306,7 @@ class SkarabTransport(Transport):
         self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
                        sd.MFR_MODE_CMD, tmp[0], tmp[1])
 
+        time.sleep(0.5)
         # restore the default fan controller configuration
         self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
                        sd.RESTORE_DEFAULT_ALL_CMD)
