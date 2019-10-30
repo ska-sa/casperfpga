@@ -850,19 +850,25 @@ class SNAPADC(object):
         errs = self.testPatterns(mode='ramp')
         return np.all(np.array([adc.values() for adc in errs.values()])==0)
 
-    def isLaneBonded(self):
+    def isLaneBonded(self, bondAllAdcs=False):
         """
         Using ramp test mode, check that all lanes are aligned.
         I.e., snap some data, and check that all lanes' counters are
         in sync.
+        inputs:
+            bondAllAdcs (bool): If True, require all chips to be synchronized.
+                                If False, only require lanes within a chip to
+                                be mutually synchronized.
         returns: True is aligned, False otherwise
         """
         self.adc.test("en_ramp")
         self.snapshot()
         d = self.readRAM(signed=False)
-        ref_val = d[self.adcList[0]][0]
         ok = True
         for adc in self.adcList:
-            ok = ok and (np.all(d[adc][0] == ref_val))
+            if bondAllAdcs:
+                ok = ok and (np.all(d[adc][0] == d[self.adcList[0]][0][0]))
+            else:
+                ok = ok and (np.all(d[adc][0] == d[adc][0][0]))
         self.adc.test("off")
         return ok
