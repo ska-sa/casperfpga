@@ -347,9 +347,16 @@ class TapcpTransport(Transport):
                 time.sleep(self.server_timeout)
                 LOGGER.info('Tftp error on read -- retrying.')
         LOGGER.warning('Several Tftp errors on read -- final retry.')
-        buf = StringIO()
-        self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
-        return buf.getvalue()
+        try:
+            buf = StringIO()
+            self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
+            return buf.getvalue()
+        except:
+            try:
+                self.t.context.end()
+            except:
+                pass
+        raise RuntimeError
 
     def blindwrite(self, device_name, data, offset=0, use_bulk=True):
         """
@@ -378,8 +385,15 @@ class TapcpTransport(Transport):
                 time.sleep(self.server_timeout)
                 LOGGER.info('Tftp error on write -- retrying')
         LOGGER.warning('Several Tftp errors on write-- final retry.')
-        buf = StringIO(data)
-        self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
+        try:
+            buf = StringIO(data)
+            self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
+        except:
+            try:
+                self.t.context.end()
+            except:
+                pass
+        raise RuntimeError
 
     def deprogram(self):
         """
