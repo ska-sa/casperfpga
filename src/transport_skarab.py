@@ -852,13 +852,19 @@ class SkarabTransport(Transport):
             except SkarabResponseNotReceivedError:
                 # retransmit the packet
                 pass
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, select.error):
                 self.logger.warning('{}: keyboard interrupt, clearing '
                                'buffer.'.format(hostname))
                 # wait to receive incoming responses
-                time.sleep(1)
+                time.sleep(0.5)
+                try:
+                    _ = self._skarab_control_sock.recvfrom(4096)
+                    self.logger.info(
+                        '{}: cleared recv buffer.'.format(hostname))
+                except socket.error:
+                    self.logger.info(
+                        '{}: buffer already empty'.format(hostname))
                 self._lock.release()
-                self.logger.info('{}: cleared recv buffer.'.format(hostname))
                 raise KeyboardInterrupt
             retransmit_count += 1
         self._lock.release()
@@ -963,9 +969,17 @@ class SkarabTransport(Transport):
                             'buffer.'.format(hostname))
             # wait to receive incoming responses
             time.sleep(1)
-            _ = self._skarab_control_sock.recvfrom(4096)
-            self.logger.info('{}: cleared recv buffer.'.format(hostname))
+            try:
+                _ = self._skarab_control_sock.recvfrom(4096)
+                self.logger.info('{}: cleared recv buffer.'.format(hostname))
+            except socket.error:
+                self.logger.info('{}: buffer already empty'.format(hostname))
             raise KeyboardInterrupt
+
+        except select.error as e:
+            self.logger.debug('{}: handling select error {}'.format(
+                hostname, e.message))
+            raise select.error
 
     # low level access functions
     def reboot_fpga(self):
