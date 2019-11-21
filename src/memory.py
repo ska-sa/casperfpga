@@ -46,8 +46,8 @@ def fp2fixed(num, bitwidth, bin_pt, signed):
     :param signed:
     """
     _format = '%s%i.%i' % ('fix' if signed else 'ufix', bitwidth, bin_pt)
-    if bin_pt >= bitwidth:
-        raise ValueError('Cannot have bin_pt >= bitwidth')
+    if bin_pt > bitwidth:
+        raise ValueError('Cannot have bin_pt > bitwidth')
     if bin_pt < 0:
         raise ValueError('bin_pt < 0 makes no sense')
     if (not signed) and (num < 0):
