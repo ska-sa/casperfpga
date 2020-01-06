@@ -10,10 +10,10 @@ import contextlib
 
 from threading import Lock
 
-import skarab_definitions as sd
-import skarab_fileops as skfops
-from transport import Transport
-from network import IpAddress
+from . import skarab_definitions as sd
+from . import skarab_fileops as skfops
+from .transport import Transport
+from .network import IpAddress
 
 
 __author__ = 'tyronevb'

@@ -2,7 +2,7 @@ import logging
 import time
 import struct
 
-from memory import Memory
+from .memory import Memory
 
 LOGGER = logging.getLogger(__name__)
 

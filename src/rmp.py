@@ -87,7 +87,7 @@ class rmpNetwork():
         #     self.psn += 1
 
         if num_wr > 0:
-            print "sending 1"
+            print("sending 1")
             pkt = array.array('I')
             pkt.append(self.psn)  # psn
             pkt.append(2)  # opcode
@@ -120,7 +120,7 @@ class rmpNetwork():
             psn = unpack('I', data[0:4])[0]
             add = unpack('I', data[4:8])[0]
             if psn != exp_psn or add != add:
-               print "Bulk write PSN error!"
+               print("Bulk write PSN error!")
                return
             num_ack += 1
             exp_psn += 1
@@ -169,45 +169,45 @@ class rmpNetwork():
                 if psn == self.psn and add == req_add:
                     return
                 elif psn != self.psn:
-                    print
-                    print "Failed UCP write, received wrong PSN ..."
-                    print "Received: " + str(psn)
-                    print "Expected: " + str(self.psn)
-                    print "Retrying..."
+                    print()
+                    print("Failed UCP write, received wrong PSN ...")
+                    print("Received: " + str(psn))
+                    print("Expected: " + str(self.psn))
+                    print("Retrying...")
                 elif add != req_add:
-                    print
-                    print "Failed UCP write, error received ..."
-                    print "Requested Add: " + hex(req_add)
-                    print "Received Add: " + hex(add)
-                    print "Retrying..."
+                    print()
+                    print("Failed UCP write, error received ...")
+                    print("Requested Add: " + hex(req_add))
+                    print("Received Add: " + hex(add))
+                    print("Retrying...")
                     self.socket_flush()
             except:
                 if self.reliable == 1:
-                    print
-                    print "Failed UCP write:"
+                    print()
+                    print("Failed UCP write:")
                     #print "Received: " + str(psn)
                     #print "Expected: " + str(self.psn)
-                    print "Requested Add: " + hex(req_add)
+                    print("Requested Add: " + hex(req_add))
                     #print "Received Add: " + hex(add)
-                    print "Retrying..."
+                    print("Retrying...")
                     pass
                 else:
-                    print "Failed UCP write. Exiting ..."
+                    print("Failed UCP write. Exiting ...")
                     sys.exit(-1)
 
 
-            print "Getting Last Executed PSN..."
+            print("Getting Last Executed PSN...")
             last_psn = self.rd32(0x30000004)
-            print "Getting Last Executed PSN...", last_psn
+            print("Getting Last Executed PSN...", last_psn)
             if last_psn == self.psn:
                 return
             else:
                 pass
 
-        print
-        print "UCP write error"
-        print "Requested Add: " + hex(req_add)
-        print "Received Add: " + hex(add)
+        print()
+        print("UCP write error")
+        print("Requested Add: " + hex(req_add))
+        print("Received Add: " + hex(add))
         exit(-1)
 
 
@@ -254,30 +254,30 @@ class rmpNetwork():
                     else:
                         return dat_list
                 else:
-                    print
-                    print "Failed UCP read, received wrong PSN or error detected ..."
-                    print "Received: " + str(psn)
-                    print "Expected: " + str(self.psn)
-                    print "Requested Add: " + hex(req_add)
-                    print "Received Add: " + hex(add)
-                    print "Retrying..."
+                    print()
+                    print("Failed UCP read, received wrong PSN or error detected ...")
+                    print("Received: " + str(psn))
+                    print("Expected: " + str(self.psn))
+                    print("Requested Add: " + hex(req_add))
+                    print("Received Add: " + hex(add))
+                    print("Retrying...")
                     self.socket_flush()
 
             except:
                 if self.reliable == 1:
-                    print "Failed UCP read, retrying ..."
+                    print("Failed UCP read, retrying ...")
                 else:
-                    print "Failed UCP read, exiting ..."
+                    print("Failed UCP read, exiting ...")
                     sys.exit(-1)
 
-        print
-        print "UCP read error"
-        print "Requested Add: " + hex(req_add)
+        print()
+        print("UCP read error")
+        print("Requested Add: " + hex(req_add))
         #print "Received Add: " + hex(add)
         exit(-1)
 
     def socket_flush(self):
-        print "Flushing UCP socket..."
+        print("Flushing UCP socket...")
         self.sock.close()
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet # UDP

@@ -1,5 +1,5 @@
 
-from memory import Memory
+from .memory import Memory
 
 class Hmc(Memory):
     """

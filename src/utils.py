@@ -1,6 +1,6 @@
 from __future__ import print_function
 import threading
-import Queue
+import queue
 import time
 import logging
 
@@ -312,7 +312,7 @@ def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
         fpga_class = CasperFpga
 
     num_hosts = len(host_list)
-    result_queue = Queue.Queue(maxsize=num_hosts)
+    result_queue = queue.Queue(maxsize=num_hosts)
     thread_list = []
 
     def makehost(hostname):
@@ -333,7 +333,7 @@ def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
             host_pos = host_list.index(result.host)
             fpgas[host_pos] = result
             hosts_missing.pop(hosts_missing.index(result.host))
-        except Queue.Empty:
+        except queue.Empty:
             break
     if hosts_missing:
         for host in hosts_missing:
@@ -423,7 +423,7 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
         resultq.put_nowait((fpga.host, rv))
 
     num_fpgas = len(fpga_list)
-    result_queue = Queue.Queue(maxsize=num_fpgas)
+    result_queue = queue.Queue(maxsize=num_fpgas)
     thread_list = []
     for fpga_ in fpga_list:
         thread = threading.Thread(target=jobfunc, args=(result_queue, fpga_))
@@ -441,7 +441,7 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
             result = result_queue.get_nowait()
             returnval[result[0]] = result[1]
             hosts_missing.pop(hosts_missing.index(result[0]))
-        except Queue.Empty:
+        except queue.Empty:
             break
     if hosts_missing:
         errmsg = 'Ran \'%s\' on hosts. Did not get a response ' \
@@ -466,7 +466,7 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
     raise DeprecationWarning
 
     num_fpgas = len(fpga_list)
-    reply_queue = Queue.Queue(maxsize=num_fpgas)
+    reply_queue = queue.Queue(maxsize=num_fpgas)
     requests = {}
     replies = {}
 

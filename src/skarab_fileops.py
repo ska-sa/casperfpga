@@ -4,10 +4,10 @@ import logging
 import time
 import socket
 
-import skarab_definitions as sd
-import progska
-from utils import threaded_fpga_operation as thop
-from network import IpAddress
+from . import skarab_definitions as sd
+from . import progska
+from .utils import threaded_fpga_operation as thop
+from .network import IpAddress
 
 LOGGER = logging.getLogger(__name__)
 

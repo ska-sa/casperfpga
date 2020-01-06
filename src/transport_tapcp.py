@@ -1,10 +1,10 @@
 import logging
 import struct
-from StringIO import StringIO
+from io import StringIO as StringIO
 import zlib
 import hashlib
 
-from transport import Transport
+from .transport import Transport
 
 __author__ = 'jackh'
 __date__ = 'June 2017'
@@ -57,7 +57,7 @@ def decode_csl_pl(csl):
 
 
 def decode_csl(csl):
-    x = decode_csl_pl(csl).keys()
+    x = list(decode_csl_pl(csl).keys())
     x.sort()
     return x
 
@@ -164,7 +164,7 @@ class TapcpTransport(Transport):
         """ (Re)Program the FPGA with the file already on flash """
         meta = self.get_metadata()
         addr = int(meta['prog_bitstream_start'])
-        print("File in flash is:  %s"%meta['filename'])   
+        print(("File in flash is:  {}".format(meta['filename'])))   
         self.progdev(addr=addr)
 
     def get_temp(self):
@@ -257,7 +257,7 @@ class TapcpTransport(Transport):
         metadict['prog']  = '?prog_bitstream_start\t%d?prog_bitstream_length\t%d'%(prog_loc,plen)
         metadict['md5']   =  '?md5sum\t' + md5
         metadict['file']  = '?filename\t' + filename.split('/')[-1]
-        for m in metadict.values():
+        for m in list(metadict.values()):
             meta += m
         meta += '?end'
         meta += '0'*(1024-len(meta)%1024)
@@ -363,11 +363,11 @@ class TapcpTransport(Transport):
         complete_blocks = len(payload) // sector_size
         trailing_bytes = len(payload) % sector_size
         for i in range(complete_blocks):
-            print "Writing block %d of %d" % (i+1, complete_blocks)
+            print(("Writing block {} of {}".format(i+1, complete_blocks)))
             self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=i*sector_size)
         # Write the not-complete last sector (if any)
         if trailing_bytes:
-            print "Writing trailing %d bytes" % trailing_bytes
+            print(("Writing trailing {} bytes".format(trailing_bytes)))
             last_offset = complete_blocks * sector_size
             self.blindwrite('/flash', payload[last_offset :], offset=last_offset)
         # return timeout to what it used to be

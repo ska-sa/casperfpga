@@ -1,7 +1,7 @@
 import logging
 import time
-from memory import Memory, fp2fixed_int
-import bitfield
+from .memory import Memory, fp2fixed_int
+from . import bitfield
 
 LOGGER = logging.getLogger(__name__)
 

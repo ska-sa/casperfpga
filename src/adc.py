@@ -1,4 +1,4 @@
-from wishbonedevice import WishBoneDevice
+from .wishbonedevice import WishBoneDevice
 import numpy as np
 import struct,math
 import logging

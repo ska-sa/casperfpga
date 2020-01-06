@@ -1,4 +1,4 @@
-from utils import get_hostname
+from .utils import get_hostname
 
 
 class Transport(object):

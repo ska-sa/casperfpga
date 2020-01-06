@@ -3,14 +3,14 @@ import katcp
 import time
 import os
 import threading
-import Queue
+import queue
 import random
 import socket
 import struct
 import contextlib
 
-from transport import Transport
-from utils import create_meta_dictionary, get_hostname, get_kwarg
+from .transport import Transport
+from .utils import create_meta_dictionary, get_hostname, get_kwarg
 
 
 # monkey-patch the maximum katcp message size
@@ -558,7 +558,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         if port == -1:
             port = random.randint(2000, 2500)
         # start the request thread and join
-        request_queue = Queue.Queue()
+        request_queue = queue.Queue()
         request_thread = threading.Thread(target=makerequest,
                                           args=(request_queue, ))
         old_timeout = self._timeout
@@ -570,8 +570,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             raise RuntimeError('progremote request(%s) on host %s failed' %
                                (request_result, self.host))
         # start the upload thread and join
-        upload_queue = Queue.Queue()
-        unhandled_informs_queue = Queue.Queue()
+        upload_queue = queue.Queue()
+        unhandled_informs_queue = queue.Queue()
         upload_thread = threading.Thread(target=self.sendfile, args=(
             filename, self.host, port, upload_queue, ))
         self.unhandled_inform_handler = \
@@ -590,7 +590,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         while not done:
             try:
                 inf = unhandled_informs_queue.get(block=True, timeout=timeout)
-            except Queue.Empty:
+            except queue.Empty:
                 self.logger.error('%s: no programming informs yet. Odd?' % self.host)
                 raise RuntimeError('%s: no programming informs yet. '
                                    'Odd?' % self.host)
@@ -645,11 +645,11 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             port = random.randint(2000, 2500)
 
         # request thread
-        request_queue = Queue.Queue()
+        request_queue = queue.Queue()
         request_thread = threading.Thread(target=makerequest,
                                           args=(request_queue, ))
         # upload thread
-        upload_queue = Queue.Queue()
+        upload_queue = queue.Queue()
         upload_thread = threading.Thread(target=self.sendfile, args=(
             binary_file, self.host, port, upload_queue, ))
         # start the threads and join

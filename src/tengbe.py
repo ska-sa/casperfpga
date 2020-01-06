@@ -1,9 +1,9 @@
 import logging
 import struct
 
-from memory import Memory
-from network import Mac, IpAddress
-from gbe import Gbe
+from .memory import Memory
+from .network import Mac, IpAddress
+from .gbe import Gbe
 
 LOGGER = logging.getLogger(__name__)
 
