@@ -73,7 +73,7 @@ class Register(Memory):
         memdata = Memory.read(self, **kwargs)
         results = memdata['data']
         timestamp = memdata['timestamp']
-        for k, v in results.iteritems():
+        for k, v in results.items():
             results[k] = v[0]
         self.last_values = results
         return {'data': results, 'timestamp': timestamp}

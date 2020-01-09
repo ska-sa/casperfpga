@@ -174,7 +174,7 @@ class SkarabTransport(Transport):
                 self.logger.info('Port({}) created & connected.'.format(
                     sd.ETHERNET_CONTROL_PORT_ADDRESS))
             else:
-                self.logger.error('Error connecting to {}: port{}'.format(self.host,
+                self.logger.error('Error connecting to {}: port {}'.format(self.host,
                     sd.ETHERNET_CONTROL_PORT_ADDRESS))
 
         # self.image_chunks, self.local_checksum = None, None
@@ -219,7 +219,7 @@ class SkarabTransport(Transport):
                                        timeout=timeout)
             return True if data else False
         except ValueError as vexc:
-            self.logger.debug('Skarab is not connected: %s' % vexc.message)
+            self.logger.debug('Skarab is not connected: {}'.format(vexc))
             return False
 
     def is_running(self):
@@ -830,9 +830,9 @@ class SkarabTransport(Transport):
             self.logger.debug('{}: retransmit attempts: {}'.format(
                 hostname, retransmit_count))
             try:
-                self.logger.debug('{}: sending pkt({}, {}) to port {}.'.format(
+                self.logger.debug('{}: sending pkt({}, {}) to port {} = {}'.format(
                     hostname, request_object.packet['command_type'],
-                    request_object.packet['seq_num'], addr))
+                    request_object.packet['seq_num'], addr, request_payload))
                 self._skarab_control_sock.send(request_payload)
                 if not request_object.expect_response:
                     self.logger.debug(

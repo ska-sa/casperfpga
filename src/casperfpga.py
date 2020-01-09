@@ -180,8 +180,8 @@ class CasperFpga(object):
         except socket.gaierror:
             raise RuntimeError('Address/host %s makes no sense to '
                                'the OS?' % host_ip)
-        except Exception as e:
-            raise RuntimeError('Could not connect to host %s: %s' % (host_ip, e.message))
+        #except Exception as e:
+        #    raise RuntimeError('Could not connect to host {}: {}'.format(host_ip, str(e)))
 
     def connect(self, timeout=None):
         """
