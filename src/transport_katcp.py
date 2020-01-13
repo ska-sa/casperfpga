@@ -167,8 +167,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                 upload_socket.send(open(filename).read())
                 result_queue.put('')
             except Exception as e:
-                result_queue.put('Could not send file to upload port(%i): '
-                                 '%s' % (port, e.message))
+                result_queue.put('Could not send file to upload port({}): {}'.format(
+                                 port, e))
             finally:
                 self.logger.info('%s: upload thread complete at %.3f' %
                                 (targethost, time.time()))

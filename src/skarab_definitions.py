@@ -750,7 +750,7 @@ class Command(object):
                 payload += value
             else:
                 for c in struct.unpack('c'*len(value), str(value).encode('ascii')):
-                payload += c
+                    payload += c
         return payload
 
     @staticmethod

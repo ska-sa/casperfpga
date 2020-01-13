@@ -460,7 +460,7 @@ class Qdr(Memory):
                 in_delays = [0] * QDR_WORD_WIDTH
             except Exception as e:
                 raise RuntimeError('Unknown exception in qdr_cal - '
-                                   '{!s}'.format(e.message))
+                                   '{}'.format(e))
 
             # update the out delays with the current input delays
             _out_delays = [out_step] * QDR_WORD_WIDTH

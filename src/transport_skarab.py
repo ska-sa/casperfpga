@@ -978,7 +978,7 @@ class SkarabTransport(Transport):
 
         except select.error as e:
             self.logger.debug('{}: handling select error {}'.format(
-                hostname, e.message))
+                hostname, e))
             raise select.error
 
     # low level access functions
