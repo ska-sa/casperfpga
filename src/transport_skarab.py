@@ -3273,6 +3273,8 @@ class SkarabTransport(Transport):
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
+        self.logger.debug('%s: multicast join request: addr(%s) mask(%s)' % (
+            gbename, ip.ip_str, mask.ip_str))
 
         ip_high = ip.ip_int >> 16
         ip_low = ip.ip_int & (2 ** 16 - 1)
