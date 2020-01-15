@@ -431,24 +431,22 @@ class FortyGbe(Gbe):
 
         rv['tx_pps'] = gbedata[0]
         rv['tx_pkt_cnt'] = gbedata[1]
-        rv['tx_gbps'] = gbedata[2] * (
-                    256 / 1024.0 / 1024.0 / 1024.0)  # convert words to Gbps
+        rv['tx_gbps'] = gbedata[2] * (256 / 1.0e9)  # convert words to Gbps
         rv['tx_byte_cnt'] = gbedata[3] * (256 / 8)  # convert words to bytes
         rv['tx_over_err_cnt'] = gbedata[4]
         rv['tx_afull_cnt'] = gbedata[5]
 
         rv['rx_pps'] = gbedata[6]
         rv['rx_pkt_cnt'] = gbedata[7]
-        rv['rx_gbps'] = gbedata[8] * (
-                    256 / 1024.0 / 1024.0 / 1024.0)  # convert words to Gbps
+        rv['rx_gbps'] = gbedata[8] * (256 / 1.0e9)  # convert words to Gbps
         rv['rx_byte_cnt'] = gbedata[9] * (256 / 8)  # convert words to bytes
-        rv['rx_over_err_cnt'] = gbedata[8]
-        rv['rx_bad_pkt_cnt'] = gbedata[9]
+        rv['rx_over_err_cnt'] = gbedata[10]
+        rv['rx_bad_pkt_cnt'] = gbedata[11]
 
         if rst_counters:
             # writing 0x1 resets the counters and holds them at 0
             self._wbone_wr(gbebase + 0x78, 0x1)
-            time.sleep(0.001)
+            time.sleep(0.01)
             # writing 0x0 restarts the counters
             self._wbone_wr(gbebase + 0x78, 0x0)
 
