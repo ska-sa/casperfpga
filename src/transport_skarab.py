@@ -3729,6 +3729,27 @@ class SkarabTransport(Transport):
                 error_dictionary[response.packet['reset_error']])
             raise SkarabUnknownDeviceError(err)
 
+    def leave_multicast_group(self, link_id=1, timeout=None, retries=None):
+        """
+        SKARAB to issue IGMP leave request to exit a multicast group.
+        :param link_id:
+        :param timeout:
+        :param retries:
+        :return: True if leave request successful, False if not
+        """
+
+        request = sd.MulticastLeaveGroupReq(link_id)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check if the request was successful
+        if response.packet['success']:
+            self.logger.info('{host} left multicast group'.format(host=self.host))
+            return True
+        else:
+            self.logger.error('{host} failed to leave multicast group'.format(host=self.host))
+            return False
+
     # TODO: only declare this function once! Will have to be global
     @staticmethod
     def _sign_extend(value, bits):
