@@ -739,7 +739,7 @@ class Command(object):
     def create_payload(self, seq_num):
         """
         Create payload for sending via UDP Packet to SKARAB
-        
+
         :return: string representation of data
         """
         self.packet['seq_num'] = seq_num
@@ -748,9 +748,14 @@ class Command(object):
             field_name, value = field
             if type(value) == bytes:
                 payload += value
-            else:
-                for c in struct.unpack('c'*len(value), str(value).encode('ascii')):
+            elif type(value) == int:
+                payload += struct.pack('!H', value)
+            elif type(value) == str:
+                for c in struct.unpack('!'+'c'*len(value), str(value).encode('ascii')):
                     payload += c
+            else:
+                raise TypeError("Don't know how to make a payload from {}, which appears to be a {}.".format( \
+                    value, type(value)))
         return payload
 
     @staticmethod
@@ -1045,7 +1050,7 @@ class SetFanSpeedReq(Command):
 
 
 class SetFanSpeedResp(Response):
-    def __init__(self, command_id, seq_num, fan_speed_pwm, fan_speed_rpm, 
+    def __init__(self, command_id, seq_num, fan_speed_pwm, fan_speed_rpm,
                  padding):
         super(SetFanSpeedResp, self).__init__(command_id, seq_num)
         self.packet['fan_speed_pwm'] = fan_speed_pwm
@@ -1066,7 +1071,7 @@ class ReadFlashWordsReq(Command):
 
 
 class ReadFlashWordsResp(Response):
-    def __init__(self, command_id, seq_num, address_high, address_low, 
+    def __init__(self, command_id, seq_num, address_high, address_low,
                  num_words, read_words, padding):
         super(ReadFlashWordsResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
@@ -1129,7 +1134,7 @@ class EraseFlashBlockReq(Command):
 
 
 class EraseFlashBlockResp(Response):
-    def __init__(self, command_id, seq_num, block_address_high, 
+    def __init__(self, command_id, seq_num, block_address_high,
                  block_address_low, erase_success, padding):
         super(EraseFlashBlockResp, self).__init__(command_id, seq_num)
         self.packet['block_address_high'] = block_address_high
@@ -1212,7 +1217,7 @@ class EraseSpiSectorReq(Command):
 
 
 class EraseSpiSectorResp(Response):
-    def __init__(self, command_id, seq_num, sector_address_high, 
+    def __init__(self, command_id, seq_num, sector_address_high,
                  sector_address_low, erase_success, padding):
         super(EraseSpiSectorResp, self).__init__(command_id, seq_num)
         self.packet['sector_address_high'] = sector_address_high
@@ -1308,7 +1313,7 @@ class OneWireDS2433ReadMemReq(Command):
 
 class OneWireDS2433ReadMemResp(Response):
     def __init__(self, command_id, seq_num, device_rom, skip_rom_address,
-                 read_bytes, num_bytes, target_address_1, target_address_2, 
+                 read_bytes, num_bytes, target_address_1, target_address_2,
                  one_wire_port, read_success, padding):
         super(OneWireDS2433ReadMemResp, self).__init__(command_id, seq_num)
         self.packet['device_rom'] = device_rom
@@ -1336,7 +1341,7 @@ class DebugConfigureEthernetReq(Command):
                  fabric_mac_mid, fabric_mac_low, fabric_port_address,
                  gateway_arp_cache_address, fabric_ip_address_high,
                  fabric_ip_address_low, fabric_multicast_ip_address_high,
-                 fabric_multicast_ip_address_low, 
+                 fabric_multicast_ip_address_low,
                  fabric_multicast_ip_address_mask_high,
                  fabric_multicast_ip_address_mask_low,
                  enable_fabric_interface):
@@ -1369,7 +1374,7 @@ class DebugConfigureEthernetResp(Response):
                  fabric_mac_mid, fabric_mac_low, fabric_port_address,
                  gateway_arp_cache_address, fabric_ip_address_high,
                  fabric_ip_address_low, fabric_multicast_ip_address_high,
-                 fabric_multicast_ip_address_low, 
+                 fabric_multicast_ip_address_low,
                  fabric_multicast_ip_address_mask_high,
                  fabric_multicast_ip_address_mask_low, enable_fabric_interface,
                  padding):
@@ -1409,7 +1414,7 @@ class DebugAddARPCacheEntryReq(Command):
 
 
 class DebugAddARPCacheEntryResp(Response):
-    def __init__(self, command_id, seq_num, interface_id, 
+    def __init__(self, command_id, seq_num, interface_id,
                  ip_address_lower_8_bits, mac_high, mac_mid, mac_low, padding):
         super(DebugAddARPCacheEntryResp, self).__init__(command_id, seq_num)
         self.packet['id'] = interface_id
