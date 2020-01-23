@@ -134,6 +134,7 @@ GET_VOLTAGE_LOGS = 0x0059
 GET_FAN_CONT_LOGS = 0x005B
 CLEAR_FAN_CONT_LOGS = 0x005D
 RESET_DHCP_SM = 0x005F
+MULTICAST_LEAVE_GROUP = 0x0061
 
 # FOR VIRTEX FLASH RECONFIG
 DEFAULT_START_ADDRESS = 0x3000000
@@ -1817,6 +1818,24 @@ class ResetDHCPStateMachineResp(Response):
         super(ResetDHCPStateMachineResp, self).__init__(command_id, seq_num)
         self.packet['link_id'] = link_id
         self.packet['reset_error'] = reset_error
+        self.packet['padding'] = padding
+
+
+class MulticastLeaveGroupReq(Command):
+    def __init__(self, link_id):
+        super(MulticastLeaveGroupReq, self).__init__(MULTICAST_LEAVE_GROUP)
+        self.expect_response = True
+        self.response = MulticastLeaveGroupResp
+        self.num_response_words = 11
+        self.pad_words = 7
+        self.packet['link_id'] = link_id
+
+
+class MulticastLeaveGroupResp(Response):
+    def __init__(self, command_id, seq_num, link_id, success, padding):
+        super(MulticastLeaveGroupResp, self).__init__(command_id, seq_num)
+        self.packet['link_id'] = link_id
+        self.packet['success'] = success
         self.packet['padding'] = padding
 
 
