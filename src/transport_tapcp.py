@@ -3,6 +3,7 @@ import struct
 from StringIO import StringIO
 import zlib
 import hashlib
+import time
 
 from transport import Transport
 
