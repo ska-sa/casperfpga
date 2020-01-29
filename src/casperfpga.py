@@ -5,8 +5,8 @@ import socket
 from time import strptime
 import string
 
-from . import register
 from . import sbram
+from . import register
 from . import snap
 from . import onegbe
 from . import tengbe
@@ -693,7 +693,7 @@ class CasperFpga(object):
         :return: List of strings matching the description
         """
         return [devname for devname, container
-                in self.memory_devices.iteritems()
+                in self.memory_devices.items()
                 if container == container_name]
 
     def devices_by_container(self, container):

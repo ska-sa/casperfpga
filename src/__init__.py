@@ -18,7 +18,7 @@ from .sbram import Sbram
 from .snap import Snap
 from .snapadc import SnapAdc
 from .tengbe import TenGbe
-from . import skarab_fileops
+#from . import skarab_fileops
 
 # BEGIN VERSION CHECK
 # Get package version when locally imported from repo or via -e develop install

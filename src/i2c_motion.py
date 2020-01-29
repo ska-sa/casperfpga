@@ -798,7 +798,7 @@ class MPU9250:
             percent=range(0,101,10)
             while length > 0:
                 if verbose and (total-length)*100./total > percent[0]:
-                    print str(percent[0])+'%...',
+                    print(str(percent[0])+'%...',)
                     sys.stdout.flush()
                     percent = percent[1:]
                 cnts = self.readFIFOCount()

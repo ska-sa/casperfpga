@@ -1,5 +1,5 @@
 import logging
-import termcolors
+from . import termcolors
 import datetime
 import os
 

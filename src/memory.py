@@ -183,10 +183,10 @@ class Memory(bitfield.Bitfield):
             memory_words.append(wordl)
         # now we have all the words as longs, so carry on
         processed = {}
-        for field in self._fields.itervalues():
+        for field in self._fields.values():
             processed[field.name] = []
         for ctr, word in enumerate(memory_words):
-            for field in self._fields.itervalues():
+            for field in self._fields.values():
                 word_shift = word >> field.offset
                 word_done = bin2fp(word_shift, field.width_bits,
                                    field.binary_pt, field.numtype == 1)

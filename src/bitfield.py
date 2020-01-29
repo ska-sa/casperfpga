@@ -72,7 +72,7 @@ class Bitfield(object):
             raise TypeError('fields should be a dictionary of Field objects.')
         if len(fields) == 0:
             raise ValueError('Empty dictionary is not so useful?')
-        for newfield in fields.itervalues():
+        for newfield in fields.values():
             self.field_add(newfield)
 
     def field_add(self, newfield, auto_offset=False):
@@ -84,7 +84,7 @@ class Bitfield(object):
         # add it at the end of the current fields
         if auto_offset:
             width = 0
-            for field in self._fields.itervalues():
+            for field in self._fields.values():
                 width += field.width_bits
             newfield.offset = width
         self._fields[newfield.name] = newfield
@@ -109,7 +109,7 @@ class Bitfield(object):
         Get a string of all the field names.
         """
         field_string = ''
-        for field in self._fields.itervalues():
+        for field in self._fields.values():
             field_string += '%s, ' % field
         field_string = field_string[0:-2]
         return field_string

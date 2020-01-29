@@ -3,6 +3,7 @@ import threading
 import queue
 import time
 import logging
+import sys
 
 LOGGER = logging.getLogger(__name__)
 
@@ -77,10 +78,16 @@ def parse_fpg(filename):
     :param filename: the name of the fpg file to parse
     :return: device info dictionary, memory map info (coreinfo.tab) dictionary
     """
+
+    is_p2 = sys.version_info[0] < 3
+
     LOGGER.debug('Parsing file %s for system information' % filename)
     if filename is not None:
         fptr = open(filename, 'r')
-        firstline = fptr.readline().strip().rstrip('\n')
+        if is_p2:
+            firstline = fptr.readline().decode('latin-1').strip().rstrip('\n')
+        else:
+            firstline = fptr.buffer.readline().decode('latin-1').strip().rstrip('\n')
         if firstline != '#!/bin/kcpfpg':
             fptr.close()
             raise RuntimeError('%s does not look like an fpg file we can '
@@ -90,7 +97,10 @@ def parse_fpg(filename):
     memorydict = {}
     metalist = []
     while True:
-        line = fptr.buffer.readline().decode('latin-1').strip().rstrip('\n')
+        if is_p2:
+            line = fptr.readline().decode('latin-1').strip().rstrip('\n')
+        else:
+            line = fptr.buffer.readline().decode('latin-1').strip().rstrip('\n')
         #line = fptr.readline().strip().rstrip('\n')
         if line.lstrip().rstrip() == '?quit':
             break
@@ -309,7 +319,7 @@ def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
     :param best_effort: return as many hosts as it was possible to make
     """
     if fpga_class is None:
-        from casperfpga import CasperFpga
+        from .casperfpga import CasperFpga
         fpga_class = CasperFpga
 
     num_hosts = len(host_list)
@@ -357,7 +367,7 @@ def _check_target_func(target_function):
 
     :param target_function:
     """
-    if isinstance(target_function, basestring):
+    if isinstance(target_function, str):
         return target_function, (), {}
     try:
         len(target_function)

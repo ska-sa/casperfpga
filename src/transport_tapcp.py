@@ -14,6 +14,9 @@ from .transport import Transport
 __author__ = 'jackh'
 __date__ = 'June 2017'
 
+
+LOGGER = logging.getLogger(__name__)
+
 TFTPY = None
 
 def set_log_level(level):
@@ -420,7 +423,7 @@ class TapcpTransport(Transport):
         :param offset: the offset, in bytes, at which to write
         :param use_bulk: Does nothing. Kept for API compatibility
         """
-        assert (type(data) == str), 'Must supply binary packed string data'
+        assert (type(data) == str or type(data) == bytes), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
         for retry in range(self.retries - 1):
