@@ -90,7 +90,8 @@ def parse_fpg(filename):
     memorydict = {}
     metalist = []
     while True:
-        line = fptr.readline().strip().rstrip('\n')
+        line = fptr.buffer.readline().decode('latin-1').strip().rstrip('\n')
+        #line = fptr.readline().strip().rstrip('\n')
         if line.lstrip().rstrip() == '?quit':
             break
         elif line.startswith('?meta'):

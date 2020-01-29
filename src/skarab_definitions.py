@@ -733,13 +733,15 @@ class Command(object):
         :return: string representation of data
         """
         self.packet['seq_num'] = seq_num
-        payload = ''
+        payload = b''
         for field in self.packet.items():
             field_name, value = field
             if type(value) == str:
-                payload += str(value)
+                #payload += str(value)
+                payload += value.encode()
             else:
-                payload += str(self.pack_two_bytes(value))
+                #payload += str(self.pack_two_bytes(value))
+                payload += self.pack_two_bytes(value)
         return payload
 
     @staticmethod

@@ -3,9 +3,11 @@ import struct
 try:
     from StringIO import StringIO
 except ImportError:
-    from io import StringIO
+    #huge, huge workaround
+    from io import BytesIO as StringIO 
 import zlib
 import hashlib
+import time
 
 from .transport import Transport
 
@@ -79,12 +81,12 @@ class TapcpTransport(Transport):
             import tftpy
             global TFTPY
             TFTPY = tftpy
-            TFTPY.setLogLevel(logging.CRITICAL)
+            #TFTPY.setLogLevel(logging.CRITICAL)
         except ImportError:
             raise ImportError('You need to install tftpy to use TapcpTransport')
         
         Transport.__init__(self, **kwargs)
-        set_log_level(logging.ERROR)
+        #set_log_level(logging.ERROR)
         self.t = tftpy.TftpClient(kwargs['host'], 69)
 	    
         try:
@@ -116,10 +118,10 @@ class TapcpTransport(Transport):
         # Temporarily turn off logging so if tftp doesn't respond
         # there's no error. Remember the existing log level so that
         # it can be re-set afterwards if tftp connects ok.
-        log_level = get_log_level()
-        set_log_level(logging.CRITICAL)
+        #log_level = get_log_level()
+        #set_log_level(logging.CRITICAL)
         if board.is_connected():
-            set_log_level(log_level)
+            #set_log_level(log_level)
             LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
             return True
         return False
