@@ -5,26 +5,26 @@ import socket
 from time import strptime
 import string
 
-import register
-import sbram
-import snap
-import onegbe
-import tengbe
-import fortygbe
-import qdr
-import hmc
-import katadc
-import skarabadc
+from . import register
+from . import sbram
+from . import snap
+from . import onegbe
+from . import tengbe
+from . import fortygbe
+from . import qdr
+from . import hmc
+from . import katadc
+from . import skarabadc
 
-from attribute_container import AttributeContainer
-from utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
-from transport_katcp import KatcpTransport
-from transport_tapcp import TapcpTransport
-from transport_skarab import SkarabTransport
-from transport_dummy import DummyTransport
+from .attribute_container import AttributeContainer
+from .utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
+from .transport_katcp import KatcpTransport
+from .transport_tapcp import TapcpTransport
+from .transport_skarab import SkarabTransport
+from .transport_dummy import DummyTransport
 
-from CasperLogHandlers import configure_console_logging, configure_file_logging
-from CasperLogHandlers import getLogger
+from .CasperLogHandlers import configure_console_logging, configure_file_logging
+from .CasperLogHandlers import getLogger
 
 
 # known CASPER memory-accessible devices and their associated

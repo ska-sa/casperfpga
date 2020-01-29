@@ -1,5 +1,16 @@
-#include <Python.h>
+# include <Python.h>
 #include <stdio.h>
+
+struct module_state {
+	    PyObject *error;
+};
+
+#if PY_MAJOR_VERSION >= 3
+#define GETSTATE(m) ((struct module_state*)PyModule_GetState(m))
+#else
+#define GETSTATE(m) (&_state)
+static struct module_state _state;
+#endif
 
 static char module_docstring[] =
     "This module provides a fast uploading interface for SKARABs.";
@@ -13,10 +24,61 @@ static PyMethodDef module_methods[] = {
     {NULL, NULL, 0, NULL}
 };
 
-PyMODINIT_FUNC initprogska(void) {
-    PyObject *m = Py_InitModule("progska", module_methods);
-    if (m == NULL)
-        return;
+
+#if PY_MAJOR_VERSION >= 3
+
+static int progska_traverse(PyObject *m, visitproc visit, void *arg) {
+	Py_VISIT(GETSTATE(m)->error);
+	return 0;
+}
+
+static int progska_clear(PyObject *m) {
+	Py_CLEAR(GETSTATE(m)->error);
+	return 0;
+}
+
+
+static struct PyModuleDef moduledef = {
+	PyModuleDef_HEAD_INIT,
+	"progska",
+	module_docstring,
+	sizeof(struct module_state),
+	module_methods,
+	NULL,
+	progska_traverse,
+	progska_clear,
+	NULL
+};
+
+#define INITERROR return NULL
+
+PyMODINIT_FUNC PyInit_progska(void)
+
+#else
+#define INITERROR return
+
+PyMODINIT_FUNC initprogska(void)
+#endif
+{
+#if PY_MAJOR_VERSION >= 3
+	PyObject *module = PyModule_Create(&moduledef);
+#else
+	PyObject *module = Py_InitModule("progska", module_methods);
+#endif
+
+	if (module == NULL)
+		INITERROR;
+	struct module_state *st = GETSTATE(module);
+
+	st->error = PyErr_NewException("progska.Error", NULL, NULL);
+	if (st->error == NULL) {
+		Py_DECREF(module);
+		INITERROR;
+	}
+
+#if PY_MAJOR_VERSION >= 3
+	return module;
+#endif
 }
 
 static PyObject *casperfpga_progskaupload(PyObject *self, PyObject *args) {
@@ -65,7 +127,12 @@ static PyObject *casperfpga_progskaupload(PyObject *self, PyObject *args) {
     mainargs[4] = binfile;
     for (host_ctr = 0; host_ctr < num_hosts; host_ctr++) {
         item = PySequence_Fast_GET_ITEM(host_list, host_ctr);
+
+#if PY_MAJOR_VERSION >= 3
+        const char *hostname = PyUnicode_AsUTF8(item);
+#else
         const char *hostname = PyString_AsString(item);
+#endif
         mainargs[host_ctr + 5] = hostname;
         if(verbose > 0)
             printf("\t%s\n", hostname);

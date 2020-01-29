@@ -1,7 +1,7 @@
-from synth import *
-from adc import *
-from clockswitch import *
-from wishbonedevice import WishBoneDevice
+from .synth import *
+from .adc import *
+from .clockswitch import *
+from .wishbonedevice import WishBoneDevice
 import logging
 
 logger = logging.getLogger(__name__)

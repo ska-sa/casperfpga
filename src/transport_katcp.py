@@ -3,14 +3,14 @@ import katcp
 import time
 import os
 import threading
-import Queue
+import queue
 import random
 import socket
 import struct
 import contextlib
 
-from transport import Transport
-from utils import create_meta_dictionary, get_hostname, get_kwarg
+from .transport import Transport
+from .utils import create_meta_dictionary, get_hostname, get_kwarg
 
 
 # monkey-patch the maximum katcp message size

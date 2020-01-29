@@ -1,8 +1,8 @@
 import logging
 
-import skarab_definitions as sd
-from transport import Transport
-from network import IpAddress
+from . import skarab_definitions as sd
+from .transport import Transport
+from .network import IpAddress
 
 LOGGER = logging.getLogger(__name__)
 

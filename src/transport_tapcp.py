@@ -1,10 +1,13 @@
 import logging
 import struct
-from StringIO import StringIO
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 import zlib
 import hashlib
 
-from transport import Transport
+from .transport import Transport
 
 __author__ = 'jackh'
 __date__ = 'June 2017'
@@ -363,11 +366,11 @@ class TapcpTransport(Transport):
         complete_blocks = len(payload) // sector_size
         trailing_bytes = len(payload) % sector_size
         for i in range(complete_blocks):
-            print "Writing block %d of %d" % (i+1, complete_blocks)
+            print("Writing block %d of %d" % (i+1, complete_blocks))
             self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=i*sector_size)
         # Write the not-complete last sector (if any)
         if trailing_bytes:
-            print "Writing trailing %d bytes" % trailing_bytes
+            print("Writing trailing %d bytes" % trailing_bytes)
             last_offset = complete_blocks * sector_size
             self.blindwrite('/flash', payload[last_offset :], offset=last_offset)
         # return timeout to what it used to be

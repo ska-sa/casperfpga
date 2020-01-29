@@ -5,7 +5,7 @@ busses. Normally via KATCP.
 """
 
 import logging
-import bitfield
+from  . import bitfield
 import struct
 
 LOGGER = logging.getLogger(__name__)

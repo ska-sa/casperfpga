@@ -7,9 +7,9 @@ Created on Fri Mar  7 07:15:45 2014
 import logging
 import numpy
 import struct
-import register
+from . import register
 
-from memory import Memory
+from .memory import Memory
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.propagate = True

@@ -1,7 +1,7 @@
 import logging
 
-from network import Mac, IpAddress
-from utils import check_changing_status, CheckCounter
+from .network import Mac, IpAddress
+from .utils import check_changing_status, CheckCounter
 
 
 class Gbe(object):

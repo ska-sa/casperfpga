@@ -1,6 +1,6 @@
 from __future__ import print_function
 import threading
-import Queue
+import queue
 import time
 import logging
 
