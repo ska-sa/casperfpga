@@ -12,6 +12,7 @@ import contextlib
 from .transport import Transport
 from .utils import create_meta_dictionary, get_hostname, get_kwarg
 
+LOGGER = logging.getLogger(__name__)
 
 # monkey-patch the maximum katcp message size
 if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
@@ -124,12 +125,19 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param timeout: as an Integer
         """
         try:
+            
+            llevel = LOGGER.getEffectiveLevel()
+            tlogger = logging.getLogger('tornado')
+            tlevel = LOGGER.getEffectiveLevel()
+            LOGGER.setLevel(logging.CRITICAL)
+            tlogger.setLevel(logging.CRITICAL)
             board = katcp.CallbackClient(host=host_ip, port=7147, timeout=timeout, auto_reconnect=False)
             board.setDaemon(True)
             board.start()
             connected = board.wait_connected(timeout)
             board.stop()
-
+            LOGGER.setLevel(llevel)
+            tlogger.setLevel(tlevel)
             if not connected:
                 return False
             else:
@@ -139,6 +147,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                 raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
 
         except Exception:
+            LOGGER.setLevel(llevel)
+            LOGGER.debug('KATCP-unable to connect to {}'.format(host_ip))
             return False
 
     def sendfile(self, filename, targethost, port, result_queue, timeout=2):
