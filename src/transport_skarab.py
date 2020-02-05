@@ -3598,7 +3598,7 @@ class SkarabTransport(Transport):
         :return: True if success, False if failed
         """
 
-        assert(link_mon_timeout >= 30), 'Minimum link monitor timeout is 30 seconds'
+        assert(link_mon_timeout >= 5), 'Minimum link monitor timeout is 5 seconds'
 
         # the uBlaze requires a count of 100ms increments
 
