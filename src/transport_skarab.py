@@ -4247,7 +4247,7 @@ class SkarabTransport(Transport):
         set_value = (stored_threshold[1] << 8) + stored_threshold[0]
         set_current = set_value * pow(2, scale_factor[0]-32) * 40
 
-        if set_current == trip_threshold:
+        if (set_current <= (trip_threshold+1)) and (set_current >= (trip_threshold-1)):
             # new current trip threshold set successfully
             self.logger.debug("New 1v0 current threshold "
                               "successfully set to {}".format(set_current))
