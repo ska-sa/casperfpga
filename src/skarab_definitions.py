@@ -135,6 +135,7 @@ GET_FAN_CONT_LOGS = 0x005B
 CLEAR_FAN_CONT_LOGS = 0x005D
 RESET_DHCP_SM = 0x005F
 MULTICAST_LEAVE_GROUP = 0x0061
+GET_DHCP_MONITOR_TIMEOUT = 0x0063
 
 # FOR VIRTEX FLASH RECONFIG
 DEFAULT_START_ADDRESS = 0x3000000
@@ -1836,6 +1837,21 @@ class MulticastLeaveGroupResp(Response):
         super(MulticastLeaveGroupResp, self).__init__(command_id, seq_num)
         self.packet['link_id'] = link_id
         self.packet['success'] = success
+        self.packet['padding'] = padding
+
+class GetDHCPMonitorTimeoutReq(Command):
+    def __init__(self):
+        super(GetDHCPMonitorTimeoutReq, self).__init__(GET_DHCP_MONITOR_TIMEOUT)
+        self.expect_response = True
+        self.response = GetDHCPMonitorTimeoutResp
+        self.num_response_words = 11
+        self.pad_words = 8
+
+
+class GetDHCPMonitorTimeoutResp(Response):
+    def __init__(self, command_id, seq_num, dhcp_monitor_timeout, padding):
+        super(GetDHCPMonitorTimeoutResp, self).__init__(command_id, seq_num)
+        self.packet['dhcp_monitor_timeout'] = dhcp_monitor_timeout
         self.packet['padding'] = padding
 
 

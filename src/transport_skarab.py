@@ -3623,6 +3623,26 @@ class SkarabTransport(Transport):
 
         return rv
 
+    def get_dhcp_link_mon_timeout(self, timeout=None, retries=None):
+        """
+        Retrieve the current dhcp link monitor timeout, as set by the MicroBlaze's
+        auto-retry mechanism.
+        :return: current set dhcp link monitor timeout, in seconds
+        """
+
+        # create request object
+        request = sd.GetDHCPMonitorTimeoutReq()
+
+        # send request to microblaze and create response object
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        dhcp_link_mon_timeout = response.packet['dhcp_monitor_timeout'] * 100.0 / 1000.0
+        
+        self.logger.debug("{host} DHCP link monitor timeout is set to {link_mon_timeout} seconds".format(
+            host=self.host, link_mon_timeout=dhcp_link_mon_timeout))
+
+        return dhcp_link_mon_timeout
+
     def get_tunable_parameters(self):
         """
         Read back the current values of the tuneable parameters (dhcp init time,
