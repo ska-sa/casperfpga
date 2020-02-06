@@ -3594,11 +3594,11 @@ class SkarabTransport(Transport):
         Set the link monitor timeout - how long to wait for the single 40GbE link
         to show activity. After this timeout, the motherboard resets in attempt to
         re-initialise the link. Only monitors the RX side of the link.
-        :param link_mon_timeout: desired link mon timeout, minimum time is 30 sec
+        :param link_mon_timeout: desired link mon timeout, minimum time is 5 sec
         :return: True if success, False if failed
         """
 
-        assert(link_mon_timeout >= 30), 'Minimum link monitor timeout is 30 seconds'
+        assert(link_mon_timeout >= 5), 'Minimum link monitor timeout is 5 seconds'
 
         # the uBlaze requires a count of 100ms increments
 
