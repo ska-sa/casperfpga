@@ -320,23 +320,24 @@ class TenGbe(Memory, Gbe):
 
         :param target_val:
         """
+        FLAGS_OFFSET = self.memmap['FLAGS']['offset']
+        FLAGS_SIZE   = self.memmap['FLAGS']['size']
+
+        # Unpack FLAGS register into four 8-bit values
+        word_bytes = list(struct.unpack('>4B', self.parent.read(self.name, FLAGS_SIZE, FLAGS_OFFSET)))
+
+        # As legacy mapping is different, need to check the index of FABRIC_EN inside the FLAGS register
         if self.memmap_compliant:
-            word_bytes = list(
-                struct.unpack('>4B', self.parent.read(self.name, 4, OFFSET_FLAGS)))
-            if word_bytes[3] == target_val:
-                return
-            word_bytes[3] = target_val
-            word_packed = struct.pack('>4B', *word_bytes)
-            self.parent.write(self.name, word_packed, OFFSET_FLAGS)
+            flag_en_idx = 3
         else:
-            # 0x20 or (0x20 / 4)? What was the /4 for?
-            word_bytes = list(
-                struct.unpack('>4B', self.parent.read(self.name, 4, 0x20)))
-            if word_bytes[1] == target_val:
-                return
-            word_bytes[1] = target_val
+            flag_en_idx = 1
+
+        if word_bytes[flag_en_idx] == target_val:
+            return
+        else:
+            word_bytes[flag_en_idx] = target_val
             word_packed = struct.pack('>4B', *word_bytes)
-            self.parent.write(self.name, word_packed, 0x20)
+            self.parent.write(self.name, word_packed, FLAGS_OFFSET)
 
     def fabric_enable(self):
         """
@@ -354,104 +355,40 @@ class TenGbe(Memory, Gbe):
         """
         Toggle the fabric soft reset
         """
-        if self.memmap_compliant:
-            word_bytes = struct.unpack('>4B', self.parent.read(self.name, 4, OFFSET_FLAGS))
-            word_bytes = list(word_bytes)
+        FLAGS_OFFSET = self.memmap['FLAGS']['offset']
+        FLAGS_SIZE   = self.memmap['FLAGS']['size']
 
-            def write_val(val):
-                word_bytes[1] = val
-                word_packed = struct.pack('>4B', *word_bytes)
-                if val == 0:
-                    self.parent.write(self.name, word_packed, OFFSET_FLAGS)
-                else:
-                    self.parent.blindwrite(self.name, word_packed, OFFSET_FLAGS)
-            if word_bytes[1] == 1:
-                write_val(0)
-            write_val(1)
-            write_val(0)
-        else:
-            word_bytes = struct.unpack('>4B', self.parent.read(self.name, 4, 0x20))
-            word_bytes = list(word_bytes)
+        # Unpack FLAGS register into four 8-bit values
+        word_bytes = struct.unpack('>%iB' % FLAGS_SIZE,
+                                   self.parent.read(self.name, FLAGS_SIZE, FLAGS_OFFSET))
+        word_bytes = list(word_bytes)
 
-            def write_val(val):
-                word_bytes[0] = val
-                word_packed = struct.pack('>4B', *word_bytes)
-                if val == 0:
-                    self.parent.write(self.name, word_packed, 0x20)
-                else:
-                    self.parent.blindwrite(self.name, word_packed, 0x20)
-            if word_bytes[0] == 1:
-                write_val(0)
-            write_val(1)
-            write_val(0)
+        # As legacy mapping is different, need to use check index (use fabric_soft_rst_idx)
+        fabric_soft_rst_idx = 1 if self.memmap_compliant else 0
+        def write_val(val, idx):
+            word_bytes[idx] = val
+            word_packed = struct.pack('>%iB' % FLAGS_SIZE, *word_bytes)
+            if val == 0:
+                self.parent.write(self.name, word_packed, FLAGS_OFFSET)
+            else:
+                self.parent.blindwrite(self.name, word_packed, FLAGS_OFFSET)
+        if word_bytes[fabric_soft_rst_idx] == 1:
+            write_val(0, fabric_soft_rst_idx)
+        write_val(1, fabric_soft_rst_idx)
+        write_val(0, fabric_soft_rst_idx)
+
 
     def get_gbe_core_details(self, read_arp=False, read_cpu=False):
         """
         Get 10GbE core details.
-        assemble struct for header stuff...
 
-        .. code-block:: python
-
-            \"\"\"
-            0x00 - 0x07: MAC address
-            0x08 - 0x0b: Not used
-            0x0c - 0x0f: Gateway addr
-            0x10 - 0x13: IP addr
-            0x14 - 0x17: Not assigned
-            0x18 - 0x1b: Buffer sizes
-            0x1c - 0x1f: Not assigned
-            0x20    :    Soft reset (bit 0)
-            0x21    :    Fabric enable (bit 0)
-            0x22 - 0x23: Fabric port
-            0x24 - 0x27: XAUI status (bit 2,3,4,5 = lane sync, bit6 = chan_bond)
-            0x28 - 0x2b: PHY config
-            0x28    :    RX_eq_mix
-            0x29    :    RX_eq_pol
-            0x2a    :    TX_preemph
-            0x2b    :    TX_diff_ctrl
-            0x30 - 0x33: Multicast IP RX base address
-            0x34 - 0x37: Multicast IP mask
-            0x38 - 0x3b: Subnet mask
-            0x1000  :    CPU TX buffer
-            0x2000  :    CPU RX buffer
-            0x3000  :    ARP tables start
-            word_width = 8
-            \"\"\"
-            self.add_field(Bitfield.Field('mac0', 0,            word_width,                 0, 0 * word_width))
-            self.add_field(Bitfield.Field('mac1', 0,            word_width,                 0, 1 * word_width))
-            self.add_field(Bitfield.Field('mac2', 0,            word_width,                 0, 2 * word_width))
-            self.add_field(Bitfield.Field('mac3', 0,            word_width,                 0, 3 * word_width))
-            self.add_field(Bitfield.Field('mac4', 0,            word_width,                 0, 4 * word_width))
-            self.add_field(Bitfield.Field('mac5', 0,            word_width,                 0, 5 * word_width))
-            self.add_field(Bitfield.Field('mac6', 0,            word_width,                 0, 6 * word_width))
-            self.add_field(Bitfield.Field('mac7', 0,            word_width,                 0, 7 * word_width))
-            self.add_field(Bitfield.Field('unused_1', 0,        (0x0c - 0x08) * word_width, 0, 8 * word_width))
-            self.add_field(Bitfield.Field('gateway_ip0', 0,     word_width,                 0, 0x0c * word_width))
-            self.add_field(Bitfield.Field('gateway_ip1', 0,     word_width,                 0, 0x0d * word_width))
-            self.add_field(Bitfield.Field('gateway_ip2', 0,     word_width,                 0, 0x0e * word_width))
-            self.add_field(Bitfield.Field('gateway_ip3', 0,     word_width,                 0, 0x0f * word_width))
-            self.add_field(Bitfield.Field('ip0', 0,             word_width,                 0, 0x10 * word_width))
-            self.add_field(Bitfield.Field('ip1', 0,             word_width,                 0, 0x11 * word_width))
-            self.add_field(Bitfield.Field('ip2', 0,             word_width,                 0, 0x12 * word_width))
-            self.add_field(Bitfield.Field('ip3', 0,             word_width,                 0, 0x13 * word_width))
-            self.add_field(Bitfield.Field('unused_2', 0,        (0x18 - 0x14) * word_width, 0, 0x14 * word_width))
-            self.add_field(Bitfield.Field('buf_sizes', 0,       (0x1c - 0x18) * word_width, 0, 0x18 * word_width))
-            self.add_field(Bitfield.Field('unused_3', 0,        (0x20 - 0x1c) * word_width, 0, 0x1c * word_width))
-            self.add_field(Bitfield.Field('soft_reset', 2,      1,                          0, 0x20 * word_width))
-            self.add_field(Bitfield.Field('fabric_enable', 2,   1,                          0, 0x21 * word_width))
-            self.add_field(Bitfield.Field('port', 0,            (0x24 - 0x22) * word_width, 0, 0x22 * word_width))
-            self.add_field(Bitfield.Field('xaui_status', 0,     (0x28 - 0x24) * word_width, 0, 0x24 * word_width))
-            self.add_field(Bitfield.Field('rx_eq_mix', 0,       word_width,                 0, 0x28 * word_width))
-            self.add_field(Bitfield.Field('rq_eq_pol', 0,       word_width,                 0, 0x29 * word_width))
-            self.add_field(Bitfield.Field('tx_preempth', 0,     word_width,                 0, 0x2a * word_width))
-            self.add_field(Bitfield.Field('tx_diff_ctrl', 0,    word_width,                 0, 0x2b * word_width))
-            #self.add_field(Bitfield.Field('buffer_tx', 0,       0x1000 * word_width,        0, 0x1000 * word_width))
-            #self.add_field(Bitfield.Field('buffer_rx', 0,       0x1000 * word_width,        0, 0x2000 * word_width))
-            #self.add_field(Bitfield.Field('arp_table', 0,       0x1000 * word_width,        0, 0x3000 * word_width))
+        :param read_arp (bool): Get ARP table details
+        :param read_cpu (bool): Get CPU details
         """
+        data = self.parent.read(self.name, 16384)
+        data = list(struct.unpack('>16384B', data))
+
         if self.memmap_compliant:
-            data = self.parent.read(self.name, 16384)
-            data = list(struct.unpack('>16384B', data))
             returnval = {
                 'ip_prefix': '%i.%i.%i.' % (data[0x14], data[0x15], data[0x16]),
                 'ip': IpAddress('%i.%i.%i.%i' % (data[0x14], data[0x15], 
@@ -472,8 +409,6 @@ class TenGbe(Memory, Gbe):
                               'rx_ips': []}
             }
         else:
-            data = self.parent.read(self.name, 16384)
-            data = list(struct.unpack('>16384B', data))
             returnval = {
                 'ip_prefix': '%i.%i.%i.' % (data[0x10], data[0x11], data[0x12]),
                 'ip': IpAddress('%i.%i.%i.%i' % (data[0x10], data[0x11], 
@@ -499,6 +434,8 @@ class TenGbe(Memory, Gbe):
                                   data[0x34], data[0x35], data[0x36], data[0x37])),
                               'rx_ips': []}
             }
+
+        # Parse multicast details
         possible_addresses = [int(returnval['multicast']['base_ip'])]
         mask_int = int(returnval['multicast']['ip_mask'])
         for ctr in range(32):
@@ -512,10 +449,12 @@ class TenGbe(Memory, Gbe):
         tmp = list(set(possible_addresses))
         for ip in tmp:
             returnval['multicast']['rx_ips'].append(IpAddress(ip))
+
         if read_arp:
             returnval['arp'] = self.get_arp_details(data)
         if read_cpu:
             returnval.update(self.get_cpu_details(data))
+
         self.core_details = returnval
         return returnval
 
@@ -526,10 +465,7 @@ class TenGbe(Memory, Gbe):
         :param port_dump: A list of raw bytes from interface memory.
         :type port_dump: list
         """
-        if self.memmap_compliant:
-            arp_addr = OFFSET_ARP_CACHE
-        else:
-            arp_addr = 0x3000
+        arp_addr = self.memmap['ARP_CACHE']['offset']
 
         if port_dump is None:
             port_dump = self.parent.read(self.name, 16384)
@@ -572,10 +508,7 @@ class TenGbe(Memory, Gbe):
         is passed such that the zeroth element is the MAC address of the
         device with IP XXX.XXX.XXX.0, and element N is the MAC address of the
         device with IP XXX.XXX.XXX.N"""
-        if self.memmap_compliant:
-            arp_addr = OFFSET_ARP_CACHE
-        else:
-            arp_addr = 0x3000
+        arp_addr = self.memmap['ARP_CACHE']['offset']
         macs = list(macs)
         macs_pack = struct.pack('>%dQ' % (len(macs)), *macs)
         self.parent.write(self.name, macs_pack, offset=arp_addr)
