@@ -111,11 +111,16 @@ class TenGbe(Memory, Gbe):
         offset = self.memmap[register]['offset']
         bytesize = self.memmap[register]['size']
         struct_ctypes = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+        if bytesize <  4:
+            raise RuntimeError("Memmap has to write 32-bit words -- write the full 32-bits")
 
-        if bytesize <= 8:
-            packed = struct.pack('>%s' % struct_ctypes[bytesize], value)
+        if isinstance(value, str):
+            packed = value
         else:
-            packed = struct.pack('>%iL' % int(bytesize / 4))
+            if bytesize <= 8:
+                packed = struct.pack('>%s' % struct_ctypes[bytesize], value)
+            else:
+                packed = struct.pack('>%iL' % int(bytesize / 4))
         self.parent.blindwrite(self.name, packed, offset=offset)
 
     def configure_core(self):
@@ -130,8 +135,14 @@ class TenGbe(Memory, Gbe):
         self._memmap_write('IP_ADDR',  self.ip_address.ip_int)
         self._memmap_write('NETMASK',  self.subnet_mask.ip_int)
         self._memmap_write('GW_ADDR',  gateway)
-        self._memmap_write('PORT',     self.port)
 
+        if self.memmap_compliant:
+            self._memmap_write('PORT',     self.port)
+        else:
+            # In legacy, PORT is part of a 32-bit word
+            # [8b soft reset | 8b fabric enable | 16b port address]
+            flags = struct.pack('>BBH', (0, 1, self.port))
+            self._memmap_write('FLAGS', flags)
 
     def dhcp_start(self):
         """
@@ -327,10 +338,7 @@ class TenGbe(Memory, Gbe):
         word_bytes = list(struct.unpack('>4B', self.parent.read(self.name, FLAGS_SIZE, FLAGS_OFFSET)))
 
         # As legacy mapping is different, need to check the index of FABRIC_EN inside the FLAGS register
-        if self.memmap_compliant:
-            flag_en_idx = 3
-        else:
-            flag_en_idx = 1
+        flag_en_idx = 3 if self.memmap_compliant else 1
 
         if word_bytes[flag_en_idx] == target_val:
             return
@@ -475,7 +483,8 @@ class TenGbe(Memory, Gbe):
             mac = []
             for ctr in range(2, 8):
                 mac.append(port_dump[arp_addr + (addr * 8) + ctr])
-            returnval.append(mac)
+            mac_obj = Mac(':'.join([hex(a)[2:] for a in mac]))
+            returnval.append(mac_obj)
         return returnval
 
     def get_cpu_details(self, port_dump=None):
