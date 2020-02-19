@@ -7,17 +7,30 @@ from gbe import Gbe
 import numpy as np
 from pkg_resources import resource_filename
 
-TENGBE_MMAP_TXT = resource_filename('casperfpga', 'tengbe_mmap.txt')
+TENGBE_UNIFIED_MMAP_TXT = resource_filename('casperfpga', 'tengbe_mmap.txt')
+TENGBE_MMAP_LEGACY_TXT  = resource_filename('casperfpga', 'tengbe_mmap_legacy.txt')
 
 LOGGER = logging.getLogger(__name__)
 
-def read_memory_map_definition():
-    """ Read memory map definition from text file
+def read_memory_map_definition(filename):
+    """ Read memory map definition from text file.
 
-    Returns a python dictionary {REGISTER_NAME : [byte_offset, size, readwrite]}
+    Returns a python dictionary:
+        {REGISTER_NAME1: {'offset': offset, 'size': size, 'rwflag': rwflag},
+         REGISTER_NAME2: {'offset': offset, 'size': size, 'rwflag': rwflag}
+         ...}
+
+    Notes:
+        Used by TenGbe.configure_core() to write to mmap.
     """
-    mmap = np.genfromtxt(TENGBE_MMAP_TXT, dtype='str', skip_header=1)
-    mmap = dict.fromkeys(mmap[:, 0], mmap[:, 1:])
+    mmap_arr = np.genfromtxt(filename, dtype='str', skip_header=1)
+    mmap_keys    = list(mmap_arr[:, 0])
+    mmap_offsets = [int(x, 0) for x in mmap_arr[:, 1]]
+    mmap_size    = [int(x, 0) for x in mmap_arr[:, 2]]
+    mmap_rw      = list(mmap_arr[:, 3])
+    mmap  = {}
+    for ii, k in enumerate(mmap_keys):
+        mmap[k] = {'offset': mmap_offsets[ii], 'size': mmap_size[ii], 'rwflag': mmap_rw[ii]}
     return mmap
 
 class TenGbe(Memory, Gbe):
@@ -37,6 +50,10 @@ class TenGbe(Memory, Gbe):
         Memory.__init__(self, name, 32, address, length_bytes)
         Gbe.__init__(self, parent, name, address, length_bytes, device_info)
         self.memmap_compliant = self._check_memmap_compliance()
+        if self.memmap_compliant:
+            self.memmap = read_memory_map_definition(TENGBE_UNIFIED_MMAP_TXT)
+        else:
+            self.memmap = read_memory_map_definition(TENGBE_MMAP_LEGACY_TXT)
 
     def _check_memmap_compliance(self):
         """
@@ -86,58 +103,35 @@ class TenGbe(Memory, Gbe):
         """
         return self.snaps['rx'].read(timeout=10)['data']
 
+    def _memmap_write(self, register, value):
+        """ Write to memory map
+        :param register: register to write to. Register must be in memmap.
+        :param value: Value to write.
+        """
+        offset = self.memmap[register]['offset']
+        bytesize = self.memmap[register]['size']
+        struct_ctypes = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+
+        if bytesize <= 8:
+            packed = struct.pack('>%s' % struct_ctypes[bytesize], value)
+        else:
+            packed = struct.pack('>%iL' % int(bytesize / 4))
+        self.parent.blindwrite(self.name, packed, offset=offset)
+
     def configure_core(self):
         """
         Setup the interface by writing to the fabric directly, bypassing tap.
         :param self:
         :return:
-
-        Core offset notes:
-           0x00 - 0x07: My MAC address
-           0x08 - 0x0b: Not used
-           0x0c - 0x0f: Gateway addr
-           0x10 - 0x13: my IP addr
-           0x14 - 0x17: Not assigned
-           0x18 - 0x1b: Buffer sizes
-           0x1c - 0x1f: Not assigned
-           0x20       : soft reset (bit 0)
-           0x21       : fabric enable (bit 0)
-           0x22 - 0x23: fabric port
-
-           0x24 - 0x27: XAUI status (bit 2,3,4,5=lane sync, bit6=chan_bond)
-           0x28 - 0x2b: PHY config
-
-           0x28       : RX_eq_mix
-           0x29       : RX_eq_pol
-           0x2a       : TX_preemph
-           0x2b       : TX_diff_ctrl
-           0x38 - 0x3b: subnet mask
-
-           0x1000     : CPU TX buffer
-           0x2000     : CPU RX buffer
-           0x3000     : ARP tables start
         """
         gateway = 1 if self.gateway is None else self.gateway.ip_int
 
-        if self.memmap_compliant:
-            pass
-        else:
-            ctrl_pack = struct.pack('>QLLLLLLBBH',
-                                    self.mac.mac_int,
-                                    0,                          # Not assigned
-                                    gateway,
-                                    self.ip_address.ip_int,
-                                    0,                          # Not assigned
-                                    0,                          # Buffer sozes
-                                    0,                          # Not assigned
-                                    0,                          # Soft reset
-                                    1,                          # Fabric enable
-                                    self.port)
+        self._memmap_write('MAC_ADDR', self.mac.mac_int)
+        self._memmap_write('IP_ADDR',  self.ip_address.ip_int)
+        self._memmap_write('NETMASK',  self.subnet_mask.ip_int)
+        self._memmap_write('GW_ADDR',  gateway)
+        self._memmap_write('PORT',     self.port)
 
-            self.parent.blindwrite(self.name, ctrl_pack, offset=0)
-
-            if self.subnet_mask is not None:
-                self.parent.blindwrite(self.name, self.subnet_mask.packed(), offset=0x38)
 
     def dhcp_start(self):
         """
