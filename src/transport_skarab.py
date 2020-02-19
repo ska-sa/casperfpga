@@ -3070,12 +3070,21 @@ class SkarabTransport(Transport):
                 # return '\033[0;31m{}\033[00m'.format('nominal')
                 return 'nominal'
 
-        def parse_fan_speeds_rpm(raw_sensor_data):
+        def parse_fan_speeds_rpm(raw_sensor_data, status_bits):
             for key, value in sd.sensor_list.items():
                 if 'fan_rpm' in key:
-                    fan_speed = raw_sensor_data[value]
-                    self.sensor_data[key] = (
-                            fan_speed, 'rpm', check_fan_speed(key, fan_speed))
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[
+                                                 key][0],
+                                             sd.sensor_status_word_location_bit[
+                                                 key][1])
+
+                    if not error:
+                        fan_speed = raw_sensor_data[value]
+                        self.sensor_data[key] = (
+                                fan_speed, 'rpm', check_fan_speed(key, fan_speed))
+                    else:
+                        self.sensor_data[key] = (-1, 'rpm', 'unknown')
 
         def parse_fan_speeds_generic(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -3083,49 +3092,67 @@ class SkarabTransport(Transport):
                     self.sensor_data[key] = round(
                         raw_sensor_data[value] / 100.0, 2)
 
-        def parse_fan_speeds_pwm(raw_sensor_data):
+        def parse_fan_speeds_pwm(raw_sensor_data, status_bits):
             for key, value in sd.sensor_list.items():
                 if 'fan_pwm' in key:
-                    pwm_value = round(raw_sensor_data[value] / 100.0, 2);
-                    if(pwm_value > 100 or pwm_value < 0):
-                        message = 'error'
-                    else:
-                        message = 'nominal'
-                    self.sensor_data[key] = (
-                            pwm_value, '%',message)
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[
+                                                 key][0],
+                                             sd.sensor_status_word_location_bit[
+                                                 key][1])
 
-        def parse_temperatures(raw_sensor_data):
+                    if not error:
+                        pwm_value = round(raw_sensor_data[value] / 100.0, 2)
+                        if(pwm_value > 100 or pwm_value < 0):
+                            message = 'error'
+                        else:
+                            message = 'nominal'
+                        self.sensor_data[key] = (
+                                pwm_value, '%', message)
+                    else:
+                        self.sensor_data[key] = (-1, '%', 'unknown')
+
+        def parse_temperatures(raw_sensor_data, status_bits):
             # inlet temp (reference)
             inlet_ref = temperature_value_check(
                 raw_sensor_data[sd.sensor_list['inlet_temperature_degC']])
             for key, value in sd.sensor_list.items():
                 if 'temperature' in key:
-                    if 'voltage' in key or 'current' in key:
-                        temperature = voltage_current_monitor_temperature_check(
-                            raw_sensor_data[value])
-                        self.sensor_data[
-                            key] = (temperature, 'degC',
-                                    check_temperature(key, temperature,
-                                                      inlet_ref=0))
-                    elif 'hmc' in key:
-                        temperature = struct.unpack(
-                            '!I', struct.pack('!4B',
-                                              *raw_sensor_data[value:value+4]))[0]
-                        self.sensor_data[key] = (-1 if temperature==0xffeeddcc else temperature,
-                                                 'degC',
-                                                 check_temperature(key, temperature, inlet_ref=0))
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[
+                                                 key][0],
+                                             sd.sensor_status_word_location_bit[
+                                                 key][1])
 
-                    # ignore the mezzanine temperatures as these are unreliable
-                    elif 'mezzanine' in key:
-                        continue
+                    if not error:
+                        if 'voltage' in key or 'current' in key:
+                            temperature = voltage_current_monitor_temperature_check(
+                                raw_sensor_data[value])
+                            self.sensor_data[
+                                key] = (temperature, 'degC',
+                                        check_temperature(key, temperature,
+                                                          inlet_ref=0))
+                        elif 'hmc' in key:
+                            temperature = struct.unpack(
+                                '!I', struct.pack('!4B',
+                                                  *raw_sensor_data[value:value+4]))[0]
+                            self.sensor_data[key] = (-1 if temperature==0xffeeddcc else temperature,
+                                                     'degC',
+                                                     check_temperature(key, temperature, inlet_ref=0))
 
+                        # ignore the mezzanine temperatures as these are unreliable
+                        elif 'mezzanine' in key:
+                            continue
+
+                        else:
+                            temperature = temperature_value_check(
+                                raw_sensor_data[value])
+                            self.sensor_data[key] = (temperature, 'degC',
+                                                     check_temperature(key,
+                                                                       temperature,
+                                                                       inlet_ref=0))
                     else:
-                        temperature = temperature_value_check(
-                            raw_sensor_data[value])
-                        self.sensor_data[key] = (temperature, 'degC',
-                                                 check_temperature(key,
-                                                                   temperature,
-                                                                   inlet_ref=0))
+                        self.sensor_data[key] = (-1, 'degC', 'unknown')
 
         def parse_mezzanine_temperatures(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -3134,36 +3161,64 @@ class SkarabTransport(Transport):
                     temperature = mezzanine_temperature_check_hmc(raw_sensor_data[value])
                     self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref=0))
 
-        def parse_voltages(raw_sensor_data):
+        def parse_voltages(raw_sensor_data, status_bits):
             for key, value in sd.sensor_list.items():
                 if '_voltage' in key:
-                    voltage = voltage_handler(raw_sensor_data, value)
-                    self.sensor_data[key] = (voltage, 'volts',
-                                             check_voltage(key, voltage))
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[
+                                                 key][0],
+                                             sd.sensor_status_word_location_bit[
+                                                 key][1])
 
-        def parse_currents(raw_sensor_data):
+                    if not error:
+
+                        voltage = voltage_handler(raw_sensor_data, value)
+                        self.sensor_data[key] = (voltage, 'volts',
+                                                 check_voltage(key, voltage))
+                    else:
+                        self.sensor_data[key] = (-1, 'volts', 'unknown')
+
+        def parse_currents(raw_sensor_data, status_bits):
             for key, value in sd.sensor_list.items():
                 if '_current' in key:
-                    current = current_handler(raw_sensor_data, value)
-                    self.sensor_data[key] = (current, 'amperes',
-                                             check_current(key, current))
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[key][0],
+                                             sd.sensor_status_word_location_bit[key][1])
+
+                    if not error:
+                        current = current_handler(raw_sensor_data, value)
+                        self.sensor_data[key] = (current, 'amperes',
+                                                 check_current(key, current))
+                    else:
+                        self.sensor_data[key] = (-1, 'amperes', 'unknown')
+
+        def check_status_bit(status, status_bits_word_idx, status_bit_idx):
+            if status[status_bits_word_idx][status_bit_idx] == '0':
+                return 0
+            else:
+                return 1
 
         request = sd.GetSensorDataReq()
         response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             # raw sensor data received from SKARAB
             recvd_sensor_data_values = response.packet['sensor_data']
+            recvd_sensor_status = response.packet['status']
+            status_dict = {k: '{:016b}'.format(v)[::-1]
+                           for k, v in enumerate(recvd_sensor_status)}
+
+            # seems to be an endianess conflict, the words are swapped around
+            # the [::-1] reverses this to match the expected bit order
+
             # parse the raw data to extract actual sensor info
-            parse_fan_speeds_generic(recvd_sensor_data_values)
-            parse_fan_speeds_rpm(recvd_sensor_data_values)
-            parse_fan_speeds_pwm(recvd_sensor_data_values)
-            parse_currents(recvd_sensor_data_values)
-            parse_voltages(recvd_sensor_data_values)
-            parse_temperatures(recvd_sensor_data_values)
+            parse_fan_speeds_rpm(recvd_sensor_data_values, status_dict)
+            parse_fan_speeds_pwm(recvd_sensor_data_values, status_dict)
+            parse_currents(recvd_sensor_data_values, status_dict)
+            parse_voltages(recvd_sensor_data_values, status_dict)
+            parse_temperatures(recvd_sensor_data_values, status_dict)
 
             # disable mezzanine temperatures as these values are not reliable
             # parse_mezzanine_temperatures(recvd_sensor_data_values)
-
             return self.sensor_data
 
         else:

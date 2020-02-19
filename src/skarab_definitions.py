@@ -624,6 +624,59 @@ sensor_list = {
     'hmc_1_die_temperature_deg_C': 98,
     'hmc_2_die_temperature_deg_C': 102}
 
+# sensor status bits
+# sensor name: (status_word_index, bit_index)
+sensor_status_word_location_bit = {
+    'left_front_fan_rpm': (0, 0),
+    'left_middle_fan_rpm': (0, 1),
+    'left_back_fan_rpm': (0, 2),
+    'right_back_fan_rpm': (0, 3),
+    'fpga_fan_rpm': (0, 4),
+    'left_front_fan_pwm': (0, 5),
+    'left_middle_fan_pwm': (0, 6),
+    'left_back_fan_pwm': (0, 7),
+    'right_back_fan_pwm': (0, 8),
+    'fpga_fan_pwm': (0, 9),
+    'inlet_temperature_degC': (0, 10),
+    'outlet_temperature_degC': (0, 11),
+    'fpga_temperature_degC': (0, 12),
+    'fan_controller_temperature_degC': (0, 13),
+    'voltage_monitor_temperature_degC': (0, 14),
+    'current_monitor_temperature_degC': (0, 15),
+    '12V2_voltage': (1, 0),
+    '12V_voltage': (1, 1),
+    '5V_voltage': (1, 2),
+    '3V3_voltage': (1, 3),
+    '2V5_voltage': (1, 4),
+    '1V8_voltage': (1, 5),
+    '1V2_voltage': (1, 6),
+    '1V0_voltage': (1, 7),
+    '1V8_MGTVCCAUX_voltage': (1, 8),
+    '1V0_MGTAVCC_voltage': (1, 9),
+    '1V2_MGTAVTT_voltage': (1, 10),
+    '5V_aux_voltage': (1, 11),
+    '3V3_config_voltage': (1, 12),
+    '12V2_current': (1, 13),
+    '12V_current': (1, 14),
+    '5V_current': (1, 15),
+    '3V3_current': (2, 0),
+    '2V5_current': (2, 1),
+    '1V8_current': (2, 2),
+    '1V2_current': (2, 3),
+    '1V0_current': (2, 4),
+    '1V8_MGTVCCAUX_current': (2, 5),
+    '1V0_MGTAVCC_current': (2, 6),
+    '1V2_MGTAVTT_current': (2, 7),
+    '3V3_config_current': (2, 8),
+    'mezzanine_site_0_temperature_degC': (2, 9),
+    'mezzanine_site_1_temperature_degC': (2, 10),
+    'mezzanine_site_2_temperature_degC': (2, 11),
+    'reserved': (2, 12),
+    'hmc_0_die_temperature_deg_C': (2, 13),
+    'hmc_1_die_temperature_deg_C': (2, 14),
+    'hmc_2_die_temperature_deg_C': (2, 15)
+}
+
 # sensor thresholds
 # voltage_sensor: (max, min)
 voltage_ranges = {
@@ -1018,19 +1071,21 @@ class GetSensorDataReq(Command):
         self.expect_response = True
         self.response = GetSensorDataResp
         self.num_response_words = 111
-        self.pad_words = 3
+        self.pad_words = 0
 
 
 class GetSensorDataResp(Response):
-    def __init__(self, command_id, seq_num, sensor_data, padding):
+    def __init__(self, command_id, seq_num, sensor_data, status):
         super(GetSensorDataResp, self).__init__(command_id, seq_num)
         self.packet['sensor_data'] = sensor_data
-        self.packet['padding'] = padding
+        self.packet['status'] = status
 
     @staticmethod
     def unpack_process(unpacked_data):
         read_bytes = unpacked_data[2:108]
+        status_bytes = unpacked_data[108:]
         unpacked_data[2:108] = [read_bytes]
+        unpacked_data[3:] = [status_bytes]
         return unpacked_data
 
 
