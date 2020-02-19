@@ -141,7 +141,7 @@ class TenGbe(Memory, Gbe):
         else:
             # In legacy, PORT is part of a 32-bit word
             # [8b soft reset | 8b fabric enable | 16b port address]
-            flags = struct.pack('>BBH', (0, 1, self.port))
+            flags = struct.pack('>BBH', 0, 1, self.port)
             self._memmap_write('FLAGS', flags)
 
     def dhcp_start(self):
