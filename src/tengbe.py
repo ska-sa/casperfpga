@@ -4,76 +4,21 @@ import struct
 from memory import Memory
 from network import Mac, IpAddress
 from gbe import Gbe
+import numpy as np
+from pkg_resources import resource_filename
+
+TENGBE_MMAP_TXT = resource_filename('casperfpga', 'tengbe_mmap.txt')
 
 LOGGER = logging.getLogger(__name__)
 
-# Offsets for fields in the memory map, in bytes
-OFFSET_CORE_TYPE   = 0x0
-OFFSET_BUFFER_SIZE = 0x4
-OFFSET_WORD_LEN    = 0x8
-OFFSET_MAC_ADDR    = 0xc
-OFFSET_IP_ADDR     = 0x14
-OFFSET_GW_ADDR     = 0x18
-OFFSET_NETMASK     = 0x1c
-OFFSET_MC_IP       = 0x20
-OFFSET_MC_MASK     = 0x24
-OFFSET_BUF_VLD     = 0x28
-OFFSET_FLAGS       = 0x2c
-OFFSET_PORT        = 0x30
-OFFSET_STATUS      = 0x34
-OFFSET_CONTROL     = 0x40
-OFFSET_ARP_SIZE    = 0x44
-OFFSET_TX_PKT_RATE = 0x48
-OFFSET_TX_PKT_CNT  = 0x4c
-OFFSET_TX_VLD_RATE = 0x50
-OFFSET_TX_VLD_CNT  = 0x54
-OFFSET_TX_OF_CNT   = 0x58
-OFFSET_TX_AF_CNT   = 0x5c
-OFFSET_RX_PKT_RATE = 0x60
-OFFSET_RX_PKT_CNT  = 0x64
-OFFSET_RX_VLD_RATE = 0x68
-OFFSET_RX_VLD_CNT  = 0x6c
-OFFSET_RX_OF_CNT   = 0x70
-OFFSET_RX_AF_CNT   = 0x74
-OFFSET_COUNT_RST   = 0x78
+def read_memory_map_definition():
+    """ Read memory map definition from text file
 
-OFFSET_ARP_CACHE   = 0x1000
-OFFSET_TX_BUFFER   = 0x4000
-OFFSET_RX_BUFFER   = 0x8000
-
-# Sizes for fields in the memory map, in bytes
-SIZE_CORE_TYPE   = 0x4
-SIZE_BUFFER_SIZE = 0x4
-SIZE_WORD_LEN    = 0x4
-SIZE_MAC_ADDR    = 0x8
-SIZE_IP_ADDR     = 0x4
-SIZE_GW_ADDR     = 0x4
-SIZE_NETMASK     = 0x4
-SIZE_MC_IP       = 0x4
-SIZE_MC_MASK     = 0x4
-SIZE_BUF_AVAIL   = 0x4
-SIZE_FLAGS       = 0x4
-SIZE_PORT        = 0x4
-SIZE_STATUS      = 0x8
-SIZE_CONTROL     = 0x8
-SIZE_ARP_SIZE    = 0x4
-SIZE_TX_PKT_RATE = 0x4
-SIZE_TX_PKT_CNT  = 0x4
-SIZE_TX_VLD_RATE = 0x4
-SIZE_TX_VLD_CNT  = 0x4
-SIZE_TX_OF_CNT   = 0x4
-SIZE_TX_AF_CNT   = 0x4
-SIZE_RX_PKT_RATE = 0x4
-SIZE_RX_PKT_CNT  = 0x4
-SIZE_RX_VLD_RATE = 0x4
-SIZE_RX_VLD_CNT  = 0x4
-SIZE_RX_OF_CNT   = 0x4
-SIZE_RX_AF_CNT   = 0x4
-SIZE_COUNT_RST   = 0x4
-
-SIZE_ARP_CACHE   = 0x3000
-SIZE_TX_BUFFER   = 0x4000
-SIZE_RX_BUFFER   = 0x4000
+    Returns a python dictionary {REGISTER_NAME : [byte_offset, size, readwrite]}
+    """
+    mmap = np.genfromtxt(TENGBE_MMAP_TXT, dtype='str', skip_header=1)
+    mmap = dict.fromkeys(mmap[:, 0], mmap[:, 1:])
+    return mmap
 
 class TenGbe(Memory, Gbe):
     """
@@ -172,25 +117,27 @@ class TenGbe(Memory, Gbe):
            0x2000     : CPU RX buffer
            0x3000     : ARP tables start
         """
-
         gateway = 1 if self.gateway is None else self.gateway.ip_int
 
-        ctrl_pack = struct.pack('>QLLLLLLBBH',
-                                self.mac.mac_int,
-                                0,                          # Not assigned
-                                gateway,
-                                self.ip_address.ip_int,
-                                0,                          # Not assigned
-                                0,                          # Buffer sozes
-                                0,                          # Not assigned
-                                0,                          # Soft reset
-                                1,                          # Fabric enable
-                                self.port)
+        if self.memmap_compliant:
+            pass
+        else:
+            ctrl_pack = struct.pack('>QLLLLLLBBH',
+                                    self.mac.mac_int,
+                                    0,                          # Not assigned
+                                    gateway,
+                                    self.ip_address.ip_int,
+                                    0,                          # Not assigned
+                                    0,                          # Buffer sozes
+                                    0,                          # Not assigned
+                                    0,                          # Soft reset
+                                    1,                          # Fabric enable
+                                    self.port)
 
-        self.parent.blindwrite(self.name, ctrl_pack, offset=0)
+            self.parent.blindwrite(self.name, ctrl_pack, offset=0)
 
-        if self.subnet_mask is not None:
-            self.parent.blindwrite(self.name, self.subnet_mask.packed(), offset=0x38)
+            if self.subnet_mask is not None:
+                self.parent.blindwrite(self.name, self.subnet_mask.packed(), offset=0x38)
 
     def dhcp_start(self):
         """
@@ -558,19 +505,19 @@ class TenGbe(Memory, Gbe):
                                   data[0x34], data[0x35], data[0x36], data[0x37])),
                               'rx_ips': []}
             }
-            possible_addresses = [int(returnval['multicast']['base_ip'])]
-            mask_int = int(returnval['multicast']['ip_mask'])
-            for ctr in range(32):
-                mask_bit = (mask_int >> ctr) & 1
-                if not mask_bit:
-                    new_ips = []
-                    for ip in possible_addresses:
-                        new_ips.append(ip & (~(1 << ctr)))
-                        new_ips.append(new_ips[-1] | (1 << ctr))
-                    possible_addresses.extend(new_ips)
-            tmp = list(set(possible_addresses))
-            for ip in tmp:
-                returnval['multicast']['rx_ips'].append(IpAddress(ip))
+        possible_addresses = [int(returnval['multicast']['base_ip'])]
+        mask_int = int(returnval['multicast']['ip_mask'])
+        for ctr in range(32):
+            mask_bit = (mask_int >> ctr) & 1
+            if not mask_bit:
+                new_ips = []
+                for ip in possible_addresses:
+                    new_ips.append(ip & (~(1 << ctr)))
+                    new_ips.append(new_ips[-1] | (1 << ctr))
+                possible_addresses.extend(new_ips)
+        tmp = list(set(possible_addresses))
+        for ip in tmp:
+            returnval['multicast']['rx_ips'].append(IpAddress(ip))
         if read_arp:
             returnval['arp'] = self.get_arp_details(data)
         if read_cpu:

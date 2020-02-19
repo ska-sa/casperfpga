@@ -1,1 +1,2 @@
 recursive-include ./ *.h
+include casperfpga/tengbe_mmap.txt
