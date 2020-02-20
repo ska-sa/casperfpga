@@ -114,7 +114,7 @@ class TenGbe(Memory, Gbe):
         bytesize = self.memmap[register]['size']
         ctype = STRUCT_CTYPES[bytesize]
 
-        if self.memmap[register]['READ/WRITE'] == 'r':
+        if self.memmap[register]['rwflag'] == 'r':
             raise RuntimeError("Warning: %s is read-only!" % register)
 
         if bytesize in (1, 2):
@@ -397,61 +397,41 @@ class TenGbe(Memory, Gbe):
         """
         Get 10GbE core details.
 
-        :param read_arp (bool): Get ARP table details
-        :param read_cpu (bool): Get CPU details
-        """
-        data = self.parent.read(self.name, 16384)
-        data = list(struct.unpack('>16384B', data))
+        :param read_arp (bool): Get ARP table details (default False)
+        :param read_cpu (bool): Get CPU details (default False)
+        :param read_multicast (bool): Get multicast address table (default False)
 
-        if self.memmap_compliant:
-            returnval = {
-                'ip_prefix': '%i.%i.%i.' % (data[0x14], data[0x15], data[0x16]),
-                'ip': IpAddress('%i.%i.%i.%i' % (data[0x14], data[0x15], 
-                                                 data[0x16], data[0x17])),
-                'subnet_mask': IpAddress('%i.%i.%i.%i' % (
-                                  data[0x1c], data[0x1d], data[0x1e], data[0x1f])),
-                'mac': Mac('%i:%i:%i:%i:%i:%i' % (data[0x0e], data[0x0f],
-                                                  data[0x10], data[0x11],
-                                                  data[0x12], data[0x13])),
-                'gateway_ip': IpAddress('%i.%i.%i.%i' % (data[0x18], data[0x19],
-                                                         data[0x1a], data[0x1b])),
-                'fabric_port': ((data[0x32] << 8) + (data[0x33])),
-                'fabric_en': bool(data[0x2f] & 1),
-                'multicast': {'base_ip': IpAddress('%i.%i.%i.%i' % (
-                    data[0x20], data[0x21], data[0x22], data[0x23])),
-                              'ip_mask': IpAddress('%i.%i.%i.%i' % (
-                                  data[0x24], data[0x25], data[0x26], data[0x27])),
-                              'rx_ips': []}
-            }
-        else:
-            returnval = {
-                'ip_prefix': '%i.%i.%i.' % (data[0x10], data[0x11], data[0x12]),
-                'ip': IpAddress('%i.%i.%i.%i' % (data[0x10], data[0x11], 
-                                                 data[0x12], data[0x13])),
-                'subnet_mask': IpAddress('%i.%i.%i.%i' % (
-                                  data[0x38], data[0x39], data[0x3a], data[0x3b])),
-                'mac': Mac('%i:%i:%i:%i:%i:%i' % (data[0x02], data[0x03],
-                                                  data[0x04], data[0x05],
-                                                  data[0x06], data[0x07])),
-                'gateway_ip': IpAddress('%i.%i.%i.%i' % (data[0x0c], data[0x0d],
-                                                         data[0x0e], data[0x0f])),
-                'fabric_port': ((data[0x22] << 8) + (data[0x23])),
-                'fabric_en': bool(data[0x21] & 1),
+        :returns: dictionary of core details (IP address, subnet mask, MAC address, port, etc).
+        """
+        IP_ADDR   = self._memmap_read('IP_ADDR')
+        IP_PREFIX = '.'.join(IpAddress(IP_ADDR).ip_str.split('.')[:3])
+
+        returnval = {
+            'ip_prefix': IP_PREFIX,
+            'ip': IpAddress(IP_ADDR),
+            'subnet_mask': IpAddress(self._memmap_read('NETMASK')),
+            'mac': Mac(self._memmap_read('MAC_ADDR')),
+            'gateway_ip': IpAddress(self._memmap_read('GW_ADDR')),
+            'fabric_port': self._memmap_read('PORT'),
+            'fabric_en': self._memmap_read('ENABLE'),
+            'multicast': {'base_ip': IpAddress(self._memmap_read('MC_IP')),
+                          'ip_mask': IpAddress(self._memmap_read('MC_MASK')),
+                          'rx_ips': []}
+        }
+
+        if not self.memmap_compliant:
+            data = self.parent.read(self.name, 16384)
+            returnval_legacy_dict = {
                 'xaui_lane_sync': [bool(data[0x27] & 4), bool(data[0x27] & 8),
                                    bool(data[0x27] & 16), bool(data[0x27] & 32)],
                 'xaui_status': [data[0x24], data[0x25], data[0x26], data[0x27]],
                 'xaui_chan_bond': bool(data[0x27] & 64),
                 'xaui_phy': {'rx_eq_mix': data[0x28], 'rx_eq_pol': data[0x29],
                              'tx_preemph': data[0x2a], 'tx_swing': data[0x2b]},
-                'multicast': {'base_ip': IpAddress('%i.%i.%i.%i' % (
-                    data[0x30], data[0x31], data[0x32], data[0x33])),
-                              'ip_mask': IpAddress('%i.%i.%i.%i' % (
-                                  data[0x34], data[0x35], data[0x36], data[0x37])),
-                              'rx_ips': []}
             }
+            returnval.update(returnval_legacy_dict)
 
         if read_multicast:
-            # Parse multicast details
             possible_addresses = [int(returnval['multicast']['base_ip'])]
             mask_int = int(returnval['multicast']['ip_mask'])
             for ctr in range(32):
