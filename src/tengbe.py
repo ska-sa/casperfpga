@@ -212,7 +212,7 @@ class TenGbe(Memory, Gbe):
         self._memmap_write('NETMASK',  self.subnet_mask.ip_int)
         self._memmap_write('GW_ADDR',  gateway)
         self._memmap_write('PORT',     self.port)
-        
+
         self.fabric_enable()
         self.fabric_soft_reset_toggle()
 

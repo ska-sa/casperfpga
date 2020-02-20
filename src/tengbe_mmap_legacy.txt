@@ -13,4 +13,4 @@ XAUI_STATUS     0x24        0x4         r
 PHY_CONFIG      0x28        0x4         r
 TX_BUFFER       0x1000      0x1000      rw
 RX_BUFFER       0x2000      0x1000      r
-ARP_CACHE       0x3000      0x3000      rw
+ARP_CACHE       0x3000      0x1000      rw
