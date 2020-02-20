@@ -121,13 +121,19 @@ class TenGbe(Memory, Gbe):
             new_arr[offset % 4] = value
             packed = struct.pack('>%s' % ctype, *new_arr)
         elif bytesize in (4, 8):
-            packed = struct.pack('>%s' % ctype, value)
+            if isinstance(value, str):
+                packed = value
+            else:
+                packed = struct.pack('>%s' % ctype, value)
         else:
             n_elem = int(bytesize / 4)
             if len(value) != n_elem:
                 raise RuntimeError("Register is %i 32-bit words long, but array is "
                                    "of length %i. Make sure these match." % (len(value), n_elem))
-            packed = struct.pack('>%iL' % int(bytesize / 4), *value)
+            if isinstance(value, str):
+                packed = value
+            else:
+                packed = struct.pack('>%iL' % int(bytesize / 4), *value)
 
         self.parent.blindwrite(self.name, packed, offset=offset)
 
@@ -142,7 +148,7 @@ class TenGbe(Memory, Gbe):
 
         if bytesize in (4, 8):
             value = self.parent.read(self.name, size=bytesize, offset=offset)
-            value = struct.unpack('>%s' % ctype, value)
+            value = struct.unpack('>%s' % ctype, value)[0]
         elif bytesize in (1, 2):
             if bytesize == 2 and offset % 4 not in (0, 2):
                 raise RuntimeError("Attempted to read 16-bits from 32-bit word with %iB offset. "
@@ -419,7 +425,7 @@ class TenGbe(Memory, Gbe):
         write_val(0, fabric_soft_rst_idx)
 
 
-    def get_gbe_core_details(self, read_arp=False, read_cpu=False):
+    def get_gbe_core_details(self, read_arp=False, read_cpu=False, read_multicast=False):
         """
         Get 10GbE core details.
 
@@ -476,20 +482,21 @@ class TenGbe(Memory, Gbe):
                               'rx_ips': []}
             }
 
-        # Parse multicast details
-        possible_addresses = [int(returnval['multicast']['base_ip'])]
-        mask_int = int(returnval['multicast']['ip_mask'])
-        for ctr in range(32):
-            mask_bit = (mask_int >> ctr) & 1
-            if not mask_bit:
-                new_ips = []
-                for ip in possible_addresses:
-                    new_ips.append(ip & (~(1 << ctr)))
-                    new_ips.append(new_ips[-1] | (1 << ctr))
-                possible_addresses.extend(new_ips)
-        tmp = list(set(possible_addresses))
-        for ip in tmp:
-            returnval['multicast']['rx_ips'].append(IpAddress(ip))
+        if read_multicast:
+            # Parse multicast details
+            possible_addresses = [int(returnval['multicast']['base_ip'])]
+            mask_int = int(returnval['multicast']['ip_mask'])
+            for ctr in range(32):
+                mask_bit = (mask_int >> ctr) & 1
+                if not mask_bit:
+                    new_ips = []
+                    for ip in possible_addresses:
+                        new_ips.append(ip & (~(1 << ctr)))
+                        new_ips.append(new_ips[-1] | (1 << ctr))
+                    possible_addresses.extend(new_ips)
+            tmp = list(set(possible_addresses))
+            for ip in tmp:
+                returnval['multicast']['rx_ips'].append(IpAddress(ip))
 
         if read_arp:
             returnval['arp'] = self.get_arp_details(data)
