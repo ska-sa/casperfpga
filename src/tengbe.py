@@ -196,7 +196,7 @@ class TenGbe(Memory, Gbe):
         if isinstance(value, str):
             packed = value
         else:
-            packed = struct.pack('>%i%s' % (n_elem, bytesize), *value)
+            packed = struct.pack('>%i%s' % (n_elem, ctype), *value)
         self.parent.blindwrite(self.name, packed, offset=offset)
 
     def configure_core(self):
