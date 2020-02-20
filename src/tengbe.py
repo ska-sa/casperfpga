@@ -110,19 +110,18 @@ class TenGbe(Memory, Gbe):
         :param register: register to write to. Register must be in memmap.
         :param value: Value to write.
         """
-        offset = self.memmap[register]['offset']
+        offset   = self.memmap[register]['offset']
         bytesize = self.memmap[register]['size']
-        ctype = STRUCT_CTYPES[bytesize]
+        rw_addr  = offset - offset % 4     # Round in case of non 32-bit writes
+        ctype    = STRUCT_CTYPES[bytesize]
 
         if self.memmap[register]['rwflag'] == 'r':
             raise RuntimeError("Warning: %s is read-only!" % register)
 
         if bytesize in (1, 2):
-            read_addr = offset - offset % 4
             n_elem = int(4 / bytesize)
             pcode  = '>%i%s' % (n_elem, ctype)
-
-            current_value  = self.parent.read(self.name, size=4, offset=read_addr)
+            current_value  = self.parent.read(self.name, size=4, offset=rw_addr)
             new_arr = list(struct.unpack(pcode, current_value))
             new_arr[offset % n_elem] = value
             packed = struct.pack(pcode, *new_arr)
@@ -133,7 +132,7 @@ class TenGbe(Memory, Gbe):
             else:
                 packed = struct.pack('>%s' % ctype, value)
         else:
-            n_elem = int(bytesize / 4)
+            n_elem = int(bytesize / 4)  # Differs to n_elem in small bytesize code!
             if len(value) != n_elem:
                 raise RuntimeError("Register is %i 32-bit words long, but array is "
                                    "of length %i. Make sure these match." % (len(value), n_elem))
@@ -142,7 +141,7 @@ class TenGbe(Memory, Gbe):
             else:
                 packed = struct.pack('>%iL' % int(bytesize / 4), *value)
 
-        self.parent.blindwrite(self.name, packed, offset=read_addr)
+        self.parent.blindwrite(self.name, packed, offset=rw_addr)
 
     def _memmap_read(self, register):
         """ Read from memory map
