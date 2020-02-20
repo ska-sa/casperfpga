@@ -447,9 +447,9 @@ class TenGbe(Memory, Gbe):
                 returnval['multicast']['rx_ips'].append(IpAddress(ip))
 
         if read_arp:
-            returnval['arp'] = self.get_arp_details(data)
+            returnval['arp'] = self.get_arp_details()
         if read_cpu:
-            returnval.update(self.get_cpu_details(data))
+            returnval.update(self.get_cpu_details())
 
         self.core_details = returnval
         return returnval
