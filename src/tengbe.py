@@ -13,6 +13,7 @@ TENGBE_MMAP_LEGACY_TXT  = resource_filename('casperfpga', 'tengbe_mmap_legacy.tx
 LOGGER = logging.getLogger(__name__)
 
 STRUCT_CTYPES = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+STRUCT_CTYPES_TO_B = {'B': 1, 'H': 2, 'L': 4, 'Q': 8}
 
 def read_memory_map_definition(filename):
     """ Read memory map definition from text file.
@@ -132,15 +133,7 @@ class TenGbe(Memory, Gbe):
             else:
                 packed = struct.pack('>%s' % ctype, value)
         else:
-            n_elem = int(bytesize / 4)  # Differs to n_elem in small bytesize code!
-            if len(value) != n_elem:
-                raise RuntimeError("Register is %i 32-bit words long, but array is "
-                                   "of length %i. Make sure these match." % (len(value), n_elem))
-            if isinstance(value, str):
-                packed = value
-            else:
-                packed = struct.pack('>%iL' % int(bytesize / 4), *value)
-
+            raise RuntimeError("Can only write 1,2,4,8 Byte registers with this function.")
         self.parent.blindwrite(self.name, packed, offset=rw_addr)
 
     def _memmap_read(self, register):
@@ -150,7 +143,7 @@ class TenGbe(Memory, Gbe):
         """
         offset   = self.memmap[register]['offset']
         bytesize = self.memmap[register]['size']
-        ctype    = STRUCT_CTYPES.get(bytesize, 'L')  # Treat as 32-bit if longer than 8B
+        ctype    = STRUCT_CTYPES.get(bytesize)  # Treat as 32-bit if longer than 8B
 
         if bytesize in (4, 8):
             value = self.parent.read(self.name, size=bytesize, offset=offset)
@@ -163,11 +156,48 @@ class TenGbe(Memory, Gbe):
             value = self.parent.read(self.name, size=4, offset=read_addr)
             valuearr = struct.unpack('>%i%s' % (int(4 / bytesize), ctype), value)
             value = valuearr[int((offset % 4) / bytesize)]
-
         else:
-            value = self.parent.read(self.name, size=bytesize, offset=offset)
-            value = struct.unpack('>%iL' % int(bytesize / 4), value)
+            raise RuntimeError("Cannot read %s of size %i: only 1,2,4,8 B supported" % (register, bytesize))
         return value
+
+    def _memmap_read_array(self, register, ctype='L'):
+        """ Read array chunk from mem-map """
+        offset   = self.memmap[register]['offset']
+        bytesize = self.memmap[register]['size']
+
+        if isinstance(ctype, str):
+            wsize = STRUCT_CTYPES_TO_B[ctype]
+        elif isinstance(ctype, int):
+            wsize = ctype
+            ctype = STRUCT_CTYPES[ctype]
+        else:
+            raise RuntimeError('Unknown ctype: %s' % ctype)
+
+        value = self.parent.read(self.name, size=bytesize, offset=offset)
+        value = struct.unpack('>%i%s' % (int(bytesize / wsize), ctype), value)
+        return value
+
+    def _memmap_write_array(self, register, value, ctype='L'):
+        offset   = self.memmap[register]['offset']
+        bytesize = self.memmap[register]['size']
+
+        if isinstance(ctype, str):
+            wsize = STRUCT_CTYPES_TO_B[ctype]
+        elif isinstance(ctype, int):
+            wsize = ctype
+            ctype = STRUCT_CTYPES[ctype]
+        else:
+            raise RuntimeError('Unknown ctype: %s' % ctype)
+
+        n_elem = int(bytesize / wsize)  # Differs to n_elem in small bytesize code!
+        if len(value) != n_elem:
+            raise RuntimeError("Register is %i 32-bit words long, but array is "
+                               "of length %i. Make sure these match." % (len(value), n_elem))
+        if isinstance(value, str):
+            packed = value
+        else:
+            packed = struct.pack('>%i%s' % (n_elem, bytesize), *value)
+        self.parent.blindwrite(self.name, packed, offset=offset)
 
     def configure_core(self):
         """

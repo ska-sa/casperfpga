@@ -10,11 +10,10 @@ MC_IP           0x20        0x4         rw
 MC_MASK         0x24        0x4         rw
 BUF_VLD         0x28        0x4         rw
 FLAGS           0x2c        0x4         rw
-SOFT_RST        0x2d        0x1         rw
-PROMISC         0x2e        0x1         rw
-ENABLE          0x2f        0x1         rw
-PORT_MASK       0x30        0x2         rw
-PORT            0x32        0x2         rw
+ENABLE          0x2c        0x1         rw
+PROMISC         0x2d        0x1         rw
+SOFT_RST        0x2e        0x1         rw
+PORT            0x30        0x4         rw
 STATUS          0x34        0x8         rw
 CONTROL         0x40        0x8         rw
 ARP_SIZE        0x44        0x4         r
