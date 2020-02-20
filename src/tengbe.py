@@ -119,10 +119,13 @@ class TenGbe(Memory, Gbe):
 
         if bytesize in (1, 2):
             read_addr = offset - offset % 4
+            n_elem = int(4 / bytesize)
+            pcode  = '>%i%s' % (n_elem, ctype)
+
             current_value  = self.parent.read(self.name, size=4, offset=read_addr)
-            new_arr        = list(struct.unpack('>%i%s' % (int(4 / bytesize), ctype), current_value))
-            new_arr[int((offset % 4) / bytesize)] = value
-            packed = struct.pack('>%s' % ctype, *new_arr)
+            new_arr = list(struct.unpack(pcode, current_value))
+            new_arr[offset % n_elem] = value
+            packed = struct.pack(pcode, *new_arr)
         elif bytesize in (4, 8):
             if isinstance(value, str):
                 packed = value
