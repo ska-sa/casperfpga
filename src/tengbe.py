@@ -126,6 +126,7 @@ class TenGbe(Memory, Gbe):
             new_arr = list(struct.unpack(pcode, current_value))
             new_arr[offset % n_elem] = value
             packed = struct.pack(pcode, *new_arr)
+
         elif bytesize in (4, 8):
             if isinstance(value, str):
                 packed = value
@@ -141,7 +142,7 @@ class TenGbe(Memory, Gbe):
             else:
                 packed = struct.pack('>%iL' % int(bytesize / 4), *value)
 
-        self.parent.blindwrite(self.name, packed, offset=offset)
+        self.parent.blindwrite(self.name, packed, offset=read_addr)
 
     def _memmap_read(self, register):
         """ Read from memory map
