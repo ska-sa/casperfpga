@@ -26,7 +26,6 @@ TX_AF_CNT       0x5c        0x4         r
 RX_PKT_RATE     0x60        0x4         r
 RX_PKT_CNT      0x64        0x4         r
 RX_VLD_RATE     0x68        0x4         r
-RX_VLD_CNT      0x6c        0x4         r
 RX_OF_CNT       0x70        0x4         r
 RX_AF_CNT       0x74        0x4         r
 COUNT_RST       0x78        0x4         w

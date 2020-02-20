@@ -112,35 +112,47 @@ class TenGbe(Memory, Gbe):
         """
         offset = self.memmap[register]['offset']
         bytesize = self.memmap[register]['size']
+        ctype = STRUCT_CTYPES[bytesize]
 
-        if bytesize <  4:
-            raise RuntimeError("Memmap has to write 32-bit words -- write the full 32-bits")
-
-        if isinstance(value, str):
-            packed = value
+        if bytesize in (1, 2):
+            read_addr = offset - offset % 4
+            current_value  = self.parent.read(self.name, size=4, offset=read_addr)
+            new_arr        = list(struct.unpack('>%s' % ctype, current_value))
+            new_arr[offset % 4] = value
+            packed = struct.pack('>%s' % ctype, *new_arr)
+        elif bytesize in (4, 8):
+            packed = struct.pack('>%s' % ctype, value)
         else:
-            if bytesize <= 8:
-                packed = struct.pack('>%s' % STRUCT_CTYPES[bytesize], value)
-            else:
-                packed = struct.pack('>%iL' % int(bytesize / 4))
+            n_elem = int(bytesize / 4)
+            if len(value) != n_elem:
+                raise RuntimeError("Register is %i 32-bit words long, but array is "
+                                   "of length %i. Make sure these match." % (len(value), n_elem))
+            packed = struct.pack('>%iL' % int(bytesize / 4), *value)
+
         self.parent.blindwrite(self.name, packed, offset=offset)
 
     def _memmap_read(self, register):
-        """ Read from memory map """
+        """ Read from memory map
+
+        :param register: register to read from. Must be in memmap.
+        """
         offset   = self.memmap[register]['offset']
         bytesize = self.memmap[register]['size']
         ctype    = STRUCT_CTYPES[bytesize]
 
         if bytesize in (4, 8):
-            value = self.parent.read(register, size=bytesize, offset=offset)
+            value = self.parent.read(self.name, size=bytesize, offset=offset)
             value = struct.unpack('>%s' % ctype, value)
         elif bytesize in (1, 2):
+            if bytesize == 2 and offset % 4 not in (0, 2):
+                raise RuntimeError("Attempted to read 16-bits from 32-bit word with %iB offset. "
+                                   "Not supported." % (offset%4))
             read_addr = offset - offset % 4
-            value = self.parent.read(register, size=4, offset=read_addr)
+            value = self.parent.read(self.name, size=4, offset=read_addr)
             valuearr = struct.unpack('>%s' % ctype, value)
             value = valuearr[offset % 4]
         else:
-            value = self.parent.read(register, size=bytesize, offset=offset)
+            value = self.parent.read(self.name, size=bytesize, offset=offset)
             value = struct.unpack('>%iL' % int(bytesize / 4), value)
         return value
 
