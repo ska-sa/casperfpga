@@ -492,10 +492,10 @@ class TenGbe(Memory, Gbe):
         self.core_details = returnval
         return returnval
 
-    def get_arp_details(self):
+    def get_arp_details(self, N=256):
         """ Get ARP details from this interface. """
         arp_table = self._memmap_read_array('ARP_CACHE', ctype='Q')
-        return map(Mac, arp_table)
+        return map(Mac, arp_table[:N])
 
     def get_cpu_details(self, port_dump=None):
         """
@@ -529,7 +529,9 @@ class TenGbe(Memory, Gbe):
         device with IP XXX.XXX.XXX.N"""
         arp_addr = self.memmap['ARP_CACHE']['offset']
         macs = list(macs)
-        macs_pack = struct.pack('>%dQ' % (len(macs)), *macs)
-        self.parent.write(self.name, macs_pack, offset=arp_addr)
+        if isinstance(macs[0], Mac):
+            macs = [m.mac_int for m in macs]
+        macs_packed = struct.pack('>%dQ' % (len(macs)), *macs)
+        self.parent.write(self.name, macs_packed, offset=arp_addr)
 
 # end
