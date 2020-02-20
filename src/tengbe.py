@@ -155,7 +155,7 @@ class TenGbe(Memory, Gbe):
                                    "Not supported." % (offset%4))
             read_addr = offset - offset % 4
             value = self.parent.read(self.name, size=4, offset=read_addr)
-            valuearr = struct.unpack('>%s' % ctype, value)
+            valuearr = struct.unpack('>%i%s' % (int(4 / bytesize), ctype), value)
             value = valuearr[offset % 4]
         else:
             value = self.parent.read(self.name, size=bytesize, offset=offset)
