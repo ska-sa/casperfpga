@@ -114,6 +114,9 @@ class TenGbe(Memory, Gbe):
         bytesize = self.memmap[register]['size']
         ctype = STRUCT_CTYPES[bytesize]
 
+        if self.memmap[register]['READ/WRITE'] == 'r':
+            raise RuntimeError("Warning: %s is read-only!" % register)
+
         if bytesize in (1, 2):
             read_addr = offset - offset % 4
             current_value  = self.parent.read(self.name, size=4, offset=read_addr)
@@ -175,14 +178,7 @@ class TenGbe(Memory, Gbe):
         self._memmap_write('IP_ADDR',  self.ip_address.ip_int)
         self._memmap_write('NETMASK',  self.subnet_mask.ip_int)
         self._memmap_write('GW_ADDR',  gateway)
-
-        if self.memmap_compliant:
-            self._memmap_write('PORT',     self.port)
-        else:
-            # In legacy, PORT is part of a 32-bit word
-            # [8b soft reset | 8b fabric enable | 16b port address]
-            flags = struct.pack('>BBH', 0, 1, self.port)
-            self._memmap_write('FLAGS', flags)
+        self._memmap_write('PORT',     self.port)
 
     def dhcp_start(self):
         """
@@ -371,21 +367,8 @@ class TenGbe(Memory, Gbe):
 
         :param target_val:
         """
-        FLAGS_OFFSET = self.memmap['FLAGS']['offset']
-        FLAGS_SIZE   = self.memmap['FLAGS']['size']
+        self._memmap_write('ENABLE', target_val)
 
-        # Unpack FLAGS register into four 8-bit values
-        word_bytes = list(struct.unpack('>4B', self.parent.read(self.name, FLAGS_SIZE, FLAGS_OFFSET)))
-
-        # As legacy mapping is different, need to check the index of FABRIC_EN inside the FLAGS register
-        flag_en_idx = 3 if self.memmap_compliant else 1
-
-        if word_bytes[flag_en_idx] == target_val:
-            return
-        else:
-            word_bytes[flag_en_idx] = target_val
-            word_packed = struct.pack('>4B', *word_bytes)
-            self.parent.write(self.name, word_packed, FLAGS_OFFSET)
 
     def fabric_enable(self):
         """
@@ -403,28 +386,12 @@ class TenGbe(Memory, Gbe):
         """
         Toggle the fabric soft reset
         """
+        self._memmap_write('SOFT_RST', 0)
+        self._memmap_write('SOFT_RST', 1)
+        self._memmap_write('SOFT_RST', 0)
+
         FLAGS_OFFSET = self.memmap['FLAGS']['offset']
         FLAGS_SIZE   = self.memmap['FLAGS']['size']
-
-        # Unpack FLAGS register into four 8-bit values
-        word_bytes = struct.unpack('>%iB' % FLAGS_SIZE,
-                                   self.parent.read(self.name, FLAGS_SIZE, FLAGS_OFFSET))
-        word_bytes = list(word_bytes)
-
-        # As legacy mapping is different, need to use check index (use fabric_soft_rst_idx)
-        fabric_soft_rst_idx = 1 if self.memmap_compliant else 0
-        def write_val(val, idx):
-            word_bytes[idx] = val
-            word_packed = struct.pack('>%iB' % FLAGS_SIZE, *word_bytes)
-            if val == 0:
-                self.parent.write(self.name, word_packed, FLAGS_OFFSET)
-            else:
-                self.parent.blindwrite(self.name, word_packed, FLAGS_OFFSET)
-        if word_bytes[fabric_soft_rst_idx] == 1:
-            write_val(0, fabric_soft_rst_idx)
-        write_val(1, fabric_soft_rst_idx)
-        write_val(0, fabric_soft_rst_idx)
-
 
     def get_gbe_core_details(self, read_arp=False, read_cpu=False, read_multicast=False):
         """
