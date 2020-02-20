@@ -112,8 +112,8 @@ class TenGbe(Memory, Gbe):
         """
         offset   = self.memmap[register]['offset']
         bytesize = self.memmap[register]['size']
-        rw_addr  = offset - offset % 4     # Round in case of non 32-bit writes
-        ctype    = STRUCT_CTYPES[bytesize]
+        rw_addr  = offset - offset % 4               # Round in case of non 32-bit writes
+        ctype    = STRUCT_CTYPES.get(bytesize, 'L')  # Treat as 32-bit if longer than 8B
 
         if self.memmap[register]['rwflag'] == 'r':
             raise RuntimeError("Warning: %s is read-only!" % register)
@@ -150,7 +150,7 @@ class TenGbe(Memory, Gbe):
         """
         offset   = self.memmap[register]['offset']
         bytesize = self.memmap[register]['size']
-        ctype    = STRUCT_CTYPES[bytesize]
+        ctype    = STRUCT_CTYPES.get(bytesize, 'L')  # Treat as 32-bit if longer than 8B
 
         if bytesize in (4, 8):
             value = self.parent.read(self.name, size=bytesize, offset=offset)
