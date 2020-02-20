@@ -454,6 +454,8 @@ class TenGbe(Memory, Gbe):
 
         if not self.memmap_compliant:
             data = self.parent.read(self.name, 16384)
+            data = list(struct.unpack('>16384B', data))
+
             returnval_legacy_dict = {
                 'xaui_lane_sync': [bool(data[0x27] & 4), bool(data[0x27] & 8),
                                    bool(data[0x27] & 16), bool(data[0x27] & 32)],
@@ -487,26 +489,10 @@ class TenGbe(Memory, Gbe):
         self.core_details = returnval
         return returnval
 
-    def get_arp_details(self, port_dump=None):
-        """
-        Get ARP details from this interface.
-
-        :param port_dump: A list of raw bytes from interface memory.
-        :type port_dump: list
-        """
-        arp_addr = self.memmap['ARP_CACHE']['offset']
-
-        if port_dump is None:
-            port_dump = self.parent.read(self.name, 16384)
-            port_dump = list(struct.unpack('>16384B', port_dump))
-        returnval = []
-        for addr in range(256):
-            mac = []
-            for ctr in range(2, 8):
-                mac.append(port_dump[arp_addr + (addr * 8) + ctr])
-            mac_obj = Mac(':'.join([hex(a)[2:] for a in mac]))
-            returnval.append(mac_obj)
-        return returnval
+    def get_arp_details(self):
+        """ Get ARP details from this interface. """
+        arp_table = self._memmap_read_array('ARP_CACHE', ctype='Q')
+        return map(Mac, arp_table)
 
     def get_cpu_details(self, port_dump=None):
         """
