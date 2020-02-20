@@ -12,6 +12,8 @@ TENGBE_MMAP_LEGACY_TXT  = resource_filename('casperfpga', 'tengbe_mmap_legacy.tx
 
 LOGGER = logging.getLogger(__name__)
 
+STRUCT_CTYPES = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+
 def read_memory_map_definition(filename):
     """ Read memory map definition from text file.
 
@@ -110,7 +112,7 @@ class TenGbe(Memory, Gbe):
         """
         offset = self.memmap[register]['offset']
         bytesize = self.memmap[register]['size']
-        struct_ctypes = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+
         if bytesize <  4:
             raise RuntimeError("Memmap has to write 32-bit words -- write the full 32-bits")
 
@@ -118,10 +120,29 @@ class TenGbe(Memory, Gbe):
             packed = value
         else:
             if bytesize <= 8:
-                packed = struct.pack('>%s' % struct_ctypes[bytesize], value)
+                packed = struct.pack('>%s' % STRUCT_CTYPES[bytesize], value)
             else:
                 packed = struct.pack('>%iL' % int(bytesize / 4))
         self.parent.blindwrite(self.name, packed, offset=offset)
+
+    def _memmap_read(self, register):
+        """ Read from memory map """
+        offset   = self.memmap[register]['offset']
+        bytesize = self.memmap[register]['size']
+        ctype    = STRUCT_CTYPES[bytesize]
+
+        if bytesize in (4, 8):
+            value = self.parent.read(register, size=bytesize, offset=offset)
+            value = struct.unpack('>%s' % ctype, value)
+        elif bytesize in (1, 2):
+            read_addr = offset - offset % 4
+            value = self.parent.read(register, size=4, offset=read_addr)
+            valuearr = struct.unpack('>%s' % ctype, value)
+            value = valuearr[offset % 4]
+        else:
+            value = self.parent.read(register, size=bytesize, offset=offset)
+            value = struct.unpack('>%iL' % int(bytesize / 4), value)
+        return value
 
     def configure_core(self):
         """
