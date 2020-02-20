@@ -156,7 +156,7 @@ class TenGbe(Memory, Gbe):
             read_addr = offset - offset % 4
             value = self.parent.read(self.name, size=4, offset=read_addr)
             valuearr = struct.unpack('>%i%s' % (int(4 / bytesize), ctype), value)
-            value = valuearr[offset % 4]
+            value = valuearr[int((offset % 4) / bytesize)]
         else:
             value = self.parent.read(self.name, size=bytesize, offset=offset)
             value = struct.unpack('>%iL' % int(bytesize / 4), value)
