@@ -117,7 +117,7 @@ class TenGbe(Memory, Gbe):
         if bytesize in (1, 2):
             read_addr = offset - offset % 4
             current_value  = self.parent.read(self.name, size=4, offset=read_addr)
-            new_arr        = list(struct.unpack('>%s' % ctype, current_value))
+            new_arr        = list(struct.unpack('>%i%s' % (int(4 / bytesize), ctype), current_value))
             new_arr[offset % 4] = value
             packed = struct.pack('>%s' % ctype, *new_arr)
         elif bytesize in (4, 8):
@@ -157,6 +157,7 @@ class TenGbe(Memory, Gbe):
             value = self.parent.read(self.name, size=4, offset=read_addr)
             valuearr = struct.unpack('>%i%s' % (int(4 / bytesize), ctype), value)
             value = valuearr[int((offset % 4) / bytesize)]
+
         else:
             value = self.parent.read(self.name, size=bytesize, offset=offset)
             value = struct.unpack('>%iL' % int(bytesize / 4), value)

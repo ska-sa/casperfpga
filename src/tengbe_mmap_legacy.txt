@@ -2,12 +2,13 @@ ID              OFFSET      SIZE        READ/WRITE
 MAC_ADDR        0x0         0x8         rw
 GW_ADDR         0x0c        0x4         rw
 IP_ADDR         0x10        0x4         rw
-GW_ADDR         0x18        0x4         rw
 PORT            0x22        0x2         rw
 NETMASK         0x38        0x4         rw
 FABRIC_EN       0x21        0x1         w
 SOFT_RST        0x20        0x1         w
 FLAGS           0x20        0x4         w
+XAUI_STATUS     0x24        0x4         r
+PHY_CONFIG      0x28        0x4         r
 TX_BUFFER       0x1000      0x1000      rw
 RX_BUFFER       0x2000      0x1000      r
 ARP_CACHE       0x3000      0x3000      rw
