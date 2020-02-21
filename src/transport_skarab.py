@@ -3152,7 +3152,10 @@ class SkarabTransport(Transport):
                                                                        temperature,
                                                                        inlet_ref=0))
                     else:
-                        self.sensor_data[key] = (-1, 'degC', 'unknown')
+                        if 'mezzanine' in key:
+                            continue
+                        else:
+                            self.sensor_data[key] = (-1, 'degC', 'unknown')
 
         def parse_mezzanine_temperatures(raw_sensor_data):
             for key, value in sd.sensor_list.items():
