@@ -93,6 +93,21 @@ class SnapAdc(object):
         self.p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
         self.p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
 
+    @classmethod
+    def from_device_info(cls, parent, device_name, device_info, initialise=False, **kwargs):
+        """
+        Process device info and the memory map to get all the necessary info
+        and return a SNAP ADC instance.
+        :param parent: The parent device, normally a casperfpga instance
+        :param device_name:
+        :param device_info:
+        :param memorymap_dict:
+        :param initialise:
+        :param kwargs:
+        :return:
+        """
+        return cls(parent, device_name, device_info, initialise, **kwargs)
+
     def init(self, samplingRate=250, numChannel=4):
         """ Get SNAP ADCs into working condition
 
