@@ -15,6 +15,7 @@ import qdr
 import hmc
 import katadc
 import skarabadc
+import snapadc
 
 from attribute_container import AttributeContainer
 from utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
@@ -45,6 +46,7 @@ CASPER_ADC_DEVICES = {
     'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
     'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
     'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:snap_adc':                 {'class': snapadc.SnapAdc,      'container': 'adcs'}
 }
 
 # other devices - blocks that aren't memory devices nor ADCs, but about which we'd
