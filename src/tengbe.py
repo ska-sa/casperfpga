@@ -7,13 +7,13 @@ from gbe import Gbe
 import numpy as np
 from pkg_resources import resource_filename
 
-TENGBE_UNIFIED_MMAP_TXT = resource_filename('casperfpga', 'tengbe_mmap.txt')
-TENGBE_MMAP_LEGACY_TXT  = resource_filename('casperfpga', 'tengbe_mmap_legacy.txt')
-
 LOGGER = logging.getLogger(__name__)
 
 STRUCT_CTYPES = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 STRUCT_CTYPES_TO_B = {'B': 1, 'H': 2, 'L': 4, 'Q': 8}
+
+TENGBE_UNIFIED_MMAP_TXT = resource_filename('casperfpga', 'tengbe_mmap.txt')
+TENGBE_MMAP_LEGACY_TXT  = resource_filename('casperfpga', 'tengbe_mmap_legacy.txt')
 
 def read_memory_map_definition(filename):
     """ Read memory map definition from text file.
