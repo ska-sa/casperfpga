@@ -93,9 +93,9 @@ class SnapAdc(object):
             raise
 
         if self.resolution == 8:
-            self.controller = HMCAD1511(interface, 'adc16_controller')
+            self.adc = HMCAD1511(parent,'adc16_controller')
         else:
-            self.controller = HMCAD1520(interface, 'adc16_controller')
+            self.adc = HMCAD1520(parent, 'adc16_controller')
 
 
         self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
@@ -109,13 +109,12 @@ class SnapAdc(object):
         else:
         self.curDelay = [[0]*len(self.laneList)]*len(self.adcList)
 
-        if ref is not None:
-            self.lmx = LMX2581(interface,'lmx_ctrl', fosc=ref)
-        else:
-            self.lmx = None
+        # TODO: Support adding LMX from parent 
+        # self.lmx = LMX2581(parent,'lmx_ctrl', fosc=ref)
+        self.lmx = None
 
-        self.clksw = HMC922(interface,'adc16_use_synth')
-        self.ram = [WishBoneDevice(interface,name) for name in self.ramList]
+        self.clksw = HMC922(parent,'adc16_use_synth')
+        self.ram = [WishBoneDevice(parent, name) for name in self.ramList]
 
         # test pattern for clock aligning
         pats = [0b10101010,0b01010101,0b00000000,0b11111111]
