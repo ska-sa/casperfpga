@@ -13,7 +13,7 @@ class SnapAdc(object):
 
     resolution  = 8
 
-    adc = None
+    controller = None
     lmx = None
     clksw = None
     ram = None
@@ -73,7 +73,7 @@ class SnapAdc(object):
 
         :return: None
 
-        device_info = {'adc_resolution': '8',
+        example device_info = {'adc_resolution': '8',
                        'sample_rate': '200',
                        'snap_inputs': '12',
                        'tag': 'xps:snap_adc'}
@@ -93,9 +93,9 @@ class SnapAdc(object):
             raise
 
         if self.resolution == 8:
-            self.adc = HMCAD1511(interface,'adc16_controller')
+            self.controller = HMCAD1511(interface, 'adc16_controller')
         else:
-            self.adc = HMCAD1520(interface, 'adc16_controller')
+            self.controller = HMCAD1520(interface, 'adc16_controller')
 
 
         self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
@@ -104,8 +104,8 @@ class SnapAdc(object):
         self.laneList = [0, 1, 2, 3, 4, 5, 6, 7]
 
         if self.resolution not in [8,12,14]:
-            logger.error("Invalid parameter")
-            raise ValueError("Invalid parameter")
+            logger.error("Invalid resolution parameter")
+            raise ValueError("Invalid resolution parameter")
         else:
         self.curDelay = [[0]*len(self.laneList)]*len(self.adcList)
 
@@ -190,7 +190,7 @@ class SnapAdc(object):
             self.clksw.setSwitch('b')
 
         logger.info("Initialising ADCs")
-        self.adc.init()
+        self.controller.init()
 
         if num_channel==1 and sample_rate<240:
             lowClkFreq = True
@@ -204,10 +204,10 @@ class SnapAdc(object):
             lowClkFreq = False
 
         logger.info("Configuring ADC operating mode")
-        if type(self.adc) is HMCAD1511:
-            self.adc.setOperatingMode(num_channel, 1, lowClkFreq)
-        elif type(self.adc) is HMCAD1520:
-            self.adc.setOperatingMode(num_channel, 1, lowClkFreq, self.resolution)
+        if type(self.controller) is HMCAD1511:
+            self.controller.setOperatingMode(num_channel, 1, lowClkFreq)
+        elif type(self.controller) is HMCAD1520:
+            self.controller.setOperatingMode(num_channel, 1, lowClkFreq, self.resolution)
 
         self.set_demux(numChannel=1) # calibrate in full interleave mode
 
@@ -244,12 +244,12 @@ class SnapAdc(object):
 
         # csn active low for HMCAD1511, but inverted in wb_adc16_controller
         if chipSel==None:       # Select all ADC chips
-            self.adc.csn = np.bitwise_or.reduce([0b1 << s for s in self.adcList])
+            self.controller.csn = np.bitwise_or.reduce([0b1 << s for s in self.adcList])
         elif isinstance(chipSel, list) and all(s in self.adcList for s in chipSel):
             csnList = [0b1 << s for s in self.adcList if s in chipSel]
-            self.adc.csn = np.bitwise_or.reduce(csnList)
+            self.controller.csn = np.bitwise_or.reduce(csnList)
         elif chipSel in self.adcList:
-            self.adc.csn = 0b1 << chipSel
+            self.controller.csn = 0b1 << chipSel
         else:
             raise ValueError("Invalid parameter")
 
@@ -282,11 +282,11 @@ class SnapAdc(object):
         TODO: Test + improve support for fine gain control
         """
 
-        self.adc.cGain(gains, cgain_cfg=use_linear_step, fgain_cfg=fgain_cfg)
+        self.controller.cGain(gains, cgain_cfg=use_linear_step, fgain_cfg=fgain_cfg)
 
         if fine_gains is not None:
             n_channels = len(gains)
-            self.adc.fGain(fine_gains, n_channels)
+            self.controller.fGain(fine_gains, n_channels)
 
     def set_demux(self, numChannel=1):
         """
@@ -303,22 +303,22 @@ class SnapAdc(object):
         mode = modeMap[numChannel]
         val = self._set(0x0, mode,  self.M_WB_W_DEMUX_MODE)
         val = self._set(val, 0b1,   self.M_WB_W_DEMUX_WRITE)
-        self.adc._write(val, self.A_WB_W_CTRL)
+        self.controller._write(val, self.A_WB_W_CTRL)
 
     def reset(self):
         """ Reset all adc16_interface logics inside FPGA """
         val = self._set(0x0, 0x1,   self.M_WB_W_RESET)
-        self.adc._write(0x0, self.A_WB_W_CTRL)
-        self.adc._write(val, self.A_WB_W_CTRL)
-        self.adc._write(0x0, self.A_WB_W_CTRL)
+        self.controller._write(0x0, self.A_WB_W_CTRL)
+        self.controller._write(val, self.A_WB_W_CTRL)
+        self.controller._write(0x0, self.A_WB_W_CTRL)
 
     def snapshot(self):
         """ Save 1024 consecutive samples of each ADC into its corresponding bram """
         # No way to snapshot a single ADC because the HDL code is designed so.
         val = self._set(0x0, 0x1,   self.M_WB_W_SNAP_REQ)
-        self.adc._write(0x0, self.A_WB_W_CTRL)
-        self.adc._write(val, self.A_WB_W_CTRL)
-        self.adc._write(0x0, self.A_WB_W_CTRL)
+        self.controller._write(0x0, self.A_WB_W_CTRL)
+        self.controller._write(val, self.A_WB_W_CTRL)
+        self.controller._write(0x0, self.A_WB_W_CTRL)
 
     def calibrate_adc_offset(self):
 
@@ -334,7 +334,7 @@ class SnapAdc(object):
         if rid==None:
             return [self.get_register(regId) for regId in self.A_WB_R_LIST]
         elif rid in self.A_WB_R_LIST:
-            rval = self.adc._read(rid)
+            rval = self.controller._read(rid)
             return {name: self._get(rval,mask) for name, mask in self.WB_DICT[rid].items()}
         else:
             raise ValueError("Invalid parameter")
@@ -352,7 +352,7 @@ class SnapAdc(object):
 
     def get_word(self, name):
         rid = self.get_reg_id(name)
-        rval = self.adc._read(rid)
+        rval = self.controller._read(rid)
         return self._get(rval,self.WB_DICT[rid][name])
 
     def get_reg_id(self, name):
@@ -372,7 +372,7 @@ class SnapAdc(object):
             interleave(data, 2) # return a two-column numpy array
             interleave(data, 4) # return a four-column numpy array
         """
-        return self.adc.interleave(data, mode)
+        return self.controller.interleave(data, mode)
 
     def read_ram(self, ram=None, signed=True):
         """ Read RAM(s) and return the 1024-sample data
@@ -463,9 +463,9 @@ class SnapAdc(object):
                 # commands after being set will not be automatically cleared.  
                 # Therefore we have to clear them by ourselves.
         
-                self.adc._write(0x0, self.A_WB_W_CTRL)  
-                self.adc._write(val, self.A_WB_W_CTRL)  
-                self.adc._write(0x0, self.A_WB_W_CTRL)  
+                self.controller._write(0x0, self.A_WB_W_CTRL)
+                self.controller._write(val, self.A_WB_W_CTRL)
+                self.controller._write(0x0, self.A_WB_W_CTRL)
 
 
     # The ADC16 controller word (the offset in write_int method) 2 and 3 are for delaying 
@@ -530,15 +530,15 @@ class SnapAdc(object):
 
         # Don't be misled by the naming - "DELAY_STROBE" in casper repo.  It doesn't 
         # generate strobe at all.  You have to manually clear the bits that you set.
-        self.adc._write(0x00, self.A_WB_W_CTRL)
-        self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_L)
-        self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_H)
-        self.adc._write(valt, self.A_WB_W_CTRL)
-        self.adc._write(vala, self.A_WB_W_DELAY_STROBE_L)
-        self.adc._write(valb, self.A_WB_W_DELAY_STROBE_H)
-        self.adc._write(0x00, self.A_WB_W_CTRL)
-        self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_L)
-        self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_H)
+        self.controller._write(0x00, self.A_WB_W_CTRL)
+        self.controller._write(0x00, self.A_WB_W_DELAY_STROBE_L)
+        self.controller._write(0x00, self.A_WB_W_DELAY_STROBE_H)
+        self.controller._write(valt, self.A_WB_W_CTRL)
+        self.controller._write(vala, self.A_WB_W_DELAY_STROBE_L)
+        self.controller._write(valb, self.A_WB_W_DELAY_STROBE_H)
+        self.controller._write(0x00, self.A_WB_W_CTRL)
+        self.controller._write(0x00, self.A_WB_W_DELAY_STROBE_L)
+        self.controller._write(0x00, self.A_WB_W_DELAY_STROBE_H)
 
         for cs in chipSel:
             for ls in laneSel:
@@ -651,13 +651,13 @@ class SnapAdc(object):
 
         self.select_adc(chipSel)
         if mode=='ramp':        # ramp mode
-            self.adc.test('en_ramp')
+            self.controller.test('en_ramp')
             taps=None
             pattern1=None
             pattern2=None
         elif pattern1==None and pattern2==None:
             # synchronization mode
-            self.adc.test('pat_sync')
+            self.controller.test('pat_sync')
             # pattern1 = 0b11110000 when self.RESOLUTION is 8
             # pattern1 = 0b111111000000 when self.RESOLUTION is 12
             pattern1 = ((2 ** (self.resolution / 2)) - 1) << (self.resolution / 2)
@@ -665,19 +665,19 @@ class SnapAdc(object):
         elif isinstance(pattern1,int) and pattern2==None:
             # single pattern mode
 
-            if type(self.adc) is HMCAD1520:
+            if type(self.controller) is HMCAD1520:
                 # test patterns of HMCAD1520 need special cares
                 ofst = 16 - self.resolution
                 reg_p1 = pattern1 << ofst
             else:
                 reg_p1 = pattern1
 
-            self.adc.test('single_custom_pat',reg_p1)
+            self.controller.test('single_custom_pat', reg_p1)
             pattern1 = self._signed(pattern1, self.resolution)
         elif isinstance(pattern1,int) and isinstance(pattern2,int):
             # dual pattern mode
 
-            if type(self.adc) is HMCAD1520:
+            if type(self.controller) is HMCAD1520:
                 # test patterns of HMCAD1520 need special cares
                 ofst = 16 - self.resolution
                 reg_p1 = pattern1 << ofst
@@ -686,7 +686,7 @@ class SnapAdc(object):
                 reg_p1 = pattern1
                 reg_p2 = pattern2
 
-            self.adc.test('dual_custom_pat',reg_p1,reg_p2)
+            self.controller.test('dual_custom_pat', reg_p1, reg_p2)
             pattern1 = self._signed(pattern1, self.resolution)
             pattern2 = self._signed(pattern2, self.resolution)
         else: 
@@ -734,7 +734,7 @@ class SnapAdc(object):
             for cs in chipSel:
                 results[cs] = dict(zip(taps,[np.array(row) for row in results[cs]]))
         
-        self.adc.test('off')
+        self.controller.test('off')
 
         if len(chipSel) == 1:
             return results[chipSel[0]]
