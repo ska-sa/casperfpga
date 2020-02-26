@@ -772,8 +772,8 @@ class CasperFpga(object):
         self._create_memory_devices(device_dict, memorymap_dict,
                                     legacy_reg_map=legacy_reg_map,
                                     initialise=initialise_objects)
-        self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
         self._create_other_devices(device_dict, initialise=initialise_objects)
+        self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
         self.transport.post_get_system_information()
 

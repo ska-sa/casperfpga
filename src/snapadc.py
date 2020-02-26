@@ -106,7 +106,7 @@ class SnapAdc(object):
         if self.resolution not in [8,12,14]:
             logger.error("Invalid resolution parameter")
             raise ValueError("Invalid resolution parameter")
-        else:
+        
         self.curDelay = [[0]*len(self.laneList)]*len(self.adcList)
 
         # check if the design uses the on-board synthesizer -- can read from fpg 'SNAP' dict
