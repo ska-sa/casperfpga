@@ -648,25 +648,30 @@ class SkarabTransport(Transport):
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
 
-        [golden_image, multiboot, firmware_version] = \
-            self.get_virtex7_firmware_version(timeout=timeout, retries=retries)
-        if golden_image == 0 and multiboot == 0:
-            return True, firmware_version
-        elif golden_image == 1 and multiboot == 0:
-            self.logger.error(
-                'Skarab is back up, but fell back to golden image with '
-                'firmware version %s' % firmware_version)
-            return False, firmware_version
-        elif golden_image == 0 and multiboot == 1:
-            self.logger.error(
-                'Skarab is back up, but fell back to multiboot image with '
-                'firmware version %s' % firmware_version)
-            return False, firmware_version
-        else:
-            self.logger.error(
-                'Skarab is back up, but unknown image with firmware '
-                'version number %s' % firmware_version)
-            return False, firmware_version
+        try:
+            [golden_image, multiboot, firmware_version] = \
+                self.get_virtex7_firmware_version(timeout=timeout, retries=retries)
+            if golden_image == 0 and multiboot == 0:
+                return True, firmware_version
+            elif golden_image == 1 and multiboot == 0:
+                self.logger.error(
+                    'Skarab is back up, but fell back to golden image with '
+                    'firmware version %s' % firmware_version)
+                return False, firmware_version
+            elif golden_image == 0 and multiboot == 1:
+                self.logger.error(
+                    'Skarab is back up, but fell back to multiboot image with '
+                    'firmware version %s' % firmware_version)
+                return False, firmware_version
+            else:
+                self.logger.error(
+                    'Skarab is back up, but unknown image with firmware '
+                    'version number %s' % firmware_version)
+                return False, firmware_version
+        except SkarabSendPacketError as err:
+            self.logger.warning('Skarab {} unreachable: {}'.format(self.host,
+                                                                   err.message))
+            return False, '0.0'
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
                                   wait_complete=True, skip_verification=False, chunk_size=1988):

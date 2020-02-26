@@ -588,8 +588,8 @@ def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
                 status_str += ' up, checking firmware'
                 result, firmware_version = \
                     fpga.transport.check_running_firmware(retries=1)
-                to_remove.append(fpga)
                 if result:
+                    # board came back with expected version
                     this_reboot_time = time.time() - reboot_start_time
                     LOGGER.info(
                         '%s back up, in %.1f seconds (%.1f + %.1f) with FW ver '
@@ -600,8 +600,15 @@ def wait_after_reboot(fpgas, timeout=200, upload_time=-1):
                         upload_time, this_reboot_time,
                         IpAddress(socket.gethostbyname(fpga.host))
                     )
+                    to_remove.append(fpga)
+                elif not result and firmware_version == '0.0':
+                    # board unreachable when trying to read firmware version
+                    # continue, leaving the board in the missing list giving it another chance later
+                    pass
                 else:
+                    # board came with with unexpected firmware version
                     print(fpga.host, 'came back with ERROR')
+                    to_remove.append(fpga)
                     fpga_error.append(fpga)
             else:
                 status_str += ' not yet ready'
