@@ -14,7 +14,7 @@ class SnapAdc(object):
     resolution  = 8
 
     controller = None
-    lmx = None
+    synth = None
     clksw = None
     ram = None
 
@@ -93,9 +93,9 @@ class SnapAdc(object):
             raise
 
         if self.resolution == 8:
-            self.adc = HMCAD1511(parent,'adc16_controller')
+            self.controller = HMCAD1511(parent,'adc16_controller')
         else:
-            self.adc = HMCAD1520(parent, 'adc16_controller')
+            self.controller = HMCAD1520(parent, 'adc16_controller')
 
 
         self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
@@ -109,9 +109,12 @@ class SnapAdc(object):
         else:
         self.curDelay = [[0]*len(self.laneList)]*len(self.adcList)
 
-        # TODO: Support adding LMX from parent 
-        # self.lmx = LMX2581(parent,'lmx_ctrl', fosc=ref)
-        self.lmx = None
+        # check if the design uses the on-board synthesizer -- can read from fpg 'SNAP' dict
+        if parent.devices['SNAP']['clk_src'] == 'sys_clk':
+            self.synth = LMX2581(parent, 'lmx_ctrl')    # Use default FOSC ref setting
+            #self.synth_clk_rate = float(parent.devices['SNAP']['clk_rate'])
+        else:
+            self.synth = None
 
         self.clksw = HMC922(parent,'adc16_use_synth')
         self.ram = [WishBoneDevice(parent, name) for name in self.ramList]
@@ -172,18 +175,18 @@ class SnapAdc(object):
 
         self.select_adc()
 
-        if self.lmx is not None:
+        if self.synth is not None:
             logger.info("Reseting frequency synthesizer")
-            self.lmx.init()
+            self.synth.init()
 
             logger.info("Configuring frequency synthesizer")
-            self.lmx.setFreq(sample_rate)
-            if not self.lmx.getDiagnoses('LD_PINSTATE'):
+            self.synth.setFreq(sample_rate)
+            if not self.synth.getDiagnoses('LD_PINSTATE'):
                 logger.error('Frequency synthesizer configuration failed!')
                 return self.ERROR_LMX
 
         logger.info("Configuring clock source switch")
-        if self.lmx is not None:
+        if self.synth is not None:
             self.clksw.setSwitch('a')
         else:
             self.clksw.setSwitch('b')
