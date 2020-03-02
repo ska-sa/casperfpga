@@ -8,7 +8,7 @@ DESCRIPTION = 'Talk to CASPER hardware devices using katcp or dcp. See https://g
 URL = 'https://github.com/casper-astro/casperfpga'
 EMAIL = 'apatel@ska.ac.za'
 AUTHOR = 'Paul Prozesky'
-VERSION = '0.1.3' # Need to adopt the __version__.py format
+VERSION = '0.2.0' # Need to adopt the __version__.py format
 
 
 here = os.path.abspath(os.path.dirname(__file__))
