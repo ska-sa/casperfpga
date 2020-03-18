@@ -674,7 +674,8 @@ class SkarabTransport(Transport):
             return False, '0.0'
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
-                                  wait_complete=True, skip_verification=False, chunk_size=1988):
+                                  wait_complete=True, skip_verification=False,
+                                  **kwargs):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -689,13 +690,18 @@ class SkarabTransport(Transport):
         :param skip_verification - do not verify the image after upload
         :return: Boolean - True/False - Succes/Fail
         """
-        #print('skarab_transport')
-        print(chunk_size)
+
+        # check if a chunk size was specified, else default to 1988
+        if 'chunk_size' in kwargs.keys():
+            chunk_size = kwargs['chunk_size']
+        else:
+            # default to a chunk size of 1988
+            chunk_size = 1988
+
         try:
             upload_time = self.upload_to_ram(filename, not skip_verification, chunk_size)
-            #print("completed fine")
+
         except:
-            #print("failed to program")
             self.logger.error('Failed to program.')
             raise
         if not wait_complete:
