@@ -286,7 +286,7 @@ class CasperFpga(object):
         return self.transport.set_igmp_version(version)
 
     def upload_to_ram_and_program(self, filename=None, wait_complete=True,
-                                  chunk_size=1988, initialise_objects=False):
+                                  initialise_objects=False, **kwargs):
         """
         Upload an FPG file to RAM and then program the FPGA.
         :param filename: The file to upload
@@ -297,6 +297,7 @@ class CasperFpga(object):
         :param initialise_objects: Flag included in the event some child objects can be initialised
                                    upon creation/startup of the SKARAB with the new firmware
                                    - e.g. The SKARAB ADC
+        :param **kwargs: chunk_size - set the chunk_size for the SKARAB platform
         :return: Boolean - True/False - Success/Fail
         """
         if filename is not None:
@@ -304,33 +305,29 @@ class CasperFpga(object):
         else:
             filename = self.bitstream
 
-        # TODO: only skarab needs chunk_size, and it can break function calls to to other transport layers
-        # TODO: this is a quick fix for now. A more elegant solution is required.
-        if self.transport == SkarabTransport:
-            rv = self.transport.upload_to_ram_and_program(
-                filename=filename, wait_complete=wait_complete, chunk_size=chunk_size)
-        else:
-            rv = self.transport.upload_to_ram_and_program(
-                filename=filename, wait_complete=wait_complete)
+        rv = self.transport.upload_to_ram_and_program(
+                filename=filename, wait_complete=wait_complete, **kwargs)
 
         if not wait_complete:
             return True
 
-        if self.bitstream:
-            if self.bitstream[-3:] == 'fpg':
-                self.get_system_information(filename,
-                                            initialise_objects=initialise_objects)
+        # if the board returned after programming successfully, get_sys_info
+        if rv:
+            if self.bitstream:
+                if self.bitstream[-3:] == 'fpg':
+                    self.get_system_information(filename,
+                                                initialise_objects=initialise_objects)
 
-        
-        # The Red Pitaya doesn't respect network-endianness. It should.
-        # For now, detect this board so that an endianness flip can be
-        # inserted between the CasperFpga and the underlying transport layer
-        # This check is in upload_to_ram and program because if we connected
-        # to a board that wasn't programmed the detection in __init__ won't have worked.
-        try:
-            self._detect_little_endianness()
-        except:
-            pass
+
+            # The Red Pitaya doesn't respect network-endianness. It should.
+            # For now, detect this board so that an endianness flip can be
+            # inserted between the CasperFpga and the underlying transport layer
+            # This check is in upload_to_ram and program because if we connected
+            # to a board that wasn't programmed the detection in __init__ won't have worked.
+            try:
+                self._detect_little_endianness()
+            except:
+                pass
 
     def is_connected(self, **kwargs):
         """

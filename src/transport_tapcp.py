@@ -266,7 +266,8 @@ class TapcpTransport(Transport):
 
         return head_loc, prog_loc
 
-    def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True):
+    def upload_to_ram_and_program(self, filename, port=None, timeout=None,
+                                  wait_complete=True, **kwargs):
         USER_FLASH_LOC = 0x800000
         sector_size = 0x10000
         # Flash writes can take a long time, due to ~1s erase cycle
