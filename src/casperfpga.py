@@ -555,7 +555,7 @@ class CasperFpga(object):
                           'okay%s.' % (integer, device_name, word_offset,
                           ' (blind)' if blindwrite else ''))
 
-    def _create_memory_devices(self, device_dict, memorymap_dict, legacy_reg_map=True, **kwargs):
+    def _create_memory_devices(self, device_dict, memorymap_dict, **kwargs):
         """
         Create memory devices from dictionaries of design information.
         
@@ -564,6 +564,9 @@ class CasperFpga(object):
         :param memorymap_dict: dictionary of information that would have been
             in coreinfo.tab - memory bus information
         """
+
+        legacy_reg_map = False
+
         # create and add memory devices to the memory device dictionary
         for device_name, device_info in device_dict.items():
             if device_name == '':
@@ -582,8 +585,17 @@ class CasperFpga(object):
                 if not callable(known_device_class):
                     raise TypeError('%s is not a callable Memory class - '
                                     'that\'s a problem.' % known_device_class)
+
+                if type(known_device_class) is fortygbe.FortyGbe:
+                    if type(self.transport) is SkarabTransport:
+                    # determine register map
+                        legacy_reg_map = self._determine_register_map(
+                                        base_address=memorymap_dict[device_name]['address']
+                                        & 0xfffff)
+
                 new_device = known_device_class.from_device_info(
                     self, device_name, device_info, memorymap_dict, legacy_reg_map=legacy_reg_map)
+
                 if new_device.name in self.memory_devices.keys():
                     raise NameError(
                         'Device called %s of type %s already exists in '
@@ -739,30 +751,38 @@ class CasperFpga(object):
         except:
             pass
 
-        legacy_reg_map = False
-        if type(self.transport) is SkarabTransport:
-            # Determine if the new or old register map is used
-            new_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x03 * 4)
-            old_reg_map_mac_word1_hex = self.transport.read_wishbone(0x54000 + 0x00 * 4)
-
-            if(new_reg_map_mac_word1_hex == 0x650):
-                self.logger.debug('Using new 40GbE core register map')
-                legacy_reg_map = False
-            elif(old_reg_map_mac_word1_hex == 0x650):
-                self.logger.debug('Using old 40GbE core register map')
-                legacy_reg_map = True
-            else:
-                self.logger.error('Unknown 40GbE core register map')
-                raise ValueError('Unknown register map')
-
         # Create Register Map
         self._create_memory_devices(device_dict, memorymap_dict,
-                                    legacy_reg_map=legacy_reg_map,
                                     initialise=initialise_objects)
         self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
         self._create_other_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
         self.transport.post_get_system_information()
+
+    def _determine_register_map(self, base_address):
+        """
+        Determine if the old or new register map is used.
+        :param base_address:
+        :return: legacy_reg_map = True/False
+        """
+
+        legacy_reg_map = False
+
+        # Determine if the new or old register map is used
+        new_reg_map_mac_word1_hex = self.transport.read_wishbone(base_address + 0x03 * 4)
+        old_reg_map_mac_word1_hex = self.transport.read_wishbone(base_address + 0x00 * 4)
+
+        if new_reg_map_mac_word1_hex == 0x650:
+            self.logger.debug('Using new 40GbE core register map')
+            legacy_reg_map = False
+        elif old_reg_map_mac_word1_hex == 0x650:
+            self.logger.debug('Using old 40GbE core register map')
+            legacy_reg_map = True
+        else:
+            self.logger.error('Unknown 40GbE core register map')
+            raise ValueError('Unknown register map')
+
+        return legacy_reg_map
 
     def estimate_fpga_clock(self):
         """

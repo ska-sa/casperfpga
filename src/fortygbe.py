@@ -10,7 +10,7 @@ class FortyGbe(Gbe):
 
     """
 
-    def __init__(self, parent, name, address=0x54000, length_bytes=0x4000,
+    def __init__(self, parent, name, address, length_bytes,
                  device_info=None, position=None, legacy_reg_map=True):
         """
         Implements the Gbe class. This is normally initialised from_device_info.
@@ -18,8 +18,8 @@ class FortyGbe(Gbe):
         :param parent: The parent object, normally a CasperFpga instance
         :param name: The name of the device
         :param position: Optional - defaulted to None
-        :param address: Integer - Optional - defaulted to 0x54000
-        :param length_bytes: Integer - Optional - defaulted to 0x4000
+        :param address: Integer
+        :param length_bytes: Integer
         :param device_info: Information about the device
         """
         super(FortyGbe, self).__init__(
@@ -27,7 +27,8 @@ class FortyGbe(Gbe):
         self.position = position
         self.logger = parent.logger
         self.legacy_reg_map = legacy_reg_map
-        if self.legacy_reg_map == False:
+
+        if not self.legacy_reg_map:
             self.reg_map = {'mac'            : 0x0E,
                             'ip'             : 0x14,
                             'fabric_port'    : 0x30,
@@ -79,10 +80,10 @@ class FortyGbe(Gbe):
         :param memorymap_dict: a dictionary containing the device memory map
         :return: a TenGbe object
         """
-        # TODO: fix this hard-coding!
-        address = 0x54000
-        length_bytes = 0x4000
-        return cls(parent, device_name, address, length_bytes, device_info, 0, legacy_reg_map=legacy_reg_map)
+        address = memorymap_dict[device_name]['address'] & 0xfffff
+        length_bytes = memorymap_dict[device_name]['bytes']
+        return cls(parent, device_name, address, length_bytes, device_info, 0,
+                   legacy_reg_map=legacy_reg_map)
 
     def _wbone_rd(self, addr):
         """
