@@ -6,13 +6,10 @@ import os
 NAME = 'casperfpga'
 DESCRIPTION = 'Talk to CASPER hardware devices using katcp or dcp. See https://github.com/casper-astro/casperfpga for more.'
 URL = 'https://github.com/casper-astro/casperfpga'
-EMAIL = 'apatel@ska.ac.za'
-AUTHOR = 'Paul Prozesky'
-VERSION = '0.1.2' # Need to adopt the __version__.py format
-
+AUTHOR = 'Tyrone van Balla'
+EMAIL = 'tvanballa at ska.ac.za'
 
 here = os.path.abspath(os.path.dirname(__file__))
-
 
 try:
     with open(os.path.join(here, 'README.md')) as readme:
@@ -40,7 +37,6 @@ progska_extension = setuptools.Extension(
 
 setuptools.setup(
     name=NAME,
-    version=VERSION,
     description=DESCRIPTION,
     author=AUTHOR,
     author_email=EMAIL,
@@ -61,7 +57,7 @@ setuptools.setup(
     package_dir={'casperfpga': 'src', 'casperfpga.progska': 'progska'},
     scripts=glob.glob('scripts/*'),
     setup_requires=['katversion'],
-    use_katversion=False,
+    use_katversion=True,
     ext_modules=[progska_extension],
     # Required for PyPI
     keywords='casper ska meerkat fpga',
