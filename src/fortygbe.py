@@ -71,8 +71,14 @@ class FortyGbe(Gbe):
         :return: a TenGbe object
         """
 
-        address = memorymap_dict[device_name]['address'] & 0xfffff
-        length_bytes = memorymap_dict[device_name]['bytes']
+        try:
+            address = memorymap_dict[device_name]['address'] & 0xfffff
+            length_bytes = memorymap_dict[device_name]['bytes']
+
+        except KeyError as e:
+            # TODO: move away from this hard coding. Requires modification to core_info.tab in mlib_devel
+            address = 0x54000
+            length_bytes = 0x4000
 
         return cls(parent, device_name, address, length_bytes, device_info, 0)
 
