@@ -169,7 +169,7 @@ class TapcpTransport(Transport):
 
     def get_temp(self):
         buf = StringIO()
-        self.t.download('/temp', buf)
+        self.t.download('/temp', buf, timeout=self.timeout)
         return struct.unpack('>f', buf.getvalue())[0]
 
     def is_connected(self):
@@ -266,7 +266,7 @@ class TapcpTransport(Transport):
 
         return head_loc, prog_loc
 
-    def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True):
+    def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True, force=False):
         USER_FLASH_LOC = 0x800000
         sector_size = 0x10000
         # Flash writes can take a long time, due to ~1s erase cycle
@@ -279,7 +279,7 @@ class TapcpTransport(Transport):
             header, prog, md5 = self._extract_bitstream(filename)
             self._logger.debug("Reading meta-data from flash")
             meta_inflash = self.get_metadata()
-            if ((meta_inflash is not None) and (meta_inflash['md5sum'] == md5)):
+            if ((meta_inflash is not None) and (meta_inflash['md5sum'] == md5) and (not force)):
                 self._logger.info("Bitstream is already on flash.")
                 self._logger.debug("Returning timeout to %f" % old_timeout)
                 self.timeout = old_timeout
@@ -398,13 +398,23 @@ class TapcpTransport(Transport):
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
-                self.t.context.end()
+                try:
+                    self.t.context.end()
+                except:
+                    pass
                 time.sleep(self.server_timeout)
                 LOGGER.info('Tftp error on read -- retrying.')
         LOGGER.warning('Several Tftp errors on read -- final retry.')
-        buf = StringIO()
-        self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
-        return buf.getvalue()
+        try:
+            buf = StringIO()
+            self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
+            return buf.getvalue()
+        except:
+            try:
+                self.t.context.end()
+            except:
+                pass
+        raise RuntimeError
 
     def blindwrite(self, device_name, data, offset=0, use_bulk=True):
         """
@@ -426,12 +436,22 @@ class TapcpTransport(Transport):
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
-                self.t.context.end()
+                try:
+                    self.t.context.end()
+                except:
+                    pass
                 time.sleep(self.server_timeout)
                 LOGGER.info('Tftp error on write -- retrying')
         LOGGER.warning('Several Tftp errors on write-- final retry.')
-        buf = StringIO(data)
-        self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
+        try:
+            buf = StringIO(data)
+            self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
+        except:
+            try:
+                self.t.context.end()
+            except:
+                pass
+        raise RuntimeError
 
     def deprogram(self):
         """
