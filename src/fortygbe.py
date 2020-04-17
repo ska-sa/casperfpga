@@ -188,37 +188,27 @@ class FortyGbe(Gbe):
             gbebytes.append((d >> 8) & 0xff)
             gbebytes.append((d >> 0) & 0xff)
         pd = gbebytes
-        
+
 
         returnval = {
-            # no longer meaningful, since subnet can be less than 256?
-            # 'ip_prefix': '%i.%i.%i.' % (pd[0x10], pd[0x11], pd[0x12]),
-            'ip': IpAddress('%i.%i.%i.%i' % (
-                pd[0x14], pd[0x15], pd[0x16], pd[0x17])),
-            'subnet_mask': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x24], pd[0x25], pd[0x26], pd[0x27])),
-            'mac': Mac('%i:%i:%i:%i:%i:%i' % (
-                pd[0x0E], pd[0x0F], pd[0x10], pd[0x11], pd[0x12], pd[0x13])),
-            'gateway_ip': IpAddress('%i.%i.%i.%i' % (
-                pd[0x18], pd[0x19], pd[0x20], pd[0x21])),
-            'fabric_port': ((pd[0x2E] << 8) + (pd[0x2F])),
-            'fabric_en': bool(pd[0x29] & 1),
-            # 'xaui_lane_sync': [
-            #     bool(pd[0x27] & 4), bool(pd[0x27] & 8),
-            #     bool(pd[0x27] & 16), bool(pd[0x27] & 32)],
-            # 'xaui_status': [
-            #     pd[0x24], pd[0x25], pd[0x26], pd[0x27]],
-            # 'xaui_chan_bond': bool(pd[0x27] & 64),
-            # 'xaui_phy': {
-            #     'rx_eq_mix': pd[0x28],
-            #     'rx_eq_pol': pd[0x29],
-            #     'tx_preemph': pd[0x2a],
-            #     'tx_swing': pd[0x2b]},
+            'ip': IpAddress('{}.{}.{}.{}'.format(
+                *pd[self.reg_map['ip']:])),
+            'subnet_mask': IpAddress('{}.{}.{}.{}'.format(
+                *pd[self.reg_map['subnet_mask']:])),
+            'mac': Mac('{}:{}:{}:{}:{}:{}'.format(
+                *pd[self.reg_map['mac']:])),
+            'gateway_ip': IpAddress('{}.{}.{}.{}'.format(
+                *pd[self.reg_map['gateway_ip']:])),
+            # idx 0 and 1 are the mask so access idx 2 and 3
+            'fabric_port': ((pd[self.reg_map['fabric_port']+2] << 8)
+                            + pd[self.reg_map['fabric_port']+3]),
+            # idx 3 is the enable bit
+            'fabric_en': bool(pd[self.reg_map['fabric_en']+3] & 1),
             'multicast': {
-                'base_ip': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x20], pd[0x21], pd[0x22], pd[0x23])),
-                'ip_mask': IpAddress('%i.%i.%i.%i' % (
-                    pd[0x24], pd[0x25], pd[0x26], pd[0x27]))}
+                'base_ip': IpAddress('{}.{}.{}.{}'.format(
+                    *pd[self.reg_map['multicast_ip']:])),
+                'ip_mask': IpAddress('{}.{}.{}.{}'.format(
+                    *pd[self.reg_map['multicast_mask']:]))}
         }
 
         possible_addresses = [int(returnval['multicast']['base_ip'])]
