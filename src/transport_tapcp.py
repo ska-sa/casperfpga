@@ -105,7 +105,7 @@ class TapcpTransport(Transport):
         try:
             board = TapcpTransport(host=host_ip, timeout=0.1)
         except ImportError:
-            LOGGER.error('tftpy is not installed, do not know if %s is a Tapcp'
+            self.logger.error('tftpy is not installed, do not know if %s is a Tapcp'
                          'client or not' % str(host_ip))
             return False
         # Temporarily turn off logging so if tftp doesn't respond
@@ -115,7 +115,7 @@ class TapcpTransport(Transport):
         set_log_level(logging.CRITICAL)
         if board.is_connected():
             set_log_level(log_level)
-            LOGGER.debug('%s seems to be a Tapcp host' % host_ip)
+            self.logger.debug('%s seems to be a Tapcp host' % host_ip)
             return True
         return False
 
@@ -394,7 +394,9 @@ class TapcpTransport(Transport):
                 self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
                 return buf.getvalue()
             except TFTPY.TftpShared.TftpFileNotFoundError:
-                LOGGER.error('Device {0} not found'.format(device_name))
+                self.logger.error('Device {0} not found'.format(device_name))
+                # If the file's not there, don't bother retrying
+                break
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
@@ -403,8 +405,8 @@ class TapcpTransport(Transport):
                 except:
                     pass
                 time.sleep(self.server_timeout)
-                LOGGER.info('Tftp error on read -- retrying.')
-        LOGGER.warning('Several Tftp errors on read -- final retry.')
+                self.logger.info('Tftp error on read -- retrying.')
+        self.logger.warning('Several Tftp errors on read -- final retry.')
         try:
             buf = BytesIO()
             self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
@@ -441,8 +443,8 @@ class TapcpTransport(Transport):
                 except:
                     pass
                 time.sleep(self.server_timeout)
-                LOGGER.info('Tftp error on write -- retrying')
-        LOGGER.warning('Several Tftp errors on write-- final retry.')
+                self.logger.info('Tftp error on write -- retrying')
+        self.logger.warning('Several Tftp errors on write-- final retry.')
         try:
             buf = BytesIO(data)
             self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
