@@ -145,12 +145,12 @@ class TapcpTransport(Transport):
     def listdev(self):
         buf = BytesIO()
         self.t.download('/listdev'.encode(), buf, timeout=self.timeout)
-        return decode_csl(buf.getvalue())
+        return [v.decode() for v in decode_csl(buf.getvalue())]
 
     def listdev_pl(self):
         buf = BytesIO()
         self.t.download('/listdev'.encode(), buf, timeout=self.timeout)
-        return decode_csl_pl(buf.getvalue())
+        return [v.decode() for v in decode_csl_pl(buf.getvalue())]
 
     def progdev(self, addr=0):
         # address shifts down because we operate in 32-bit addressing mode
