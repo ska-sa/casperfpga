@@ -10,6 +10,7 @@ from .transport_katcp import KatcpTransport
 from .transport_tapcp import TapcpTransport
 from .transport_skarab import SkarabTransport
 from .transport_itpm import ItpmTransport
+from .transport_redis import RedisTapcpTransport
 from .memory import Memory
 from .network import IpAddress, Mac
 from .qdr import Qdr

@@ -1,4 +1,4 @@
-import time,logging,collections
+import time,logging,collections,warnings
 
 PRERlo = 0
 PRERhi = 1
@@ -31,18 +31,20 @@ class I2C:
 
         fpga: casperfpga.CasperFpga instance
         controller_name: The name of the I2C yellow block
-        retry_wait: Time interval between pulling status of I2C module,
-                    Default value is 0.02. Typical range between [0.1, 0.001].
+        retry:  Number of retries on read/write failure,
+                    Default value is 3
         """
 
         self.fpga = fpga
         self.controller_name = controller_name
         self.enable_core()
 
-        self._retry_wait = 0.02
+        self.setClock(10,100)
+
+        self._retry = 3
         if kwargs is not None:
-            if 'retry_wait' in kwargs:
-                self._retry_wait = float(kwargs['retry_wait'])
+            if 'retry' in kwargs:
+                self._retry = int(kwargs['retry'])
 
     def setClock(self, target, reference=100):
         """ 
@@ -67,6 +69,9 @@ class I2C:
         self.fpga.write_int(self.controller_name, (preScale >> 8) & 0xff, word_offset=PRERhi, blindwrite=True)
         # Re-enable core
         self.enable_core()
+
+        # Empirical time for an I2C command transmission to finish
+        self.T = 1.0 / target / 1000
 
     def getClock(self, reference=None):
         """ 
@@ -93,7 +98,7 @@ class I2C:
         if reference==None:
             return preScale
         else:
-            return reference*200./(preScale+1) + ' MHz'
+            return '{} kHz'.format(reference*200./(preScale+1))
 
 
     def getStatus(self):
@@ -137,11 +142,55 @@ class I2C:
         I2C_ENABLE_OFFSET = 7
         self.fpga.write_int(self.controller_name, 0<<I2C_ENABLE_OFFSET, word_offset=controlReg, blindwrite=True)
 
-    def _itf_write(self,addr,data,check_ack=True):
-        self.fpga.write_int(self.controller_name, data, word_offset=addr, blindwrite=True)
-        if addr == commandReg and check_ack:
-            while (self.getStatus()["TIP"]):
-                time.sleep(self._retry_wait)
+    def _reset_bus(self):
+
+        reg = commandReg
+        data = CMD_START|CMD_STOP
+
+        self.fpga.write_int(self.controller_name, data, word_offset=reg, blindwrite=True)
+
+        status = self.getStatus()
+        for i in range(self._retry+1):
+            if not status['TIP']:
+                break
+            elif i == self._retry:
+                raise IOError('Stuck in TIP state')
+            else:
+                time.sleep(self.T)
+                status = self.getStatus()
+
+        self.fpga.write_int(self.controller_name, data, word_offset=reg, blindwrite=True)
+
+        time.sleep(self.T)
+
+    def _itf_write(self,reg,data):
+        self.fpga.write_int(self.controller_name, data, word_offset=reg, blindwrite=True)
+
+        #start = time.clock()
+        #print('start at {}'.format(start))
+        #status = self.getStatus()
+        #i = 0
+        #while status['TIP']:
+        #    status = self.getStatus()
+        #    tick = time.clock()
+        #    print('{}\t{}'.format(tick-start, status))
+        #    i = i + 1
+        #    if i > 1000:
+        #        raise IOError('stuck on TIP')
+
+        status = self.getStatus()
+        for i in range(self._retry+1):
+            if not status['TIP']:
+                break
+            elif i == self._retry:
+                raise IOError('Stuck in TIP state')
+            else:
+                time.sleep(self.T)
+                status = self.getStatus()
+
+        if reg==commandReg and data&CMD_WRITE:
+            if status['ACK'] == 1:
+                raise IOError('No acknowledgement from target address')
 
     def _itf_read(self,addr):
         return self.fpga.read_int(self.controller_name, word_offset=addr)
@@ -249,11 +298,25 @@ class I2C:
         elif isinstance(cmd, list):
             if not all(isinstance(c,int) for c in cmd) or cmd==[]:
                 raise ValueError("Invalid parameter")
-        if cmd==None:
-            return self._read(addr,length)
-        else:
-            self._write(addr,cmd)
-            return self._read(addr,length)
+
+        # retry a few times on failure
+        for i in range(self._retry+1):
+
+            try:
+
+                if cmd==None:
+                    return self._read(addr,length)
+                else:
+                    self._write(addr,cmd)
+                    return self._read(addr,length)
+
+            except Exception as error:
+
+                if i == self._retry:
+                    raise error
+                else:
+                    self._reset_bus()
+                    continue
 
     def write(self,addr,cmd=None, data=None):
         """ 
@@ -293,46 +356,54 @@ class I2C:
         elif isinstance(data, int):
             data = [data]
 
-        if cmd==None and data!=None:
-            self._write(addr,data)
-        elif cmd!=None and data==None:
-            self._write(addr,cmd)
-        elif cmd!=None and data!=None:
-            self._write(addr,cmd+data)
-        else:
-            raise ValueError("Invalid parameter")
+
+        # retry a few times on failure
+        for i in range(self._retry+1):
+
+            try:
+
+                if cmd==None and data!=None:
+                    self._write(addr,data)
+                elif cmd!=None and data==None:
+                    self._write(addr,cmd)
+                elif cmd!=None and data!=None:
+                    self._write(addr,cmd+data)
+                else:
+                    raise ValueError("Invalid parameter")
+                return 0
+
+            except Exception as error:
+
+                if i == self._retry:
+                    raise error
+                else:
+                    self._reset_bus()
+                    continue
 
     def _probe(self,addr):
-        """ Test if a device with addr is present on the I2C bus
-
-        1. Generate a start signal
-        2. Send address
-        3. Send read/write bit
-        4. Read ACK status
-        5. Send a Stop signal
-        6. Return true is ACK==0
-
-        addr: 7-bit integer, address of the slave device
-        The return is a boolean when a device exists at addr
-
-        E.g.
-            _read(0x20) # Return true is a device is available at 0x20
+        """ Test if a device with addr is present on the I2C bus by just reading it
         """
-
-        # Set address and read bit (can be a write bit as well)
-        self._itf_write(transmitReg,    (addr<<1)|READ_BIT, check_ack=False)
-        # Send start signal and start write address to the bus
-        self._itf_write(commandReg, CMD_START|CMD_WRITE, check_ack=False)
-        # Check the 9th bit, i.e. ACK, is low
-        while (self.getStatus()["TIP"]):
+        ret = None
+        try:
+            ret = self.read(addr)
+        except IOError as error:
             pass
-        ack = self.getStatus()['ACK']
-        # Send a Stop signal
-        self._itf_write(commandReg, CMD_STOP)
-
-        return ack==0
+        finally:
+            if ret is not None:
+                return True
+            else:
+                return False
 
     def probe(self):
+        """ Return a list of devices detected on the i2c bus. """
+        addrs = []
+        for addr in range(128):
+            if self._probe(addr):
+                addrs += [addr]
+        return addrs
+
+    def probe_nice(self):
+        """ Print a table of devices detected on the i2c bus. """
         import sys
         print ('   00  01  02  03  04  05  06  07  08  09  10  11  12  13  14  15')
         for row in range(8):
@@ -418,7 +489,7 @@ class I2C_PIGPIO:
     def _open(self):
         ret = self.pi.bb_i2c_open(self.sda,self.scl,self.baud)
         if ret != 0:
-            raise Exception(pigpio.error_text(ret[0]))
+            raise IOError(pigpio.error_text(ret[0]))
 
     def _close(self):
         self.pi.bb_i2c_close(self.sda)
@@ -459,7 +530,7 @@ class I2C_PIGPIO:
 
         if ret[0] < 0:
             import pigpio
-            raise Exception(pigpio.error_text(ret[0]))
+            raise IOError(pigpio.error_text(ret[0]))
         elif length == 1:
             return ret[1][0]
         else:
@@ -500,7 +571,7 @@ class I2C_PIGPIO:
 
         if ret[0] != 0:
             import pigpio
-            raise Exception(pigpio.error_text(ret[0]))
+            raise IOError(pigpio.error_text(ret[0]))
 
     def read(self, addr, cmd=None, length=1):
         """ 
@@ -555,6 +626,7 @@ class I2C_PIGPIO:
 
         Write arbitary number of bytes to an internal address of a slave device.
         Some I2C datasheets refer to internal address as command (cmd) as well.
+        Return 0 if success.
 
         :param addr: 7-bit integer, address of the slave device
         :param cmd: a byte of a list of bytes, the internal address of the slave device
@@ -596,14 +668,51 @@ class I2C_PIGPIO:
         else:
             raise ValueError("Invalid parameter")
 
+        return 0
+
+    def _probe(self,addr):
+        """ Test if a device with addr is present on the I2C bus by just reading it
+        """
+        ret = None
+        try:
+            ret = self.read(addr)
+        except IOError as error:
+            pass
+        finally:
+            if ret is not None:
+                return True
+            else:
+                return False
+
+    def probe(self):
+        import sys
+        print ('   00  01  02  03  04  05  06  07  08  09  10  11  12  13  14  15')
+        for row in range(8):
+            sys.stdout.write('{}'.format(row))
+            sys.stdout.flush()
+            for col in range(16):
+                addr = row << 4 | col
+                mark = '{:02x}'.format(addr) if self._probe(addr) else '  '
+                sys.stdout.write('  ' + mark)
+                sys.stdout.flush()
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+
 class I2C_DEVICE(object):
     """ I2C device base class """
 
     DICT = dict()
 
-    def __init__(self, itf, addr):
+    def __init__(self, itf, addr, logger=None, **kwargs):
         self.itf=itf
         self.addr=addr
+        #obj = __name__ + '({}:{}:0x{:02x})'.format(itf.fpga.host, itf.controller_name, addr)
+        #self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(obj))
+
+        self._retry = 3
+        if kwargs is not None:
+            if 'retry' in kwargs:
+                self._retry = int(kwargs['retry'])
 
     def _set(self, d1, d2, mask=None):
         # Update some bits of d1 with d2, while keep other bits unchanged

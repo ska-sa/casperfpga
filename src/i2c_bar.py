@@ -1,8 +1,8 @@
 import time,numpy as np,logging
+from i2c import I2C_DEVICE
 
-logger = logging.getLogger(__name__)
 
-class MS5611_01B:
+class MS5611_01B(I2C_DEVICE):
 
     OSR_PRESS = {   256:0x40,
             512:0x42,
@@ -16,9 +16,17 @@ class MS5611_01B:
             2048:0x56,
             4096:0x58,}
 
-    def __init__(self,itf,addr=0x77):
-        self.itf = itf
-        self.addr = addr
+    D1_MIN, D1_MAX = 0, 16777216
+    D2_MIN, D2_MAX = 0, 16777216
+    DT_MIN, DT_MAX = -16776960, 16777216
+    TEMP_MIN, TEMP_MAX = -4000, 8500
+    OFF_MIN, OFF_MAX = -8589672450, 12884705280
+    SENS_MIN, SENS_MAX = -4294836225, 6442352640
+    P_MIN, P_MAX = 1000, 120000
+
+    def __init__(self, itf, addr=0x77, **kwargs):
+        super(MS5611_01B, self).__init__(itf, addr, **kwargs)
+        self._tsampling = 0.01
         self.prom = self.readCalibration()
 
     def init(self):
@@ -32,7 +40,7 @@ class MS5611_01B:
         data = [x<<8|y for x,y in zip(data[0::2],data[1::2])]
 
         if data[7] & 0xf != self.crc4(data):
-            logger.error('Barometer MS5611-01B PROM CRC error!')
+            raise IOError('Barometer MS5611-01B PROM CRC error!')
 
         return data
 
@@ -78,7 +86,7 @@ class MS5611_01B:
         if osr not in self.OSR_PRESS:
             raise ValueError("Invalid parameter")
         self.write(self.OSR_PRESS[osr])
-        time.sleep(0.1)
+        time.sleep(self._tsampling)
         data = self.read(0x00,3)
         data = (data[0]<<16)|(data[1]<<8)|data[2]
 
@@ -103,7 +111,15 @@ class MS5611_01B:
             off=off-off2
             sens=sens-sens2
 
+        if data < self.D1_MIN or data > self.D1_MAX or \
+            off < self.OFF_MIN or off > self.OFF_MAX or \
+            sens < self.SENS_MIN or sens > self.SENS_MAX:
+            raise IOError('Compensation values excceed min-max range.')
+
         data = (data * 1. / (1<<21) * sens - off) / (1<<15)
+        if data < self.P_MIN or data > self.P_MAX:
+            raise IOError('Temperature compensated pressure excceeds min-max range')
+
         return data/100.
 
     def readTemp(self,raw=False,osr=4096):
@@ -125,6 +141,10 @@ class MS5611_01B:
         dt = data - self.prom[5] * (1<<8) * 1.0
 
         data = 2000 + dt * self.prom[6] / (1<<23)
+
+        if data < self.TEMP_MIN or data > self.TEMP_MAX or \
+            dt < self.DT_MIN or dt > self.DT_MAX:
+            raise IOError('Temperature excceeds min-max range')
 
         if raw==False:
             return data / 100.
