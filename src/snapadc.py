@@ -8,7 +8,7 @@ import time
 
 
 # Some codes and docstrings are copied from https://github.com/UCBerkeleySETI/snap_control
-class SNAPADC(object):
+class SnapAdc(object):
     # Wishbone address and mask for read
     WB_DICT = [None] * ((0b11 << 2) + 1)
 
