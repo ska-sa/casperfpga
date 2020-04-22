@@ -8,7 +8,7 @@ DESCRIPTION = 'Talk to CASPER hardware devices using katcp or dcp. See https://g
 URL = 'https://github.com/casper-astro/casperfpga'
 EMAIL = 'apatel@ska.ac.za'
 AUTHOR = 'Paul Prozesky'
-VERSION = '0.1.2' # Need to adopt the __version__.py format
+VERSION = '0.1.3' # Need to adopt the __version__.py format
 
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -37,6 +37,8 @@ progska_extension = setuptools.Extension(
     # extra_link_args=['-static'],
 )
 
+data_files = ['tengbe_mmap.txt', 'tengbe_mmap_legacy.txt']
+
 
 setuptools.setup(
     name=NAME,
@@ -61,6 +63,7 @@ setuptools.setup(
     ],
     packages=['casperfpga', 'casperfpga.progska'],
     package_dir={'casperfpga': 'src', 'casperfpga.progska': 'progska'},
+    package_data={'casperfpga': data_files},
     scripts=glob.glob('scripts/*'),
     setup_requires=['katversion'],
     use_katversion=False,

@@ -4,6 +4,7 @@ import time
 import socket
 from time import strptime
 import string
+<<<<<<< HEAD
 import collections
 
 from . import register
@@ -16,6 +17,7 @@ from . import qdr
 from . import hmc
 from . import katadc
 from . import skarabadc
+from . import snapadc
 
 from .attribute_container import AttributeContainer
 from .utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
@@ -45,6 +47,7 @@ CASPER_ADC_DEVICES = {
     'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
     'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
     'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:snap_adc':                 {'class': snapadc.SnapAdc,      'container': 'adcs'}
 }
 
 # other devices - blocks that aren't memory devices nor ADCs, but about which we'd
@@ -776,8 +779,8 @@ class CasperFpga(object):
         self._create_memory_devices(device_dict, memorymap_dict,
                                     legacy_reg_map=legacy_reg_map,
                                     initialise=initialise_objects)
-        self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
         self._create_other_devices(device_dict, initialise=initialise_objects)
+        self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
         self.transport.post_get_system_information()
 
