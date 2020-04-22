@@ -1,4 +1,4 @@
-from wishbonedevice import WishBoneDevice
+from .wishbonedevice import WishBoneDevice
 import fractions as _frac
 import logging
 import time

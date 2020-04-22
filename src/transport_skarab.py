@@ -10,10 +10,10 @@ import contextlib
 
 from threading import Lock
 
-import skarab_definitions as sd
-import skarab_fileops as skfops
-from transport import Transport
-from network import IpAddress
+from . import skarab_definitions as sd
+from . import skarab_fileops as skfops
+from .transport import Transport
+from .network import IpAddress
 
 
 __author__ = 'tyronevb'
@@ -84,6 +84,9 @@ class SkarabFanControllerClearError(ValueError):
     pass
 
 class NonVolatileLogRetrievalError(ValueError):
+    pass
+
+class SkarabProcessorVersionError(ValueError):
     pass
 
 # endregion
@@ -171,7 +174,7 @@ class SkarabTransport(Transport):
                 self.logger.info('Port({}) created & connected.'.format(
                     sd.ETHERNET_CONTROL_PORT_ADDRESS))
             else:
-                self.logger.error('Error connecting to {}: port{}'.format(self.host,
+                self.logger.error('Error connecting to {}: port {}'.format(self.host,
                     sd.ETHERNET_CONTROL_PORT_ADDRESS))
 
         # self.image_chunks, self.local_checksum = None, None
@@ -216,7 +219,7 @@ class SkarabTransport(Transport):
                                        timeout=timeout)
             return True if data else False
         except ValueError as vexc:
-            self.logger.debug('Skarab is not connected: %s' % vexc.message)
+            self.logger.debug('Skarab is not connected: {}'.format(vexc))
             return False
 
     def is_running(self):
@@ -729,6 +732,8 @@ class SkarabTransport(Transport):
 
         # clear prog_info for last uploaded
         self.prog_info['last_uploaded'] = ''
+        self.logger.debug('SDRAM for host {host} '
+                          'cleared'.format(host=self.host))
 
     @staticmethod
     def data_split_and_pack(data):
@@ -825,9 +830,9 @@ class SkarabTransport(Transport):
             self.logger.debug('{}: retransmit attempts: {}'.format(
                 hostname, retransmit_count))
             try:
-                self.logger.debug('{}: sending pkt({}, {}) to port {}.'.format(
+                self.logger.debug('{}: sending pkt({}, {}) to port {} = {}'.format(
                     hostname, request_object.packet['command_type'],
-                    request_object.packet['seq_num'], addr))
+                    request_object.packet['seq_num'], addr, request_payload))
                 self._skarab_control_sock.send(request_payload)
                 if not request_object.expect_response:
                     self.logger.debug(
@@ -847,13 +852,19 @@ class SkarabTransport(Transport):
             except SkarabResponseNotReceivedError:
                 # retransmit the packet
                 pass
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, select.error):
                 self.logger.warning('{}: keyboard interrupt, clearing '
                                'buffer.'.format(hostname))
                 # wait to receive incoming responses
-                time.sleep(1)
+                time.sleep(0.5)
+                try:
+                    _ = self._skarab_control_sock.recvfrom(4096)
+                    self.logger.info(
+                        '{}: cleared recv buffer.'.format(hostname))
+                except socket.error:
+                    self.logger.info(
+                        '{}: buffer already empty'.format(hostname))
                 self._lock.release()
-                self.logger.info('{}: cleared recv buffer.'.format(hostname))
                 raise KeyboardInterrupt
             retransmit_count += 1
         self._lock.release()
@@ -958,9 +969,17 @@ class SkarabTransport(Transport):
                             'buffer.'.format(hostname))
             # wait to receive incoming responses
             time.sleep(1)
-            _ = self._skarab_control_sock.recvfrom(4096)
-            self.logger.info('{}: cleared recv buffer.'.format(hostname))
+            try:
+                _ = self._skarab_control_sock.recvfrom(4096)
+                self.logger.info('{}: cleared recv buffer.'.format(hostname))
+            except socket.error:
+                self.logger.info('{}: buffer already empty'.format(hostname))
             raise KeyboardInterrupt
+
+        except select.error as e:
+            self.logger.debug('{}: handling select error {}'.format(
+                hostname, e))
+            raise select.error
 
     # low level access functions
     def reboot_fpga(self):
@@ -3087,7 +3106,7 @@ class SkarabTransport(Transport):
                         self.sensor_data[
                             key] = (temperature, 'degC',
                                     check_temperature(key, temperature,
-                                                      inlet_ref))
+                                                      inlet_ref=0))
                     elif 'hmc' in key:
                         temperature = struct.unpack(
                             '!I', struct.pack('!4B',
@@ -3096,13 +3115,17 @@ class SkarabTransport(Transport):
                                                  'degC',
                                                  check_temperature(key, temperature, inlet_ref=0))
 
+                    # ignore the mezzanine temperatures as these are unreliable
+                    elif 'mezzanine' in key:
+                        continue
+
                     else:
                         temperature = temperature_value_check(
                             raw_sensor_data[value])
                         self.sensor_data[key] = (temperature, 'degC',
                                                  check_temperature(key,
                                                                    temperature,
-                                                                   inlet_ref))
+                                                                   inlet_ref=0))
 
         def parse_mezzanine_temperatures(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -3137,7 +3160,9 @@ class SkarabTransport(Transport):
             parse_currents(recvd_sensor_data_values)
             parse_voltages(recvd_sensor_data_values)
             parse_temperatures(recvd_sensor_data_values)
-            parse_mezzanine_temperatures(recvd_sensor_data_values)
+
+            # disable mezzanine temperatures as these values are not reliable
+            # parse_mezzanine_temperatures(recvd_sensor_data_values)
 
             return self.sensor_data
 
@@ -3644,8 +3669,8 @@ class SkarabTransport(Transport):
             hmc_retries = struct.unpack('<I', struct.pack('!4B', *hmc_retries_raw))[0]
             hmc_total_retries = struct.unpack('<I', struct.pack('!4B', *hmc_total_retries_raw))[0]
 
-            stats['hmc_retries'] = hmc_retries
-            stats['hmc_total_retries'] = hmc_total_retries
+            stats['hmc_init_failures_recorded'] = hmc_retries
+            stats['hmc_total_init_retries_recorded'] = hmc_total_retries
 
             hmc_reconfigure_stats[prefix] = stats
 
@@ -4063,4 +4088,280 @@ class SkarabTransport(Transport):
         except NonVolatileLogRetrievalError:
             self.logger.error('Failed to retrieve fan controller log data')
 
+    def _set_to_default_configuration(self, threshold_1v0_current=35,
+                                      tuneable_parameters_dict=sd.default_tunable_parameters):
+        """
+        Configure the SKARAB board to the SARAO default configuration parameters
+        :param: threshold_1v0_current
+        :param: tuneable_parameters_dict
+        :return: True if success, False otherwise
+        """
+
+        # check MircoBlaze version
+        major, minor, patch = self.get_embedded_software_version().split('.')
+        if (int(major) < 3) or (int(major) == 3 and int(minor) < 11):
+            raise SkarabProcessorVersionError('MicroBlaze version is too '
+                                              'old to support configuration '
+                                              'of tunable parameters')
+
+        # configure 1V0 Trip Current Threshold
+        current_threshold_set = self._set_1v0_trip_current_threshold(
+            trip_threshold=threshold_1v0_current)
+
+        if not current_threshold_set:
+            self.logger.warning('Setting trip threshold for '
+                                '1V0 current to {} failed!'.format(threshold_1v0_current))
+
+        # configure tunable parameters
+        error_dict = {}
+        self.set_hmc_reconfig_max_retries(tuneable_parameters_dict['hmc_reconfig_max_retries'])
+        self.set_hmc_reconfig_timeout(tuneable_parameters_dict['hmc_reconfig_timeout'])
+        self.set_link_mon_timeout(tuneable_parameters_dict['link_mon_timeout'])
+        self.set_dhcp_init_time(tuneable_parameters_dict['dhcp_init_time'])
+        self.set_dhcp_retry_rate(tuneable_parameters_dict['dhcp_retry_rate'])
+
+        # check if the tunable parameters were set correctly
+        set_parameters = self.get_tunable_parameters()
+        for parameter, value in set_parameters.items():
+            if value != tuneable_parameters_dict[parameter]:
+                error_dict[parameter] = value
+
+        if error_dict:
+            #  some parameters were not set correctly
+            self.logger.warning("Some parameters were not set correctly. "
+                  "These are the errorneous parameters and the "
+                  "values they are set to:{}".format(error_dict))
+        else:
+            self.logger.debug("All tunable parameters successfully configured!")
+
+        # enable non-volatile fan controller logging
+        # TODO: implement function
+
+        # configure fan control logic
+        # TODO: add when available
+
+        if error_dict or not current_threshold_set:
+            return False
+        else:
+            return True
+
+    def _set_1v0_trip_current_threshold(self, trip_threshold=35):
+        """
+        Reconfigure the 1V0 current trip threshold
+        :param trip_threshold: The desired 1V0 current trip threshold (Amps)
+        :return: True if success, False otherwise
+        """
+
+        # check that the desired threshold is within the acceptable range
+
+        if trip_threshold < 20:
+            self.logger.warning("Desired current limit too low! "
+                                "Threshold must be >= 20A")
+            return False
+
+        # work out the [LSB, MSB] to set the threshold
+
+        # calculation of the LSB and MSB for trip value
+        # current measured as voltage divided by sense resistor
+
+        # voltage over the 1V0 Rsense is on page 7 of i2c device 0x47 (UCD90120A)
+        # this voltage can be read with READ_VOUT cmd (0x8b) and is in the LINEAR16 format.
+        # from datasheet, UCD90xxx Sequencer and System Health Controller PMBus Command Reference:
+        #   pg. 13 par. 2.1 =>  Voltage = V x 2^x
+        #                       V is 16bit unsigned int (from READ_VOUT)
+        #                       x is signed 5-bit two's complement exponent (from VOUT_MODE)
+
+        # therefore :
+        # current = value x 2^(x) x 1/R(sense)
+
+        # for page 7:
+        # VOUT_MODE = 17 => 17 -32 = -15 two's compl 5-bit signed integer
+        # R(sense) = 100*0.00025 = 0.025
+
+        # => current (A) = value x 2^(-15) * 1/0.025
+        # => value = current / (2^(-15) * 1/0.025)
+        # e.g. 32A
+        # => value = 26,214.4 ~ 26,214 = 0x6666
+        # e.g. 35A
+        # => value = 28,672 = 0x7000
+
+        value = int(trip_threshold / (2**(-15) * 1.0/0.025))
+
+        limit_msb = value >> 8
+        limit_lsb = value & 0xff
+
+        assert limit_msb >= 0x40, "Desired current limit too low! " \
+                                  "Threshold must be >= 20A"
+
+        # set i2c switch to select current mon
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.MONITOR_SWITCH_SELECT)
+        time.sleep(0.5)
+
+        # set current monitor page to 7, which corresponds to 1V0 current
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.PAGE_CMD, sd.P1V0_CURRENT_MON_PAGE)
+        time.sleep(1)
+
+        # now set the current fault limit with the VOUT_OV_FAULT_LIMIT cmd
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.VOUT_OV_FAULT_LIMIT_CMD, limit_lsb, limit_msb)
+        time.sleep(1)
+
+        # check the new stored value
+
+        stored_threshold = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_OV_FAULT_LIMIT_CMD, 2)
+
+        time.sleep(1)
+
+        # check the set value
+        scale_factor = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_MODE_CMD, 1)
+
+        set_value = (stored_threshold[1] << 8) + stored_threshold[0]
+        set_current = set_value * pow(2, scale_factor[0]-32) * 40
+
+        if set_current == trip_threshold:
+            # new current trip threshold set successfully
+            self.logger.debug("New 1v0 current threshold "
+                              "successfully set to {}".format(set_current))
+
+            # now store the new limit as the default value
+            # store as default value into NV data memory / FLASH
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                           sd.STORE_DEFAULT_ALL_CMD)
+            time.sleep(2)
+
+            stored = False
+            count = 0
+            while not stored and count < 10:
+                status = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                             sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                             sd.MFR_STATUS,
+                                             5)  # read mfr_status
+                if (status[3] & 0x6) == 2:  # status is 32-bit word
+                    stored = True
+                time.sleep(1)
+                count = count + 1
+
+            if not stored:
+                # new default trip threshold not stored
+                self.logger.warning("New default trip threshold not stored!")
+                return False
+
+            self.logger.debug("New default trip threshold successfully stored!")
+            return True
+
+        else:
+            # new current trip threshold not set correctly
+            self.logger.error("New 1v0 current threshold not set correctly. "
+                              "Desired threshold = {} but set "
+                              "threshold = {}".format(trip_threshold,
+                                                      set_current))
+            return False
+
+    def _check_1v0_current_limit(self):
+        """
+        Check the set 1V0 current trip limit
+        :return: the set current limit for the 1V0 rail
+        """
+        # set i2c switch to select current mon
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.MONITOR_SWITCH_SELECT)
+        time.sleep(0.5)
+
+        # set current monitor page to 7, which corresponds to 1V0 current
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.PAGE_CMD, sd.P1V0_CURRENT_MON_PAGE)
+        time.sleep(1)
+
+        stored_threshold = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_OV_FAULT_LIMIT_CMD, 2)
+
+        time.sleep(1)
+
+        # check the set value
+        scale_factor = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                           sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                           sd.VOUT_MODE_CMD, 1)
+
+        set_value = (stored_threshold[1] << 8) + stored_threshold[0]
+        set_current = set_value * pow(2, scale_factor[0] - 32) * 40
+
+        self.logger.info('Configured 1v0 current for '
+                         'host {} is {}'.format(self.host, set_current))
+        return set_current
+
+    def _enable_fan_controller_nv_logs(self):
+        """
+        Enable logging of fan controller faults to non-volatile memory
+        :return: True if success, False otherwise
+        """
+
+        # set i2c switch to select the fan controller
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.FAN_CONT_SWITCH_SELECT)
+
+        # clear the fault log
+        # read the control register value
+        # tmp[0] = LSB, tmp[1] = MSB
+        tmp = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                  sd.MAX31785_I2C_DEVICE_ADDRESS,
+                                  sd.MFR_MODE_CMD, 2)
+
+        # toggle bit to clear fault log
+        tmp[1] = tmp[1] | 0x40
+
+        # write new value to the control register
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                       sd.MFR_MODE_CMD, tmp[0], tmp[1])
+
+        time.sleep(0.5)
+        # restore the default fan controller configuration
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                       sd.RESTORE_DEFAULT_ALL_CMD)
+
+        # enable non-volatile logging for all relevant pages (page 0 - page 22)
+        for page in range(0, 23):
+            time.sleep(0.5)
+            # select page of the fan controller
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                           sd.PAGE_CMD, page)
+
+            time.sleep(0.5)
+
+            # get the current page configuration
+            tmp = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                      sd.MAX31785_I2C_DEVICE_ADDRESS,
+                                      sd.MFR_FAULT_RESPONSE_CMD, 1)
+
+            time.sleep(0.5)
+
+            # toggle the bit to enable logging to non-volatile memory
+            tmp[0] = tmp[0] | 0x80
+
+            # write new value to the page control register
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                           sd.MFR_FAULT_RESPONSE_CMD, tmp[0])
+
+            time.sleep(0.5)
+
+        self.logger.info('Enabled Fan Controller Fault logging for'
+                         'host {}'.format(self.host))
+
+        # store the new default configuration incl. the non-volatile fault logging
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                       sd.STORE_DEFAULT_ALL_CMD)
+
+        # TODO: implement error checking and error handling
+        # check here:
+            # read the value back
+            # check the msb
+            # if it's set, return true, else return false
+
+        return True
 # end

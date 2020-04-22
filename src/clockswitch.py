@@ -1,4 +1,4 @@
-from wishbonedevice import WishBoneDevice
+from .wishbonedevice import WishBoneDevice
 
 class HMC922(WishBoneDevice):
 	""" HMC922 DIFFERENTIAL SPDT SWITCH """

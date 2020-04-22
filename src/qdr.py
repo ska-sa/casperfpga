@@ -7,9 +7,9 @@ Created on Fri Mar  7 07:15:45 2014
 import logging
 import numpy
 import struct
-import register
+from . import register
 
-from memory import Memory
+from .memory import Memory
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.propagate = True
@@ -460,7 +460,7 @@ class Qdr(Memory):
                 in_delays = [0] * QDR_WORD_WIDTH
             except Exception as e:
                 raise RuntimeError('Unknown exception in qdr_cal - '
-                                   '{!s}'.format(e.message))
+                                   '{}'.format(e))
 
             # update the out delays with the current input delays
             _out_delays = [out_step] * QDR_WORD_WIDTH

@@ -5,26 +5,27 @@ import socket
 from time import strptime
 import string
 
-import register
-import sbram
-import snap
-import onegbe
-import tengbe
-import fortygbe
-import qdr
-import hmc
-import katadc
-import skarabadc
+from . import register
+from . import sbram
+from . import snap
+from . import onegbe
+from . import tengbe
+from . import fortygbe
+from . import qdr
+from . import hmc
+from . import katadc
+from . import skarabadc
 
-from attribute_container import AttributeContainer
-from utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
-from transport_katcp import KatcpTransport
-from transport_tapcp import TapcpTransport
-from transport_skarab import SkarabTransport
-from transport_dummy import DummyTransport
+from .attribute_container import AttributeContainer
+from .utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
+from .transport_katcp import KatcpTransport
+from .transport_tapcp import TapcpTransport
+from .transport_skarab import SkarabTransport
+from .transport_dummy import DummyTransport
 
-from CasperLogHandlers import configure_console_logging, configure_file_logging
-from CasperLogHandlers import getLogger
+from .CasperLogHandlers import configure_console_logging, configure_file_logging
+from .CasperLogHandlers import getLogger
+import collections
 
 
 # known CASPER memory-accessible devices and their associated
@@ -179,8 +180,8 @@ class CasperFpga(object):
         except socket.gaierror:
             raise RuntimeError('Address/host %s makes no sense to '
                                'the OS?' % host_ip)
-        except Exception as e:
-            raise RuntimeError('Could not connect to host %s: %s' % (host_ip, e.message))
+        #except Exception as e:
+        #    raise RuntimeError('Could not connect to host {}: {}'.format(host_ip, str(e)))
 
     def connect(self, timeout=None):
         """
@@ -265,7 +266,7 @@ class CasperFpga(object):
         try:
             return self.transport.listdev()
         except AttributeError:
-            return self.memory_devices.keys()
+            return list(self.memory_devices.keys())
 
     def deprogram(self):
         """
@@ -390,10 +391,10 @@ class CasperFpga(object):
         self.other_devices = {}
 
         # containers
-        for container_ in CASPER_MEMORY_DEVICES.values():
+        for container_ in list(CASPER_MEMORY_DEVICES.values()):
             setattr(self, container_['container'], AttributeContainer())
 
-        for container_ in CASPER_ADC_DEVICES.values():
+        for container_ in list(CASPER_ADC_DEVICES.values()):
             setattr(self, container_['container'], AttributeContainer())
 
         # hold misc information about the bof file, program time, etc
@@ -560,10 +561,10 @@ class CasperFpga(object):
         try:
             data = struct.pack('>i' if integer < 0 else '>I', integer)
         except Exception as ve:
-            self.logger.error('Writing integer %i failed with error: %s' % (
-                integer, ve.message))
-            raise ValueError('Writing integer %i failed with error: %s' % (
-                integer, ve.message))
+            self.logger.error('Writing integer {} failed with error: {}'.format(
+                integer, ve))
+            raise ValueError('Writing integer {} failed with error: {}'.format(
+                integer, ve))
         if blindwrite:
             self.blindwrite(device_name, data, word_offset * 4)
         else:
@@ -582,11 +583,11 @@ class CasperFpga(object):
             in coreinfo.tab - memory bus information
         """
         # create and add memory devices to the memory device dictionary
-        for device_name, device_info in device_dict.items():
+        for device_name, device_info in list(device_dict.items()):
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank '
                                 'device name?')
-            if device_name in self.memory_devices.keys():
+            if device_name in list(self.memory_devices.keys()):
                 raise NameError('Memory device %s already exists' % device_name)
             # get the class from the known devices, if it exists there
             tag = device_info['tag']
@@ -596,12 +597,12 @@ class CasperFpga(object):
             except KeyError:
                 pass
             else:
-                if not callable(known_device_class):
+                if not isinstance(known_device_class, collections.Callable):
                     raise TypeError('%s is not a callable Memory class - '
                                     'that\'s a problem.' % known_device_class)
                 new_device = known_device_class.from_device_info(
                     self, device_name, device_info, memorymap_dict, legacy_reg_map=legacy_reg_map)
-                if new_device.name in self.memory_devices.keys():
+                if new_device.name in list(self.memory_devices.keys()):
                     raise NameError(
                         'Device called %s of type %s already exists in '
                         'devices list.' % (new_device.name, type(new_device)))
@@ -613,7 +614,7 @@ class CasperFpga(object):
                 assert id(new_device) == id(self.memory_devices[device_name])
         # allow created devices to update themselves with full device info
         # link control registers, etc
-        for name, device in self.memory_devices.items():
+        for name, device in list(self.memory_devices.items()):
             try:
                 device.post_create_update(device_dict)
             except AttributeError:  # the device may not have an update function
@@ -630,12 +631,12 @@ class CasperFpga(object):
                            - e.g. The SKARAB ADC's PLL SYNC
         :return: None
         """
-        for device_name, device_info in device_dict.items():
+        for device_name, device_info in list(device_dict.items()):
             
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank '
                                 'device name?')
-            if device_name in self.adc_devices.keys():
+            if device_name in list(self.adc_devices.keys()):
                 raise NameError('ADC device %s already exists' % device_name)
             # get the class from the known devices, if it exists there
             tag = device_info['tag']
@@ -645,14 +646,14 @@ class CasperFpga(object):
             except KeyError:
                 pass
             else:
-                if not callable(known_device_class):
+                if not isinstance(known_device_class, collections.Callable):
                     errmsg = '{} is not a callable ADC Class'.format(known_device_class)
                     raise TypeError(errmsg)
 
                 new_device = known_device_class.from_device_info(self,
                                 device_name, device_info, initialise=initialise)
                 
-                if new_device.name in self.adc_devices.keys():
+                if new_device.name in list(self.adc_devices.keys()):
                     errmsg = 'Device {} of type {} already exists in \
                              the devices list'.format(new_device.name, type(new_device))
 
@@ -675,13 +676,13 @@ class CasperFpga(object):
         :param device_dict: raw dictionary of information from tagged
             blocks in Simulink design, keyed on device name
         """
-        for device_name, device_info in device_dict.items():
+        for device_name, device_info in list(device_dict.items()):
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a '
                                 'blank device name?')
-            if device_name in self.other_devices.keys():
+            if device_name in list(self.other_devices.keys()):
                 raise NameError('Other device %s already exists.' % device_name)
-            if device_info['tag'] in CASPER_OTHER_DEVICES.keys():
+            if device_info['tag'] in list(CASPER_OTHER_DEVICES.keys()):
                 self.devices[device_name] = device_info
                 self.other_devices[device_name] = device_info
 
@@ -693,7 +694,7 @@ class CasperFpga(object):
         :return: List of strings matching the description
         """
         return [devname for devname, container
-                in self.memory_devices.iteritems()
+                in self.memory_devices.items()
                 if container == container_name]
 
     def devices_by_container(self, container):
@@ -742,13 +743,19 @@ class CasperFpga(object):
         # and RCS information if included
         for device_name in device_dict:
             if device_name.startswith('77777_git'):
-                name = device_name[device_name.find('_', 10) + 1:]
                 if 'git' not in self.rcs_info:
                     self.rcs_info['git'] = {}
-                self.rcs_info['git'][name] = device_dict[device_name]
+                self.rcs_info['git'].update(device_dict[device_name])
 
-        if '77777_svn' in device_dict:
-            self.rcs_info['svn'] = device_dict['77777_svn']
+            if device_name.startswith('77777_svn'):
+                if 'svn' not in self.rcs_info:
+                    self.rcs_info['svn'] = {}
+                self.rcs_info['svn'].update(device_dict[device_name])
+
+        try:
+            self.rcs_info['git'].pop('tag')
+        except:
+            pass
 
         legacy_reg_map = False
         if type(self.transport) is SkarabTransport:
@@ -837,12 +844,12 @@ class CasperFpga(object):
         if len(self.rcs_info['git']) == 0:
             return []
         git_info = self.rcs_info['git']
-        files = git_info.keys()
+        files = list(git_info.keys())
         old_version = hasattr(git_info[files[0]], 'keys')
         if old_version:
             rv = []
             for filename in files:
-                if 'git_info_found' in git_info[filename].keys():
+                if 'git_info_found' in list(git_info[filename].keys()):
                     if git_info[filename]['git_info_found'] == ['1']:
                         rv.append(
                             (filename, git_info[filename]['commit_hash'][0] +

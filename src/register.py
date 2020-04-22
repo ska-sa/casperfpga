@@ -1,7 +1,7 @@
 import logging
 import time
-from memory import Memory, fp2fixed_int
-import bitfield
+from .memory import Memory, fp2fixed_int
+from . import bitfield
 
 LOGGER = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class Register(Memory):
         memdata = Memory.read(self, **kwargs)
         results = memdata['data']
         timestamp = memdata['timestamp']
-        for k, v in results.iteritems():
+        for k, v in results.items():
             results[k] = v[0]
         self.last_values = results
         return {'data': results, 'timestamp': timestamp}

@@ -51,8 +51,8 @@ setuptools.setup(
     long_description_content_type='text/markdown',
     # Specify version in-line here
     install_requires=[
-        'katcp==0.6.2',
-        'numpy<1.17',
+        'katcp==0.7.0',
+        'numpy',
         'odict',
         'setuptools',
         'tornado<5',

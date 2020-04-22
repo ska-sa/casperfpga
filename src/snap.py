@@ -1,9 +1,9 @@
 from __future__ import print_function
 import logging
 import time
-from memory import Memory
-import bitfield
-from register import Register
+from .memory import Memory
+from . import bitfield
+from .register import Register
 
 LOGGER = logging.getLogger(__name__)
 

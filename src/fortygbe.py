@@ -1,8 +1,8 @@
 import logging
 import time
 
-from network import IpAddress, Mac
-from gbe import Gbe
+from .network import IpAddress, Mac
+from .gbe import Gbe
 
 
 class FortyGbe(Gbe):
@@ -53,19 +53,18 @@ class FortyGbe(Gbe):
         :param raw_device_info: info about this block that may be useful
         """
         super(FortyGbe, self).post_create_update(raw_device_info)
-        self.snaps = {'tx': None, 'rx': None}
+        self.snaps = {'tx': [], 'rx': []}
         snapnames = self.parent.snapshots.names()
         for txrx in ['r', 't']:
             snapshot_index=0
-            self.snaps['%sx' % txrx]=[]
-            name = self.name + '_%sxs%i_ss' %(txrx,snapshot_index)
             snapshot_found=True
             while snapshot_found:
+                name = self.name + '_%sxs%i_ss' %(txrx,snapshot_index)
                 if name in snapnames:
-                    self.snaps['%sx' % txrx].append(self.parent.snapshots[self.name + '_%sxs%i_ss' %(txrx,snapshot_index)])
+                    self.snaps['%sx' % txrx].append(self.parent.snapshots[name])
                     snapshot_index+=1
                 else:
-                   snapshot_found=False
+                    snapshot_found=False
         self.get_gbe_core_details()
 
     @classmethod
@@ -413,6 +412,46 @@ class FortyGbe(Gbe):
             rv['rx_over'] = second['%s_rxofctr' % name]
         if rxbadcnt in second:
             rv['rx_bad_pkts'] = second['%s_rxbadctr' % name]
+        return rv
+
+    def get_hw_gbe_stats(self, rst_counters=False):
+        """
+    Get the traffic statistics of the ethernet core from the device memory map.
+    ::param:: rst_counters: reset the counters after reading them.
+    :return:
+        """
+
+        gbebase = self.address
+        gbedata = []
+
+        for ctr in range(0x48, 0x74 + 4, 4):
+            gbedata.append(self._wbone_rd(gbebase + ctr))
+
+        rv = {}
+
+        rv['tx_pps'] = gbedata[0]
+        rv['tx_pkt_cnt'] = gbedata[1]
+        rv['tx_gbps'] = gbedata[2] * (
+                    256 / 1024.0 / 1024.0 / 1024.0)  # convert words to Gbps
+        rv['tx_byte_cnt'] = gbedata[3] * (256 / 8)  # convert words to bytes
+        rv['tx_over_err_cnt'] = gbedata[4]
+        rv['tx_afull_cnt'] = gbedata[5]
+
+        rv['rx_pps'] = gbedata[6]
+        rv['rx_pkt_cnt'] = gbedata[7]
+        rv['rx_gbps'] = gbedata[8] * (
+                    256 / 1024.0 / 1024.0 / 1024.0)  # convert words to Gbps
+        rv['rx_byte_cnt'] = gbedata[9] * (256 / 8)  # convert words to bytes
+        rv['rx_over_err_cnt'] = gbedata[8]
+        rv['rx_bad_pkt_cnt'] = gbedata[9]
+
+        if rst_counters:
+            # writing 0x1 resets the counters and holds them at 0
+            self._wbone_wr(gbebase + 0x78, 0x1)
+            time.sleep(0.001)
+            # writing 0x0 restarts the counters
+            self._wbone_wr(gbebase + 0x78, 0x0)
+
         return rv
 
     @staticmethod
