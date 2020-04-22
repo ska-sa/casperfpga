@@ -4,6 +4,7 @@ import time
 import socket
 from time import strptime
 import string
+import collections
 
 from . import register
 from . import sbram
@@ -25,8 +26,6 @@ from .transport_dummy import DummyTransport
 
 from .CasperLogHandlers import configure_console_logging, configure_file_logging
 from .CasperLogHandlers import getLogger
-import collections
-
 
 # known CASPER memory-accessible devices and their associated
 # classes and containers

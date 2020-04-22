@@ -1,8 +1,6 @@
 from . import skarab_definitions as sd
 import os
 
-import IPython
-
 class SkarabAdc(object):
     """
     This is the class definition for the SKARAB ADC

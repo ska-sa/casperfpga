@@ -51,11 +51,13 @@ setuptools.setup(
     long_description_content_type='text/markdown',
     # Specify version in-line here
     install_requires=[
-        'katcp==0.7.0',
         'numpy',
+        'katcp>=0.7',
         'odict',
         'setuptools',
-        'tornado<5',
+        'tornado',
+        'redis',
+        'tftpy==0.8.0',
     ],
     packages=['casperfpga', 'casperfpga.progska'],
     package_dir={'casperfpga': 'src', 'casperfpga.progska': 'progska'},

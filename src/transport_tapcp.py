@@ -3,20 +3,25 @@ import struct
 from io import BytesIO as BytesIO
 import zlib
 import hashlib
+import time
 
 from .transport import Transport
 
 __author__ = 'jackh'
 __date__ = 'June 2017'
 
-TFTPY = None
+
+LOGGER = logging.getLogger(__name__)
+TFTPY = logging.getLogger('tftpy')
+
 
 def set_log_level(level):
-    TFTPY.setLogLevel(level)
-
+    LOGGER.setLevel(level)
+    #TFTPY.setLevel(level)
 
 def get_log_level():
-    return TFTPY.log.level
+    #return min(TFTPY.getEffectiveLevel(),LOGGER.getEffectiveLevel())
+    return LOGGER.getEffectiveLevel()
 
 
 def get_core_info_payload(payload_str):
@@ -117,6 +122,7 @@ class TapcpTransport(Transport):
             set_log_level(log_level)
             self.logger.debug('%s seems to be a Tapcp host' % host_ip)
             return True
+        LOGGER.debug("{} not a Tapcp host".format(host_ip))
         return False
 
     @staticmethod
@@ -427,7 +433,7 @@ class TapcpTransport(Transport):
         :param offset: the offset, in bytes, at which to write
         :param use_bulk: Does nothing. Kept for API compatibility
         """
-        assert (type(data) == str), 'Must supply binary packed string data'
+        assert (type(data) == str or type(data) == bytes), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
         for retry in range(self.retries - 1):
