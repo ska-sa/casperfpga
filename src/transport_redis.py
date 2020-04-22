@@ -6,12 +6,12 @@ import json
 import tftpy
 import base64
 from numpy import random
-from StringIO import StringIO
+from io import StringIO
 
-from Queue import Queue
+from queue import Queue
 from threading import Thread
 
-from transport_tapcp import TapcpTransport
+from .transport_tapcp import TapcpTransport
 
 __author__ = 'jackh'
 __date__ = 'May 2019'
