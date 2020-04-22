@@ -1,6 +1,6 @@
 import logging
 import struct
-from io import StringIO as StringIO
+from io import BytesIO as BytesIO
 import zlib
 import hashlib
 
@@ -35,7 +35,7 @@ def decode_csl_pl(csl):
     s = struct.unpack('%ds' % len(csl), csl)[0]
     # payload size is first byte
     pl = v[OFFSET]
-    prev_str = ''
+    prev_str = b''
     nrepchars = 0
     c = OFFSET
     line = 0
@@ -76,12 +76,10 @@ class TapcpTransport(Transport):
             import tftpy
             global TFTPY
             TFTPY = tftpy
-            TFTPY.setLogLevel(logging.CRITICAL)
         except ImportError:
             raise ImportError('You need to install tftpy to use TapcpTransport')
         
         Transport.__init__(self, **kwargs)
-        set_log_level(logging.ERROR)
         self.t = tftpy.TftpClient(kwargs['host'], 69)
 	    
         try:
@@ -131,7 +129,7 @@ class TapcpTransport(Transport):
         try:
             import tftpy
             board = tftpy.TftpClient(host_ip, 69)
-            buf = StringIO()
+            buf = BytesIO()
             board.download('%s.%x.%x' % ('sys_clkcounter', 0, 1),
                            buf, timeout=3)
             return True
@@ -139,19 +137,19 @@ class TapcpTransport(Transport):
             return False
 
     def listdev(self):
-        buf = StringIO()
-        self.t.download('/listdev', buf, timeout=self.timeout)
+        buf = BytesIO()
+        self.t.download('/listdev'.encode(), buf, timeout=self.timeout)
         return decode_csl(buf.getvalue())
 
     def listdev_pl(self):
-        buf = StringIO()
-        self.t.download('/listdev', buf, timeout=self.timeout)
+        buf = BytesIO()
+        self.t.download('/listdev'.encode(), buf, timeout=self.timeout)
         return decode_csl_pl(buf.getvalue())
 
     def progdev(self, addr=0):
         # address shifts down because we operate in 32-bit addressing mode
         # see xilinx docs. Todo, fix this microblaze side
-        buf = StringIO(struct.pack('>L', addr >> 8))
+        buf = BytesIO(struct.pack('>L', addr >> 8))
         try:
             self.t.upload('/progdev', buf, timeout=self.timeout)
         except:
@@ -168,7 +166,7 @@ class TapcpTransport(Transport):
         self.progdev(addr=addr)
 
     def get_temp(self):
-        buf = StringIO()
+        buf = BytesIO()
         self.t.download('/temp', buf)
         return struct.unpack('>f', buf.getvalue())[0]
 
@@ -392,9 +390,11 @@ class TapcpTransport(Transport):
         """
         for retry in range(self.retries - 1):
             try:
-                buf = StringIO()
+                buf = BytesIO()
                 self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
                 return buf.getvalue()
+            except TFTPY.TftpShared.TftpFileNotFoundError:
+                LOGGER.error('Device {0} not found'.format(device_name))
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
                 # server to timeout and restart the whole transaction.
@@ -402,7 +402,7 @@ class TapcpTransport(Transport):
                 time.sleep(self.server_timeout)
                 LOGGER.info('Tftp error on read -- retrying.')
         LOGGER.warning('Several Tftp errors on read -- final retry.')
-        buf = StringIO()
+        buf = BytesIO()
         self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
         return buf.getvalue()
 
@@ -420,7 +420,7 @@ class TapcpTransport(Transport):
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
         for retry in range(self.retries - 1):
             try:
-                buf = StringIO(data)
+                buf = BytesIO(data)
                 self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
                 return
             except:
@@ -430,7 +430,7 @@ class TapcpTransport(Transport):
                 time.sleep(self.server_timeout)
                 LOGGER.info('Tftp error on write -- retrying')
         LOGGER.warning('Several Tftp errors on write-- final retry.')
-        buf = StringIO(data)
+        buf = BytesIO(data)
         self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
 
     def deprogram(self):
