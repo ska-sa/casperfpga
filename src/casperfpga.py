@@ -4,7 +4,6 @@ import time
 import socket
 from time import strptime
 import string
-<<<<<<< HEAD
 import collections
 
 from . import register
