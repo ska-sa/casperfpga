@@ -345,6 +345,14 @@ class SkarabTransport(Transport):
         if response is None:
             errmsg = 'Bulk read failed.'
             raise SkarabReadFailed(errmsg)
+
+        # check if read failed due to address out of range
+        if response.packet['number_of_reads'] \
+                == sd.BIG_WISHBONE_READ_ERROR_CODE:
+            errmsg = 'Bulk read failed. Specified address {} ' \
+                     'is out of range'.format(address)
+            raise SkarabReadFailed(errmsg)
+
         # response.read_data is a list of 16-bit words, pack it
         read_data = response.packet['read_data'][0:words_to_read*2]
         return struct.pack('>%iH' % len(read_data), *read_data)
@@ -415,6 +423,12 @@ class SkarabTransport(Transport):
             raise SkarabWriteFailed(errmsg)
         if response.packet['number_of_writes_done'] != words_to_write:
             errmsg = 'Bulk write failed. Not all words written.'
+            raise SkarabWriteFailed(errmsg)
+
+        # check if write failed due to address out of range
+        if response.packet['error_status']:
+            errmsg = 'Bulk write failed. Specified address {} ' \
+                     'is out of range'.format(address)
             raise SkarabWriteFailed(errmsg)
 
         self.logger.debug('Number of writes dones: %d' %
@@ -1172,7 +1186,14 @@ class SkarabTransport(Transport):
         address_and_data.extend(data_split)
         request = sd.WriteWishboneReq(*address_and_data)
         response = self.send_packet(request, timeout=timeout, retries=retries)
-        return response
+
+        # check if write was successful
+        if response.packet['error_status']:
+            errmsg = 'Wishbone write failed. Specified address {} ' \
+                     'is out of range'.format(wb_address)
+            raise SkarabWriteFailed(errmsg)
+        else:
+            return response
 
     def read_wishbone(self, wb_address,
                       timeout=None,
@@ -1189,9 +1210,15 @@ class SkarabTransport(Transport):
         request = sd.ReadWishboneReq(*self.data_split_and_pack(wb_address))
         response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
-            return self.data_unpack_and_merge(
-                response.packet['read_data_high'],
-                response.packet['read_data_low'])
+            # check if read was successful
+            if response.packet['error_status']:
+                errmsg = 'Wishbone read failed. Specified address {} ' \
+                         'is out of range'.format(wb_address)
+                raise SkarabReadFailed(errmsg)
+            else:
+                return self.data_unpack_and_merge(
+                    response.packet['read_data_high'],
+                    response.packet['read_data_low'])
 
     def write_i2c(self, interface, slave_address, *bytes_to_write):
         """
