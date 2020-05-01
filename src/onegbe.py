@@ -592,6 +592,21 @@ class OneGbe(Memory, Gbe):
             returnval['cpu_rx'][ctr * 8] = tmp
         return returnval
 
+    def set_single_arp_entry(self, ip, mac):
+        """
+        Set a single MAC address entry in the ARP table.
+
+        :param ip (string) : IP whose MAC we should set. E.g. '10.0.1.123'
+        :param mac (int)   : MAC address to associate with this IP. Eg. 0x020304050607
+        """
+        if self.memmap_compliant:
+            arp_addr = OFFSET_ARP_CACHE
+        else:
+            arp_addr = 0x3000
+        arp_addr += 8*int(ip.split('.')[-1])
+        mac_pack = struct.pack('>Q', mac)
+        self.parent.write(self.name, mac_pack, offset=arp_addr)
+
     def set_arp_table(self, macs):
         """Set the ARP table with a list of MAC addresses. The list, `macs`,
         is passed such that the zeroth element is the MAC address of the

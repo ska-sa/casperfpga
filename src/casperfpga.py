@@ -4,6 +4,7 @@ import time
 import socket
 from time import strptime
 import string
+import collections
 
 from . import register
 from . import sbram

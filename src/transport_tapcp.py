@@ -193,14 +193,14 @@ class TapcpTransport(Transport):
         """
         Extract the header and program bitstream from the input file provided.
         """
-        with open(filename, 'r') as fh:
+        with open(filename, 'rb') as fh:
             fpg = fh.read()
 
-        header_offset = fpg.find('\n?quit\n') + 7
-        header = fpg[0:header_offset] + '0'*(1024-header_offset%1024)
-        prog = fpg[header_offset:]+'0'*(1024-(len(fpg)-header_offset)%1024)
+        header_offset = fpg.find('\n?quit\n'.encode()) + 7
+        header = fpg[0:header_offset] + b'0' * (1024-header_offset%1024)
+        prog = fpg[header_offset:] + b'0' * (1024-(len(fpg)-header_offset)%1024)
         
-        if prog.startswith('\x1f\x8b\x08'):
+        if prog.startswith(b'\x1f\x8b\x08'):
             prog = zlib.decompress(prog, 16 + zlib.MAX_WBITS)
 
         chksum = hashlib.md5()
@@ -215,28 +215,28 @@ class TapcpTransport(Transport):
         USER_FLASH_LOC  = 0x800000
         READ_CHUNK_SIZE = 1024     # size of flash chunks to read
         MAX_SEARCH      = 128*1024 # give up if we get this far
-        meta   = ''
+        meta   = b''
         offset = 0
         # We want to find the end of the metadata, marked by the
         # string end. But, to save lots of short tftp commands
         # read data from flash 1kB at a time and search that
         page_offset = 0
-        while (meta.find('?end')==-1):
+        while (meta.find('?end'.encode())==-1):
             meta_page = self.read('/flash', READ_CHUNK_SIZE, offset=USER_FLASH_LOC + page_offset)
             page_offset += READ_CHUNK_SIZE
             if page_offset > MAX_SEARCH:
                 return None
-            for i in range(READ_CHUNK_SIZE/4):
+            for i in range(READ_CHUNK_SIZE//4):
                 meta += meta_page[4*i:4*(i+1)]
                 offset += 4
-                if (meta.find('?end')!=-1):
+                if (meta.find('?end'.encode())!=-1):
                     break
         
         metadict = {};        
-        for _ in meta.split('?'):
-             args = _.split('\t')
+        for _ in meta.split('?'.encode()):
+             args = _.split('\t'.encode())
              if len(args) > 1:
-                 metadict[args[0]] = args[1]
+                 metadict[args[0].decode()] = args[1].decode()
 
         return metadict
 
@@ -255,18 +255,18 @@ class TapcpTransport(Transport):
         head_loc = USER_FLASH_LOC + SECTOR_SIZE
         prog_loc = head_loc + hlen 
         
-        metadict = {}; meta = ''
+        metadict = {}; meta = b''
         metadict['flash'] = '?sector_size\t%d'%SECTOR_SIZE
         metadict['head']  = '?header_start\t%d?header_length\t%d'%(head_loc,hlen)
         metadict['prog']  = '?prog_bitstream_start\t%d?prog_bitstream_length\t%d'%(prog_loc,plen)
         metadict['md5']   =  '?md5sum\t' + md5
         metadict['file']  = '?filename\t' + filename.split('/')[-1]
         for m in list(metadict.values()):
-            meta += m
-        meta += '?end'
-        meta += '0'*(1024-len(meta)%1024)
+            meta += m.encode()
+        meta += '?end'.encode()
+        meta += b'0'*(1024-len(meta)%1024)
 
-        self.blindwrite('/flash',meta,offset=USER_FLASH_LOC)
+        self.blindwrite('/flash', meta, offset=USER_FLASH_LOC)
 
         return head_loc, prog_loc
 
@@ -300,10 +300,17 @@ class TapcpTransport(Transport):
                 complete_blocks = len(payload) // sector_size
                 trailing_bytes = len(payload) % sector_size
                 for i in range(complete_blocks):
-                    self.logger.debug("block %d of %d: writing %d bytes:" % (i+1, complete_blocks, len(payload[i*sector_size : (i+1)*sector_size])))
+                    self.logger.debug("block %d of %d: writing %d bytes to address 0x%x:" % (i+1, complete_blocks, len(payload[i*sector_size : (i+1)*sector_size]), HEAD_LOC+i*sector_size))
                     self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=HEAD_LOC+i*sector_size)
                     readback = self.read('/flash', len(payload[i*sector_size : (i+1)*sector_size]), offset=HEAD_LOC+i*sector_size)
                     if payload[i*sector_size : (i+1)*sector_size] != readback:
+                        print(payload[i*sector_size : i*sector_size + 10])
+                        print(payload[(i+1)*sector_size - 10 : (i+1)*sector_size])
+                        print(readback[-10:])
+                        with open('/tmp/foo-write.dat', 'wb') as fh:
+                            fh.write(payload[i*sector_size : (i+1)*sector_size])
+                        with open('/tmp/foo-read.dat', 'wb') as fh:
+                            fh.write(readback)
                         raise RuntimeError("Readback of flash failed!")
                 # Write the not-complete last sector (if any)
                 if trailing_bytes:
@@ -323,7 +330,7 @@ class TapcpTransport(Transport):
         else:
             self.logger.info("Programming something which isn't an .fpg file.")
             self.logger.debug("Reading file %s" % filename)
-            with open(filename,'r') as fh:
+            with open(filename,'rb') as fh:
                 payload = fh.read()
             complete_blocks = len(payload) // sector_size
             trailing_bytes = len(payload) % sector_size
@@ -360,7 +367,7 @@ class TapcpTransport(Transport):
         :param imagefile: A .bin file containing a golden image
         """
         sector_size = 0x10000
-        with open(imagefile,'r') as fh:
+        with open(imagefile,'rb') as fh:
             payload = fh.read()
         # Write the flash a chunk at a time. Each chunk includes an erase
         # cycle, so can take ~1s to complete.
@@ -372,11 +379,17 @@ class TapcpTransport(Transport):
         for i in range(complete_blocks):
             print(("Writing block {} of {}".format(i+1, complete_blocks)))
             self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=i*sector_size)
+            readback = self.read('/flash', sector_size, offset=i*sector_size)
+            if payload[i*sector_size : (i+1)*sector_size] != readback:
+                raise RuntimeError("Readback of flash failed!")
         # Write the not-complete last sector (if any)
         if trailing_bytes:
             print(("Writing trailing {} bytes".format(trailing_bytes)))
             last_offset = complete_blocks * sector_size
             self.blindwrite('/flash', payload[last_offset :], offset=last_offset)
+            readback = self.read('/flash', trailing_bytes, offset=last_offset)
+            if payload[last_offset:] != readback:
+                raise RuntimeError("Readback of flash failed!")
         # return timeout to what it used to be
         self.timeout = old_timeout
     

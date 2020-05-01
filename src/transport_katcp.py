@@ -289,16 +289,16 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             _, informs = self.katcprequest(name='listdev',
                                            request_timeout=self._timeout,
                                            request_args=('size',))
-            return [(i.arguments[0], i.arguments[1]) for i in informs]
+            return [(i.arguments[0].decode(), i.arguments[1].decode()) for i in informs]
         elif getaddress:
             _, informs = self.katcprequest(name='listdev',
                                            request_timeout=self._timeout,
                                            request_args=('detail',))
-            return [(i.arguments[0], i.arguments[1]) for i in informs]
+            return [(i.arguments[0].decode(), i.arguments[1].decode()) for i in informs]
         else:
             _, informs = self.katcprequest(name='listdev',
                                            request_timeout=self._timeout)
-            return [i.arguments[0] for i in informs]
+            return [i.arguments[0].decode() for i in informs]
 
     def listbof(self):
         """
@@ -306,7 +306,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         _, informs = self.katcprequest(name='listbof',
                                        request_timeout=self._timeout)
-        return [i.arguments[0] for i in informs]
+        return [i.arguments[0].decode() for i in informs]
 
     def status(self):
         """
@@ -314,7 +314,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         reply, _ = self.katcprequest(name='status',
                                      request_timeout=self._timeout)
-        return reply.arguments[1]
+        return reply.arguments[1].decode()
 
     def ping(self):
         """
@@ -324,7 +324,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         reply, _ = self.katcprequest(name='watchdog',
                                      request_timeout=self._timeout)
-        if reply.arguments[0] == 'ok':
+        if reply.arguments[0] == katcp.Message.OK:
             self.logger.info('%s: katcp ping okay' % self.host)
             return True
         else:
@@ -339,7 +339,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         reply, _ = self.katcprequest(
             name='fpgastatus', request_timeout=self._timeout, require_ok=False)
-        return reply.arguments[0] == 'ok'
+        return reply.arguments[0] == katcp.Message.OK
 
     def test_connection(self):
         """
@@ -367,7 +367,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         reply, _ = self.katcprequest(
             name='read', request_timeout=self._timeout, require_ok=True,
             request_args=(device_name, str(offset), str(size)))
-        return reply.arguments[1]
+        return reply.arguments[1].decode()
 
     def wordread(self, device_name, size=1, word_offset=0, bit_offset=0):
         """
@@ -384,7 +384,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             request_args=(device_name, str(word_offset)+':'+str(bit_offset),
                           str(size))
         )
-        return reply.arguments[1]
+        return reply.arguments[1].decode()
 
     def blindwrite(self, device_name, data, offset=0):
         """
@@ -449,7 +449,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         reply, _ = self.katcprequest(name='progdev', request_timeout=10,
                                      request_args=(filename, ))
         self.unhandled_inform_handler = None
-        if reply.arguments[0] == 'ok':
+        if reply.arguments[0] == katcp.Message.OK:
             complete_okay = False
             for inf in unhandled_informs:
                 if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
@@ -457,7 +457,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             if not complete_okay: # Modify to do an extra check
                 reply, _ = self.katcprequest(name='status', request_timeout=1)
                 # Not sure whether 1 second is a good timeout here
-                if reply.arguments[0] == 'ok':
+                if reply.arguments[0] == katcp.Message.OK:
                     complete_okay = True
                 else:
                     self.logger.error('%s: programming %s failed.' %
@@ -747,7 +747,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             reply, informs = self.katcprequest(
                 name='meta', request_timeout=10.0, require_ok=True,
                 request_args=(device, ))
-        if reply.arguments[0] != 'ok':
+        if reply.arguments[0] != katcp.Message.OK:
             raise RuntimeError('Could not read meta information '
                                'from %s' % self.host)
         metalist = []
@@ -764,10 +764,10 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                     continue
             for arg in inform.arguments:
                 arg = arg.replace('\_', ' ')
-            name = inform.arguments[0]
-            tag = inform.arguments[1]
-            param = inform.arguments[2]
-            value = inform.arguments[3:]
+            name = inform.arguments[0].decode()
+            tag = inform.arguments[1].decode()
+            param = inform.arguments[2].decode()
+            value = [x.decode() for x in inform.arguments[3:]]
             if len(value) == 1:
                 value = value[0]
             name = name.replace('/', '_')
