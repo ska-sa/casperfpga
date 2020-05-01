@@ -4,8 +4,6 @@ import time
 import socket
 from time import strptime
 import string
-<<<<<<< HEAD
-import collections
 
 from . import register
 from . import sbram
@@ -25,6 +23,7 @@ from .transport_katcp import KatcpTransport
 from .transport_tapcp import TapcpTransport
 from .transport_skarab import SkarabTransport
 from .transport_dummy import DummyTransport
+from .casper_platform_id_map import PLATFORM_ID
 
 from .CasperLogHandlers import configure_console_logging, configure_file_logging
 from .CasperLogHandlers import getLogger
@@ -155,6 +154,10 @@ class CasperFpga(object):
         except:
             pass
 
+        # Store board ID as it may be used to make
+        # comms decisions
+        self.platform = PLATFORM_ID.get(self._get_platform_id(), None)
+        self.transport.platform = self.platform
         
     def choose_transport(self, host_ip):
         """
@@ -227,6 +230,16 @@ class CasperFpga(object):
         infomsg = 'Log level successfully updated to: {}'.format(log_level.upper())
         self.logger.info(infomsg)
         return True
+
+    def _get_platform_id(self):
+        """
+        Get the platform ID stored in the toolflow-generated system
+        register `sys_board_id`
+        """
+        try:
+            return self.read_uint("sys_board_id")
+        except:
+            return None
 
     def read(self, device_name, size, offset=0, **kwargs):
         """

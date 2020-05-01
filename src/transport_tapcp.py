@@ -271,7 +271,10 @@ class TapcpTransport(Transport):
         return head_loc, prog_loc
 
     def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True, force=False):
-        USER_FLASH_LOC = 0x800000
+        if self.platform == "snap":
+            USER_FLASH_LOC = 0x800000
+        elif self.platform == "snap2":
+            USER_FLASH_LOC = 0xC00000
         sector_size = 0x10000
         # Flash writes can take a long time, due to ~1s erase cycle
         # So set the timeout high. We'll return it to normal at the end
@@ -283,7 +286,7 @@ class TapcpTransport(Transport):
             header, prog, md5 = self._extract_bitstream(filename)
             self.logger.debug("Reading meta-data from flash")
             meta_inflash = self.get_metadata()
-            if ((meta_inflash is not None) and (meta_inflash['md5sum'] == md5) and (not force)):
+            if ((meta_inflash is not None) and (meta_inflash.get('md5sum', None) == md5) and (not force)):
                 self.logger.info("Bitstream is already on flash.")
                 self.logger.debug("Returning timeout to %f" % old_timeout)
                 self.timeout = old_timeout
