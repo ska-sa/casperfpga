@@ -289,7 +289,6 @@ class SkarabTransport(Transport):
         if (size > 4) and use_bulk:
             # use a bulk read if more than 4 bytes are requested
             return self._bulk_read(device_name, size, offset)
-
         addr = self._get_device_address(device_name)
         # can only read 4 bytes at a time
         # work out how many reads we require, and from where
@@ -306,8 +305,9 @@ class SkarabTransport(Transport):
         # address to read is starting address plus offset
         data = ''
         for readctr in range(num_reads):
-            response = self._rd_wishbone(wb_address=addr_start)
-
+            addr_high, addr_low = self.data_split_and_pack(addr_start)
+            request = sd.ReadWishboneReq(addr_high, addr_low)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
             read_low = struct.pack('!H', response.packet['read_data_low'])
             read_high = struct.pack('!H', response.packet['read_data_high'])
@@ -345,14 +345,6 @@ class SkarabTransport(Transport):
         if response is None:
             errmsg = 'Bulk read failed.'
             raise SkarabReadFailed(errmsg)
-
-        # check if read failed due to address out of range
-        if response.packet['number_of_reads'] \
-                == sd.BIG_WISHBONE_READ_ERROR_CODE:
-            errmsg = 'Bulk read failed. specified address 0x{:x} ' \
-                     'is out of range'.format(address)
-            raise SkarabReadFailed(errmsg)
-
         # response.read_data is a list of 16-bit words, pack it
         read_data = response.packet['read_data'][0:words_to_read*2]
         return struct.pack('>%iH' % len(read_data), *read_data)
@@ -423,12 +415,6 @@ class SkarabTransport(Transport):
             raise SkarabWriteFailed(errmsg)
         if response.packet['number_of_writes_done'] != words_to_write:
             errmsg = 'Bulk write failed. Not all words written.'
-            raise SkarabWriteFailed(errmsg)
-
-        # check if write failed due to address out of range
-        if response.packet['error_status']:
-            errmsg = 'Bulk write failed. specified address 0x{:x} ' \
-                     'is out of range'.format(address)
             raise SkarabWriteFailed(errmsg)
 
         self.logger.debug('Number of writes dones: %d' %
@@ -534,11 +520,13 @@ class SkarabTransport(Transport):
         data = ''
 
         # address to read is starting address plus offset
-        addr = self._get_device_address(device_name)
-        addr += offset
+        addr = device_name + offset
         for readctr in range(num_reads):
-            response = self._rd_wishbone(wb_address=addr)
-
+            # get correct address and pack into binary format
+            # TODO: sort out memory mapping of device_name
+            addr_high, addr_low = self.data_split_and_pack(addr)
+            request = sd.ReadWishboneReq(addr_high, addr_low)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
             read_high = struct.pack('!H', response.packet['read_data_high'])
             read_low = struct.pack('!H', response.packet['read_data_low'])
@@ -579,10 +567,15 @@ class SkarabTransport(Transport):
 
             # map device name to address, if can't find, bail
             addr = self._get_device_address(device_name)
-            addr += offset
 
-            self._wr_wishbone(wb_address=addr,
-                              data=data)
+            # split the data into two 16-bit words
+            data_high = data[:2]
+            data_low = data[2:]
+            addr += offset
+            addr_high, addr_low = self.data_split_and_pack(addr)
+            request = sd.WriteWishboneReq(addr_high, addr_low,
+                                          data_high, data_low)
+            self.send_packet(request, timeout=timeout, retries=retries)
 
     def deprogram(self):
         """
@@ -1155,63 +1148,40 @@ class SkarabTransport(Transport):
             patch = response.packet['version_patch']
             return '{}.{}.{}'.format(major, minor, patch)
 
-    def _wr_wishbone(self, wb_address, data,
-                     timeout=None,
-                     retries=None):
+    def write_wishbone(self, wb_address, data,
+                       timeout=None,
+                       retries=None):
         """
         Used to perform low level wishbone write to a wishbone slave. Gives
         low level direct access to wishbone bus.
 
         :param wb_address: address of the wishbone slave to write to
         :param data: data to write
-        :return:
+        :return: response object
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
 
-        addr_high, addr_low = self.data_split_and_pack(wb_address)
-
-        # split the data into two 16-bit words
-        data_high = data[:2]
-        data_low = data[2:]
-        request = sd.WriteWishboneReq(addr_high, addr_low,
-                                      data_high, data_low)
-
-        response = self.send_packet(request, timeout=timeout, retries=retries)
-
-        # check if write was successful
-        if response.packet['error_status']:
-            errmsg = 'Wishbone write failed. specified address 0x{:x} ' \
-                     'is out of range'.format(wb_address)
-            raise SkarabWriteFailed(errmsg)
-
-    def write_wishbone(self, wb_address, data,
-                       timeout=None,
-                       retries=None):
-
-        """
-        Used to perform low level wishbone write to a Wishbone slave. Used
-        as a high-level simple wishbone write. Doesn't expect data to be
-        binary strings.
-        :param wb_address: address of the wishbone slave to read from
-        :return: read data
-        """
-
         # split data into two 16-bit words (also packs for network transmission)
-        data_high, data_low = self.data_split_and_pack(data)
-        data_packed = data_high + data_low
+        data_split = list(self.data_split_and_pack(data))
+        # split address into two 16-bit segments: high, low
+        # (also packs for network transmission)
+        address_split = list(self.data_split_and_pack(wb_address))
+        # create one tuple containing data and address
+        address_and_data = address_split
+        address_and_data.extend(data_split)
+        request = sd.WriteWishboneReq(*address_and_data)
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+        return response
 
-        self._wr_wishbone(wb_address=wb_address,
-                          data=data_packed)
-
-    def _rd_wishbone(self, wb_address,
-                     timeout=None,
-                     retries=None):
+    def read_wishbone(self, wb_address,
+                      timeout=None,
+                      retries=None):
         """
         Used to perform low level wishbone read from a Wishbone slave.
-        Used by higher-level methods
+
         :param wb_address: address of the wishbone slave to read from
-        :return: response object
+        :return: Read Data or None
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
@@ -1219,29 +1189,9 @@ class SkarabTransport(Transport):
         request = sd.ReadWishboneReq(*self.data_split_and_pack(wb_address))
         response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
-            # check if read was successful
-            if response.packet['error_status']:
-                errmsg = 'Wishbone read failed. specified address 0x{:x} ' \
-                         'is out of range'.format(wb_address)
-                raise SkarabReadFailed(errmsg)
-            else:
-                return response
-
-    def read_wishbone(self, wb_address,
-                      timeout=None,
-                      retries=None):
-        """
-        Used to perform low level wishbone read from a Wishbone slave. Used
-        as a high-level simple wishbone read.
-        :param wb_address: address of the wishbone slave to read from
-        :return: read data
-        """
-
-        response = self._rd_wishbone(wb_address)
-
-        return self.data_unpack_and_merge(
-            response.packet['read_data_high'],
-            response.packet['read_data_low'])
+            return self.data_unpack_and_merge(
+                response.packet['read_data_high'],
+                response.packet['read_data_low'])
 
     def write_i2c(self, interface, slave_address, *bytes_to_write):
         """
