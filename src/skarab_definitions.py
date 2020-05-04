@@ -904,7 +904,7 @@ class WriteWishboneReq(Command):
         self.expect_response = True
         self.response = WriteWishboneResp
         self.num_response_words = 11
-        self.pad_words = 4
+        self.pad_words = 5
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
         self.packet['write_data_high'] = write_data_high
@@ -913,13 +913,12 @@ class WriteWishboneReq(Command):
 
 class WriteWishboneResp(Response):
     def __init__(self, command_id, seq_num, address_high, address_low,
-                 write_data_high, write_data_low, error_status, padding):
+                 write_data_high, write_data_low, padding):
         super(WriteWishboneResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
         self.packet['write_data_high'] = write_data_high
         self.packet['write_data_low'] = write_data_low
-        self.packet['error_status'] = error_status
         self.packet['padding'] = padding
 
 
@@ -929,20 +928,19 @@ class ReadWishboneReq(Command):
         self.expect_response = True
         self.response = ReadWishboneResp
         self.num_response_words = 11
-        self.pad_words = 4
+        self.pad_words = 5
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
 
 
 class ReadWishboneResp(Response):
     def __init__(self, command_id, seq_num, address_high, address_low,
-                 read_data_high, read_data_low, error_status, padding):
+                 read_data_high, read_data_low, padding):
         super(ReadWishboneResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
         self.packet['read_data_high'] = read_data_high
         self.packet['read_data_low'] = read_data_low
-        self.packet['error_status'] = error_status
         self.packet['padding'] = padding
 
 
@@ -1698,7 +1696,6 @@ class WriteHMCI2CResp(Response):
 
 MAX_READ_32WORDS = 497
 MAX_WRITE_32WORDS = 497
-BIG_WISHBONE_READ_ERROR_CODE = 0xABCD
 
 
 class BigReadWishboneReq(Command):
@@ -1737,7 +1734,7 @@ class BigWriteWishboneReq(Command):
         self.expect_response = True
         self.response = BigWriteWishboneResp
         self.num_response_words = 11
-        self.pad_words = 5
+        self.pad_words = 6
         self.packet['start_address_high'] = start_address_high
         self.packet['start_address_low'] = start_address_low
         self.packet['write_data'] = write_data
@@ -1746,13 +1743,11 @@ class BigWriteWishboneReq(Command):
 
 class BigWriteWishboneResp(Response):
     def __init__(self, command_id, seq_num, start_address_high,
-                 start_address_low, number_of_writes_done, error_status,
-                 padding):
+                 start_address_low, number_of_writes_done, padding):
         super(BigWriteWishboneResp, self).__init__(command_id, seq_num)
         self.packet['start_address_high'] = start_address_high
         self.packet['start_address_low'] = start_address_low
         self.packet['number_of_writes_done'] = number_of_writes_done
-        self.packet['error_status'] = error_status
         self.packet['padding'] = padding
 
 
