@@ -10,7 +10,7 @@ import struct
 import contextlib
 
 from .transport import Transport
-from .utils import create_meta_dictionary, get_hostname, get_kwarg
+from .utils import create_meta_dictionary, get_hostname, get_kwarg, socket_closer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -190,6 +190,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                 result_queue.put('Could not send file to upload port({}): {}'.format(
                                  port, e))
             finally:
+                socket_closer("sendfile to {}:{}".format(targethost, port), upload_socket)
                 self.logger.info('%s: upload thread complete at %.3f' %
                                 (targethost, time.time()))
 
