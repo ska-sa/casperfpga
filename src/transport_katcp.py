@@ -116,6 +116,16 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.connect()
         self.logger.info('%s: port(%s) created and connected.' % (self.host, port))
 
+    def __del__(self):
+        """
+        When the KatcpTransport object is reclaimed, make sure to
+        disconnect from the device server.
+        """
+        try:
+            self.disconnect()
+        except:
+            pass
+
     @staticmethod
     def test_host_type(host_ip, timeout=5):
         """
