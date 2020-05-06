@@ -200,7 +200,7 @@ class SkarabTransport(Transport):
             request_payload = request_object.create_payload(0xffff)
             sctrl_sock.sendto(request_payload, skarab_eth_ctrl_port)
             data_ready = select.select([sctrl_sock], [], [], 1)
-	    socket_closer("class SkarabTransport test_host_type", sctrl_sock)
+            socket_closer("class SkarabTransport test_host_type", sctrl_sock)
             if len(data_ready[0]) > 0:
                 # self.logger.debug('%s seems to be a SKARAB' % host_ip)
                 return True
