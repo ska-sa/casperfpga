@@ -10,7 +10,7 @@ import struct
 import contextlib
 
 from .transport import Transport
-from .utils import create_meta_dictionary, get_hostname, get_kwarg
+from .utils import create_meta_dictionary, get_hostname, get_kwarg, socket_closer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -116,6 +116,16 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.connect()
         self.logger.info('%s: port(%s) created and connected.' % (self.host, port))
 
+    def __del__(self):
+        """
+        When the KatcpTransport object is reclaimed, make sure to
+        disconnect from the device server.
+        """
+        try:
+            self.disconnect()
+        except:
+            pass
+
     @staticmethod
     def test_host_type(host_ip, timeout=5):
         """
@@ -180,6 +190,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                 result_queue.put('Could not send file to upload port({}): {}'.format(
                                  port, e))
             finally:
+                socket_closer("sendfile to {}:{}".format(targethost, port), upload_socket)
                 self.logger.info('%s: upload thread complete at %.3f' %
                                 (targethost, time.time()))
 

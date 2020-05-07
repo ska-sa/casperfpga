@@ -4,6 +4,7 @@ import queue
 import time
 import logging
 import sys
+import socket
 
 LOGGER = logging.getLogger(__name__)
 
@@ -585,5 +586,27 @@ def deprogram_hosts(host_list):
     if len(already_deprogrammed) != 0:
         print('%s: already deprogrammed.' % already_deprogrammed)
     threaded_fpga_function(fpgas, 10, 'disconnect')
+
+def socket_closer(arg_caller, arg_socket):
+    """
+    Ref: https://docs.python.org/3/library/socket.html
+    See warnings about close() and notes on shutdown().
+
+    Shutdown and close the specified socket.
+    Ignore all exceptions.
+
+    :param arg_caller: Identity and/or context of caller.
+    :param arg_socket: socket to be shutdown & closed.
+    :return: nothing
+    """
+    LOGGER.debug("socket_closer: called from {}".format(arg_caller))
+    try:
+        arg_socket.shutdown(socket.SHUT_RDWR)
+    except:
+        pass
+    try:
+        arg_socket.close()
+    except:
+        pass
 
 # end

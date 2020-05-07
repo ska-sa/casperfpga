@@ -100,6 +100,12 @@ class TapcpTransport(Transport):
         self.server_timeout = 0.1 # Microblaze timeout period. So that if a command fails we can wait for the microblaze to terminate the connection before retrying
         self.retries = kwargs.get('retries', 8) # These are retries of a complete transaction (each of which has it's ofw TFTP retries).
 
+    __del__(self):
+        try:
+            self.t.context.end()
+        except:
+            pass
+    
     @staticmethod
     def test_host_type(host_ip):
         """
@@ -138,8 +144,16 @@ class TapcpTransport(Transport):
             buf = BytesIO()
             board.download('%s.%x.%x' % ('sys_clkcounter', 0, 1),
                            buf, timeout=3)
+            try:
+                board.context.end()
+            except:
+                pass
             return True
         except Exception:
+            try:
+                board.context.end()
+            except:
+                pass
             return False
 
     def listdev(self):
@@ -414,10 +428,18 @@ class TapcpTransport(Transport):
             try:
                 buf = BytesIO()
                 self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
+                try:
+                    self.t.context.end()
+                except:
+                    pass
                 return buf.getvalue()
             except TFTPY.TftpShared.TftpFileNotFoundError:
                 self.logger.error('Device {0} not found'.format(device_name))
                 # If the file's not there, don't bother retrying
+                try:
+                    self.t.context.end()
+                except:
+                    pass
                 break
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
@@ -432,6 +454,10 @@ class TapcpTransport(Transport):
         try:
             buf = BytesIO()
             self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
+            try:
+                self.t.context.end()
+            except:
+                pass
             return buf.getvalue()
         except:
             try:
@@ -456,6 +482,10 @@ class TapcpTransport(Transport):
             try:
                 buf = BytesIO(data)
                 self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
+                try:
+                    self.t.context.end()
+                except:
+                    pass
                 return
             except:
                 # if we fail to get a response after a bunch of packet re-sends, wait for the
@@ -470,6 +500,10 @@ class TapcpTransport(Transport):
         try:
             buf = BytesIO(data)
             self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
+            try:
+                self.t.context.end()
+            except:
+                pass
         except:
             try:
                 self.t.context.end()
