@@ -100,7 +100,7 @@ class TapcpTransport(Transport):
         self.server_timeout = 0.1 # Microblaze timeout period. So that if a command fails we can wait for the microblaze to terminate the connection before retrying
         self.retries = kwargs.get('retries', 8) # These are retries of a complete transaction (each of which has it's ofw TFTP retries).
 
-    __del__(self):
+    def __del__(self):
         try:
             self.t.context.end()
         except:
