@@ -93,6 +93,18 @@ class TenGbe(Memory, Gbe):
         Gbe.__init__(self, parent, name, address, length_bytes, device_info)
         self.memmap_compliant = self._check_memmap_compliance()
 
+    @property
+    def mac(self):
+        return self.get_gbe_core_details()['mac']
+
+    @property
+    def ip_address(self):
+        return self.get_gbe_core_details()['ip']
+
+    @property
+    def port(self):
+        return self.get_gbe_core_details()['fabric_port']
+
     def _check_memmap_compliance(self):
         """
         Look at the first word of the core's memory map and try to
@@ -162,9 +174,9 @@ class TenGbe(Memory, Gbe):
         """
         Configure this interface, then start a DHCP client on ALL interfaces.
         """
-        if self.mac is None:
+        #if self.mac is None:
             # TODO get MAC from EEPROM serial number and assign here
-            self.mac = '0'
+            #self.mac = '0'
         reply, _ = self.parent.transport.katcprequest(
             name='tap-start', request_timeout=5,
             require_ok=True,
