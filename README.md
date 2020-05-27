@@ -49,7 +49,7 @@ DEBUG:root:casperfpga.casperfpga:roach020203: now a CasperFpga
 [`casperfpga`](https://pypi.org/project/casperfpga/) is now available on the Python Package Index (PyPI) and can be installed via [`pip`](https://pip.pypa.io/en/stable/). However, should you need to interface with a SNAP board, your installation workflow involves the extra step of installing against `casperfpga's requirements.txt`.
 
 ```shell
-$ git clone https://github.com/casper-astro/casperfpga
+$ git clone https://github.com/ska-sa/casperfpga
 $ cd casperfpga/
 $ sudo apt-get install python-pip
 $ sudo pip install -r requirements.txt
