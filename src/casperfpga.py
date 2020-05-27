@@ -256,7 +256,7 @@ class CasperFpga(object):
             assert ((len(data) % 4) == 0), \
                 "Can only read multiples of 4 bytes because CasperFpga is doing an endianness flip"
             # iterate through 32-bit words and flip them
-            data_byte_swapped = ""
+            data_byte_swapped = b""
             for i in range(0, len(data), 4):
                 data_byte_swapped += data[i:i+4][::-1]
             return data_byte_swapped
@@ -267,7 +267,7 @@ class CasperFpga(object):
             assert ((len(data) % 4) == 0), \
                 "Can only write multiples of 4 bytes because CasperFpga is doing an endianness flip"
             # iterate through 32-bit words and flip them
-            data_byte_swapped = ""
+            data_byte_swapped = b""
             for i in range(0, len(data), 4):
                 data_byte_swapped += data[i:i+4][::-1]
                 return self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
