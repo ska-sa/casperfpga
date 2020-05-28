@@ -270,7 +270,7 @@ class CasperFpga(object):
             data_byte_swapped = b""
             for i in range(0, len(data), 4):
                 data_byte_swapped += data[i:i+4][::-1]
-                return self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
+            return self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
         return self.transport.blindwrite(device_name, data, offset, **kwargs)
 
     def listdev(self):
