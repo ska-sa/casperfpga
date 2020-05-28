@@ -36,6 +36,33 @@ class FortyGbe(Gbe):
                         'multicast_ip'   : 0x20,
                         'multicast_mask' : 0x24}
 
+    @property
+    def ip_address(self):
+        ip = self._wbone_rd(self.address + self.reg_map['ip'])
+        ip_address = IpAddress(ip)
+        return ip_address
+
+    @property
+    def mac(self):
+        gbedata = []
+        for ctr in range(0xC, 0x14, 4):
+            gbedata.append(self._wbone_rd(self.address + ctr))
+        gbebytes = []
+        for d in gbedata:
+            gbebytes.append((d >> 24) & 0xff)
+            gbebytes.append((d >> 16) & 0xff)
+            gbebytes.append((d >> 8) & 0xff)
+            gbebytes.append((d >> 0) & 0xff)
+        pd = gbebytes
+        return Mac('{}:{}:{}:{}:{}:{}'.format(
+                *pd[2:]))
+
+    @property
+    def port(self):
+        en_port = self._wbone_rd(self.address + self.reg_map['fabric_port'])
+        port = en_port & (2 ** 16 - 1)
+        return port
+
     def post_create_update(self, raw_device_info):
         """
         Update the device with information not available at creation.
@@ -99,7 +126,7 @@ class FortyGbe(Gbe):
 
     def fabric_enable(self):
         """
-        Enables 40G corei fabric interface.
+        Enables 40G core fabric interface.
         :return: 
         """
         en_port = self._wbone_rd(self.address + self.reg_map['fabric_en'])
@@ -133,8 +160,7 @@ class FortyGbe(Gbe):
 
         :return: Mac object
         """
-        details = self.get_gbe_core_details()
-        return details['mac']
+        return self.mac
 
     def get_ip(self):
         """
@@ -142,8 +168,6 @@ class FortyGbe(Gbe):
 
         :return: IpAddress object
         """
-        ip = self._wbone_rd(self.address + self.reg_map['ip'])
-        self.ip_address = IpAddress(ip)
         return self.ip_address
 
     def get_port(self):
@@ -152,8 +176,6 @@ class FortyGbe(Gbe):
 
         :return:  int
         """
-        en_port = self._wbone_rd(self.address + self.reg_map['fabric_port'])
-        self.port = en_port & (2 ** 16 - 1)
         return self.port
 
     def set_port(self, port):
@@ -170,7 +192,6 @@ class FortyGbe(Gbe):
             errmsg = 'Error setting 40gbe port to 0x%04x' % port
             self.logger.error(errmsg)
             raise ValueError(errmsg)
-        self.port = port
 
     def get_gbe_core_details(self, read_arp=False, read_cpu=False):
         """
@@ -230,9 +251,6 @@ class FortyGbe(Gbe):
         if read_cpu:
             # returnval.update(self.get_cpu_details(gbedata))
             self.logger.warn('Retrieving CPU packet buffers not yet implemented.')
-        self.mac = returnval['mac']
-        self.ip_address = returnval['ip']
-        self.port = returnval['fabric_port']
         return returnval
 
     def get_arp_details(self, port_dump=None):
