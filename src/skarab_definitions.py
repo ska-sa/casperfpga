@@ -764,6 +764,12 @@ FT4232H_USB_I2C_CONTROL = 0x20
 FT4232H_FPGA_ONLY_JTAG_CHAIN = 0x40
 FT4232H_INCLUDE_MONITORS_IN_JTAG_CHAIN = 0x80
 
+# multilink error codes
+MULTILINK_CMD_STATUS_SUCCESS = 0
+MULTILINK_CMD_STATUS_ERROR_GENERAL = 1
+MULTILINK_CMD_STATUS_ERROR_IF_OUT_OF_RANGE = 2
+MULTILINK_CMD_STATUS_ERROR_IF_NOT_PRESENT = 3
+
 
 class SkarabInvalidBitstream(ValueError):
     pass
@@ -1557,7 +1563,7 @@ class ConfigureMulticastReq(Command):
         self.expect_response = True
         self.response = ConfigureMulticastResp
         self.num_response_words = 11
-        self.pad_words = 4
+        self.pad_words = 3
         self.packet['id'] = interface_id
         self.packet['fabric_multicast_ip_address_high'] =  \
             fabric_multicast_ip_address_high
@@ -1574,7 +1580,8 @@ class ConfigureMulticastResp(Response):
                  fabric_multicast_ip_address_high,
                  fabric_multicast_ip_address_low,
                  fabric_multicast_ip_address_mask_high,
-                 fabric_multicast_ip_address_mask_low, padding):
+                 fabric_multicast_ip_address_mask_low,
+                 status, padding):
         super(ConfigureMulticastResp, self).__init__(command_id, seq_num)
         self.packet['id'] = interface_id
         self.packet['fabric_multicast_ip_address_high'] = \
@@ -1585,6 +1592,7 @@ class ConfigureMulticastResp(Response):
             fabric_multicast_ip_address_mask_high
         self.packet['fabric_multicast_ip_address_mask_low'] = \
             fabric_multicast_ip_address_mask_low
+        self.packet['status'] = status
         self.packet['padding'] = padding
 
 
