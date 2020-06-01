@@ -89,6 +89,9 @@ class NonVolatileLogRetrievalError(ValueError):
 class SkarabProcessorVersionError(ValueError):
     pass
 
+class NetworkConfigurationError(ValueError):
+    pass
+
 # endregion
 
 
@@ -3389,15 +3392,21 @@ class SkarabTransport(Transport):
         minor = self.read_spi_page(rd_minor, 1)[0]
         return major, minor
 
-    def multicast_receive(self, gbename, ip, mask,
+    def multicast_receive(self, gbename, ip, mask, interface_id=1,
                           timeout=None,
                           retries=None):
         """
-
-        :param gbename:
-        :param ip:
-        :param mask:
+        Configure an interface for multicast
+        :param gbename: gbe device name to configure
+        :param interface_id: interface to configure (1,2,3 or 4) or 0xff
+        to use command and control interface i.e. *this* interface
+        :param ip: multicast ip address
+        :param mask: multicast address mask
+        :param timeout:
+        :param retries:
+        :return:
         """
+
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
         self.logger.debug('%s: multicast join request: addr(%s) mask(%s)' % (
@@ -3407,10 +3416,32 @@ class SkarabTransport(Transport):
         ip_low = ip.ip_int & (2 ** 16 - 1)
         mask_high = mask.ip_int >> 16
         mask_low = mask.ip_int & (2 ** 16 - 1)
-        request = sd.ConfigureMulticastReq(1, ip_high, ip_low,
+        request = sd.ConfigureMulticastReq(interface_id, ip_high, ip_low,
                                            mask_high, mask_low)
         response = self.send_packet(request, timeout=timeout, retries=retries)
         resp_pkt = response.packet
+
+        # check status
+        if resp_pkt['status'] == sd.MULTILINK_CMD_STATUS_SUCCESS:
+            msg = '{}: multicast to be configured for interface {}'.format(
+                gbename, interface_id)
+            self.logger.debug(msg)
+        elif resp_pkt['status'] == sd.MULTILINK_CMD_STATUS_ERROR_GENERAL:
+            errmsg = '{}: failed to configure multicast for specified ' \
+                     'interface {}'.format(gbename, interface_id)
+            self.logger.error(errmsg)
+            raise NetworkConfigurationError(errmsg)
+        elif resp_pkt['status'] == sd.MULTILINK_CMD_STATUS_ERROR_IF_OUT_OF_RANGE:
+            errmsg = '{}: invalid interface identifier specified: {}'.format(
+                gbename, interface_id)
+            self.logger.error(errmsg)
+            raise NetworkConfigurationError(errmsg)
+        elif resp_pkt['status'] == sd.MULTILINK_CMD_STATUS_ERROR_IF_NOT_PRESENT:
+            errmsg = '{}: specified interface: {} not present in design'.format(
+                gbename, interface_id)
+            self.logger.error(errmsg)
+            raise NetworkConfigurationError(errmsg)
+
         resp_ip = IpAddress(resp_pkt['fabric_multicast_ip_address_high'] << 16 |
                             resp_pkt['fabric_multicast_ip_address_low'])
         resp_mask = IpAddress(
@@ -3879,7 +3910,9 @@ class SkarabTransport(Transport):
     def leave_multicast_group(self, link_id=1, timeout=None, retries=None):
         """
         SKARAB to issue IGMP leave request to exit a multicast group.
-        :param link_id:
+        :param link_id: interface/link to issue igmp leave request on. 
+        Options: (1,2, 3 or 4) or 0xff to use command and control interface 
+        i.e. *this* interface
         :param timeout:
         :param retries:
         :return: True if leave request successful, False if not
