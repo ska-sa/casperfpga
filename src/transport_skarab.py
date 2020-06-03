@@ -349,11 +349,10 @@ class SkarabTransport(Transport):
             errmsg = 'Bulk read failed.'
             raise SkarabReadFailed(errmsg)
 
-        # check if read failed due to address out of range
+        # check if wishbone read command timed out
         if response.packet['number_of_reads'] \
                 == sd.BIG_WISHBONE_READ_ERROR_CODE:
-            errmsg = 'Bulk read failed. specified address 0x{:x} ' \
-                     'is out of range'.format(address)
+            errmsg = 'Wishbone timeout. Address 0x{:x}'.format(address)
             raise SkarabReadFailed(errmsg)
 
         # response.read_data is a list of 16-bit words, pack it
@@ -428,10 +427,9 @@ class SkarabTransport(Transport):
             errmsg = 'Bulk write failed. Not all words written.'
             raise SkarabWriteFailed(errmsg)
 
-        # check if write failed due to address out of range
+        # check if wishbone command timed out
         if response.packet['error_status']:
-            errmsg = 'Bulk write failed. specified address 0x{:x} ' \
-                     'is out of range'.format(address)
+            errmsg = 'Wishbone timeout. Address 0x{:x}'.format(address)
             raise SkarabWriteFailed(errmsg)
 
         self.logger.debug('Number of writes dones: %d' %
@@ -1182,10 +1180,9 @@ class SkarabTransport(Transport):
 
         response = self.send_packet(request, timeout=timeout, retries=retries)
 
-        # check if write was successful
+        # check if wishbone command timed out
         if response.packet['error_status']:
-            errmsg = 'Wishbone write failed. specified address 0x{:x} ' \
-                     'is out of range'.format(wb_address)
+            errmsg = 'Wishbone timeout. Address 0x{:x}'.format(wb_address)
             raise SkarabWriteFailed(errmsg)
 
     def write_wishbone(self, wb_address, data,
@@ -1222,10 +1219,9 @@ class SkarabTransport(Transport):
         request = sd.ReadWishboneReq(*self.data_split_and_pack(wb_address))
         response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
-            # check if read was successful
+            # check if wishbone command timed out
             if response.packet['error_status']:
-                errmsg = 'Wishbone read failed. specified address 0x{:x} ' \
-                         'is out of range'.format(wb_address)
+                errmsg = 'Wishbone timeout. Address 0x{:x}'.format(wb_address)
                 raise SkarabReadFailed(errmsg)
             else:
                 return response
