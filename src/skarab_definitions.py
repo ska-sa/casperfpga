@@ -134,6 +134,8 @@ GET_VOLTAGE_LOGS = 0x0059
 GET_FAN_CONT_LOGS = 0x005B
 CLEAR_FAN_CONT_LOGS = 0x005D
 RESET_DHCP_SM = 0x005F
+MULTICAST_LEAVE_GROUP = 0x0061
+GET_DHCP_MONITOR_TIMEOUT = 0x0063
 
 # FOR VIRTEX FLASH RECONFIG
 DEFAULT_START_ADDRESS = 0x3000000
@@ -346,6 +348,14 @@ HMC_MEZZANINE_SITES = [1, 2, 3]
 HMC_CARD_I2C_PORT_MAP = {0: 0x1,
                          1: 0x2,
                          2: 0x3}
+
+# default tunable parameters
+default_tunable_parameters = {'hmc_reconfig_max_retries': 4,
+                              'hmc_reconfig_timeout': 8,
+                              'link_mon_timeout': 240,
+                              'dhcp_init_time': 2,
+                              'dhcp_retry_rate': 10}
+
 # flash pages
 MEZZANINE_SIGNATURES_PAGE = 0
 TUNABLE_PARAMETERS_PAGE = 15
@@ -400,6 +410,8 @@ MFR_FAN_WARN_LIMIT_CMD = 0xF6
 MFR_FAN_RUN_TIME_CMD = 0xF7
 MFR_FAN_PWM_AVG_CMD = 0xF8
 MFR_FAN_PWM2RPM_CMD = 0xF9
+
+MFR_STATUS = 0xF3
 
 # UCD90120A VOLTAGE AND CURRENT MONITORING DEFINES
 UCD90120A_VMON_I2C_DEVICE_ADDRESS = 0x45  # Without read/write bit
@@ -612,6 +624,59 @@ sensor_list = {
     'hmc_1_die_temperature_deg_C': 98,
     'hmc_2_die_temperature_deg_C': 102}
 
+# sensor status bits
+# sensor name: (status_word_index, bit_index)
+sensor_status_word_location_bit = {
+    'left_front_fan_rpm': (0, 0),
+    'left_middle_fan_rpm': (0, 1),
+    'left_back_fan_rpm': (0, 2),
+    'right_back_fan_rpm': (0, 3),
+    'fpga_fan_rpm': (0, 4),
+    'left_front_fan_pwm': (0, 5),
+    'left_middle_fan_pwm': (0, 6),
+    'left_back_fan_pwm': (0, 7),
+    'right_back_fan_pwm': (0, 8),
+    'fpga_fan_pwm': (0, 9),
+    'inlet_temperature_degC': (0, 10),
+    'outlet_temperature_degC': (0, 11),
+    'fpga_temperature_degC': (0, 12),
+    'fan_controller_temperature_degC': (0, 13),
+    'voltage_monitor_temperature_degC': (0, 14),
+    'current_monitor_temperature_degC': (0, 15),
+    '12V2_voltage': (1, 0),
+    '12V_voltage': (1, 1),
+    '5V_voltage': (1, 2),
+    '3V3_voltage': (1, 3),
+    '2V5_voltage': (1, 4),
+    '1V8_voltage': (1, 5),
+    '1V2_voltage': (1, 6),
+    '1V0_voltage': (1, 7),
+    '1V8_MGTVCCAUX_voltage': (1, 8),
+    '1V0_MGTAVCC_voltage': (1, 9),
+    '1V2_MGTAVTT_voltage': (1, 10),
+    '5V_aux_voltage': (1, 11),
+    '3V3_config_voltage': (1, 12),
+    '12V2_current': (1, 13),
+    '12V_current': (1, 14),
+    '5V_current': (1, 15),
+    '3V3_current': (2, 0),
+    '2V5_current': (2, 1),
+    '1V8_current': (2, 2),
+    '1V2_current': (2, 3),
+    '1V0_current': (2, 4),
+    '1V8_MGTVCCAUX_current': (2, 5),
+    '1V0_MGTAVCC_current': (2, 6),
+    '1V2_MGTAVTT_current': (2, 7),
+    '3V3_config_current': (2, 8),
+    'mezzanine_site_0_temperature_degC': (2, 9),
+    'mezzanine_site_1_temperature_degC': (2, 10),
+    'mezzanine_site_2_temperature_degC': (2, 11),
+    'reserved': (2, 12),
+    'hmc_0_die_temperature_deg_C': (2, 13),
+    'hmc_1_die_temperature_deg_C': (2, 14),
+    'hmc_2_die_temperature_deg_C': (2, 15)
+}
+
 # sensor thresholds
 # voltage_sensor: (max, min)
 voltage_ranges = {
@@ -651,11 +716,11 @@ current_ranges = {
 # hmc die and mezzanine temps are not relative to inlet temp
 temperature_ranges = {
     'inlet_temperature_degC': (50.0, -10.0),
-    'outlet_temperature_degC': (10, -10),
-    'fpga_temperature_degC': (30, -10),
-    'fan_controller_temperature_degC': (10, -10),
-    'voltage_monitor_temperature_degC': (10, -10),
-    'current_monitor_temperature_degC': (10, -10),
+    'outlet_temperature_degC': (60.0, -10),
+    'fpga_temperature_degC': (80.0, 5.0),
+    'fan_controller_temperature_degC': (80.0, 5.0),
+    'voltage_monitor_temperature_degC': (80.0, 5.0),
+    'current_monitor_temperature_degC': (80.0, 5.0),
     'mezzanine_site_0_temperature_degC': (80.0, 5.0),
     'mezzanine_site_1_temperature_degC': (80.0, 5.0),
     'mezzanine_site_2_temperature_degC': (80.0, 5.0),
@@ -668,11 +733,11 @@ temperature_ranges = {
 # fan_rpm: (max, min)
 # fan_pwm: (max, min)
 fan_speed_ranges = {
-    'left_front_fan_rpm': (200000, 100),
-    'left_middle_fan_rpm': (200000, 100),
-    'left_back_fan_rpm': (200000, 100),
-    'right_back_fan_rpm': (200000, 100),
-    'fpga_fan_rpm': (200000, 100),
+    'left_front_fan_rpm': (24000, 2200),
+    'left_middle_fan_rpm': (24000, 2200),
+    'left_back_fan_rpm': (24000, 2200),
+    'right_back_fan_rpm': (24000, 2200),
+    'fpga_fan_rpm': (6000, 1800),
     'left_front_fan_pwm': (100, 0),
     'left_middle_fan_pwm': (100, 0),
     'left_back_fan_pwm': (100, 0),
@@ -698,6 +763,12 @@ FT4232H_USB_JTAG_CONTROL = 0x08
 FT4232H_USB_I2C_CONTROL = 0x20
 FT4232H_FPGA_ONLY_JTAG_CHAIN = 0x40
 FT4232H_INCLUDE_MONITORS_IN_JTAG_CHAIN = 0x80
+
+# multilink error codes
+MULTILINK_CMD_STATUS_SUCCESS = 0
+MULTILINK_CMD_STATUS_ERROR_GENERAL = 1
+MULTILINK_CMD_STATUS_ERROR_IF_OUT_OF_RANGE = 2
+MULTILINK_CMD_STATUS_ERROR_IF_NOT_PRESENT = 3
 
 
 class SkarabInvalidBitstream(ValueError):
@@ -839,7 +910,7 @@ class WriteWishboneReq(Command):
         self.expect_response = True
         self.response = WriteWishboneResp
         self.num_response_words = 11
-        self.pad_words = 5
+        self.pad_words = 4
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
         self.packet['write_data_high'] = write_data_high
@@ -848,12 +919,13 @@ class WriteWishboneReq(Command):
 
 class WriteWishboneResp(Response):
     def __init__(self, command_id, seq_num, address_high, address_low,
-                 write_data_high, write_data_low, padding):
+                 write_data_high, write_data_low, error_status, padding):
         super(WriteWishboneResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
         self.packet['write_data_high'] = write_data_high
         self.packet['write_data_low'] = write_data_low
+        self.packet['error_status'] = error_status
         self.packet['padding'] = padding
 
 
@@ -863,19 +935,20 @@ class ReadWishboneReq(Command):
         self.expect_response = True
         self.response = ReadWishboneResp
         self.num_response_words = 11
-        self.pad_words = 5
+        self.pad_words = 4
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
 
 
 class ReadWishboneResp(Response):
     def __init__(self, command_id, seq_num, address_high, address_low,
-                 read_data_high, read_data_low, padding):
+                 read_data_high, read_data_low, error_status, padding):
         super(ReadWishboneResp, self).__init__(command_id, seq_num)
         self.packet['address_high'] = address_high
         self.packet['address_low'] = address_low
         self.packet['read_data_high'] = read_data_high
         self.packet['read_data_low'] = read_data_low
+        self.packet['error_status'] = error_status
         self.packet['padding'] = padding
 
 
@@ -1006,19 +1079,21 @@ class GetSensorDataReq(Command):
         self.expect_response = True
         self.response = GetSensorDataResp
         self.num_response_words = 111
-        self.pad_words = 3
+        self.pad_words = 0
 
 
 class GetSensorDataResp(Response):
-    def __init__(self, command_id, seq_num, sensor_data, padding):
+    def __init__(self, command_id, seq_num, sensor_data, status):
         super(GetSensorDataResp, self).__init__(command_id, seq_num)
         self.packet['sensor_data'] = sensor_data
-        self.packet['padding'] = padding
+        self.packet['status'] = status
 
     @staticmethod
     def unpack_process(unpacked_data):
         read_bytes = unpacked_data[2:108]
+        status_bytes = unpacked_data[108:]
         unpacked_data[2:108] = [read_bytes]
+        unpacked_data[3:] = [status_bytes]
         return unpacked_data
 
 
@@ -1488,7 +1563,7 @@ class ConfigureMulticastReq(Command):
         self.expect_response = True
         self.response = ConfigureMulticastResp
         self.num_response_words = 11
-        self.pad_words = 4
+        self.pad_words = 3
         self.packet['id'] = interface_id
         self.packet['fabric_multicast_ip_address_high'] =  \
             fabric_multicast_ip_address_high
@@ -1505,7 +1580,8 @@ class ConfigureMulticastResp(Response):
                  fabric_multicast_ip_address_high,
                  fabric_multicast_ip_address_low,
                  fabric_multicast_ip_address_mask_high,
-                 fabric_multicast_ip_address_mask_low, padding):
+                 fabric_multicast_ip_address_mask_low,
+                 status, padding):
         super(ConfigureMulticastResp, self).__init__(command_id, seq_num)
         self.packet['id'] = interface_id
         self.packet['fabric_multicast_ip_address_high'] = \
@@ -1516,6 +1592,7 @@ class ConfigureMulticastResp(Response):
             fabric_multicast_ip_address_mask_high
         self.packet['fabric_multicast_ip_address_mask_low'] = \
             fabric_multicast_ip_address_mask_low
+        self.packet['status'] = status
         self.packet['padding'] = padding
 
 
@@ -1629,6 +1706,7 @@ class WriteHMCI2CResp(Response):
 
 MAX_READ_32WORDS = 497
 MAX_WRITE_32WORDS = 497
+BIG_WISHBONE_READ_ERROR_CODE = 0xABCD
 
 
 class BigReadWishboneReq(Command):
@@ -1667,7 +1745,7 @@ class BigWriteWishboneReq(Command):
         self.expect_response = True
         self.response = BigWriteWishboneResp
         self.num_response_words = 11
-        self.pad_words = 6
+        self.pad_words = 5
         self.packet['start_address_high'] = start_address_high
         self.packet['start_address_low'] = start_address_low
         self.packet['write_data'] = write_data
@@ -1676,11 +1754,13 @@ class BigWriteWishboneReq(Command):
 
 class BigWriteWishboneResp(Response):
     def __init__(self, command_id, seq_num, start_address_high,
-                 start_address_low, number_of_writes_done, padding):
+                 start_address_low, number_of_writes_done, error_status,
+                 padding):
         super(BigWriteWishboneResp, self).__init__(command_id, seq_num)
         self.packet['start_address_high'] = start_address_high
         self.packet['start_address_low'] = start_address_low
         self.packet['number_of_writes_done'] = number_of_writes_done
+        self.packet['error_status'] = error_status
         self.packet['padding'] = padding
 
 
@@ -1807,6 +1887,39 @@ class ResetDHCPStateMachineResp(Response):
         super(ResetDHCPStateMachineResp, self).__init__(command_id, seq_num)
         self.packet['link_id'] = link_id
         self.packet['reset_error'] = reset_error
+        self.packet['padding'] = padding
+
+
+class MulticastLeaveGroupReq(Command):
+    def __init__(self, link_id):
+        super(MulticastLeaveGroupReq, self).__init__(MULTICAST_LEAVE_GROUP)
+        self.expect_response = True
+        self.response = MulticastLeaveGroupResp
+        self.num_response_words = 11
+        self.pad_words = 7
+        self.packet['link_id'] = link_id
+
+
+class MulticastLeaveGroupResp(Response):
+    def __init__(self, command_id, seq_num, link_id, success, padding):
+        super(MulticastLeaveGroupResp, self).__init__(command_id, seq_num)
+        self.packet['link_id'] = link_id
+        self.packet['success'] = success
+        self.packet['padding'] = padding
+
+class GetDHCPMonitorTimeoutReq(Command):
+    def __init__(self):
+        super(GetDHCPMonitorTimeoutReq, self).__init__(GET_DHCP_MONITOR_TIMEOUT)
+        self.expect_response = True
+        self.response = GetDHCPMonitorTimeoutResp
+        self.num_response_words = 11
+        self.pad_words = 8
+
+
+class GetDHCPMonitorTimeoutResp(Response):
+    def __init__(self, command_id, seq_num, dhcp_monitor_timeout, padding):
+        super(GetDHCPMonitorTimeoutResp, self).__init__(command_id, seq_num)
+        self.packet['dhcp_monitor_timeout'] = dhcp_monitor_timeout
         self.packet['padding'] = padding
 
 

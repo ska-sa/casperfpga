@@ -6,13 +6,11 @@ import os
 NAME = 'casperfpga'
 DESCRIPTION = 'Talk to CASPER hardware devices using katcp or dcp. See https://github.com/casper-astro/casperfpga for more.'
 URL = 'https://github.com/casper-astro/casperfpga'
-EMAIL = 'apatel@ska.ac.za'
-AUTHOR = 'Paul Prozesky'
-VERSION = '0.1.3' # Need to adopt the __version__.py format
+AUTHOR = 'Tyrone van Balla'
+EMAIL = 'tvanballa at ska.ac.za'
 
 
 here = os.path.abspath(os.path.dirname(__file__))
-
 
 try:
     with open(os.path.join(here, 'README.md')) as readme:
@@ -42,7 +40,6 @@ data_files = ['tengbe_mmap.txt', 'tengbe_mmap_legacy.txt']
 
 setuptools.setup(
     name=NAME,
-    version=VERSION,
     description=DESCRIPTION,
     author=AUTHOR,
     author_email=EMAIL,
@@ -53,18 +50,17 @@ setuptools.setup(
     long_description_content_type='text/markdown',
     # Specify version in-line here
     install_requires=[
-        'katcp==0.6.2',
+        'katcp>=0.6.2',
         'numpy<1.17',
         'odict',
         'setuptools',
         'tornado<5',
     ],
-    packages=['casperfpga', 'casperfpga.progska'],
-    package_dir={'casperfpga': 'src', 'casperfpga.progska': 'progska'},
-    package_data={'casperfpga': data_files},
+    packages=['casperfpga'],
+    package_dir={'casperfpga': 'src'},
     scripts=glob.glob('scripts/*'),
     setup_requires=['katversion'],
-    use_katversion=False,
+    use_katversion=True,
     ext_modules=[progska_extension],
     # Required for PyPI
     keywords='casper ska meerkat fpga',
