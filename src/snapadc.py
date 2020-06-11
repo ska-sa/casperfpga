@@ -1,3 +1,4 @@
+import numpy as np
 from synth import *
 from adc import *
 from clockswitch import *
@@ -8,12 +9,12 @@ logger = logging.getLogger(__name__)
 
 
 # Some codes and docstrings are copied from https://github.com/UCBerkeleySETI/snap_control
-class SNAPADC(object):
+class SnapAdc(object):
 
-    RESOLUTION  = 8
+    resolution  = 8
 
-    adc = None
-    lmx = None
+    controller = None
+    synth = None
     clksw = None
     ram = None
 
@@ -55,45 +56,94 @@ class SNAPADC(object):
     ERROR_FRAME = 4
     ERROR_RAMP = 5
 
-    def __init__(self, interface, ADC='HMCAD1511', ref=None, resolution=8):
-        # interface => casperfpga.CasperFpga(hostname/ip)
+    def __init__(self, parent, device_name, device_info, initialise=False):
+        """
+        Initialise SnapAdc Object
+        :param parent: Parent object creating the SnapAdc Object
+        :type parent: casperfpga.CasperFpga
+
+        :param device_name: Name of SnapAdc Object
+        :type device_name: str
+
+        :param device_info:
+        :type device_info: dict
+
+        :param intialise: Trigger ADC SerDes calibration.
+        :type initialise: Boolean - True/False
+
+        :return: None
+
+        example device_info = {'adc_resolution': '8',
+                       'sample_rate': '200',
+                       'snap_inputs': '12',
+                       'tag': 'xps:snap_adc'}
+        """
+
+        self.parent = parent
+        self.logger = parent.logger
+        self.name   = device_name
+        self.device_info = device_info
+
+        try:
+            self.resolution  = int(self.device_info['adc_resolution'])
+            self.sample_rate = float(self.device_info['sample_rate'])
+            self.num_channel = int(self.device_info['snap_inputs']) //  4
+        except:
+            print(self.device_info)
+            raise
+
+        if self.resolution == 8:
+            self.controller = HMCAD1511(parent,'adc16_controller')
+        else:
+            self.controller = HMCAD1520(parent, 'adc16_controller')
+
 
         self.A_WB_R_LIST = [self.WB_DICT.index(a) for a in self.WB_DICT if a != None]
         self.adcList = [0, 1, 2]
         self.ramList = ['adc16_wb_ram0', 'adc16_wb_ram1', 'adc16_wb_ram2']
         self.laneList = [0, 1, 2, 3, 4, 5, 6, 7]
 
-        if resolution not in [8,12,14]:
-            logger.error("Invalid parameter")
-            raise ValueError("Invalid parameter")
-        else:
-            self.RESOLUTION = resolution
+        if self.resolution not in [8,12,14]:
+            logger.error("Invalid resolution parameter")
+            raise ValueError("Invalid resolution parameter")
+        
         self.curDelay = [[0]*len(self.laneList)]*len(self.adcList)
 
-        if ref is not None:
-            self.lmx = LMX2581(interface,'lmx_ctrl', fosc=ref)
+        # check if the design uses the on-board synthesizer -- can read from fpg 'SNAP' dict
+        if parent.devices['SNAP']['clk_src'] == 'sys_clk':
+            self.synth = LMX2581(parent, 'lmx_ctrl')    # Use default FOSC ref setting
+            #self.synth_clk_rate = float(parent.devices['SNAP']['clk_rate'])
         else:
-            self.lmx = None
+            self.synth = None
 
-        self.clksw = HMC922(interface,'adc16_use_synth')
-        self.ram = [WishBoneDevice(interface,name) for name in self.ramList]
-
-        if ADC not in ['HMCAD1511','HMCAD1520']:
-            raise ValueError("Invalid parameter")
-
-        if ADC == 'HMCAD1511':
-            self.adc = HMCAD1511(interface,'adc16_controller')
-        else:   # 'HMCAD1520'
-            self.adc = HMCAD1520(interface,'adc16_controller')
+        self.clksw = HMC922(parent,'adc16_use_synth')
+        self.ram = [WishBoneDevice(parent, name) for name in self.ramList]
 
         # test pattern for clock aligning
         pats = [0b10101010,0b01010101,0b00000000,0b11111111]
-        mask = (1<<(self.RESOLUTION/2))-1
-        ofst = self.RESOLUTION/2
+        mask = (1 << (self.resolution / 2)) - 1
+        ofst = self.resolution / 2
         self.p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
         self.p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
 
-    def init(self, samplingRate=250, numChannel=4):
+        if initialise:
+            self.init(sample_rate=self.sample_rate, num_channel=self.num_channel)
+
+    @classmethod
+    def from_device_info(cls, parent, device_name, device_info, initialise=False, **kwargs):
+        """
+        Process device info and the memory map to get all the necessary info
+        and return a SNAP ADC instance.
+        :param parent: The parent device, normally a casperfpga instance
+        :param device_name:
+        :param device_info:
+        :param initialise:
+        :param kwargs:
+        :return:
+        """
+        return cls(parent, device_name, device_info, initialise, **kwargs)
+
+    def init(self, sample_rate=None, num_channel=None):
         """ Get SNAP ADCs into working condition
 
         Supported frequency range: 60MHz ~ 1000MHz. Set resolution to
@@ -117,71 +167,74 @@ class SNAPADC(object):
 
         """
 
+        sample_rate = self.sample_rate if sample_rate is None else sample_rate
+        num_channel = self.num_channel if num_channel is None else num_channel
+
         logger.info("Reseting adc_unit")
         self.reset()
 
-        self.selectADC()
+        self.select_adc()
 
-        if self.lmx is not None:
+        if self.synth is not None:
             logger.info("Reseting frequency synthesizer")
-            self.lmx.init()
+            self.synth.init()
 
             logger.info("Configuring frequency synthesizer")
-            self.lmx.setFreq(samplingRate)
-            if not self.lmx.getDiagnoses('LD_PINSTATE'):
+            self.synth.setFreq(sample_rate)
+            if not self.synth.getDiagnoses('LD_PINSTATE'):
                 logger.error('Frequency synthesizer configuration failed!')
                 return self.ERROR_LMX
 
         logger.info("Configuring clock source switch")
-        if self.lmx is not None:
+        if self.synth is not None:
             self.clksw.setSwitch('a')
         else:
             self.clksw.setSwitch('b')
 
         logger.info("Initialising ADCs")
-        self.adc.init()
+        self.controller.init()
 
-        if numChannel==1 and samplingRate<240:
+        if num_channel==1 and sample_rate<240:
             lowClkFreq = True
-        elif numChannel==2 and samplingRate<120:
+        elif num_channel==2 and sample_rate<120:
             lowClkFreq = True
-        elif numChannel==4 and samplingRate<60:
+        elif num_channel==4 and sample_rate<60:
             lowClkFreq = True
-        elif numChannel==4 and self.RESOLUTION==14 and samplingRate<30:
+        elif num_channel==4 and self.resolution==14 and sample_rate<30:
             lowClkFreq = True
         else:
             lowClkFreq = False
 
         logger.info("Configuring ADC operating mode")
-        if type(self.adc) is HMCAD1511:
-            self.adc.setOperatingMode(numChannel,1,lowClkFreq)
-        elif type(self.adc) is HMCAD1520:
-            self.adc.setOperatingMode(numChannel,1,lowClkFreq,self.RESOLUTION)
+        if type(self.controller) is HMCAD1511:
+            self.controller.setOperatingMode(num_channel, 1, lowClkFreq)
+        elif type(self.controller) is HMCAD1520:
+            self.controller.setOperatingMode(num_channel, 1, lowClkFreq, self.resolution)
 
-        self.setDemux(numChannel=1) # calibrate in full interleave mode
+        self.set_demux(numChannel=1) # calibrate in full interleave mode
 
-        if not self.getWord('ADC16_LOCKED'):
+        if not self.get_word('ADC16_LOCKED'):
             logger.error('MMCM not locked.')
             return self.ERROR_MMCM
 
-        if not self.alignLineClock():
+        if not self.align_line_clock():
             logger.error('Line clock alignment failed!')
             return self.ERROR_LINE
-        if not self.alignFrameClock():
+        if not self.align_frame_clock():
             logger.error('Frame clock alignment failed!')
             return self.ERROR_FRAME
 
-        errs = self.testPatterns(mode='ramp')
+        errs = self.test_patterns(mode='ramp')
         if not np.all(np.array([adc.values() for adc in errs.values()])==0):
             logger.error('ADCs failed on ramp test.')
             return self.ERROR_RAMP
 
         # Finally place ADC in "correct" mode
-        self.setDemux(numChannel=numChannel)
+        self.set_demux(numChannel=num_channel)
 
         return self.SUCCESS
 
-    def selectADC(self, chipSel=None):
+    def select_adc(self, chipSel=None):
         """ Select one or multiple ADCs
 
         Select the ADC(s) to be configured. ADCs are numbered by 0, 1, 2...
@@ -193,16 +246,51 @@ class SNAPADC(object):
 
         # csn active low for HMCAD1511, but inverted in wb_adc16_controller
         if chipSel==None:       # Select all ADC chips
-            self.adc.csn = np.bitwise_or.reduce([0b1 << s for s in self.adcList])
+            self.controller.csn = np.bitwise_or.reduce([0b1 << s for s in self.adcList])
         elif isinstance(chipSel, list) and all(s in self.adcList for s in chipSel):
             csnList = [0b1 << s for s in self.adcList if s in chipSel]
-            self.adc.csn = np.bitwise_or.reduce(csnList)
+            self.controller.csn = np.bitwise_or.reduce(csnList)
         elif chipSel in self.adcList:
-            self.adc.csn = 0b1 << chipSel
+            self.controller.csn = 0b1 << chipSel
         else:
             raise ValueError("Invalid parameter")
 
-    def setDemux(self, numChannel=1):
+    def set_gain(self, gains, use_linear_step=False, fine_gains=None, fgain_cfg=False):
+        """ Set the coarse gain of the ADC channels
+
+        Args:
+            gains (list): List of gains, e.g. [1, 2, 3, 4]
+            use_linear_step (bool): Defaults to use dB steps for values.
+            fine_gains (list): Fine gain values to set
+            fgain_cfg (bool): If fine gains are to be used, set this to True
+
+        Notes:
+            Coarse gain control (parameters in dB). Input gain must be a list of
+            integers. Coarse gain range for HMCAD1511: 0dB ~ 12dB
+        E.g.
+            cGain([1,5,9,12])       # Quad channel mode in dB step
+            cGain([32,50],use_linear_step=True)   # Dual channel mode in x step
+            cGain([10], fgain_cfg=True)  # Single channel mode in dB
+                            # step, with fine gain enabled
+
+        Coarse gain options when by default use_linear_step=False:
+            0 dB, 1 dB, 2 dB, 3 dB, 4 dB, 5 dB, 6 dB,
+            7 dB, 8 dB, 9 dB, 10 dB, 11 dB and 12 dB
+            
+        Coarse gain options when use_linear_step=True:
+            1x, 1.25x, 2x, 2.5x, 4x, 5x, 8x,
+            10x, 12.5x, 16x, 20x, 25x, 32x, 50x
+
+        TODO: Test + improve support for fine gain control
+        """
+
+        self.controller.cGain(gains, cgain_cfg=use_linear_step, fgain_cfg=fgain_cfg)
+
+        if fine_gains is not None:
+            n_channels = len(gains)
+            self.controller.fGain(fine_gains, n_channels)
+
+    def set_demux(self, numChannel=1):
         """
         when mode==0: numChannel=4
             data = data[:,[0,4,1,5,2,6,3,7]]
@@ -217,38 +305,38 @@ class SNAPADC(object):
         mode = modeMap[numChannel]
         val = self._set(0x0, mode,  self.M_WB_W_DEMUX_MODE)
         val = self._set(val, 0b1,   self.M_WB_W_DEMUX_WRITE)
-        self.adc._write(val, self.A_WB_W_CTRL)
+        self.controller._write(val, self.A_WB_W_CTRL)
 
     def reset(self):
         """ Reset all adc16_interface logics inside FPGA """
         val = self._set(0x0, 0x1,   self.M_WB_W_RESET)
-        self.adc._write(0x0, self.A_WB_W_CTRL)
-        self.adc._write(val, self.A_WB_W_CTRL)
-        self.adc._write(0x0, self.A_WB_W_CTRL)
+        self.controller._write(0x0, self.A_WB_W_CTRL)
+        self.controller._write(val, self.A_WB_W_CTRL)
+        self.controller._write(0x0, self.A_WB_W_CTRL)
 
     def snapshot(self):
         """ Save 1024 consecutive samples of each ADC into its corresponding bram """
         # No way to snapshot a single ADC because the HDL code is designed so.
         val = self._set(0x0, 0x1,   self.M_WB_W_SNAP_REQ)
-        self.adc._write(0x0, self.A_WB_W_CTRL)
-        self.adc._write(val, self.A_WB_W_CTRL)
-        self.adc._write(0x0, self.A_WB_W_CTRL)
+        self.controller._write(0x0, self.A_WB_W_CTRL)
+        self.controller._write(val, self.A_WB_W_CTRL)
+        self.controller._write(0x0, self.A_WB_W_CTRL)
 
-    def calibrateAdcOffset(self):
+    def calibrate_adc_offset(self):
 
         logger.warning('Operation not supported.')
 
 
-    def calibrationAdcGain(self):
+    def calibration_adc_gain(self):
 
         logger.warning('Operation not supported.')
 
         
-    def getRegister(self, rid=None):
+    def get_register(self, rid=None):
         if rid==None:
-            return [self.getRegister(regId) for regId in self.A_WB_R_LIST]
+            return [self.get_register(regId) for regId in self.A_WB_R_LIST]
         elif rid in self.A_WB_R_LIST:
-            rval = self.adc._read(rid)
+            rval = self.controller._read(rid)
             return {name: self._get(rval,mask) for name, mask in self.WB_DICT[rid].items()}
         else:
             raise ValueError("Invalid parameter")
@@ -264,12 +352,12 @@ class SNAPADC(object):
             d2 = d2 * (mask & -mask)
         return d1 | d2
 
-    def getWord(self,name):
-        rid = self.getRegId(name)
-        rval = self.adc._read(rid)
+    def get_word(self, name):
+        rid = self.get_reg_id(name)
+        rval = self.controller._read(rid)
         return self._get(rval,self.WB_DICT[rid][name])
 
-    def getRegId(self,name):
+    def get_reg_id(self, name):
         rid = [d for d in self.A_WB_R_LIST if name in self.WB_DICT[d]]
         if len(rid) == 0:
             raise ValueError("Invalid parameter")
@@ -286,9 +374,9 @@ class SNAPADC(object):
             interleave(data, 2) # return a two-column numpy array
             interleave(data, 4) # return a four-column numpy array
         """
-        return self.adc.interleave(data, mode)
+        return self.controller.interleave(data, mode)
 
-    def readRAM(self, ram=None, signed=True):
+    def read_ram(self, ram=None, signed=True):
         """ Read RAM(s) and return the 1024-sample data
 
         E.g.
@@ -298,13 +386,13 @@ class SNAPADC(object):
             readRAM(signed=False)   # return a list of arrays in unsiged format
         """
         if ram==None:                       # read all RAMs
-            return self.readRAM(self.adcList,signed)
+            return self.read_ram(self.adcList, signed)
         elif isinstance(ram, list) and all(r in self.adcList for r in ram):
                                     # read a list of RAMs
-            data = [self.readRAM(r,signed) for r in ram if r in self.adcList]
+            data = [self.read_ram(r, signed) for r in ram if r in self.adcList]
             return dict(zip(ram,data))
         elif ram in self.adcList:               # read one RAM      
-            if self.RESOLUTION>8:       # ADC_DATA_WIDTH == 16
+            if self.resolution>8:       # ADC_DATA_WIDTH == 16
                 fmt = '!1024' + ('h' if signed else 'H')
                 length = 2048
             else:               # ADC_DATA_WIDTH == 8
@@ -377,9 +465,9 @@ class SNAPADC(object):
                 # commands after being set will not be automatically cleared.  
                 # Therefore we have to clear them by ourselves.
         
-                self.adc._write(0x0, self.A_WB_W_CTRL)  
-                self.adc._write(val, self.A_WB_W_CTRL)  
-                self.adc._write(0x0, self.A_WB_W_CTRL)  
+                self.controller._write(0x0, self.A_WB_W_CTRL)
+                self.controller._write(val, self.A_WB_W_CTRL)
+                self.controller._write(0x0, self.A_WB_W_CTRL)
 
 
     # The ADC16 controller word (the offset in write_int method) 2 and 3 are for delaying 
@@ -444,22 +532,22 @@ class SNAPADC(object):
 
         # Don't be misled by the naming - "DELAY_STROBE" in casper repo.  It doesn't 
         # generate strobe at all.  You have to manually clear the bits that you set.
-        self.adc._write(0x00, self.A_WB_W_CTRL)
-        self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_L)
-        self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_H)
-        self.adc._write(valt, self.A_WB_W_CTRL)
-        self.adc._write(vala, self.A_WB_W_DELAY_STROBE_L)
-        self.adc._write(valb, self.A_WB_W_DELAY_STROBE_H)
-        self.adc._write(0x00, self.A_WB_W_CTRL)
-        self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_L)
-        self.adc._write(0x00, self.A_WB_W_DELAY_STROBE_H)
+        self.controller._write(0x00, self.A_WB_W_CTRL)
+        self.controller._write(0x00, self.A_WB_W_DELAY_STROBE_L)
+        self.controller._write(0x00, self.A_WB_W_DELAY_STROBE_H)
+        self.controller._write(valt, self.A_WB_W_CTRL)
+        self.controller._write(vala, self.A_WB_W_DELAY_STROBE_L)
+        self.controller._write(valb, self.A_WB_W_DELAY_STROBE_H)
+        self.controller._write(0x00, self.A_WB_W_CTRL)
+        self.controller._write(0x00, self.A_WB_W_DELAY_STROBE_L)
+        self.controller._write(0x00, self.A_WB_W_DELAY_STROBE_H)
 
         for cs in chipSel:
             for ls in laneSel:
                 self.curDelay[cs][ls] = tap
 
 
-    def testPatterns(self, chipSel=None, taps=None, mode='std', pattern1=None, pattern2=None):
+    def test_patterns(self, chipSel=None, taps=None, mode='std', pattern1=None, pattern2=None):
         """ Return a list of std/err for a given tap or a list of taps
 
         Return the lane-wise standard deviation/error of the data under a given
@@ -563,46 +651,46 @@ class SNAPADC(object):
         if mode not in MODE:
             raise ValueError("Invalid parameter")
 
-        self.selectADC(chipSel)
+        self.select_adc(chipSel)
         if mode=='ramp':        # ramp mode
-            self.adc.test('en_ramp')
+            self.controller.test('en_ramp')
             taps=None
             pattern1=None
             pattern2=None
         elif pattern1==None and pattern2==None:
             # synchronization mode
-            self.adc.test('pat_sync')
+            self.controller.test('pat_sync')
             # pattern1 = 0b11110000 when self.RESOLUTION is 8
             # pattern1 = 0b111111000000 when self.RESOLUTION is 12
-            pattern1 = ((2**(self.RESOLUTION/2))-1) << (self.RESOLUTION/2)
-            pattern1 = self._signed(pattern1,self.RESOLUTION)
+            pattern1 = ((2 ** (self.resolution / 2)) - 1) << (self.resolution / 2)
+            pattern1 = self._signed(pattern1, self.resolution)
         elif isinstance(pattern1,int) and pattern2==None:
             # single pattern mode
 
-            if type(self.adc) is HMCAD1520:
+            if type(self.controller) is HMCAD1520:
                 # test patterns of HMCAD1520 need special cares
-                ofst = 16 - self.RESOLUTION
+                ofst = 16 - self.resolution
                 reg_p1 = pattern1 << ofst
             else:
                 reg_p1 = pattern1
 
-            self.adc.test('single_custom_pat',reg_p1)
-            pattern1 = self._signed(pattern1,self.RESOLUTION)
+            self.controller.test('single_custom_pat', reg_p1)
+            pattern1 = self._signed(pattern1, self.resolution)
         elif isinstance(pattern1,int) and isinstance(pattern2,int):
             # dual pattern mode
 
-            if type(self.adc) is HMCAD1520:
+            if type(self.controller) is HMCAD1520:
                 # test patterns of HMCAD1520 need special cares
-                ofst = 16 - self.RESOLUTION
+                ofst = 16 - self.resolution
                 reg_p1 = pattern1 << ofst
                 reg_p2 = pattern2 << ofst
             else:
                 reg_p1 = pattern1
                 reg_p2 = pattern2
 
-            self.adc.test('dual_custom_pat',reg_p1,reg_p2)
-            pattern1 = self._signed(pattern1,self.RESOLUTION)
-            pattern2 = self._signed(pattern2,self.RESOLUTION)
+            self.controller.test('dual_custom_pat', reg_p1, reg_p2)
+            pattern1 = self._signed(pattern1, self.resolution)
+            pattern2 = self._signed(pattern2, self.resolution)
         else: 
             raise ValueError("Invalid parameter")
 
@@ -632,7 +720,7 @@ class SNAPADC(object):
 
         if taps == None:
             self.snapshot()
-            results = [_check(self.readRAM(cs)) for cs in chipSel]
+            results = [_check(self.read_ram(cs)) for cs in chipSel]
             results = np.array(results).reshape(len(chipSel),len(self.laneList)).tolist()
             results = dict(zip(chipSel,results))
             for cs in chipSel:
@@ -641,14 +729,14 @@ class SNAPADC(object):
             for tap in taps:
                 self.delay(tap, chipSel)
                 self.snapshot()
-                results += [_check(self.readRAM(cs)) for cs in chipSel]
+                results += [_check(self.read_ram(cs)) for cs in chipSel]
             results = np.array(results).reshape(-1,len(chipSel),len(self.laneList))
             results = np.einsum('ijk->jik',results).tolist()
             results = dict(zip(chipSel,results))
             for cs in chipSel:
                 results[cs] = dict(zip(taps,[np.array(row) for row in results[cs]]))
         
-        self.adc.test('off')
+        self.controller.test('off')
 
         if len(chipSel) == 1:
             return results[chipSel[0]]
@@ -693,7 +781,7 @@ class SNAPADC(object):
             return data[0]
         
 
-    def decideDelay(self, data):
+    def decide_delay(self, data):
         """ Decide and return proper setting for delay tap
 
         Find the tap setting that has the largest margin of error, i.e. the biggest distance
@@ -734,7 +822,7 @@ class SNAPADC(object):
         return np.argmax(dist)
 
     # Line clock also known as bit clock in ADC datasheets
-    def alignLineClock(self, mode='dual_pat'):
+    def align_line_clock(self, mode='dual_pat'):
         """ Align the rising edge of line clock with data eye
 
         And return the tap settings being using
@@ -749,11 +837,11 @@ class SNAPADC(object):
 
         if mode == 'lane_wise_single_pat':
             # Decide lane-wise delay tap under single pattern test mode
-            stds = self.testPatterns(taps=True) # Sweep tap settings and get std
+            stds = self.test_patterns(taps=True) # Sweep tap settings and get std
             for adc in self.adcList:
                 for lane in self.laneList:
                     vals = np.array(stds[adc].values())[:,lane]
-                    t = self.decideDelay(vals)  # Find a proper tap setting 
+                    t = self.decide_delay(vals)  # Find a proper tap setting
                     if not t:
                         logger.error("ADC{0} lane{1} delay decision failed".format(adc,lane))
                     else:
@@ -762,10 +850,10 @@ class SNAPADC(object):
         elif mode == 'chip_wise_single_pat':
             # This method would give all lanes of an ADC the same delay tap setting
             # decide chip-wise delay tap under single pattern test mode
-            stds = self.testPatterns(taps=True) # Sweep tap settings and get std
+            stds = self.test_patterns(taps=True) # Sweep tap settings and get std
             for adc in self.adcList:
                 vals = np.array(stds[adc].values())
-                t = self.decideDelay(vals)  # Find a proper tap setting 
+                t = self.decide_delay(vals)  # Find a proper tap setting
                 if not t:
                     logger.error("ADC{0} delay decision failed".format(adc))
                 else:
@@ -774,20 +862,20 @@ class SNAPADC(object):
         elif mode == 'dual_pat':    # dual_pat
             # Fine tune delay tap under dual pattern test mode
 
-            errs = self.testPatterns(taps=True,mode='std',pattern1=self.p1,
-                        pattern2=self.p2)
+            errs = self.test_patterns(taps=True, mode='std', pattern1=self.p1,
+                                      pattern2=self.p2)
 
             for adc in self.adcList:
                 for lane in self.laneList:
                     vals = np.array(errs[adc].values())[:,lane]
-                    t = self.decideDelay(vals)  # Find a proper tap setting 
+                    t = self.decide_delay(vals)  # Find a proper tap setting
                     if not t:
                         logger.error("ADC{0} lane{1} delay decision failed".format(adc,lane))
                     else:
                         self.delay(t,adc,lane)  # Apply the tap setting
 
         # Check if line clock aligned
-        errs = self.testPatterns(mode='std',pattern1=self.p1,pattern2=self.p2)
+        errs = self.test_patterns(mode='std', pattern1=self.p1, pattern2=self.p2)
         if np.all(np.array([adc.values() for adc in errs.values()])==0):
             logger.info('Line clock of all ADCs aligned.')
             return True
@@ -795,13 +883,13 @@ class SNAPADC(object):
             logger.error('Line clock NOT aligned.\n{0}'.format(str(errs)))
             return False
 
-    def alignFrameClock(self):
+    def align_frame_clock(self):
         """ Align the frame clock with data frame
         """
 
-        for u in range(self.RESOLUTION*2):
+        for u in range(self.resolution * 2):
             allDone = True
-            errs = self.testPatterns(mode='err',pattern1=self.p1,pattern2=self.p2)
+            errs = self.test_patterns(mode='err', pattern1=self.p1, pattern2=self.p2)
             for adc in self.adcList:
                 for lane in self.laneList:
                     if errs[adc][lane]!=0:
@@ -811,7 +899,7 @@ class SNAPADC(object):
                 break;
 
         # Check if frame clock aligned
-        errs = self.testPatterns(mode='err',pattern1=self.p1,pattern2=self.p2)
+        errs = self.test_patterns(mode='err', pattern1=self.p1, pattern2=self.p2)
         if all(all(val==0 for val in adc.values()) for adc in errs.values()):
             logger.info('Frame clock of all ADCs aligned.')
             return True

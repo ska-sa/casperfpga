@@ -109,12 +109,12 @@ class Gbe(object):
             raise ValueError('%s: 10Gbe interface must '
                              'have mac, ip and port.' % self.fullname)
 
-    def setup(self, mac, ipaddress, port):
+    def setup(self, mac, ipaddress, port, gateway=None, subnet_mask=None):
         """
         Set up the MAC, IP and port for this interface
 
-        :param mac: String or Integer input
-        :param ipaddress: String or Integer input
+        :param mac: String or Integer input, MAC address (e.g. '02:00:00:00:00:01')
+        :param ipaddress: String or Integer input, IP address (eg '10.0.0.1')
         :param port: String or Integer input
         """
         raise NotImplementedError('This is no longer required as the mac, '
