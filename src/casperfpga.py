@@ -15,7 +15,6 @@ import qdr
 import hmc
 import katadc
 import skarabadc
-import snapadc
 
 from attribute_container import AttributeContainer
 from utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
@@ -46,7 +45,6 @@ CASPER_ADC_DEVICES = {
     'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
     'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
     'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
-    'xps:snap_adc':                 {'class': snapadc.SnapAdc,      'container': 'adcs'}
 }
 
 # other devices - blocks that aren't memory devices nor ADCs, but about which we'd
@@ -357,22 +355,8 @@ class CasperFpga(object):
         """
         self.is_little_endian = False
         board_id = self.read_uint('sys_board_id')
-        
-        if (board_id >> 16) == 0xB00B:  # ROACH
-            return self.is_little_endian
-        
-        if (board_id >> 16) == 0xBABE:  # ROACH2
-            return self.is_little_endian
-        
-        if board_id == 0:               # red pitaya
-            self.is_little_endian = True
-            return self.is_little_endian
-        
         msb = (board_id >> 24) & 0xff
-        if msb > 0:
-            self.is_little_endian = True
-            return self.is_little_endian
-        
+        self.is_little_endian = (msb > 0) or (board_id == 0)
         return self.is_little_endian
 
     def _reset_device_info(self):
@@ -761,8 +745,8 @@ class CasperFpga(object):
         # Create Register Map
         self._create_memory_devices(device_dict, memorymap_dict,
                                     initialise=initialise_objects)
-        self._create_other_devices(device_dict, initialise=initialise_objects)
         self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
+        self._create_other_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
         self.transport.post_get_system_information()
 

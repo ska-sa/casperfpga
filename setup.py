@@ -9,7 +9,6 @@ URL = 'https://github.com/casper-astro/casperfpga'
 AUTHOR = 'Tyrone van Balla'
 EMAIL = 'tvanballa at ska.ac.za'
 
-
 here = os.path.abspath(os.path.dirname(__file__))
 
 try:
@@ -34,8 +33,6 @@ progska_extension = setuptools.Extension(
     # extra_compile_args=extra_compile_args,
     # extra_link_args=['-static'],
 )
-
-data_files = ['tengbe_mmap.txt', 'tengbe_mmap_legacy.txt']
 
 
 setuptools.setup(
