@@ -3,6 +3,6 @@ ipython
 katcp
 numpy
 odict
-tornado
+tornado<5,>=4.3
 redis
 tftpy==0.8.0
