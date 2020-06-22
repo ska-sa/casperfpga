@@ -251,6 +251,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         Disconnect from the device server.
         :return:
         """
+        katcp.CallbackClient.stop(self)
         if self.is_connected():
             katcp.CallbackClient.disconnect(self)
         self.join(timeout=self._timeout)
