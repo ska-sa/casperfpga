@@ -48,12 +48,12 @@ def init_snaps(arg_counter, arg_snap_list):
         asnaps.append(snap_instance)
     return asnaps
 
-def main():
+def main(nloops=NLOOPS):
 	counter = 0
 	if SIMULATION:
 	    f = []
 	print("main: Begin loops, initial count of open FDs:", count_ofds())
-	while counter < NLOOPS:
+	while counter < nloops:
 	    snaps = init_snaps(counter, SNAP_NAMES)
 	    print("main: count of open FDs after init_snaps:", count_ofds())
 	    disconnect_snaps(counter, SNAP_NAMES, snaps)
