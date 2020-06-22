@@ -62,7 +62,7 @@ setuptools.setup(
         'tftpy==0.8.0',
     ],
     packages=['casperfpga', 'casperfpga.progska'],
-    package_dir={'casperfpga': 'src', 'casperfpga.progska': 'progska'},
+    package_dir={'casperfpga': 'src', 'casperfpga': 'debug', 'casperfpga.progska': 'progska'},
     package_data={'casperfpga': data_files},
     scripts=glob.glob('scripts/*'),
     setup_requires=['katversion'],
