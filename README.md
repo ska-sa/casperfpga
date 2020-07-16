@@ -19,7 +19,7 @@ This README will outline, and make reference to, the following:
 
 Not much to say to new users except welcome! It goes without saying that once you have cloned this respository you should make sure you're on the correct branch (usually **master**, unless you're a contributor) and always pull regularly. This, to make sure you have the latest version of casperfpga with the latest features. You can move on straight to [Installation](#installation).
 
-Should you be an existing `corr` user, wondering where some of your functionality has gone when interfacing to your ROACH/2, please [look here](https://github.com/casper-astro/casperfpga/wiki/Migrating-from-corr-to-casperfpga) for a detailed explanation on **How to migrate to `casperfpga`**.
+Should you be an existing `corr` user, wondering where some of your functionality has gone when interfacing to your ROACH/2, please [look here](https://casper-toolflow.readthedocs.io/projects/casperfpga/en/latest/migrating_from_corr.html) for a detailed explanation on **how to migrate to `casperfpga`**.
 
 ### Existing Users ###
 
