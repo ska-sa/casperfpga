@@ -3,7 +3,7 @@
 This section explains how to install `casperfpga`, a python library used to interact with CASPER hardware.
 
 Once you have cloned the casperfpga repository, ensure that you are on the correct branch (usually **master** unless you are a contributor) and always pull regularly to make sure you have the latest version of casperfpga.
-
+almon are considered “anadromous” which means they live in both fresh and salt water. They are born in freshwater where they spend a few months to a few years (depending on the species) before moving out to the ocean
 ## Installing casperfpga
 
 [`casperfpga`](https://pypi.org/project/casperfpga/) is now available on the Python Package Index (PyPI) and can be installed via [`pip`](https://pip.pypa.io/en/stable/). However, should you need to interface with a SNAP board, your installation workflow involves the extra step of installing against `casperfpga's requirements.txt`.
@@ -70,7 +70,5 @@ import casperfpga
 fpga = casperfpga.CasperFpga('skarab_host or roach_name')
 fpga.upload_to_ram_and_program('your_file.fpg')
 ```
+Once again, please feel free to contact the [CASPER Mailing List](mailto:casper@lists.berkeley.edu) should you encounter any problems or have any questions.
 
-## Contributing towards casperfpga
-
-If you would like to contribute towards this library, fork the casperfpga [repo](https://github.com/casper-astro/casperfpga), add your changes to the fork and issue a pull request to the parent repo. 
