@@ -44,7 +44,7 @@ As of commit `4adffc0 <https://github.com/ska-sa/casperfpga/commit/4adffc0994c56
 
 Contributing 
 ############
-f you would like to contribute towards this library, fork the casperfpga `repo <https://github.com/casper-astro/casperfpga>`__, add your changes to the fork and issue a pull request to the parent repo.
+If you would like to contribute towards this library, fork the casperfpga `repo <https://github.com/casper-astro/casperfpga>`__, add your changes to the fork and issue a pull request to the parent repo.
 
 .. toctree::
     :hidden:
