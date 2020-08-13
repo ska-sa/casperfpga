@@ -705,7 +705,7 @@ current_ranges = {
     '1V8_current': (0.88, 0.001),
     '1V2_current': (0.22, 0.001),
     '1V0_current': (33.0, 0.001),
-    '1V8_MGTVCCAUX_current': (0.33, 0.001),
+    '1V8_MGTVCCAUX_current': (0.33, 0.000),
     '1V0_MGTAVCC_current': (15.84, 0.001),
     '1V2_MGTAVTT_current': (5.83, 0.001),
     '3V3_config_current': (0.11, 0.001)
