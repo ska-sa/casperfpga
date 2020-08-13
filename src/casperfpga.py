@@ -12,6 +12,7 @@ from . import snap
 from . import onegbe
 from . import tengbe
 from . import fortygbe
+from . import onehundredgbe
 from . import qdr
 from . import hmc
 from . import katadc
@@ -38,6 +39,7 @@ CASPER_MEMORY_DEVICES = {
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:ten_gbe':      {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
+    'xps:onehundred_gbe':{'class': onehundredgbe.OneHundredGbe, 'container': 'gbes'},
     'xps:onegbe':       {'class': onegbe.OneGbe,     'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
     'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
@@ -797,6 +799,12 @@ class CasperFpga(object):
         self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
         self.transport.post_get_system_information()
+        # we may not have been able to detect endianness until now
+        # that we know the register map
+        try:
+            self._detect_little_endianness()
+        except:
+            pass
 
     def estimate_fpga_clock(self):
         """
