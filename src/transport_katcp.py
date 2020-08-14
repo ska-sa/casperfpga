@@ -184,7 +184,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             if not connected:
                 result_queue.put('Could not connect to upload port.')
             try:
-                upload_socket.send(open(filename).read())
+                upload_socket.send(open(filename, 'rb').read())
                 result_queue.put('')
             except Exception as e:
                 result_queue.put('Could not send file to upload port({}): {}'.format(
@@ -251,6 +251,9 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         Disconnect from the device server.
         :return:
         """
+        katcp.CallbackClient.stop(self)
+        if self.is_connected():
+            katcp.CallbackClient.disconnect(self)
         self.join(timeout=self._timeout)
         self.logger.info('%s: disconnected' % self.host)
 
@@ -378,7 +381,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         reply, _ = self.katcprequest(
             name='read', request_timeout=self._timeout, require_ok=True,
             request_args=(device_name, str(offset), str(size)))
-        return reply.arguments[1].decode()
+        return reply.arguments[1]
 
     def wordread(self, device_name, size=1, word_offset=0, bit_offset=0):
         """
@@ -395,7 +398,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             request_args=(device_name, str(word_offset)+':'+str(bit_offset),
                           str(size))
         )
-        return reply.arguments[1].decode()
+        return reply.arguments[1]
 
     def blindwrite(self, device_name, data, offset=0):
         """
@@ -405,8 +408,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param offset: the offset, in bytes, at which to write
         :return: <nothing>
         """
-        assert(type(data) == str), 'You need to supply binary packed ' \
-                                   'string data!'
+        assert (type(data) == str or type(data) == bytes), 'Must supply binary packed string data'
         assert(len(data) % 4) == 0, 'You must write 32-bit-bounded words!'
         assert((offset % 4) == 0), 'You must write 32-bit-bounded words!'
         self.katcprequest(name='write', request_timeout=self._timeout,
@@ -615,7 +617,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                 self.logger.error('%s: no programming informs yet. Odd?' % self.host)
                 raise RuntimeError('%s: no programming informs yet. '
                                    'Odd?' % self.host)
-            if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
+            if (inf.name == 'fpga') and (inf.arguments[0].decode() == 'ready'):
                 done = True
         self.logger.info('%s: programming done.' % self.host)
         self.unhandled_inform_handler = None
@@ -774,7 +776,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                  'arguments: %s' % str(inform.arguments))
                     continue
             for arg in inform.arguments:
-                arg = arg.replace('\_', ' ')
+                arg = arg.replace(b'\_', b' ')
             name = inform.arguments[0].decode()
             tag = inform.arguments[1].decode()
             param = inform.arguments[2].decode()
