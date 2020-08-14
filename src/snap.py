@@ -206,8 +206,8 @@ class Snap(Memory):
         snapdata = self.read(**kwargs)
         for ctr in range(0, len(snapdata['data'][snapdata['data'].keys()[0]])):
             print('%5i ' % ctr, end='')
-            for key in snapdata['data'].keys():
-                print('%s(%i)\t' % (key, snapdata['data'][key][ctr]), end='')
+            for key in sorted(snapdata['data'].keys()):
+                print('{}({})\t'.format(key, snapdata['data'][key][ctr]), end='')
             print('')
             if (limit_lines > 0) and (ctr == limit_lines):
                 break

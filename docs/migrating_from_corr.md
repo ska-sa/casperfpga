@@ -1,4 +1,4 @@
-# Migrating from `corr`
+# Migrating from corr
 
 **So**, you've been using `corr` to communicate and reconfigure your ROACH/2 with .bof files, when suddenly `fpga.progdev('file.bof')` doesn't work anymore. Well, this page aims to help migrate you and your existing system to using casperfpga and use .fpg files to reconfigure your CASPER Hardware.
 
