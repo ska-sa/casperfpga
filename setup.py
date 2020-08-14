@@ -58,8 +58,6 @@ setuptools.setup(
         'redis',
         'tftpy==0.8.0',
     ],
-    packages=['casperfpga'],
-    package_dir={'casperfpga': 'src'},
     packages=['casperfpga', 'casperfpga.debug', 'casperfpga.progska'],
     package_dir={'casperfpga': 'src', 'casperfpga.debug': 'debug', 'casperfpga.progska': 'progska'},
     package_data={'casperfpga': data_files},
