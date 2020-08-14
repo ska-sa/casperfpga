@@ -111,16 +111,13 @@ class Gbe(object):
 
     def setup(self, mac, ipaddress, port, gateway=None, subnet_mask=None):
         """
-        Set up the MAC, IP and port for this interface
-
-        :param mac: String or Integer input, MAC address (e.g. '02:00:00:00:00:01')
-        :param ipaddress: String or Integer input, IP address (eg '10.0.0.1')
-        :param port: String or Integer input
+        No longer implemented. See `configure_core`
         """
         raise NotImplementedError('This is no longer required as the mac, '
                                   'ip_address and port are no longer stored '
                                   'as attributes. These values are retrieved '
-                                  'from the processing node when required.')
+                                  'from the processing node when required.'
+                                  'You probably want the `configure_core` method')
 
     def post_create_update(self, raw_device_info):
         """

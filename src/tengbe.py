@@ -211,19 +211,28 @@ class TenGbe(Memory, Gbe):
             packed = struct.pack('>%i%s' % (n_elem, ctype), *value)
         self.parent.blindwrite(self.name, packed, offset=offset)
 
-    def configure_core(self):
+    def configure_core(self, mac, ip, port, gateway=None, subnet_mask=None):
         """
-        Setup the interface by writing to the fabric directly, bypassing tap.
-        :param self:
-        :return:
-        """
-        gateway = 1 if self.gateway is None else self.gateway.ip_int
+        Configure the interface by writing to its internal configuration registers.
 
-        self._memmap_write('MAC_ADDR', self.mac.mac_int)
-        self._memmap_write('IP_ADDR',  self.ip_address.ip_int)
-        self._memmap_write('NETMASK',  self.subnet_mask.ip_int)
-        self._memmap_write('GW_ADDR',  gateway)
-        self._memmap_write('PORT',     self.port)
+        :param mac: String or Integer input, MAC address (e.g. '02:00:00:00:00:01')
+        :param ipaddress: String or Integer input, IP address (eg '10.0.0.1')
+        :param port: String or Integer input
+        :param gateway: String or Integer input, an IP address
+        :param subnet_mask: string or integer, subnet mask (e.g. '255.255.255.0')
+        """
+
+        mac_to_write         = Mac(mac).mac_int
+        ip_address_to_write  = IpAddress(ip).ip_int
+        port_to_write        = port if isinstance(port, int) else int(port)
+        gateway_to_write = IpAddress(gateway).ip_int if gateway is not None else 1
+        subnet_mask_to_write = IpAddress(subnet_mask).ip_int if subnet_mask is not None else 0xffffff00
+
+        self._memmap_write('MAC_ADDR', mac_to_write)
+        self._memmap_write('IP_ADDR',  ip_address_to_write)
+        self._memmap_write('NETMASK',  subnet_mask_to_write)
+        self._memmap_write('GW_ADDR',  gateway_to_write)
+        self._memmap_write('PORT',     port_to_write)
 
         self.fabric_enable()
         self.fabric_soft_reset_toggle()
