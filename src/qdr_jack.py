@@ -7,9 +7,9 @@ Created on Fri Mar  7 07:15:45 2014
 import logging
 import numpy
 import struct
-import register
+from . import register
 
-from memory import Memory
+from .memory import Memory
 
 LOGGER = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class QdrJack(Memory):
         :return: a Qdr object
         """
         mem_address, mem_length = -1, -1
-        for mem_name in memorymap_dict.keys():
+        for mem_name in list(memorymap_dict.keys()):
             if mem_name == device_info['which_qdr'] + '_memory':
                 mem_address = memorymap_dict[mem_name]['address']
                 mem_length = memorymap_dict[mem_name]['bytes']
@@ -88,7 +88,7 @@ class QdrJack(Memory):
                                'Qdr %s' % device_name)
         # find the ctrl register
         ctrlreg_address, ctrlreg_length = -1, -1
-        for mem_name in memorymap_dict.keys():
+        for mem_name in list(memorymap_dict.keys()):
             if mem_name == device_info['which_qdr'] + '_ctrl':
                 ctrlreg_address = memorymap_dict[mem_name]['address']
                 ctrlreg_length = memorymap_dict[mem_name]['bytes']
@@ -198,9 +198,9 @@ class QdrJack(Memory):
             for word_n,word in enumerate(pattern):
                 patfail=patfail|(word ^ retdat[word_n])
                 if verbosity>2:
-                    print "{0:032b}".format(word),
-                    print "{0:032b}".format(retdat[word_n]),
-                    print "{0:032b}".format(patfail)
+                    print("{0:032b}".format(word), end=' ')
+                    print("{0:032b}".format(retdat[word_n]), end=' ')
+                    print("{0:032b}".format(patfail))
         if patfail>0:
             #raise RuntimeError ("Calibration of QDR%i failed: 0b%s."%(qdr,"{0:032b}".format(patfail)))
             return False
@@ -226,29 +226,29 @@ class QdrJack(Memory):
                 for word_n,word in enumerate(pattern):
                     patfail=patfail|(word ^ retdat[word_n])
                     if verbosity>2:
-                        print '\t %4i %4i'%(step,word_n),
-                        print "{0:032b}".format(word),
-                        print "{0:032b}".format(retdat[word_n]),
-                        print "{0:032b}".format(patfail)
+                        print('\t %4i %4i'%(step,word_n), end=' ')
+                        print("{0:032b}".format(word), end=' ')
+                        print("{0:032b}".format(retdat[word_n]), end=' ')
+                        print("{0:032b}".format(patfail))
             fail.append(patfail)
             for bit in range(n_bits):
                 bit_cal[bit].append(1-2*((fail[step]&(1<<bit))>>bit))
                 #if bit_cal[bit][step]==True:
                 #    valid_steps[bit].append(step)
             if (verbosity>2):
-                print 'STEP input delays to %i!'%(step+1)
+                print('STEP input delays to %i!'%(step+1))
             self.qdr_delay_in_step(0xfffffffff,1)
 
         if (verbosity > 0):
-            print 'Eye for QDR %s (0 is pass, 1 is fail):' % self.name
+            print('Eye for QDR %s (0 is pass, 1 is fail):' % self.name)
             for step in range(n_steps):
-                print '\tTap step %2i: '%step,
-                print "{0:032b}".format(fail[step])
+                print('\tTap step %2i: '%step, end=' ')
+                print("{0:032b}".format(fail[step]))
 
         if (verbosity > 3):
             for bit in range(n_bits):
-                print 'Bit %2i: '%bit,
-                print bit_cal[bit]
+                print('Bit %2i: '%bit, end=' ')
+                print(bit_cal[bit])
 
         #find indices where calibration passed and failed:
         for bit in range(n_bits):
@@ -271,15 +271,15 @@ class QdrJack(Memory):
             # cal_steps[bit]=sum(cal_area[1:3])/3
             cal_steps[bit]=sum(cal_area[1:3])/4
             if (verbosity > 1):
-                print 'Selected tap for bit %i: %i'%(bit,cal_steps[bit])
+                print('Selected tap for bit %i: %i'%(bit,cal_steps[bit]))
         #since we don't have access to bits 32-36, we guess the number of taps required based on the other bits:
         median_taps=numpy.median(cal_steps)
         if verbosity>1:
-            print "Median taps: %i"%median_taps
+            print("Median taps: %i"%median_taps)
         for bit in range(32,36):
             cal_steps[bit]=median_taps
             if (verbosity > 1):
-                print 'Selected tap for bit %i: %i'%(bit,cal_steps[bit])
+                print('Selected tap for bit %i: %i'%(bit,cal_steps[bit]))
         return cal_steps
 
     def apply_cals(self,in_delays,out_delays,clk_delay,verbosity=0):
@@ -294,8 +294,8 @@ class QdrJack(Memory):
             for bit in range(len(in_delays)):
                 mask+=(1<<bit if (step<in_delays[bit]) else 0)
             if verbosity>1:
-                print 'Step %i'%step,
-                print "{0:036b}".format(mask)
+                print('Step %i'%step, end=' ')
+                print("{0:036b}".format(mask))
             self.qdr_delay_in_step(mask,1)
 
         for step in range(int(max(out_delays))):
@@ -303,8 +303,8 @@ class QdrJack(Memory):
             for bit in range(len(out_delays)):
                 mask+=(1<<bit if (step<out_delays[bit]) else 0)
             if verbosity>1:
-                print 'Step out %i'%step,
-                print "{0:036b}".format(mask)
+                print('Step out %i'%step, end=' ')
+                print("{0:036b}".format(mask))
             self.qdr_delay_out_step(mask,1)
 
     def qdr_check_cal_any_good(self,verbosity=0):
@@ -316,9 +316,9 @@ class QdrJack(Memory):
             for word_n,word in enumerate(pattern):
                 patfail=patfail|(word ^ retdat[word_n])
                 if verbosity>2:
-                    print "{0:032b}".format(word),
-                    print "{0:032b}".format(retdat[word_n]),
-                    print "{0:032b}".format(patfail)
+                    print("{0:032b}".format(word), end=' ')
+                    print("{0:032b}".format(retdat[word_n]), end=' ')
+                    print("{0:032b}".format(patfail))
                 if patfail == 0xffffffff:
                     return False
         return True
@@ -340,8 +340,8 @@ class QdrJack(Memory):
                             out_delays=[out_step for bit in range(36)],
                             clk_delay=out_step,verbosity=verbosity)
             if verbosity > 0:
-                print "--- === Trying with OUT DELAYS to %i === ---" % out_step,
-                print 'was: %i' % self.qdr_delay_clk_get()
+                print("--- === Trying with OUT DELAYS to %i === ---" % out_step, end=' ')
+                print('was: %i' % self.qdr_delay_clk_get())
             try:
                 in_delays = self.find_in_delays(verbosity)
             except:
@@ -387,15 +387,15 @@ class QdrJack(Memory):
         #                out_delays=[out_step for bit in range(36)],
         #                clk_delay=out_step,verbosity=verbosity)
         if verbosity > 0:
-            print "--- === Trying with OUT DELAYS to %i === ---" % out_step,
-            print 'was: %i' % self.qdr_delay_clk_get()
+            print("--- === Trying with OUT DELAYS to %i === ---" % out_step, end=' ')
+            print('was: %i' % self.qdr_delay_clk_get())
         try:
             in_delays = self.find_in_delays(verbosity)
         except:
             in_delays = [0 for bit in range(36)]
 
         if verbosity > 0:
-            print 'Using in delays:', in_delays
+            print('Using in delays:', in_delays)
 
         self.apply_cals(in_delays,
                         out_delays=[out_step for bit in range(36)],

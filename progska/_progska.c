@@ -13,10 +13,17 @@ static PyMethodDef module_methods[] = {
     {NULL, NULL, 0, NULL}
 };
 
-PyMODINIT_FUNC initprogska(void) {
-    PyObject *m = Py_InitModule("progska", module_methods);
-    if (m == NULL)
-        return;
+static struct PyModuleDef progska =
+{
+    PyModuleDef_HEAD_INIT,
+    "progska", //name of module
+    "", //Module docstring
+    -1, //size of per-interpreter state of the module, or -1 if the module keeps state in global variables.
+    module_methods
+};
+
+PyMODINIT_FUNC PyInit_progska(void) {
+    return PyModule_Create(&progska);
 }
 
 static PyObject *casperfpga_progskaupload(PyObject *self, PyObject *args) {
@@ -65,7 +72,7 @@ static PyObject *casperfpga_progskaupload(PyObject *self, PyObject *args) {
     mainargs[4] = binfile;
     for (host_ctr = 0; host_ctr < num_hosts; host_ctr++) {
         item = PySequence_Fast_GET_ITEM(host_list, host_ctr);
-        const char *hostname = PyString_AsString(item);
+        const char *hostname = PyBytes_AsString(item);
         mainargs[host_ctr + 5] = hostname;
         if(verbose > 0)
             printf("\t%s\n", hostname);

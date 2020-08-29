@@ -1,9 +1,8 @@
-from wishbonedevice import WishBoneDevice
+from .wishbonedevice import WishBoneDevice
 import numpy as np
 import struct,math
 import logging
 
-logger = logging.getLogger(__name__)
 
 class HMCAD1511(WishBoneDevice):
 
@@ -124,7 +123,7 @@ class HMCAD1511(WishBoneDevice):
              32 : 0b1100,
              50 : 0b1101,}
 
-    def __init__(self, interface, controller_name, cs=0xff):
+    def __init__(self, interface, controller_name, cs=0xff, **kwargs):
         """ HMCAD1511 High Speed Multi-Mode 8-Bit 1 GSPS A/D Converter
 
         interface: an instance of casperfpga.CasperFpga
@@ -166,12 +165,13 @@ class HMCAD1511(WishBoneDevice):
         Please find more examples of of usage in adc.HMCAD1511.init() or snapadc.py
         """
 
-        super(HMCAD1511, self).__init__(interface, controller_name)
+        super(HMCAD1511, self).__init__(interface, controller_name, **kwargs)
 
         if not isinstance(cs,int):
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         self.cs = cs & 0xff
+
 
     # Put some initialization here rather than in __init__ so that instantiate
     # an HMCAD1511 object wouldn't reset/interrupt the running ADCs.
@@ -234,7 +234,7 @@ class HMCAD1511(WishBoneDevice):
                 rid = self.DICT.index(d)
                 return rid, d.get(name)
         if rid == None:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
 
     def test(self, mode='off', _bits_custom1=None, _bits_custom2=None):
@@ -256,7 +256,7 @@ class HMCAD1511(WishBoneDevice):
             self.write(self._set(0x0, 0b100, mask), rid)
         elif mode == 'dual_custom_pat':
             if not isinstance(_bits_custom1, int) or not isinstance(_bits_custom2, int):
-                logger.error("Invalid parameter")
+                self.logger.error("Invalid parameter")
                 raise ValueError("Invalid parameter")
             rid, mask = self._getMask('pat_deskew')
             self.write(self._set(0x0, 0b00, mask), rid)
@@ -268,7 +268,7 @@ class HMCAD1511(WishBoneDevice):
             self.write(self._set(0x0, 0b010, mask), rid)
         elif mode == 'single_custom_pat':
             if not isinstance(_bits_custom1, int):
-                logger.error("Invalid parameter")
+                self.logger.error("Invalid parameter")
                 raise ValueError("Invalid parameter")
             rid, mask = self._getMask('pat_deskew')
             self.write(self._set(0x0, 0b00, mask), rid)
@@ -292,7 +292,7 @@ class HMCAD1511(WishBoneDevice):
             rid, mask = self._getMask('pat_deskew')
             self.write(self._set(0x0, 0b00, mask), rid)
         else:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
 
     # fine gain (x, not dB)
@@ -328,21 +328,21 @@ class HMCAD1511(WishBoneDevice):
         """
 
         if not isinstance(gains, list):
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if len(gains) not in [1,2,4]:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if not all(isinstance(e, (int,float)) and e>=0 for e in gains):
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if cgain_cfg==False:
             if not all(e in self.CGAIN_DICT_0.keys() for e in gains):
-                logger.error("Invalid parameter")
+                self.logger.error("Invalid parameter")
                 raise ValueError("Invalid parameter")
         else:
             if not all(e in self.CGAIN_DICT_1.keys() for e in gains):
-                logger.error("Invalid parameter")
+                self.logger.error("Invalid parameter")
                 raise ValueError("Invalid parameter")
 
         # By default, coarse gain in dB step, fine gain disabled
@@ -388,21 +388,21 @@ class HMCAD1511(WishBoneDevice):
         """
 
         if not isinstance(gains, list):
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if not all(isinstance(e, float) for e in gains):
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if not len(gains) == 8:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         maxdB = 20*math.log(1+sum(self.FGAIN),10)
         mindB = 20*math.log(1-sum(self.FGAIN),10)
         if not all(e > maxdB for e in gains):
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Fine gain cannot be bigger than %d dB" % maxdB)
         if not all(e < mindB for e in gains):
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Fine gain cannot be smaller than %d dB" % mindB)
 
         cfgs = [self._calFGainCfg(g) for g in gains]
@@ -461,10 +461,10 @@ class HMCAD1511(WishBoneDevice):
         """
 
         if not numChannel in [1,2,4]:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if not clkDivide in [1,2,4,8]:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
 
         self.powerDown()
@@ -485,13 +485,13 @@ class HMCAD1511(WishBoneDevice):
         """ Reshape and return ADC data
         """
         if numChannel not in [1,2,4]:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if not isinstance(data,np.ndarray):
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if data.ndim != 2 or data.shape[1]!=8:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
 
         data = data.reshape(-1,numChannel,8/numChannel)
@@ -512,7 +512,7 @@ class HMCAD1511(WishBoneDevice):
 
         opts = [1, 2, 3, 4]
         if not all(i in opts for i in inputs):
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
 
         rid, mask = self._getMask('inp_sel_adc1')
@@ -604,16 +604,16 @@ class HMCAD1520(HMCAD1511):
         """
 
         if numChannel not in [0,1,2,4]:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if clkDivide not in [1,2,4,8]:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if lowClkFreq not in [True,False]:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
         if resolution not in [8,12,14]:
-            logger.error("Invalid parameter")
+            self.logger.error("Invalid parameter")
             raise ValueError("Invalid parameter")
 
         self.powerDown()

@@ -52,7 +52,7 @@ class AsyncRequester(object):
         :return:
         """
         req = self._nb_requests[self._nb_requests.keys()[0]]
-        for v in self._nb_requests.itervalues():
+        for v in self._nb_requests.values():
             if v.time_tx < req.time_tx:
                 req = v
         self._nb_requests_lock.acquire()

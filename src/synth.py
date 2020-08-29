@@ -1,9 +1,8 @@
-from wishbonedevice import WishBoneDevice
+from .wishbonedevice import WishBoneDevice
 import fractions as _frac
 import logging
 import time
 
-logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 class LMX2581(WishBoneDevice):
 	""" LMX2581 Frequency Synthesizer """
@@ -294,9 +293,10 @@ class LMX2581(WishBoneDevice):
 		self.setWord(0, 'NO_FCAL')
 
 		if self.getDiagnoses('LD_PINSTATE'):
+			self.logger.info('LMX2581 locked at {} MHz'.format(synth_mhz))
 			return True
 		else:
-			logging.error('LMX2581 not locked')
+			self.logger.error('LMX2581 not locked')
 			return False
 		
 
@@ -387,5 +387,5 @@ class LMX2581(WishBoneDevice):
 		if self.getDiagnoses('LD_PINSTATE'):
 			return True
 		else:
-			logging.error('LMX2581 not locked')
+			self.logger.error('LMX2581 not locked')
 			return False

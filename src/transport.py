@@ -1,4 +1,4 @@
-from utils import get_hostname
+from .utils import get_hostname
 
 
 class Transport(object):
@@ -15,6 +15,7 @@ class Transport(object):
         self.memory_devices = None
         self.prog_info = {'last_uploaded': '', 'last_programmed': '',
                           'system_name': ''}
+        self.platform = None
 
     def connect(self, timeout=None):
         """

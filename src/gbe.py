@@ -1,7 +1,7 @@
 import logging
 
-from network import Mac, IpAddress
-from utils import check_changing_status, CheckCounter
+from .network import Mac, IpAddress
+from .utils import check_changing_status, CheckCounter
 
 
 class Gbe(object):
@@ -381,7 +381,7 @@ class Gbe(object):
             self.get_gbe_core_details(read_cpu=True)
         print('CPU TX Interface (at offset 4096 bytes):')
         print('Byte offset: Contents (Hex)')
-        for key, value in details['cpu_tx'].iteritems():
+        for key, value in details['cpu_tx'].items():
             print('%04i:    ' % key,)
             for val in value:
                 print('%02x' % val,)
@@ -392,7 +392,7 @@ class Gbe(object):
         print('CPU packet RX buffer unacknowledged data: %i' %
               details['cpu_rx_buf_unack_data'])
         print('Byte offset: Contents (Hex)')
-        for key, value in details['cpu_rx'].iteritems():
+        for key, value in details['cpu_rx'].items():
             print('%04i:    ' % key,)
             for val in value:
                 print('%02x' % val,)

@@ -10,11 +10,11 @@ import contextlib
 
 from threading import Lock
 
-import skarab_definitions as sd
-import skarab_fileops as skfops
-from transport import Transport
-from network import IpAddress
-
+from . import skarab_definitions as sd
+from . import skarab_fileops as skfops
+from .transport import Transport
+from .network import IpAddress
+from .utils import socket_closer
 
 __author__ = 'tyronevb'
 __date__ = 'April 2016'
@@ -177,7 +177,7 @@ class SkarabTransport(Transport):
                 self.logger.info('Port({}) created & connected.'.format(
                     sd.ETHERNET_CONTROL_PORT_ADDRESS))
             else:
-                self.logger.error('Error connecting to {}: port{}'.format(self.host,
+                self.logger.error('Error connecting to {}: port {}'.format(self.host,
                     sd.ETHERNET_CONTROL_PORT_ADDRESS))
 
         # self.image_chunks, self.local_checksum = None, None
@@ -193,6 +193,9 @@ class SkarabTransport(Transport):
         """
 
         self.timeout = timeout
+    
+    def __del__(self):
+        socket_closer("class SkarabTransport __del__", self._skarab_control_sock)
 
     @staticmethod
     def test_host_type(host_ip):
@@ -208,6 +211,7 @@ class SkarabTransport(Transport):
             request_payload = request_object.create_payload(0xffff)
             sctrl_sock.sendto(request_payload, skarab_eth_ctrl_port)
             data_ready = select.select([sctrl_sock], [], [], 1)
+            socket_closer("class SkarabTransport test_host_type", sctrl_sock)
             if len(data_ready[0]) > 0:
                 # self.logger.debug('%s seems to be a SKARAB' % host_ip)
                 return True
@@ -230,7 +234,7 @@ class SkarabTransport(Transport):
                                        timeout=timeout)
             return True if data else False
         except ValueError as vexc:
-            self.logger.debug('Skarab is not connected: %s' % vexc.message)
+            self.logger.debug('Skarab is not connected: {}'.format(vexc))
             return False
 
     def is_running(self):
@@ -857,9 +861,9 @@ class SkarabTransport(Transport):
             self.logger.debug('{}: retransmit attempts: {}'.format(
                 hostname, retransmit_count))
             try:
-                self.logger.debug('{}: sending pkt({}, {}) to port {}.'.format(
+                self.logger.debug('{}: sending pkt({}, {}) to port {} = {}'.format(
                     hostname, request_object.packet['command_type'],
-                    request_object.packet['seq_num'], addr))
+                    request_object.packet['seq_num'], addr, request_payload))
                 self._skarab_control_sock.send(request_payload)
                 if not request_object.expect_response:
                     self.logger.debug(
@@ -1005,7 +1009,7 @@ class SkarabTransport(Transport):
 
         except select.error as e:
             self.logger.debug('{}: handling select error {}'.format(
-                hostname, e.message))
+                hostname, e))
             raise select.error
 
     # low level access functions

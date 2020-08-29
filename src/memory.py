@@ -5,7 +5,7 @@ busses. Normally via KATCP.
 """
 
 import logging
-import bitfield
+from . import bitfield
 import struct
 
 LOGGER = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def bin2fp(raw_word, bitwidth, bin_pt, signed):
         else:
             return long(word_masked)
     else:
-        quotient = word_masked / (2**bin_pt)
+        quotient = word_masked // (2**bin_pt)
         rem = word_masked - (quotient * (2**bin_pt))
         return quotient + (float(rem) / (2**bin_pt))
     raise RuntimeError
@@ -124,7 +124,7 @@ class Memory(bitfield.Bitfield):
         """
         :return: the memory block's length, in Words
         """
-        return self.length_bytes / (self.width_bits / 8)
+        return self.length_bytes // (self.width_bits // 8)
 
     # def __setattr__(self, name, value):
     #     try:
@@ -166,13 +166,13 @@ class Memory(bitfield.Bitfield):
         Does not use construct, just struct and iterate through.
         Faster than construct. Who knew?
         """
-        if not(isinstance(rawdata, str) or isinstance(rawdata, buffer)):
+        if not isinstance(rawdata, bytes):
             raise TypeError('self.read_raw returning incorrect datatype. '
                             'Must be str or buffer.')
         fbytes = struct.unpack('%iB' % self.length_bytes, rawdata)
-        width_bytes = self.width_bits / 8
+        width_bytes = self.width_bits // 8
         memory_words = []
-        for wordctr in range(0, len(fbytes) / width_bytes):
+        for wordctr in range(0, len(fbytes) // width_bytes):
             startindex = wordctr * width_bytes
             wordl = 0
             for bytectr in range(0, width_bytes):
@@ -183,10 +183,10 @@ class Memory(bitfield.Bitfield):
             memory_words.append(wordl)
         # now we have all the words as longs, so carry on
         processed = {}
-        for field in self._fields.itervalues():
+        for field in self._fields.values():
             processed[field.name] = []
         for ctr, word in enumerate(memory_words):
-            for field in self._fields.itervalues():
+            for field in self._fields.values():
                 word_shift = word >> field.offset
                 word_done = bin2fp(word_shift, field.width_bits,
                                    field.binary_pt, field.numtype == 1)

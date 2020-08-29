@@ -1,8 +1,8 @@
 import logging
 import time
 
-from network import IpAddress, Mac
-from gbe import Gbe
+from .network import IpAddress, Mac
+from .gbe import Gbe
 
 
 class FortyGbe(Gbe):
