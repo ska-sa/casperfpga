@@ -121,8 +121,8 @@ class SnapAdc(object):
 
         # test pattern for clock aligning
         pats = [0b10101010,0b01010101,0b00000000,0b11111111]
-        mask = (1 << (self.resolution / 2)) - 1
-        ofst = self.resolution / 2
+        mask = (1 << (self.resolution // 2)) - 1
+        ofst = self.resolution // 2
         self.p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
         self.p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
 
@@ -343,7 +343,7 @@ class SnapAdc(object):
 
     def _get(self, data, mask):
         data = data & mask
-        return data / (mask & -mask)
+        return data // (mask & -mask)
 
     def _set(self, d1, d2, mask=None):
         # Update some bits of d1 with d2, while keep other bits unchanged
@@ -662,7 +662,7 @@ class SnapAdc(object):
             self.controller.test('pat_sync')
             # pattern1 = 0b11110000 when self.RESOLUTION is 8
             # pattern1 = 0b111111000000 when self.RESOLUTION is 12
-            pattern1 = ((2 ** (self.resolution / 2)) - 1) << (self.resolution / 2)
+            pattern1 = ((2 ** (self.resolution // 2)) - 1) << (self.resolution // 2)
             pattern1 = self._signed(pattern1, self.resolution)
         elif isinstance(pattern1,int) and pattern2==None:
             # single pattern mode

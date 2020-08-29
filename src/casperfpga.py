@@ -586,7 +586,7 @@ class CasperFpga(object):
                           'okay%s.' % (integer, device_name, word_offset,
                           ' (blind)' if blindwrite else ''))
 
-    def _create_memory_devices(self, device_dict, memorymap_dict, **kwargs):
+    def _create_memory_devices(self, device_dict, memorymap_dict, legacy_reg_map=True, **kwargs):
         """
         Create memory devices from dictionaries of design information.
         
