@@ -86,6 +86,12 @@ class SkarabFanControllerClearError(ValueError):
 class NonVolatileLogRetrievalError(ValueError):
     pass
 
+class SkarabProcessorVersionError(ValueError):
+    pass
+
+class NetworkConfigurationError(ValueError):
+    pass
+
 # endregion
 
 
@@ -179,6 +185,14 @@ class SkarabTransport(Transport):
         # self.gbes = []
         # self.gbes.append(FortyGbe(self, 0))
         # # self.gbes.append(FortyGbe(self, 0, 0x54000 - 0x4000))
+
+    def _update_response_timeout(self, timeout):
+        """
+        Method to update the timeout when waiting for responses from SKARABs
+        :return:
+        """
+
+        self.timeout = timeout
 
     @staticmethod
     def test_host_type(host_ip):
@@ -278,6 +292,7 @@ class SkarabTransport(Transport):
         if (size > 4) and use_bulk:
             # use a bulk read if more than 4 bytes are requested
             return self._bulk_read(device_name, size, offset)
+
         addr = self._get_device_address(device_name)
         # can only read 4 bytes at a time
         # work out how many reads we require, and from where
@@ -294,9 +309,8 @@ class SkarabTransport(Transport):
         # address to read is starting address plus offset
         data = ''
         for readctr in range(num_reads):
-            addr_high, addr_low = self.data_split_and_pack(addr_start)
-            request = sd.ReadWishboneReq(addr_high, addr_low)
-            response = self.send_packet(request, timeout=timeout, retries=retries)
+            response = self._rd_wishbone(wb_address=addr_start)
+
             # merge high and low binary data for the current read
             read_low = struct.pack('!H', response.packet['read_data_low'])
             read_high = struct.pack('!H', response.packet['read_data_high'])
@@ -334,6 +348,13 @@ class SkarabTransport(Transport):
         if response is None:
             errmsg = 'Bulk read failed.'
             raise SkarabReadFailed(errmsg)
+
+        # check if wishbone read command timed out
+        if response.packet['number_of_reads'] \
+                == sd.BIG_WISHBONE_READ_ERROR_CODE:
+            errmsg = 'Wishbone timeout. Address 0x{:x}'.format(address)
+            raise SkarabReadFailed(errmsg)
+
         # response.read_data is a list of 16-bit words, pack it
         read_data = response.packet['read_data'][0:words_to_read*2]
         return struct.pack('>%iH' % len(read_data), *read_data)
@@ -404,6 +425,11 @@ class SkarabTransport(Transport):
             raise SkarabWriteFailed(errmsg)
         if response.packet['number_of_writes_done'] != words_to_write:
             errmsg = 'Bulk write failed. Not all words written.'
+            raise SkarabWriteFailed(errmsg)
+
+        # check if wishbone command timed out
+        if response.packet['error_status']:
+            errmsg = 'Wishbone timeout. Address 0x{:x}'.format(address)
             raise SkarabWriteFailed(errmsg)
 
         self.logger.debug('Number of writes dones: %d' %
@@ -509,13 +535,11 @@ class SkarabTransport(Transport):
         data = ''
 
         # address to read is starting address plus offset
-        addr = device_name + offset
+        addr = self._get_device_address(device_name)
+        addr += offset
         for readctr in range(num_reads):
-            # get correct address and pack into binary format
-            # TODO: sort out memory mapping of device_name
-            addr_high, addr_low = self.data_split_and_pack(addr)
-            request = sd.ReadWishboneReq(addr_high, addr_low)
-            response = self.send_packet(request, timeout=timeout, retries=retries)
+            response = self._rd_wishbone(wb_address=addr)
+
             # merge high and low binary data for the current read
             read_high = struct.pack('!H', response.packet['read_data_high'])
             read_low = struct.pack('!H', response.packet['read_data_low'])
@@ -556,15 +580,10 @@ class SkarabTransport(Transport):
 
             # map device name to address, if can't find, bail
             addr = self._get_device_address(device_name)
-
-            # split the data into two 16-bit words
-            data_high = data[:2]
-            data_low = data[2:]
             addr += offset
-            addr_high, addr_low = self.data_split_and_pack(addr)
-            request = sd.WriteWishboneReq(addr_high, addr_low,
-                                          data_high, data_low)
-            self.send_packet(request, timeout=timeout, retries=retries)
+
+            self._wr_wishbone(wb_address=addr,
+                              data=data)
 
     def deprogram(self):
         """
@@ -645,28 +664,34 @@ class SkarabTransport(Transport):
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
 
-        [golden_image, multiboot, firmware_version] = \
-            self.get_virtex7_firmware_version(timeout=timeout, retries=retries)
-        if golden_image == 0 and multiboot == 0:
-            return True, firmware_version
-        elif golden_image == 1 and multiboot == 0:
-            self.logger.error(
-                'Skarab is back up, but fell back to golden image with '
-                'firmware version %s' % firmware_version)
-            return False, firmware_version
-        elif golden_image == 0 and multiboot == 1:
-            self.logger.error(
-                'Skarab is back up, but fell back to multiboot image with '
-                'firmware version %s' % firmware_version)
-            return False, firmware_version
-        else:
-            self.logger.error(
-                'Skarab is back up, but unknown image with firmware '
-                'version number %s' % firmware_version)
-            return False, firmware_version
+        try:
+            [golden_image, multiboot, firmware_version] = \
+                self.get_virtex7_firmware_version(timeout=timeout, retries=retries)
+            if golden_image == 0 and multiboot == 0:
+                return True, firmware_version
+            elif golden_image == 1 and multiboot == 0:
+                self.logger.error(
+                    'Skarab is back up, but fell back to golden image with '
+                    'firmware version %s' % firmware_version)
+                return False, firmware_version
+            elif golden_image == 0 and multiboot == 1:
+                self.logger.error(
+                    'Skarab is back up, but fell back to multiboot image with '
+                    'firmware version %s' % firmware_version)
+                return False, firmware_version
+            else:
+                self.logger.error(
+                    'Skarab is back up, but unknown image with firmware '
+                    'version number %s' % firmware_version)
+                return False, firmware_version
+        except SkarabSendPacketError as err:
+            self.logger.warning('Skarab {} unreachable: {}'.format(self.host,
+                                                                   err.message))
+            return False, '0.0'
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=60,
-                                  wait_complete=True, skip_verification=False, chunk_size=1988):
+                                  wait_complete=True, skip_verification=False,
+                                  **kwargs):
         """
         Uploads an FPGA image to the SDRAM, and triggers a reboot to boot
         from the new image.
@@ -681,13 +706,18 @@ class SkarabTransport(Transport):
         :param skip_verification - do not verify the image after upload
         :return: Boolean - True/False - Succes/Fail
         """
-        #print('skarab_transport')
-        print(chunk_size)
+
+        # check if a chunk size was specified, else default to 1988
+        if 'chunk_size' in kwargs.keys():
+            chunk_size = kwargs['chunk_size']
+        else:
+            # default to a chunk size of 1988
+            chunk_size = 1988
+
         try:
             upload_time = self.upload_to_ram(filename, not skip_verification, chunk_size)
-            #print("completed fine")
+
         except:
-            #print("failed to program")
             self.logger.error('Failed to program.')
             raise
         if not wait_complete:
@@ -729,6 +759,8 @@ class SkarabTransport(Transport):
 
         # clear prog_info for last uploaded
         self.prog_info['last_uploaded'] = ''
+        self.logger.debug('SDRAM for host {host} '
+                          'cleared'.format(host=self.host))
 
     @staticmethod
     def data_split_and_pack(data):
@@ -847,13 +879,19 @@ class SkarabTransport(Transport):
             except SkarabResponseNotReceivedError:
                 # retransmit the packet
                 pass
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, select.error):
                 self.logger.warning('{}: keyboard interrupt, clearing '
                                'buffer.'.format(hostname))
                 # wait to receive incoming responses
-                time.sleep(1)
+                time.sleep(0.5)
+                try:
+                    _ = self._skarab_control_sock.recvfrom(4096)
+                    self.logger.info(
+                        '{}: cleared recv buffer.'.format(hostname))
+                except socket.error:
+                    self.logger.info(
+                        '{}: buffer already empty'.format(hostname))
                 self._lock.release()
-                self.logger.info('{}: cleared recv buffer.'.format(hostname))
                 raise KeyboardInterrupt
             retransmit_count += 1
         self._lock.release()
@@ -958,9 +996,17 @@ class SkarabTransport(Transport):
                             'buffer.'.format(hostname))
             # wait to receive incoming responses
             time.sleep(1)
-            _ = self._skarab_control_sock.recvfrom(4096)
-            self.logger.info('{}: cleared recv buffer.'.format(hostname))
+            try:
+                _ = self._skarab_control_sock.recvfrom(4096)
+                self.logger.info('{}: cleared recv buffer.'.format(hostname))
+            except socket.error:
+                self.logger.info('{}: buffer already empty'.format(hostname))
             raise KeyboardInterrupt
+
+        except select.error as e:
+            self.logger.debug('{}: handling select error {}'.format(
+                hostname, e.message))
+            raise select.error
 
     # low level access functions
     def reboot_fpga(self):
@@ -1110,40 +1156,62 @@ class SkarabTransport(Transport):
             patch = response.packet['version_patch']
             return '{}.{}.{}'.format(major, minor, patch)
 
-    def write_wishbone(self, wb_address, data,
-                       timeout=None,
-                       retries=None):
+    def _wr_wishbone(self, wb_address, data,
+                     timeout=None,
+                     retries=None):
         """
         Used to perform low level wishbone write to a wishbone slave. Gives
         low level direct access to wishbone bus.
 
         :param wb_address: address of the wishbone slave to write to
         :param data: data to write
-        :return: response object
+        :return:
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
 
-        # split data into two 16-bit words (also packs for network transmission)
-        data_split = list(self.data_split_and_pack(data))
-        # split address into two 16-bit segments: high, low
-        # (also packs for network transmission)
-        address_split = list(self.data_split_and_pack(wb_address))
-        # create one tuple containing data and address
-        address_and_data = address_split
-        address_and_data.extend(data_split)
-        request = sd.WriteWishboneReq(*address_and_data)
-        response = self.send_packet(request, timeout=timeout, retries=retries)
-        return response
+        addr_high, addr_low = self.data_split_and_pack(wb_address)
 
-    def read_wishbone(self, wb_address,
-                      timeout=None,
-                      retries=None):
+        # split the data into two 16-bit words
+        data_high = data[:2]
+        data_low = data[2:]
+        request = sd.WriteWishboneReq(addr_high, addr_low,
+                                      data_high, data_low)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check if wishbone command timed out
+        if response.packet['error_status']:
+            errmsg = 'Wishbone timeout. Address 0x{:x}'.format(wb_address)
+            raise SkarabWriteFailed(errmsg)
+
+    def write_wishbone(self, wb_address, data,
+                       timeout=None,
+                       retries=None):
+
+        """
+        Used to perform low level wishbone write to a Wishbone slave. Used
+        as a high-level simple wishbone write. Doesn't expect data to be
+        binary strings.
+        :param wb_address: address of the wishbone slave to read from
+        :return: read data
+        """
+
+        # split data into two 16-bit words (also packs for network transmission)
+        data_high, data_low = self.data_split_and_pack(data)
+        data_packed = data_high + data_low
+
+        self._wr_wishbone(wb_address=wb_address,
+                          data=data_packed)
+
+    def _rd_wishbone(self, wb_address,
+                     timeout=None,
+                     retries=None):
         """
         Used to perform low level wishbone read from a Wishbone slave.
-
+        Used by higher-level methods
         :param wb_address: address of the wishbone slave to read from
-        :return: Read Data or None
+        :return: response object
         """
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
@@ -1151,9 +1219,28 @@ class SkarabTransport(Transport):
         request = sd.ReadWishboneReq(*self.data_split_and_pack(wb_address))
         response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
-            return self.data_unpack_and_merge(
-                response.packet['read_data_high'],
-                response.packet['read_data_low'])
+            # check if wishbone command timed out
+            if response.packet['error_status']:
+                errmsg = 'Wishbone timeout. Address 0x{:x}'.format(wb_address)
+                raise SkarabReadFailed(errmsg)
+            else:
+                return response
+
+    def read_wishbone(self, wb_address,
+                      timeout=None,
+                      retries=None):
+        """
+        Used to perform low level wishbone read from a Wishbone slave. Used
+        as a high-level simple wishbone read.
+        :param wb_address: address of the wishbone slave to read from
+        :return: read data
+        """
+
+        response = self._rd_wishbone(wb_address)
+
+        return self.data_unpack_and_merge(
+            response.packet['read_data_high'],
+            response.packet['read_data_low'])
 
     def write_i2c(self, interface, slave_address, *bytes_to_write):
         """
@@ -3051,12 +3138,21 @@ class SkarabTransport(Transport):
                 # return '\033[0;31m{}\033[00m'.format('nominal')
                 return 'nominal'
 
-        def parse_fan_speeds_rpm(raw_sensor_data):
+        def parse_fan_speeds_rpm(raw_sensor_data, status_bits):
             for key, value in sd.sensor_list.items():
                 if 'fan_rpm' in key:
-                    fan_speed = raw_sensor_data[value]
-                    self.sensor_data[key] = (
-                            fan_speed, 'rpm', check_fan_speed(key, fan_speed))
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[
+                                                 key][0],
+                                             sd.sensor_status_word_location_bit[
+                                                 key][1])
+
+                    if not error:
+                        fan_speed = raw_sensor_data[value]
+                        self.sensor_data[key] = (
+                                fan_speed, 'rpm', check_fan_speed(key, fan_speed))
+                    else:
+                        self.sensor_data[key] = (-1, 'rpm', 'unknown')
 
         def parse_fan_speeds_generic(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -3064,45 +3160,70 @@ class SkarabTransport(Transport):
                     self.sensor_data[key] = round(
                         raw_sensor_data[value] / 100.0, 2)
 
-        def parse_fan_speeds_pwm(raw_sensor_data):
+        def parse_fan_speeds_pwm(raw_sensor_data, status_bits):
             for key, value in sd.sensor_list.items():
                 if 'fan_pwm' in key:
-                    pwm_value = round(raw_sensor_data[value] / 100.0, 2);
-                    if(pwm_value > 100 or pwm_value < 0):
-                        message = 'error'
-                    else:
-                        message = 'nominal'
-                    self.sensor_data[key] = (
-                            pwm_value, '%',message)
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[
+                                                 key][0],
+                                             sd.sensor_status_word_location_bit[
+                                                 key][1])
 
-        def parse_temperatures(raw_sensor_data):
+                    if not error:
+                        pwm_value = round(raw_sensor_data[value] / 100.0, 2)
+                        if(pwm_value > 100 or pwm_value < 0):
+                            message = 'error'
+                        else:
+                            message = 'nominal'
+                        self.sensor_data[key] = (
+                                pwm_value, '%', message)
+                    else:
+                        self.sensor_data[key] = (-1, '%', 'unknown')
+
+        def parse_temperatures(raw_sensor_data, status_bits):
             # inlet temp (reference)
             inlet_ref = temperature_value_check(
                 raw_sensor_data[sd.sensor_list['inlet_temperature_degC']])
             for key, value in sd.sensor_list.items():
                 if 'temperature' in key:
-                    if 'voltage' in key or 'current' in key:
-                        temperature = voltage_current_monitor_temperature_check(
-                            raw_sensor_data[value])
-                        self.sensor_data[
-                            key] = (temperature, 'degC',
-                                    check_temperature(key, temperature,
-                                                      inlet_ref))
-                    elif 'hmc' in key:
-                        temperature = struct.unpack(
-                            '!I', struct.pack('!4B',
-                                              *raw_sensor_data[value:value+4]))[0]
-                        self.sensor_data[key] = (-1 if temperature==0xffeeddcc else temperature,
-                                                 'degC',
-                                                 check_temperature(key, temperature, inlet_ref=0))
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[
+                                                 key][0],
+                                             sd.sensor_status_word_location_bit[
+                                                 key][1])
 
+                    if not error:
+                        if 'voltage' in key or 'current' in key:
+                            temperature = voltage_current_monitor_temperature_check(
+                                raw_sensor_data[value])
+                            self.sensor_data[
+                                key] = (temperature, 'degC',
+                                        check_temperature(key, temperature,
+                                                          inlet_ref=0))
+                        elif 'hmc' in key:
+                            temperature = struct.unpack(
+                                '!I', struct.pack('!4B',
+                                                  *raw_sensor_data[value:value+4]))[0]
+                            self.sensor_data[key] = (-1 if temperature==0xffeeddcc else temperature,
+                                                     'degC',
+                                                     check_temperature(key, temperature, inlet_ref=0))
+
+                        # ignore the mezzanine temperatures as these are unreliable
+                        elif 'mezzanine' in key:
+                            continue
+
+                        else:
+                            temperature = temperature_value_check(
+                                raw_sensor_data[value])
+                            self.sensor_data[key] = (temperature, 'degC',
+                                                     check_temperature(key,
+                                                                       temperature,
+                                                                       inlet_ref=0))
                     else:
-                        temperature = temperature_value_check(
-                            raw_sensor_data[value])
-                        self.sensor_data[key] = (temperature, 'degC',
-                                                 check_temperature(key,
-                                                                   temperature,
-                                                                   inlet_ref))
+                        if 'mezzanine' in key:
+                            continue
+                        else:
+                            self.sensor_data[key] = (-1, 'degC', 'unknown')
 
         def parse_mezzanine_temperatures(raw_sensor_data):
             for key, value in sd.sensor_list.items():
@@ -3111,34 +3232,64 @@ class SkarabTransport(Transport):
                     temperature = mezzanine_temperature_check_hmc(raw_sensor_data[value])
                     self.sensor_data[key] = (temperature, 'degC', check_temperature(key, temperature, inlet_ref=0))
 
-        def parse_voltages(raw_sensor_data):
+        def parse_voltages(raw_sensor_data, status_bits):
             for key, value in sd.sensor_list.items():
                 if '_voltage' in key:
-                    voltage = voltage_handler(raw_sensor_data, value)
-                    self.sensor_data[key] = (voltage, 'volts',
-                                             check_voltage(key, voltage))
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[
+                                                 key][0],
+                                             sd.sensor_status_word_location_bit[
+                                                 key][1])
 
-        def parse_currents(raw_sensor_data):
+                    if not error:
+
+                        voltage = voltage_handler(raw_sensor_data, value)
+                        self.sensor_data[key] = (voltage, 'volts',
+                                                 check_voltage(key, voltage))
+                    else:
+                        self.sensor_data[key] = (-1, 'volts', 'unknown')
+
+        def parse_currents(raw_sensor_data, status_bits):
             for key, value in sd.sensor_list.items():
                 if '_current' in key:
-                    current = current_handler(raw_sensor_data, value)
-                    self.sensor_data[key] = (current, 'amperes',
-                                             check_current(key, current))
+                    error = check_status_bit(status_bits,
+                                             sd.sensor_status_word_location_bit[key][0],
+                                             sd.sensor_status_word_location_bit[key][1])
+
+                    if not error:
+                        current = current_handler(raw_sensor_data, value)
+                        self.sensor_data[key] = (current, 'amperes',
+                                                 check_current(key, current))
+                    else:
+                        self.sensor_data[key] = (-1, 'amperes', 'unknown')
+
+        def check_status_bit(status, status_bits_word_idx, status_bit_idx):
+            if status[status_bits_word_idx][status_bit_idx] == '0':
+                return 0
+            else:
+                return 1
 
         request = sd.GetSensorDataReq()
         response = self.send_packet(request, timeout=timeout, retries=retries)
         if response is not None:
             # raw sensor data received from SKARAB
             recvd_sensor_data_values = response.packet['sensor_data']
-            # parse the raw data to extract actual sensor info
-            parse_fan_speeds_generic(recvd_sensor_data_values)
-            parse_fan_speeds_rpm(recvd_sensor_data_values)
-            parse_fan_speeds_pwm(recvd_sensor_data_values)
-            parse_currents(recvd_sensor_data_values)
-            parse_voltages(recvd_sensor_data_values)
-            parse_temperatures(recvd_sensor_data_values)
-            parse_mezzanine_temperatures(recvd_sensor_data_values)
+            recvd_sensor_status = response.packet['status']
+            status_dict = {k: '{:016b}'.format(v)[::-1]
+                           for k, v in enumerate(recvd_sensor_status)}
 
+            # seems to be an endianess conflict, the words are swapped around
+            # the [::-1] reverses this to match the expected bit order
+
+            # parse the raw data to extract actual sensor info
+            parse_fan_speeds_rpm(recvd_sensor_data_values, status_dict)
+            parse_fan_speeds_pwm(recvd_sensor_data_values, status_dict)
+            parse_currents(recvd_sensor_data_values, status_dict)
+            parse_voltages(recvd_sensor_data_values, status_dict)
+            parse_temperatures(recvd_sensor_data_values, status_dict)
+
+            # disable mezzanine temperatures as these values are not reliable
+            # parse_mezzanine_temperatures(recvd_sensor_data_values)
             return self.sensor_data
 
         else:
@@ -3237,26 +3388,56 @@ class SkarabTransport(Transport):
         minor = self.read_spi_page(rd_minor, 1)[0]
         return major, minor
 
-    def multicast_receive(self, gbename, ip, mask,
+    def multicast_receive(self, gbename, ip, mask, interface_id=1,
                           timeout=None,
                           retries=None):
         """
-
-        :param gbename:
-        :param ip:
-        :param mask:
+        Configure an interface for multicast
+        :param gbename: gbe device name to configure
+        :param interface_id: interface to configure (1,2,3 or 4) or 0xff
+        to use command and control interface i.e. *this* interface
+        :param ip: multicast ip address
+        :param mask: multicast address mask
+        :param timeout:
+        :param retries:
+        :return:
         """
+
         if timeout is None: timeout=self.timeout
         if retries is None: retries=self.retries
+        self.logger.debug('%s: multicast join request: addr(%s) mask(%s)' % (
+            gbename, ip.ip_str, mask.ip_str))
 
         ip_high = ip.ip_int >> 16
         ip_low = ip.ip_int & (2 ** 16 - 1)
         mask_high = mask.ip_int >> 16
         mask_low = mask.ip_int & (2 ** 16 - 1)
-        request = sd.ConfigureMulticastReq(1, ip_high, ip_low,
+        request = sd.ConfigureMulticastReq(interface_id, ip_high, ip_low,
                                            mask_high, mask_low)
         response = self.send_packet(request, timeout=timeout, retries=retries)
         resp_pkt = response.packet
+
+        # check status
+        if resp_pkt['status'] == sd.MULTILINK_CMD_STATUS_SUCCESS:
+            msg = '{}: multicast to be configured for interface {}'.format(
+                gbename, interface_id)
+            self.logger.debug(msg)
+        elif resp_pkt['status'] == sd.MULTILINK_CMD_STATUS_ERROR_GENERAL:
+            errmsg = '{}: failed to configure multicast for specified ' \
+                     'interface {}'.format(gbename, interface_id)
+            self.logger.error(errmsg)
+            raise NetworkConfigurationError(errmsg)
+        elif resp_pkt['status'] == sd.MULTILINK_CMD_STATUS_ERROR_IF_OUT_OF_RANGE:
+            errmsg = '{}: invalid interface identifier specified: {}'.format(
+                gbename, interface_id)
+            self.logger.error(errmsg)
+            raise NetworkConfigurationError(errmsg)
+        elif resp_pkt['status'] == sd.MULTILINK_CMD_STATUS_ERROR_IF_NOT_PRESENT:
+            errmsg = '{}: specified interface: {} not present in design'.format(
+                gbename, interface_id)
+            self.logger.error(errmsg)
+            raise NetworkConfigurationError(errmsg)
+
         resp_ip = IpAddress(resp_pkt['fabric_multicast_ip_address_high'] << 16 |
                             resp_pkt['fabric_multicast_ip_address_low'])
         resp_mask = IpAddress(
@@ -3567,11 +3748,11 @@ class SkarabTransport(Transport):
         Set the link monitor timeout - how long to wait for the single 40GbE link
         to show activity. After this timeout, the motherboard resets in attempt to
         re-initialise the link. Only monitors the RX side of the link.
-        :param link_mon_timeout: desired link mon timeout, minimum time is 30 sec
+        :param link_mon_timeout: desired link mon timeout, minimum time is 5 sec
         :return: True if success, False if failed
         """
 
-        assert(link_mon_timeout >= 30), 'Minimum link monitor timeout is 30 seconds'
+        assert(link_mon_timeout >= 5), 'Minimum link monitor timeout is 5 seconds'
 
         # the uBlaze requires a count of 100ms increments
 
@@ -3595,6 +3776,26 @@ class SkarabTransport(Transport):
                                             force_page_zero_write=False)
 
         return rv
+
+    def get_dhcp_link_mon_timeout(self, timeout=None, retries=None):
+        """
+        Retrieve the current dhcp link monitor timeout, as set by the MicroBlaze's
+        auto-retry mechanism.
+        :return: current set dhcp link monitor timeout, in seconds
+        """
+
+        # create request object
+        request = sd.GetDHCPMonitorTimeoutReq()
+
+        # send request to microblaze and create response object
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        dhcp_link_mon_timeout = response.packet['dhcp_monitor_timeout'] * 100.0 / 1000.0
+        
+        self.logger.debug("{host} DHCP link monitor timeout is set to {link_mon_timeout} seconds".format(
+            host=self.host, link_mon_timeout=dhcp_link_mon_timeout))
+
+        return dhcp_link_mon_timeout
 
     def get_tunable_parameters(self):
         """
@@ -3644,8 +3845,8 @@ class SkarabTransport(Transport):
             hmc_retries = struct.unpack('<I', struct.pack('!4B', *hmc_retries_raw))[0]
             hmc_total_retries = struct.unpack('<I', struct.pack('!4B', *hmc_total_retries_raw))[0]
 
-            stats['hmc_retries'] = hmc_retries
-            stats['hmc_total_retries'] = hmc_total_retries
+            stats['hmc_init_failures_recorded'] = hmc_retries
+            stats['hmc_total_init_retries_recorded'] = hmc_total_retries
 
             hmc_reconfigure_stats[prefix] = stats
 
@@ -3701,6 +3902,29 @@ class SkarabTransport(Transport):
                 response.packet['link_id'],
                 error_dictionary[response.packet['reset_error']])
             raise SkarabUnknownDeviceError(err)
+
+    def leave_multicast_group(self, link_id=1, timeout=None, retries=None):
+        """
+        SKARAB to issue IGMP leave request to exit a multicast group.
+        :param link_id: interface/link to issue igmp leave request on. 
+        Options: (1,2, 3 or 4) or 0xff to use command and control interface 
+        i.e. *this* interface
+        :param timeout:
+        :param retries:
+        :return: True if leave request successful, False if not
+        """
+
+        request = sd.MulticastLeaveGroupReq(link_id)
+
+        response = self.send_packet(request, timeout=timeout, retries=retries)
+
+        # check if the request was successful
+        if response.packet['success']:
+            self.logger.info('{host} left multicast group'.format(host=self.host))
+            return True
+        else:
+            self.logger.error('{host} failed to leave multicast group'.format(host=self.host))
+            return False
 
     # TODO: only declare this function once! Will have to be global
     @staticmethod
@@ -4063,4 +4287,280 @@ class SkarabTransport(Transport):
         except NonVolatileLogRetrievalError:
             self.logger.error('Failed to retrieve fan controller log data')
 
+    def _set_to_default_configuration(self, threshold_1v0_current=35,
+                                      tuneable_parameters_dict=sd.default_tunable_parameters):
+        """
+        Configure the SKARAB board to the SARAO default configuration parameters
+        :param: threshold_1v0_current
+        :param: tuneable_parameters_dict
+        :return: True if success, False otherwise
+        """
+
+        # check MircoBlaze version
+        major, minor, patch = self.get_embedded_software_version().split('.')
+        if (int(major) < 3) or (int(major) == 3 and int(minor) < 11):
+            raise SkarabProcessorVersionError('MicroBlaze version is too '
+                                              'old to support configuration '
+                                              'of tunable parameters')
+
+        # configure 1V0 Trip Current Threshold
+        current_threshold_set = self._set_1v0_trip_current_threshold(
+            trip_threshold=threshold_1v0_current)
+
+        if not current_threshold_set:
+            self.logger.warning('Setting trip threshold for '
+                                '1V0 current to {} failed!'.format(threshold_1v0_current))
+
+        # configure tunable parameters
+        error_dict = {}
+        self.set_hmc_reconfig_max_retries(tuneable_parameters_dict['hmc_reconfig_max_retries'])
+        self.set_hmc_reconfig_timeout(tuneable_parameters_dict['hmc_reconfig_timeout'])
+        self.set_link_mon_timeout(tuneable_parameters_dict['link_mon_timeout'])
+        self.set_dhcp_init_time(tuneable_parameters_dict['dhcp_init_time'])
+        self.set_dhcp_retry_rate(tuneable_parameters_dict['dhcp_retry_rate'])
+
+        # check if the tunable parameters were set correctly
+        set_parameters = self.get_tunable_parameters()
+        for parameter, value in set_parameters.items():
+            if value != tuneable_parameters_dict[parameter]:
+                error_dict[parameter] = value
+
+        if error_dict:
+            #  some parameters were not set correctly
+            self.logger.warning("Some parameters were not set correctly. "
+                  "These are the errorneous parameters and the "
+                  "values they are set to:{}".format(error_dict))
+        else:
+            self.logger.debug("All tunable parameters successfully configured!")
+
+        # enable non-volatile fan controller logging
+        # TODO: implement function
+
+        # configure fan control logic
+        # TODO: add when available
+
+        if error_dict or not current_threshold_set:
+            return False
+        else:
+            return True
+
+    def _set_1v0_trip_current_threshold(self, trip_threshold=35):
+        """
+        Reconfigure the 1V0 current trip threshold
+        :param trip_threshold: The desired 1V0 current trip threshold (Amps)
+        :return: True if success, False otherwise
+        """
+
+        # check that the desired threshold is within the acceptable range
+
+        if trip_threshold < 20:
+            self.logger.warning("Desired current limit too low! "
+                                "Threshold must be >= 20A")
+            return False
+
+        # work out the [LSB, MSB] to set the threshold
+
+        # calculation of the LSB and MSB for trip value
+        # current measured as voltage divided by sense resistor
+
+        # voltage over the 1V0 Rsense is on page 7 of i2c device 0x47 (UCD90120A)
+        # this voltage can be read with READ_VOUT cmd (0x8b) and is in the LINEAR16 format.
+        # from datasheet, UCD90xxx Sequencer and System Health Controller PMBus Command Reference:
+        #   pg. 13 par. 2.1 =>  Voltage = V x 2^x
+        #                       V is 16bit unsigned int (from READ_VOUT)
+        #                       x is signed 5-bit two's complement exponent (from VOUT_MODE)
+
+        # therefore :
+        # current = value x 2^(x) x 1/R(sense)
+
+        # for page 7:
+        # VOUT_MODE = 17 => 17 -32 = -15 two's compl 5-bit signed integer
+        # R(sense) = 100*0.00025 = 0.025
+
+        # => current (A) = value x 2^(-15) * 1/0.025
+        # => value = current / (2^(-15) * 1/0.025)
+        # e.g. 32A
+        # => value = 26,214.4 ~ 26,214 = 0x6666
+        # e.g. 35A
+        # => value = 28,672 = 0x7000
+
+        value = int(trip_threshold / (2**(-15) * 1.0/0.025))
+
+        limit_msb = value >> 8
+        limit_lsb = value & 0xff
+
+        assert limit_msb >= 0x40, "Desired current limit too low! " \
+                                  "Threshold must be >= 20A"
+
+        # set i2c switch to select current mon
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.MONITOR_SWITCH_SELECT)
+        time.sleep(0.5)
+
+        # set current monitor page to 7, which corresponds to 1V0 current
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.PAGE_CMD, sd.P1V0_CURRENT_MON_PAGE)
+        time.sleep(1)
+
+        # now set the current fault limit with the VOUT_OV_FAULT_LIMIT cmd
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.VOUT_OV_FAULT_LIMIT_CMD, limit_lsb, limit_msb)
+        time.sleep(1)
+
+        # check the new stored value
+
+        stored_threshold = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_OV_FAULT_LIMIT_CMD, 2)
+
+        time.sleep(1)
+
+        # check the set value
+        scale_factor = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_MODE_CMD, 1)
+
+        set_value = (stored_threshold[1] << 8) + stored_threshold[0]
+        set_current = set_value * pow(2, scale_factor[0]-32) * 40
+
+        if (set_current <= (trip_threshold+1)) and (set_current >= (trip_threshold-1)):
+            # new current trip threshold set successfully
+            self.logger.debug("New 1v0 current threshold "
+                              "successfully set to {}".format(set_current))
+
+            # now store the new limit as the default value
+            # store as default value into NV data memory / FLASH
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                           sd.STORE_DEFAULT_ALL_CMD)
+            time.sleep(2)
+
+            stored = False
+            count = 0
+            while not stored and count < 10:
+                status = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                             sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                             sd.MFR_STATUS,
+                                             5)  # read mfr_status
+                if (status[3] & 0x6) == 2:  # status is 32-bit word
+                    stored = True
+                time.sleep(1)
+                count = count + 1
+
+            if not stored:
+                # new default trip threshold not stored
+                self.logger.warning("New default trip threshold not stored!")
+                return False
+
+            self.logger.debug("New default trip threshold successfully stored!")
+            return True
+
+        else:
+            # new current trip threshold not set correctly
+            self.logger.error("New 1v0 current threshold not set correctly. "
+                              "Desired threshold = {} but set "
+                              "threshold = {}".format(trip_threshold,
+                                                      set_current))
+            return False
+
+    def _check_1v0_current_limit(self):
+        """
+        Check the set 1V0 current trip limit
+        :return: the set current limit for the 1V0 rail
+        """
+        # set i2c switch to select current mon
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.MONITOR_SWITCH_SELECT)
+        time.sleep(0.5)
+
+        # set current monitor page to 7, which corresponds to 1V0 current
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                       sd.PAGE_CMD, sd.P1V0_CURRENT_MON_PAGE)
+        time.sleep(1)
+
+        stored_threshold = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                               sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                               sd.VOUT_OV_FAULT_LIMIT_CMD, 2)
+
+        time.sleep(1)
+
+        # check the set value
+        scale_factor = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                           sd.UCD90120A_CMON_I2C_DEVICE_ADDRESS,
+                                           sd.VOUT_MODE_CMD, 1)
+
+        set_value = (stored_threshold[1] << 8) + stored_threshold[0]
+        set_current = set_value * pow(2, scale_factor[0] - 32) * 40
+
+        self.logger.info('Configured 1v0 current for '
+                         'host {} is {}'.format(self.host, set_current))
+        return set_current
+
+    def _enable_fan_controller_nv_logs(self):
+        """
+        Enable logging of fan controller faults to non-volatile memory
+        :return: True if success, False otherwise
+        """
+
+        # set i2c switch to select the fan controller
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.PCA9546_I2C_DEVICE_ADDRESS,
+                       sd.FAN_CONT_SWITCH_SELECT)
+
+        # clear the fault log
+        # read the control register value
+        # tmp[0] = LSB, tmp[1] = MSB
+        tmp = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                  sd.MAX31785_I2C_DEVICE_ADDRESS,
+                                  sd.MFR_MODE_CMD, 2)
+
+        # toggle bit to clear fault log
+        tmp[1] = tmp[1] | 0x40
+
+        # write new value to the control register
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                       sd.MFR_MODE_CMD, tmp[0], tmp[1])
+
+        time.sleep(0.5)
+        # restore the default fan controller configuration
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                       sd.RESTORE_DEFAULT_ALL_CMD)
+
+        # enable non-volatile logging for all relevant pages (page 0 - page 22)
+        for page in range(0, 23):
+            time.sleep(0.5)
+            # select page of the fan controller
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                           sd.PAGE_CMD, page)
+
+            time.sleep(0.5)
+
+            # get the current page configuration
+            tmp = self.pmbus_read_i2c(sd.MB_I2C_BUS_ID,
+                                      sd.MAX31785_I2C_DEVICE_ADDRESS,
+                                      sd.MFR_FAULT_RESPONSE_CMD, 1)
+
+            time.sleep(0.5)
+
+            # toggle the bit to enable logging to non-volatile memory
+            tmp[0] = tmp[0] | 0x80
+
+            # write new value to the page control register
+            self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                           sd.MFR_FAULT_RESPONSE_CMD, tmp[0])
+
+            time.sleep(0.5)
+
+        self.logger.info('Enabled Fan Controller Fault logging for'
+                         'host {}'.format(self.host))
+
+        # store the new default configuration incl. the non-volatile fault logging
+        self.write_i2c(sd.MB_I2C_BUS_ID, sd.MAX31785_I2C_DEVICE_ADDRESS,
+                       sd.STORE_DEFAULT_ALL_CMD)
+
+        # TODO: implement error checking and error handling
+        # check here:
+            # read the value back
+            # check the msb
+            # if it's set, return true, else return false
+
+        return True
 # end
