@@ -6,8 +6,10 @@ import os
 NAME = 'casperfpga'
 DESCRIPTION = 'Talk to CASPER hardware devices using katcp or dcp. See https://github.com/casper-astro/casperfpga for more.'
 URL = 'https://github.com/casper-astro/casperfpga'
-AUTHOR = 'Tyrone van Balla'
-EMAIL = 'tvanballa at ska.ac.za'
+
+AUTHOR  = 'Tyrone van Balla'
+EMAIL   = 'tvanballa at ska.ac.za'
+VERSION = '0.2.0' # Need to adopt the __version__.py format
 
 
 here = os.path.abspath(os.path.dirname(__file__))
