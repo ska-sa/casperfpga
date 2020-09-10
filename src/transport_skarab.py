@@ -2534,7 +2534,7 @@ class SkarabTransport(Transport):
                                     sd.DIRECT_SPI_ADDRESS_LSB_REG, write_byte)
 
 
-        write_byte = spi_destination | START_DIRECT_SPI_ACCESS | DIRECT_SPI_READ_NOT_WRITE
+        write_byte = spi_destination | sd.START_DIRECT_SPI_ACCESS | sd.DIRECT_SPI_READ_NOT_WRITE
         self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
                                     sd.DIRECT_SPI_CONTROL_REG, write_byte)
 
