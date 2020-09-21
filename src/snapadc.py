@@ -502,9 +502,11 @@ class SnapAdc(object):
         elif laneSel not in self.laneList:
             raise ValueError("Invalid parameter")
 
-        if not isinstance(tap, int):
+        if not isinstance(tap, (int, np.int64)):
             raise ValueError("Invalid parameter")
-
+            if isinstance(tap, np.int64):
+                tap = int(tap)   # Fix for Py3
+ 
         strl = ','.join([str(c) for c in laneSel])
         strc = ','.join([str(c) for c in chipSel])
         logger.debug('Set DelayTap of lane {0} of chip {1} to {2}'
@@ -640,12 +642,14 @@ class SnapAdc(object):
             raise ValueError("Invalid parameter")
 
         if taps==True:
-            taps = range(32)
+            taps = list(range(32))
         elif taps in self.adcList:
             taps = [taps]
         if not isinstance(taps,list) and taps!=None:
+            print(type(taps), taps)
             raise ValueError("Invalid parameter")
         elif isinstance(taps,list) and any(cs not in range(32) for cs in taps):
+            print(type(taps), taps)
             raise ValueError("Invalid parameter")
 
         if mode not in MODE:
@@ -867,7 +871,7 @@ class SnapAdc(object):
 
             for adc in self.adcList:
                 for lane in self.laneList:
-                    vals = np.array(errs[adc].values())[:,lane]
+                    vals = np.array(list(errs[adc].values()))[:,lane]
                     t = self.decide_delay(vals)  # Find a proper tap setting
                     if not t:
                         logger.error("ADC{0} lane{1} delay decision failed".format(adc,lane))
