@@ -12,6 +12,8 @@ from threading import Lock
 
 import skarab_definitions as sd
 import skarab_fileops as skfops
+import CasperLogHandlers
+
 from transport import Transport
 from network import IpAddress
 
@@ -970,10 +972,37 @@ class SkarabTransport(Transport):
                     response_object.seq_num))
                 expected_response_id = request_object.type + 1
                 if response_object.type != expected_response_id:
+                    # Implementing a monkey patch here. On the MeerKAT site when the
+                    # corr2_hardware_sensor_servlet and the corr2_servlet are running at the same
+                    # time we periodically get the command ID warning below. It does not affect the
+                    # operation of the telescope, but it does clutter the KCS logs. The
+                    # corr2_servlet has two log handlers that propagate down to casperfpga. One
+                    # handler sends data to a log file, while the other sends it to the console.
+                    # The patch here is to disable the console logger for this one warning message.
+                    # When this error occurs it will only be written to the log file, not to the
+                    # console(which is collected by KCS). In this way we preserve the error without
+                    # cluttering KCS.
+
+                    # Find console handler and set to such a high level that the warning wont print.
+                    handlers = self.logger.handlers 
+                    concoleLogHandlerDisabled = False
+                    for handler in handlers:
+                        if(issubclass(type(handler), CasperLogHandlers.CasperConsoleHandler)):
+                            handler.setLevel(logging.CRITICAL)
+                            consoleLogHandler = handler
+                            concoleLogHandlerDisabled = True
+                            break
+                    
+                    # Print the log message
                     self.logger.warning('%s: incorrect command ID in response. Expected'
                                    '(%i) got(%i). Discarding response.' % (
                                        hostname, expected_response_id,
                                        response_object.type))
+
+                    # Set log levels back to what they were originally
+                    if concoleLogHandlerDisabled:
+                        consoleLogHandler.setLevel(self.logger.getEffectiveLevel())
+
                     return None
                 elif response_object.seq_num != sequence_number:
                     self.logger.debug('%s: incorrect sequence number in response. '
