@@ -546,7 +546,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
     def upload_to_ram_and_program(self, filename, port=-1, timeout=10,
                                   wait_complete=True,
-                                  skip_verification=False):
+                                  skip_verification=False, **kwargs):
         """
         Upload an FPG file to RAM and then program the FPGA.
 
