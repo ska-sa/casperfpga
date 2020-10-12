@@ -186,17 +186,6 @@ class SkarabTransport(Transport):
         # self.gbes.append(FortyGbe(self, 0))
         # # self.gbes.append(FortyGbe(self, 0, 0x54000 - 0x4000))
 
-    def __del__(self):
-        socket_closer("class SkarabTransport __del__", self._skarab_control_sock)
-
-    def _update_response_timeout(self, timeout):
-        """
-        Method to update the timeout when waiting for responses from SKARABs
-        :return:
-        """
-
-        self.timeout = timeout
-
     @staticmethod
     def test_host_type(host_ip):
         """
