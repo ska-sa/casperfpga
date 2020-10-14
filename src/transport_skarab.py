@@ -294,7 +294,6 @@ class SkarabTransport(Transport):
         if (size > 4) and use_bulk:
             # use a bulk read if more than 4 bytes are requested
             return self._bulk_read(device_name, size, offset)
-
         addr = self._get_device_address(device_name)
         # can only read 4 bytes at a time
         # work out how many reads we require, and from where
@@ -311,8 +310,9 @@ class SkarabTransport(Transport):
         # address to read is starting address plus offset
         data = ''
         for readctr in range(num_reads):
-            response = self._rd_wishbone(wb_address=addr_start)
-
+            addr_high, addr_low = self.data_split_and_pack(addr_start)
+            request = sd.ReadWishboneReq(addr_high, addr_low)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
             read_low = struct.pack('!H', response.packet['read_data_low'])
             read_high = struct.pack('!H', response.packet['read_data_high'])
@@ -537,11 +537,13 @@ class SkarabTransport(Transport):
         data = ''
 
         # address to read is starting address plus offset
-        addr = self._get_device_address(device_name)
-        addr += offset
+        addr = device_name + offset
         for readctr in range(num_reads):
-            response = self._rd_wishbone(wb_address=addr)
-
+            # get correct address and pack into binary format
+            # TODO: sort out memory mapping of device_name
+            addr_high, addr_low = self.data_split_and_pack(addr)
+            request = sd.ReadWishboneReq(addr_high, addr_low)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
             read_high = struct.pack('!H', response.packet['read_data_high'])
             read_low = struct.pack('!H', response.packet['read_data_low'])
@@ -582,10 +584,15 @@ class SkarabTransport(Transport):
 
             # map device name to address, if can't find, bail
             addr = self._get_device_address(device_name)
-            addr += offset
 
-            self._wr_wishbone(wb_address=addr,
-                              data=data)
+            # split the data into two 16-bit words
+            data_high = data[:2]
+            data_low = data[2:]
+            addr += offset
+            addr_high, addr_low = self.data_split_and_pack(addr)
+            request = sd.WriteWishboneReq(addr_high, addr_low,
+                                          data_high, data_low)
+            self.send_packet(request, timeout=timeout, retries=retries)
 
     def deprogram(self):
         """
