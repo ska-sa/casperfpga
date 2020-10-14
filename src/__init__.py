@@ -16,8 +16,8 @@ from qdr import Qdr
 from register import Register
 from sbram import Sbram
 from snap import Snap
-from snapadc import SnapAdc
 from tengbe import TenGbe
+import progska
 import skarab_fileops
 
 # BEGIN VERSION CHECK

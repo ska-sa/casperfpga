@@ -12,6 +12,8 @@ from threading import Lock
 
 import skarab_definitions as sd
 import skarab_fileops as skfops
+import CasperLogHandlers
+
 from transport import Transport
 from network import IpAddress
 
@@ -292,7 +294,6 @@ class SkarabTransport(Transport):
         if (size > 4) and use_bulk:
             # use a bulk read if more than 4 bytes are requested
             return self._bulk_read(device_name, size, offset)
-
         addr = self._get_device_address(device_name)
         # can only read 4 bytes at a time
         # work out how many reads we require, and from where
@@ -309,8 +310,9 @@ class SkarabTransport(Transport):
         # address to read is starting address plus offset
         data = ''
         for readctr in range(num_reads):
-            response = self._rd_wishbone(wb_address=addr_start)
-
+            addr_high, addr_low = self.data_split_and_pack(addr_start)
+            request = sd.ReadWishboneReq(addr_high, addr_low)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
             read_low = struct.pack('!H', response.packet['read_data_low'])
             read_high = struct.pack('!H', response.packet['read_data_high'])
@@ -535,11 +537,13 @@ class SkarabTransport(Transport):
         data = ''
 
         # address to read is starting address plus offset
-        addr = self._get_device_address(device_name)
-        addr += offset
+        addr = device_name + offset
         for readctr in range(num_reads):
-            response = self._rd_wishbone(wb_address=addr)
-
+            # get correct address and pack into binary format
+            # TODO: sort out memory mapping of device_name
+            addr_high, addr_low = self.data_split_and_pack(addr)
+            request = sd.ReadWishboneReq(addr_high, addr_low)
+            response = self.send_packet(request, timeout=timeout, retries=retries)
             # merge high and low binary data for the current read
             read_high = struct.pack('!H', response.packet['read_data_high'])
             read_low = struct.pack('!H', response.packet['read_data_low'])
@@ -580,10 +584,15 @@ class SkarabTransport(Transport):
 
             # map device name to address, if can't find, bail
             addr = self._get_device_address(device_name)
-            addr += offset
 
-            self._wr_wishbone(wb_address=addr,
-                              data=data)
+            # split the data into two 16-bit words
+            data_high = data[:2]
+            data_low = data[2:]
+            addr += offset
+            addr_high, addr_low = self.data_split_and_pack(addr)
+            request = sd.WriteWishboneReq(addr_high, addr_low,
+                                          data_high, data_low)
+            self.send_packet(request, timeout=timeout, retries=retries)
 
     def deprogram(self):
         """
@@ -970,10 +979,37 @@ class SkarabTransport(Transport):
                     response_object.seq_num))
                 expected_response_id = request_object.type + 1
                 if response_object.type != expected_response_id:
+                    # Implementing a monkey patch here. On the MeerKAT site when the
+                    # corr2_hardware_sensor_servlet and the corr2_servlet are running at the same
+                    # time we periodically get the command ID warning below. It does not affect the
+                    # operation of the telescope, but it does clutter the KCS logs. The
+                    # corr2_servlet has two log handlers that propagate down to casperfpga. One
+                    # handler sends data to a log file, while the other sends it to the console.
+                    # The patch here is to disable the console logger for this one warning message.
+                    # When this error occurs it will only be written to the log file, not to the
+                    # console(which is collected by KCS). In this way we preserve the error without
+                    # cluttering KCS.
+
+                    # Find console handler and set to such a high level that the warning wont print.
+                    handlers = self.logger.handlers 
+                    concoleLogHandlerDisabled = False
+                    for handler in handlers:
+                        if(issubclass(type(handler), CasperLogHandlers.CasperConsoleHandler)):
+                            handler.setLevel(logging.CRITICAL)
+                            consoleLogHandler = handler
+                            concoleLogHandlerDisabled = True
+                            break
+                    
+                    # Print the log message
                     self.logger.warning('%s: incorrect command ID in response. Expected'
                                    '(%i) got(%i). Discarding response.' % (
                                        hostname, expected_response_id,
                                        response_object.type))
+
+                    # Set log levels back to what they were originally
+                    if concoleLogHandlerDisabled:
+                        consoleLogHandler.setLevel(self.logger.getEffectiveLevel())
+
                     return None
                 elif response_object.seq_num != sequence_number:
                     self.logger.debug('%s: incorrect sequence number in response. '
@@ -2534,7 +2570,7 @@ class SkarabTransport(Transport):
                                     sd.DIRECT_SPI_ADDRESS_LSB_REG, write_byte)
 
 
-        write_byte = spi_destination | START_DIRECT_SPI_ACCESS | DIRECT_SPI_READ_NOT_WRITE
+        write_byte = spi_destination | sd.START_DIRECT_SPI_ACCESS | sd.DIRECT_SPI_READ_NOT_WRITE
         self.write_i2c(i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
                                     sd.DIRECT_SPI_CONTROL_REG, write_byte)
 
