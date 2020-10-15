@@ -447,16 +447,16 @@ def threaded_fpga_operation(fpga_list, timeout, target_function, num_retries=5, 
         return returnval, hosts_missing
     
     retry = 0
-    current_fpga_list = fpga_list
+    current_fpga_list = fpga_list[:]
     while retry < num_retries:
         returnval, hosts_missing = run_threaded_op(current_fpga_list)
         if hosts_missing:
-	    warnmsg = 'Ran function {} on hosts. Did not get a response ' \
-                      'from {}.'.format(target_function[0].__name__, hosts_missing)
-            warnmsg += '\nTarget function object contains: {}\n'.format(target_function)
+            warnmsg = ('Ran function {} on hosts. Did not get a response '
+                       'from {}.'.format(target_function[0].__name__, hosts_missing))
+            warnmsg += ('\nTarget function object contains: {}\n'.format(target_function))
             LOGGER.warning(warnmsg)
             retry += 1
-            current_fpga_list = hosts_missing
+            current_fpga_list = hosts_missing[:]
             time.sleep(retry_sleep_time)
         else:
             break
