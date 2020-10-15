@@ -1,4 +1,5 @@
 from matplotlib import pyplot as plt
+import sys
 
 def make_wave(x):
     s = ""
@@ -196,21 +197,21 @@ class ADS5296fw():
 
     def init(self, cs):
         self.reset(cs)
-        print("CS:%d 0x0 (wrote 0) "%cs, hex(self.read_spi(0, cs)))
+        print("CS:%d 0x0 (wrote 0) "%cs, hex(self.read_spi(0, cs)), file=sys.stderr)
         self.write_spi(0x0F, 0x0400, cs) # power down pin partial
-        print("CS:%d 0x0f (wrote 0x0400)"%cs, hex(self.read_spi(0x0F, cs)))
+        print("CS:%d 0x0f (wrote 0x0400)"%cs, hex(self.read_spi(0x0F, cs)), file=sys.stderr)
         self.write_spi(0x07, 0x0001, cs) # enable interleave
-        print("CS:%d 0x07 (wrote 0x0001)"%cs, hex(self.read_spi(0x07, cs)))
+        print("CS:%d 0x07 (wrote 0x0001)"%cs, hex(self.read_spi(0x07, cs)), file=sys.stderr)
         #self.write_spi(0x42, 0x8000, cs) # DDR phase
         #print("CS:%d"%cs, hex(self.read_spi(0x42, cs)))
         self.write_spi(0x46, 0x8104, cs) # 10b serialization, LSB first, 2's complement, DDR
         #self.write_spi(0x46, 0x8100, cs) # 10b serialization, LSB first, offset binary, DDR
-        print("CS:%d 0x46 (wrote 0x8100)"%cs, hex(self.read_spi(0x46, cs)))
+        print("CS:%d 0x46 (wrote 0x8100)"%cs, hex(self.read_spi(0x46, cs)), file=sys.stderr)
         self.write_spi(0x40, 0x8000, cs) # input selection
-        print("CS:%d 0x40 (wrote 0x8000)"%cs, hex(self.read_spi(0x40, cs)))
+        print("CS:%d 0x40 (wrote 0x8000)"%cs, hex(self.read_spi(0x40, cs)), file=sys.stderr)
         self.write_spi(0x25, 0x8000, cs) # Enable external sync
-        print("CS:%d 0x25 (wrote 0x8000)"%cs, hex(self.read_spi(0x25, cs)))
-        print("Enabling VTC on IDELAYs")
+        print("CS:%d 0x25 (wrote 0x8000)"%cs, hex(self.read_spi(0x25, cs)), file=sys.stderr)
+        print("Enabling VTC on IDELAYs", file=sys.stderr)
         self.enable_vtc_data(range(8), cs)
         self.enable_vtc_fclk(cs)
 
@@ -233,7 +234,7 @@ class ADS5296fw():
                 print("!!!!!", c0, c1)
                 c1 += 2**32
             errs += [c1 - c0]
-            print("FCLK cal: %d: %d errs" % (i, errs[-1]))
+            print("FCLK cal: %d: %d errs" % (i, errs[-1]), file=sys.stderr)
         slack = []
         for i in range(NSTEPS):
             #count number of zeros before this slot
