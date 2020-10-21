@@ -901,7 +901,6 @@ class SkarabTransport(Transport):
             hostname, retransmit_count, timeout, retries))
         self.logger.debug(errmsg)
         raise SkarabSendPacketError(errmsg)
-        return None
 
     def _receive_packet(self, request_object, sequence_number,
                         timeout, hostname):
