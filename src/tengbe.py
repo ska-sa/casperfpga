@@ -68,7 +68,7 @@ class TenGbe(Memory, Gbe):
         """
         x = self.parent.read(self.name, 4)
         cpu_tx_en, cpu_rx_en, rev, core_type = struct.unpack('4B', x)
-        if (cpu_tx_en > 1) or (cpu_rx_en > 1) or (core_type != 2):
+        if (cpu_tx_en > 1) or (cpu_rx_en > 1) or ((core_type != 4) and (core_type != 2)):
             return False
         else:
             return True
