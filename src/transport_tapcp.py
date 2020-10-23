@@ -14,6 +14,8 @@ __date__ = 'June 2017'
 LOGGER = logging.getLogger(__name__)
 TFTPY = logging.getLogger('tftpy')
 
+FLASH_SECTOR_SIZE = 0x10000
+
 
 def set_log_level(level):
     LOGGER.setLevel(level)
@@ -99,6 +101,7 @@ class TapcpTransport(Transport):
         self.timeout = kwargs.get('timeout', 3)
         self.server_timeout = 0.1 # Microblaze timeout period. So that if a command fails we can wait for the microblaze to terminate the connection before retrying
         self.retries = kwargs.get('retries', 8) # These are retries of a complete transaction (each of which has it's ofw TFTP retries).
+        self.platform = None # User (CasperFpga?) to update this
 
     def __del__(self):
         try:
@@ -169,7 +172,11 @@ class TapcpTransport(Transport):
     def progdev(self, addr=0):
         # address shifts down because we operate in 32-bit addressing mode
         # see xilinx docs. Todo, fix this microblaze side
-        buf = BytesIO(struct.pack('>L', addr >> 8))
+        # 23/10/20 This shift isn't needed for the SNAP2 [JH doesn't understand this, but is blindly following LS's instructions]
+        if self.platform == "snap":
+            buf = BytesIO(struct.pack('>L', addr >> 8))
+        else:
+            buf = BytesIO(struct.pack('>L', addr))
         try:
             self.t.upload('/progdev', buf, timeout=self.timeout)
         except:
@@ -222,11 +229,17 @@ class TapcpTransport(Transport):
 
         return header, prog, chksum.hexdigest()
 
+    def get_user_flash_loc(self):
+        if self.platform == "snap":
+            return 0x800000
+        elif self.platform == "snap2":
+            return 0xC00000
+
     def get_metadata(self):
         """
         Read meta data from user_flash_loc on the fpga flash drive
         """
-        USER_FLASH_LOC  = 0x800000
+        user_flash_loc  = self.get_user_flash_loc()
         READ_CHUNK_SIZE = 1024     # size of flash chunks to read
         MAX_SEARCH      = 128*1024 # give up if we get this far
         meta   = b''
@@ -236,7 +249,7 @@ class TapcpTransport(Transport):
         # read data from flash 1kB at a time and search that
         page_offset = 0
         while (meta.find('?end'.encode())==-1):
-            meta_page = self.read('/flash', READ_CHUNK_SIZE, offset=USER_FLASH_LOC + page_offset)
+            meta_page = self.read('/flash', READ_CHUNK_SIZE, offset=user_flash_loc + page_offset)
             page_offset += READ_CHUNK_SIZE
             if page_offset > MAX_SEARCH:
                 return None
@@ -263,14 +276,13 @@ class TapcpTransport(Transport):
         program-location, length of the program bitstream (B),
         md5sum of the fpg file
         """
-        USER_FLASH_LOC = 0x800000
-        SECTOR_SIZE = 0x10000
+        user_flash_loc = self.get_user_flash_loc()
 
-        head_loc = USER_FLASH_LOC + SECTOR_SIZE
+        head_loc = user_flash_loc + FLASH_SECTOR_SIZE
         prog_loc = head_loc + hlen 
         
         metadict = {}; meta = b''
-        metadict['flash'] = '?sector_size\t%d'%SECTOR_SIZE
+        metadict['flash'] = '?sector_size\t%d'%FLASH_SECTOR_SIZE
         metadict['head']  = '?header_start\t%d?header_length\t%d'%(head_loc,hlen)
         metadict['prog']  = '?prog_bitstream_start\t%d?prog_bitstream_length\t%d'%(prog_loc,plen)
         metadict['md5']   =  '?md5sum\t' + md5
@@ -280,16 +292,12 @@ class TapcpTransport(Transport):
         meta += '?end'.encode()
         meta += b'0'*(1024-len(meta)%1024)
 
-        self.blindwrite('/flash', meta, offset=USER_FLASH_LOC)
+        self.blindwrite('/flash', meta, offset=user_flash_loc)
 
         return head_loc, prog_loc
 
     def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True, force=False):
-        if self.platform == "snap":
-            USER_FLASH_LOC = 0x800000
-        elif self.platform == "snap2":
-            USER_FLASH_LOC = 0xC00000
-        sector_size = 0x10000
+        user_flash_loc = self.get_user_flash_loc()
         # Flash writes can take a long time, due to ~1s erase cycle
         # So set the timeout high. We'll return it to normal at the end
         old_timeout = self.timeout
@@ -298,6 +306,9 @@ class TapcpTransport(Transport):
         if(filename.endswith('.fpg')):
             self.logger.info("Programming with an .fpg file. Checking if it is already in flash")
             header, prog, md5 = self._extract_bitstream(filename)
+            # Align header with sector size
+            if len(header) % FLASH_SECTOR_SIZE:
+                header += b'\00' * (FLASH_SECTOR_SIZE - (len(header) % FLASH_SECTOR_SIZE))
             self.logger.debug("Reading meta-data from flash")
             meta_inflash = self.get_metadata()
             if ((meta_inflash is not None) and (meta_inflash.get('md5sum', None) == md5) and (not force)):
@@ -309,29 +320,29 @@ class TapcpTransport(Transport):
             else:
                 self.logger.info("Bitstream is not in flash. Writing new bitstream.")
                 self.logger.debug("Generating new header information")
-                HEAD_LOC, PROG_LOC = self._update_metadata(filename,len(header),len(prog),md5)
+                head_loc, prog_loc = self._update_metadata(filename,len(header),len(prog),md5)
                 payload = header + prog
-                complete_blocks = len(payload) // sector_size
-                trailing_bytes = len(payload) % sector_size
+                complete_blocks = len(payload) // FLASH_SECTOR_SIZE
+                trailing_bytes = len(payload) % FLASH_SECTOR_SIZE
                 for i in range(complete_blocks):
-                    self.logger.debug("block %d of %d: writing %d bytes to address 0x%x:" % (i+1, complete_blocks, len(payload[i*sector_size : (i+1)*sector_size]), HEAD_LOC+i*sector_size))
-                    self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=HEAD_LOC+i*sector_size)
-                    readback = self.read('/flash', len(payload[i*sector_size : (i+1)*sector_size]), offset=HEAD_LOC+i*sector_size)
-                    if payload[i*sector_size : (i+1)*sector_size] != readback:
-                        print(payload[i*sector_size : i*sector_size + 10])
-                        print(payload[(i+1)*sector_size - 10 : (i+1)*sector_size])
+                    self.logger.debug("block %d of %d: writing %d bytes to address 0x%x:" % (i+1, complete_blocks, len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE]), head_loc+i*FLASH_SECTOR_SIZE))
+                    self.blindwrite('/flash', payload[i*FLASH_SECTOR_SIZE: (i+1)*FLASH_SECTOR_SIZE], offset=head_loc+i*FLASH_SECTOR_SIZE)
+                    readback = self.read('/flash', len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE]), offset=head_loc+i*FLASH_SECTOR_SIZE)
+                    if payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE] != readback:
+                        print(payload[i*FLASH_SECTOR_SIZE : i*FLASH_SECTOR_SIZE + 10])
+                        print(payload[(i+1)*FLASH_SECTOR_SIZE - 10 : (i+1)*FLASH_SECTOR_SIZE])
                         print(readback[-10:])
                         with open('/tmp/foo-write.dat', 'wb') as fh:
-                            fh.write(payload[i*sector_size : (i+1)*sector_size])
+                            fh.write(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE])
                         with open('/tmp/foo-read.dat', 'wb') as fh:
                             fh.write(readback)
                         raise RuntimeError("Readback of flash failed!")
                 # Write the not-complete last sector (if any)
                 if trailing_bytes:
                     self.logger.debug("writing trailing %d bytes" % trailing_bytes)
-                    last_offset = complete_blocks * sector_size
-                    self.blindwrite('/flash', payload[last_offset :], offset=HEAD_LOC+last_offset)
-                    readback = self.read('/flash', len(payload[last_offset :]), offset=HEAD_LOC+last_offset)
+                    last_offset = complete_blocks * FLASH_SECTOR_SIZE
+                    self.blindwrite('/flash', payload[last_offset :], offset=head_loc+last_offset)
+                    readback = self.read('/flash', len(payload[last_offset :]), offset=head_loc+last_offset)
                     if payload[last_offset :] != readback:
                         raise RuntimeError("Readback of flash failed!")
 
@@ -339,35 +350,35 @@ class TapcpTransport(Transport):
                 self.timeout = old_timeout
                 # Program from new flash image!
                 self.logger.info("Booting from new bitstream")
-                self.progdev(PROG_LOC)
+                self.progdev(prog_loc)
 
         else:
             self.logger.info("Programming something which isn't an .fpg file.")
             self.logger.debug("Reading file %s" % filename)
             with open(filename,'rb') as fh:
                 payload = fh.read()
-            complete_blocks = len(payload) // sector_size
-            trailing_bytes = len(payload) % sector_size
+            complete_blocks = len(payload) // FLASH_SECTOR_SIZE
+            trailing_bytes = len(payload) % FLASH_SECTOR_SIZE
             for i in range(complete_blocks):
-                self.logger.debug("block %d of %d: writing %d bytes:" % (i+1, complete_blocks, len(payload[i*sector_size : (i+1)*sector_size])))
-                self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=USER_FLASH_LOC+i*sector_size)
-                readback = self.read('/flash', len(payload[i*sector_size : (i+1)*sector_size]), offset=USER_FLASH_LOC+i*sector_size)
-                if payload[i*sector_size : (i+1)*sector_size] != readback:
+                self.logger.debug("block %d of %d: writing %d bytes:" % (i+1, complete_blocks, len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE])))
+                self.blindwrite('/flash', payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE], offset=user_flash_loc+i*FLASH_SECTOR_SIZE)
+                readback = self.read('/flash', len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE]), offset=user_flash_loc+i*FLASH_SECTOR_SIZE)
+                if payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE] != readback:
                     raise RuntimeError("Readback of flash failed!")
 
             # Write the not-complete last sector (if any)
             if trailing_bytes:
                 self.logger.debug("writing trailing %d bytes" % trailing_bytes)
-                last_offset = complete_blocks * sector_size
-                self.blindwrite('/flash', payload[last_offset :], offset=USER_FLASH_LOC+last_offset)
-                readback = self.read('/flash', len(payload[last_offset :]), offset=USER_FLASH_LOC+last_offset)
+                last_offset = complete_blocks * FLASH_SECTOR_SIZE
+                self.blindwrite('/flash', payload[last_offset :], offset=user_flash_loc+last_offset)
+                readback = self.read('/flash', len(payload[last_offset :]), offset=user_flash_loc+last_offset)
                 if payload[last_offset :] != readback:
                     raise RuntimeError("Readback of flash failed!")
             self.logger.debug("Returning timeout to %f" % old_timeout)
             self.timeout = old_timeout
             # Program from new flash image!
             self.logger.info("Booting from new bitstream")
-            self.progdev(USER_FLASH_LOC)
+            self.progdev(user_flash_loc)
 
     def _program_new_golden_image(self, imagefile):
         """
