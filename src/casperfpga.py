@@ -252,8 +252,10 @@ class CasperFpga(object):
             # iterate through 32-bit words and flip them
             data_byte_swapped = ""
             for i in range(0, len(data), 4):
-                data_byte_swapped += data[i:i+4][::-1]
-                return self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
+                data_byte_swapped = data[i:i+4][::-1]
+                self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
+                offset = offset + 4
+            return 
         return self.transport.blindwrite(device_name, data, offset, **kwargs)
 
     def listdev(self):
