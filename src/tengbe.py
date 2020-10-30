@@ -495,7 +495,7 @@ class TenGbe(Memory, Gbe):
                                                  data[0x16], data[0x17])),
                 'subnet_mask': IpAddress('%i.%i.%i.%i' % (
                                   data[0x1c], data[0x1d], data[0x1e], data[0x1f])),
-                'mac': Mac('%i:%i:%i:%i:%i:%i' % (data[0x0e], data[0x0f],
+                'mac': Mac('%x:%x:%x:%x:%x:%x' % (data[0x0e], data[0x0f],
                                                   data[0x10], data[0x11],
                                                   data[0x12], data[0x13])),
                 'gateway_ip': IpAddress('%i.%i.%i.%i' % (data[0x18], data[0x19],
