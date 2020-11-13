@@ -1,5 +1,6 @@
 from matplotlib import pyplot as plt
 import sys
+import time
 
 def make_wave(x):
     s = ""
@@ -437,3 +438,20 @@ class ADS5296fw():
         self._write((((chip+1)%8) << 8) +  chip, 0)
         if readback:
             return self._read(2) & 0xffff
+
+    def read_clk_rates(self, board):
+        now = time.time()
+        counts0 = [0 for _ in range(5)]
+        counts1 = [0 for _ in range(5)]
+        diffs = [0 for _ in range(5)]
+        for i in range(5):
+            counts0[i] = self._read_ctrl(offset=10+i, board=board)
+        time.sleep(now + 1 - time.time())
+        for i in range(5):
+            counts1[i] = self._read_ctrl(offset=10+i, board=board)
+        for i in range(5):
+            if counts1[i] < counts0[i]:
+                diffs[i] = counts1[i] - counts0[i] + 2**32
+            else:
+                diffs[i] = counts1[i] - counts0[i]
+        return diffs
