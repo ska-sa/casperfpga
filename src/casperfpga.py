@@ -45,6 +45,7 @@ CASPER_ADC_DEVICES = {
     'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
     'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
     'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:adc_4x16g_asnt':           {'class': adc_4x16g_asnt.Adc_4X16G_ASNT, 'container': 'adcs'}
 }
 
 # other devices - blocks that aren't memory devices nor ADCs, but about which we'd
