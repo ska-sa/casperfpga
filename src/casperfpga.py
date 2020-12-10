@@ -15,6 +15,7 @@ import qdr
 import hmc
 import katadc
 import skarabadc
+import xil_device
 
 from attribute_container import AttributeContainer
 from utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg

@@ -38,7 +38,7 @@ class Xil_Device(Memory):
                 break
         if address == -1 or length_bytes == -1:
             raise RuntimeError('Could not find address or length '
-                               'for Gbe device %s' % device_name)
+                               'for Xil device %s' % device_name)
         return cls(parent, device_name, address, length_bytes, device_info)
     
     def read(self,offset):
