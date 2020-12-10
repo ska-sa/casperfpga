@@ -39,6 +39,7 @@ CASPER_MEMORY_DEVICES = {
     'xps:onegbe':       {'class': onegbe.OneGbe,     'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
     'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
+    'xps:xil_device':   {'class': xil_device.Xil_Device, 'container': 'xil_device'}
 }
 
 CASPER_ADC_DEVICES = {
