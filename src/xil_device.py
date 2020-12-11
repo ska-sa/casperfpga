@@ -41,9 +41,12 @@ class Xil_Device(Memory):
                                'for Xil device %s' % device_name)
         return cls(parent, device_name, address, length_bytes, device_info)
     
-    def read(self,offset):
-        data = self.parent.read(self.name,4,offset=offset)
-        data = list(struct.unpack('>4B', data))
-        print('data=%x',data)
+    def read_int(self,word_offset):
+        data = self.parent.read_int(self.name,word_offset)
+        print(hex(data))
+    
+    def write_int(self,value,word_offset):
+        data = self.parent.write_int(self.name,value,False,word_offset)
+        
     
 
