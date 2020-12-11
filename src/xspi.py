@@ -24,7 +24,7 @@ class Xspi_Config(object):
 
 class Xspi(object):
 
-    def __init__(self,  parent, devname):
+    def __init__(self, parent, devname):
         self.parent = parent
         self.devname = devname
 
@@ -161,6 +161,13 @@ class Xspi(object):
 
         return XST_SUCCESS
 
+
+    def XSpi_WriteReg(self. RegOffset, RegisterValue):
+        self.parent.write_int(self.devname,RegisterValue,False, RegOffset/4)
+
+    def XSpi_ReadReg(self, RegOffset):  
+        return self.parent.read_int(self.devname, RegOffset/4)
+
     def XSpi_IntrGlobalEnable(self):
 
 
@@ -218,10 +225,7 @@ class Xspi(object):
     def XSpi_Disable(self):
 
 
-    def XSpi_WriteReg(self. offset_addr, value):
-
-
-    def XSpi_ReadReg(self, offset_addr):  
+ 
    
 
     def XSpi_Start(self):
