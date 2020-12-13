@@ -16,6 +16,11 @@ XST_DEVICE_IS_STARTED       = 5
 XST_DEVICE_IS_STOPPED       = 6
 XST_FIFO_ERROR              = 7
 
+XST_DEVICE_BUSY             = 21	# Device is busy
+XST_SPI_SLAVE_ONLY          = 1158	# device is configured as slave-only
+XST_SPI_NO_SLAVE            = 1155	# no slave has been selected yet
+XST_SPI_TOO_MANY_SLAVES     = 1156	# more than one slave is being
+
 XIL_COMPONENT_IS_READY      = 0x11111111
 XIL_COMPONENT_IS_STARTED    = 0x22222222
 
@@ -141,10 +146,6 @@ XSP_CR_LSB_MSB_FIRST_MASK       = 0x00000200
 XSP_CR_XIP_CLK_PHASE_MASK       = 0x00000001 # Clock phase 0 or 1
 XSP_CR_XIP_CLK_POLARITY_MASK    = 0x00000002 # Clock polarity high or low
 
-
-
-
-
 """
  * Status Register (SR) masks
 """
@@ -194,6 +195,11 @@ XSP_DATAWIDTH_BYTE      = 8   # Tx/Rx Reg is Byte Wide
 XSP_DATAWIDTH_HALF_WORD = 16  # Tx/Rx Reg is Half Word (16 bit) Wide
 XSP_DATAWIDTH_WORD      = 32  # Tx/Rx Reg is Word (32 bit)  Wide
 
+XSP_MASTER_OPTION           = 0x1
+XSP_CLK_ACTIVE_LOW_OPTION   = 0x2
+XSP_CLK_PHASE_1_OPTION      = 0x4
+XSP_LOOPBACK_OPTION	        = 0x8
+XSP_MANUAL_SSELECT_OPTION   = 0x10
 
 """
  * SPI Modes
@@ -203,6 +209,11 @@ XSP_DATAWIDTH_WORD      = 32  # Tx/Rx Reg is Word (32 bit)  Wide
 XSP_STANDARD_MODE   = 0
 XSP_DUAL_MODE       = 1
 XSP_QUAD_MODE       = 2
+
+class OptionsMap(object):
+    def __init__(self, Option, Mask):
+        self.Option = Option
+        self.Mask = Mask
 
 class XSpi_Stats(object):
     def __init__(self,  ModeFaults=0,             \
@@ -216,7 +227,7 @@ class XSpi_Stats(object):
         self.RecvOverruns = RecvOverruns
         self.SlaveModeFaults = SlaveModeFaults
         self.BytesTransferred = BytesTransferred
-        self.NumInterrupts NumInterrupts
+        self.NumInterrupts = NumInterrupts
 
 class Xspi_Config(object):
     def __init__(self,  fifo_exit = 1,              \
@@ -244,7 +255,7 @@ class Xspi(object):
         self.parent = parent
         self.devname = devname
 
-        self.Stats = XSpi_Stats
+        self.Stats = XSpi_Stats()
         self.IsReady = 0
         self.IsStarted = 0
         self.HasFifos = 0
@@ -261,6 +272,13 @@ class Xspi(object):
         #self.StatusRef=[]
         self.FlashBaseAddr = 0
         self.XipMode = 0
+
+        self.OptionsTable = [OptionsMap(XSP_LOOPBACK_OPTION, XSP_CR_LOOPBACK_MASK), \
+                             OptionsMap(XSP_CLK_ACTIVE_LOW_OPTION, XSP_CR_CLK_POLARITY_MASK),  \
+                             OptionsMap(XSP_CLK_PHASE_1_OPTION, XSP_CR_CLK_PHASE_MASK),  \
+                             OptionsMap(XSP_MASTER_OPTION, XSP_CR_MASTER_MODE_MASK),  \
+                             OptionsMap(XSP_MANUAL_SSELECT_OPTION, XSP_CR_MANUAL_SS_MASK)]
+        self.XSP_NUM_OPTIONS = 5
 
     def XSpi_CfgInitialize(self,config):
         """
@@ -350,7 +368,7 @@ class Xspi(object):
     
             """ Master Inhibit enable in the CR """
             ControlReg = self.XSpi_GetControlReg()
-            ControlReg &= ~XSP_CR_TRANS_INHIBIT_MASK
+            ControlReg &= (0xffffffff - XSP_CR_TRANS_INHIBIT_MASK)
             self.XSpi_SetControlReg(ControlReg)
     
             """ Master Inhibit disable in the CR """
@@ -378,7 +396,7 @@ class Xspi(object):
 
 
     def XSpi_WriteReg(self, RegOffset, RegisterValue):
-        self.parent.write_int(self.devname,RegisterValue,False, RegOffset/4)
+        self.parent.write_int(self.devname,RegisterValue,True, RegOffset/4)
 
     def XSpi_ReadReg(self, RegOffset):  
         return self.parent.read_int(self.devname, RegOffset/4)
@@ -390,7 +408,7 @@ class Xspi(object):
         self.XSpi_WriteReg(XSP_DGIER_OFFSET, 0)
 
     def XSpi_IsIntrGlobalEnabled(self):
-        return (self.XSpi_ReadReg((XSP_DGIER_OFFSET) ==  XSP_GINTR_ENABLE_MASK)
+        return self.XSpi_ReadReg((XSP_DGIER_OFFSET) ==  XSP_GINTR_ENABLE_MASK)
 
     def XSpi_IntrGetStatus(self):
         return self.XSpi_ReadReg(XSP_IISR_OFFSET)
@@ -405,7 +423,7 @@ class Xspi(object):
     
     def XSpi_IntrDisable(self, DisableMask):
         self.XSpi_WriteReg(XSP_IIER_OFFSET,	\
-            self.XSpi_ReadReg(XSP_IIER_OFFSET) & (~ ((DisableMask) & XSP_INTR_ALL )))
+            self.XSpi_ReadReg(XSP_IIER_OFFSET) & (0xffffffff - ((DisableMask) & XSP_INTR_ALL )))
 
     def XSpi_IntrGetEnabled(self):
         return self.XSpi_ReadReg(XSP_IIER_OFFSET)
@@ -437,12 +455,12 @@ class Xspi(object):
     def XSpi_Enable(self):
         Control = self.XSpi_GetControlReg() 
         Control |= XSP_CR_ENABLE_MASK
-        Control &= ~XSP_CR_TRANS_INHIBIT_MASK
+        Control &= (0xffffffff - XSP_CR_TRANS_INHIBIT_MASK)
         self.XSpi_SetControlReg(Control)
 
     def XSpi_Disable(self):
         self.XSpi_SetControlReg(
-            self.XSpi_GetControlReg() & ~XSP_CR_ENABLE_MASK)
+            self.XSpi_GetControlReg() & (0xffffffff - XSP_CR_ENABLE_MASK))
 
     def XSpi_Start(self):
         """
@@ -468,7 +486,7 @@ class Xspi(object):
          * context. So we wait until after the r/m/w of the control register to
          * enable the Global Interrupt Enable.
         """
-        ControlReg = XSpi_GetControlReg()
+        ControlReg = self.XSpi_GetControlReg()
         ControlReg |= XSP_CR_TXFIFO_RESET_MASK | XSP_CR_RXFIFO_RESET_MASK | XSP_CR_ENABLE_MASK
         self.XSpi_SetControlReg(ControlReg)
 
@@ -495,8 +513,8 @@ class Xspi(object):
         """
         self.XSpi_IntrGlobalDisable()
 
-        ControlReg = XSpi_GetControlReg()
-        self.XSpi_SetControlReg(ControlReg & ~XSP_CR_ENABLE_MASK)
+        ControlReg = self.XSpi_GetControlReg()
+        self.XSpi_SetControlReg(ControlReg & (0xffffffff - XSP_CR_ENABLE_MASK))
 
         self.IsStarted = 0
 
@@ -556,8 +574,8 @@ class Xspi(object):
         """
         if (ControlReg & XSP_CR_MASTER_MODE_MASK):
             if ((ControlReg & XSP_CR_LOOPBACK_MASK) == 0):
-                if (self.laveSelectReg == self.SlaveSelectMask):
-                    if (GlobalIntrReg == TRUE):
+                if (self.SlaveSelectReg == self.SlaveSelectMask):
+                    if (GlobalIntrReg == True):
                         #Interrupt Mode of operation
                         self.XSpi_IntrGlobalEnable()
                     return XST_SPI_NO_SLAVE
@@ -566,7 +584,7 @@ class Xspi(object):
         * Set the busy flag, which will be cleared when the transfer
         * is completely done.
         """
-        self.IsBusy = TRUE
+        self.IsBusy = True
 
         """
         * Set up buffer pointers.
@@ -594,28 +612,30 @@ class Xspi(object):
         """
         StatusReg = self.XSpi_GetStatusReg()
 
-        while (((StatusReg & XSP_SR_TX_FULL_MASK) == 0) && (self.RemainingBytes > 0)):
-            if (DataWidth == XSP_DATAWIDTH_BYTE):
-                """
-                * Data Transfer Width is Byte (8 bit).
-                """
-                Data = self.SendBufferPtr
-            elif (DataWidth == XSP_DATAWIDTH_HALF_WORD):
-                """
-                * Data Transfer Width is Half Word (16 bit).
-                """
-                Data = self.SendBufferPtr
-            elif (DataWidth == XSP_DATAWIDTH_WORD):
-                """
-                * Data Transfer Width is Word (32 bit).
-                """
-                Data = self.SendBufferPtr
-
+        SendBUffer_Index = 0
+        SendBUffer_Size = len(self.SendBufferPtr)
+        SendBUffer = []
+        if(DataWidth == XSP_DATAWIDTH_BYTE):
+            SendBUffer = self.SendBufferPtr
+        elif(DataWidth == XSP_DATAWIDTH_HALF_WORD):
+            #Because a half word is composed of 2 bytes
+            SendBUffer_Size = SendBUffer_Size//2
+            for i in range(SendBUffer_Size):
+                SendBUffer += [self.SendBufferPtr[2*i] + (self.SendBufferPtr[2*i+1]<<8)]
+        elif(DataWidth == XSP_DATAWIDTH_WORD):
+            #Because a half word is composed of 4 bytes
+            SendBUffer_Size = SendBUffer_Size//4
+            for i in range(SendBUffer_Size):
+                SendBUffer += [self.SendBufferPtr[4*i] + (self.SendBufferPtr[4*i+1]<<8) + \
+                                (self.SendBufferPtr[4*i+2]<<16) + (self.SendBufferPtr[4*i+3]<<24)]
+        while (((StatusReg & XSP_SR_TX_FULL_MASK) == 0) and (self.RemainingBytes > 0)):
+            Data = SendBUffer[SendBUffer_Index]
+            SendBUffer_Index += 1
             self.XSpi_WriteReg(XSP_DTR_OFFSET, Data)
-            self.SendBufferPtr += (DataWidth >> 3)
+            #self.SendBufferPtr += (DataWidth >> 3)
             self.RemainingBytes -= (DataWidth >> 3)
             StatusReg = self.XSpi_GetStatusReg()
-
+            
         """
         * Set the slave select register to select the device on the SPI before
         * starting the transfer of data.
@@ -629,7 +649,7 @@ class Xspi(object):
         * that must be initiated by a master.
         """
         ControlReg = self.XSpi_GetControlReg()
-        ControlReg &= ~XSP_CR_TRANS_INHIBIT_MASK
+        ControlReg &= (0xffffffff - XSP_CR_TRANS_INHIBIT_MASK)
         self.XSpi_SetControlReg(ControlReg)
 
         """
@@ -638,7 +658,7 @@ class Xspi(object):
         * in Interrupt mode of operation.   
         """
         # Interrupt Mode of operation 
-        if (GlobalIntrReg == TRUE): 
+        if (GlobalIntrReg == True): 
 
             """
             * Enable the transmit empty interrupt, which we use to
@@ -679,37 +699,37 @@ class Xspi(object):
                 """
                 StatusReg = self.XSpi_GetStatusReg()
                 while ((StatusReg & XSP_SR_RX_EMPTY_MASK) == 0):
-                    Data = XSpi_ReadReg(XSP_DRR_OFFSET)
+                    Data = self.XSpi_ReadReg(XSP_DRR_OFFSET)
                     if (DataWidth == XSP_DATAWIDTH_BYTE):
                         """
                         * Data Transfer Width is Byte (8 bit).
                         """
                         if(self.RecvBufferPtr != []):
-                            #TO-DO
+                            #TODO
                             self.RecvBufferPtr.append(Data)
                     elif (DataWidth == XSP_DATAWIDTH_HALF_WORD):
                         """
                         * Data Transfer Width is Half Word
                         * (16 bit).
                         """
-                        #TO-DO
-                        if (self.RecvBufferPtr != []){
+                        #TODO
+                        if (self.RecvBufferPtr != []):
                             self.RecvBufferPtr.append(Data)
                             #self.RecvBufferPtr += 2
                     elif (DataWidth == XSP_DATAWIDTH_WORD):
                         """
                         * Data Transfer Width is Word (32 bit).
                         """
-                        #TO-DO
+                        #TODO
                         if (self.RecvBufferPtr != []):
                             self.RecvBufferPtr.append(Data)
                             #self.RecvBufferPtr += 4
                     self.Stats.BytesTransferred += (DataWidth >> 3)
                     ByteCount -= (DataWidth >> 3)
-                    StatusReg = XSpi_GetStatusReg()
+                    StatusReg = self.XSpi_GetStatusReg()
 
 
-                if (self.>RemainingBytes > 0):
+                if (self.RemainingBytes > 0):
 
                     """
                     * Fill the DTR/FIFO with as many bytes as it
@@ -723,30 +743,27 @@ class Xspi(object):
                     * each loop iteration.
                     """
                     StatusReg = self.XSpi_GetStatusReg()
-
-                    while(((StatusReg & XSP_SR_TX_FULL_MASK)== 0) && (self.RemainingBytes > 0)):
-                        if (DataWidth == XSP_DATAWIDTH_BYTE) {
-                            """
-                            * Data Transfer Width is Byte
-                            * (8 bit).
-                            """
-                            Data = self.SendBufferPtr
-
-                        elif (DataWidth == XSP_DATAWIDTH_HALF_WORD):
-
-                            """
-                            * Data Transfer Width is Half
-                            * Word (16 bit).
-                            """
-                            Data = self.SendBufferPtr
-                        elif (DataWidth == XSP_DATAWIDTH_WORD):
-                            """
-                            * Data Transfer Width is Word
-                            * (32 bit).
-                            """
-                            Data = self.SendBufferPtr
+                    SendBUffer_Index = 0
+                    SendBUffer_Size = len(self.SendBufferPtr)
+                    SendBUffer = []
+                    if(DataWidth == XSP_DATAWIDTH_BYTE):
+                        SendBUffer = self.SendBufferPtr
+                    elif(DataWidth == XSP_DATAWIDTH_HALF_WORD):
+                        #Because a half word is composed of 2 bytes
+                        SendBUffer_Size = SendBUffer_Size//2
+                        for i in range(SendBUffer_Size):
+                            SendBUffer += [self.SendBufferPtr[2*i] + (self.SendBufferPtr[2*i+1]<<8)]
+                    elif(DataWidth == XSP_DATAWIDTH_WORD):
+                        #Because a half word is composed of 4 bytes
+                        SendBUffer_Size += SendBUffer_Size//4
+                        for i in range(SendBUffer_Size):
+                            SendBUffer += [self.SendBufferPtr[4*i] + (self.SendBufferPtr[4*i+1]<<8) + \
+                                        (self.SendBufferPtr[4*i+2]<<16) + (self.SendBufferPtr[4*i+3]<<24)]
+                    while(((StatusReg & XSP_SR_TX_FULL_MASK)== 0) and (self.RemainingBytes > 0)):
+                        Data = SendBUffer[SendBUffer_Index]
+                        SendBUffer_Index += 1
                         self.XSpi_WriteReg(XSP_DTR_OFFSET, Data)
-                        self.SendBufferPtr += (DataWidth >> 3)
+                        #self.SendBufferPtr += (DataWidth >> 3)
                         self.RemainingBytes -= (DataWidth >> 3)
                         StatusReg = self.XSpi_GetStatusReg()
 
@@ -765,7 +782,7 @@ class Xspi(object):
             * may be connected to slave select
             """
             self.XSpi_SetSlaveSelectReg(self.SlaveSelectMask)
-            self.IsBusy = FALSE
+            self.IsBusy = False
         return XST_SUCCESS
 
     def XSpi_SetSlaveSelect(self, SlaveMask):
@@ -780,11 +797,15 @@ class Xspi(object):
         if (self.IsBusy):
             return XST_DEVICE_BUSY
 
+        if (SlaveMask == (pow(2,self.NumSlaveBits)-1)):
+            return XST_SUCCESS
         """
         * Verify that only one bit in the incoming slave mask is set.
         """
         NumAsserted = 0
-        for Index in range(self.NumSlaveBits-1,-1,0):
+        NumSlaveBits_list = range(self.NumSlaveBits)
+        NumSlaveBits_list = reversed(NumSlaveBits_list)
+        for Index in NumSlaveBits_list:
             if ((SlaveMask >> Index) & 0x1):
                 NumAsserted = NumAsserted + 1
         """
@@ -808,7 +829,7 @@ class Xspi(object):
         * be  written to the slave select register as the inverse of the slave
         * mask.
         """
-        self.SlaveSelectReg = ~SlaveMask
+        self.SlaveSelectReg = 0xffffffff - SlaveMask
 
         return XST_SUCCESS
 
@@ -818,7 +839,7 @@ class Xspi(object):
         * InstancePtr->SlaveSelectReg. This value is set using the API
         * XSpi_SetSlaveSelect.
         """
-        return ~self.SlaveSelectReg
+        return (0xffffffff - self.SlaveSelectReg)
 
     def XSpi_SetStatusHandler(self):
         pass
@@ -835,7 +856,7 @@ class Xspi(object):
         * done before the device is disabled such that the signals which are
         * driven by the device are changed without the device enabled.
         """
-	    self.XSpi_SetSlaveSelectReg(self.SlaveSelectMask)
+        self.XSpi_SetSlaveSelectReg(self.SlaveSelectMask)
         """
         * Abort the operation currently in progress. Clear the mode
         * fault condition by reading the status register (done) then
@@ -856,7 +877,68 @@ class Xspi(object):
 
         self.RemainingBytes = 0
         self.RequestedBytes = 0
-        self.IsBusy = FALSE
+        self.IsBusy = False
+    
+    def XSpi_SetOptions(self,Options):
+        """
+        * Do not allow the slave select to change while a transfer is in
+        * progress.
+        * No need to worry about a critical section here since even if the Isr
+        * changes the busy flag just after we read it, the function will return
+        * busy and the caller can retry when notified that their current
+        * transfer is done.
+        """
+        if (self.IsBusy):
+            return XST_DEVICE_BUSY
+        """
+        * Do not allow master option to be set if the device is slave only.
+        """
+        if ((Options & XSP_MASTER_OPTION) and (self.SlaveOnly)):
+            return XST_SPI_SLAVE_ONLY
+
+        ControlReg = self.XSpi_GetControlReg()
+
+        """
+        * Loop through the options table, turning the option on or off
+        * depending on whether the bit is set in the incoming options flag.
+        """
+        #for (Index = 0; Index < XSP_NUM_OPTIONS; Index++) {
+        for Index in range(self.XSP_NUM_OPTIONS):
+            if (Options & self.OptionsTable[Index].Option):
+                """
+                *Turn it ON.
+                """
+                ControlReg |= self.OptionsTable[Index].Mask
+            else:
+                """
+                *Turn it OFF.
+                """
+                ControlReg &= (0xffffffff - self.OptionsTable[Index].Mask)
+
+        """
+        * Now write the control register. Leave it to the upper layers
+        * to restart the device.
+        """
+        self.XSpi_SetControlReg(ControlReg)
+
+        return XST_SUCCESS
+    
+    def XSpi_GetOptions(self):
+        OptionsFlag = 0
+        """
+        * Get the control register to determine which options are currently
+        * set.
+        """
+        ControlReg = self.XSpi_GetControlReg()
+
+        """
+        * Loop through the options table to determine which options are set.
+        """
+        #for (Index = 0; Index < XSP_NUM_OPTIONS; Index++) {
+        for Index in range(self.XSP_NUM_OPTIONS):
+            if (ControlReg & self.OptionsTable[Index].Mask):
+                OptionsFlag |= self.OptionsTable[Index].Option
+        return OptionsFlag
 
 
 

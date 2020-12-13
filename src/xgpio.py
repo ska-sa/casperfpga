@@ -68,7 +68,7 @@ class XGpio(object):
         self.IsDual= 0
 
     def XGpio_WriteReg(self, RegOffset, Data):
-        self.parent.write_int(self.devname, Data,False, RegOffset/4)
+        self.parent.write_int(self.devname, Data,True, RegOffset/4)
     
     def XGpio_ReadReg(self, RegOffset):
         return self.parent.read_int(self.devname, RegOffset/4)
