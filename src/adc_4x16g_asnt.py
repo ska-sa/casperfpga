@@ -75,6 +75,9 @@ class Adc_4X16G_ASNT(object):
         self.block_info = device_info
         self.channel_sel = 0
         self.process_device_info(device_info)
+        
+        self.snapshot = 0
+        self.cntrl = 0
         # The following parameters are used for adc initlization
         # They are related to xil_devices
         self.Spi = 0
@@ -180,74 +183,23 @@ class Adc_4X16G_ASNT(object):
             #for (delay = 0; delay < 10; delay++);
             time.sleep(0.1)
 
-    def adc_init(self):
-        """
-            This is used for adc initlization, including:
-                
-                * AXI_GPIO Cores initlization
-                * AXI_QUAD_SPI Core initlization
-                * HMC988 configuration via SPI
-                * DAC configuration via SPI
 
-        """
-
-        #Spi devices Init
-        """
-        fifo_exit               1         
-        spi_slave_only          0
-        num_ss_bits,            4
-        num_transfer_bits       16
-        spi_mode                0
-        type_of_axi4_interface  0
-        axi4_baseaddr           0
-        xip_mode                0
-        use_startup             0
-        """
-        ConfigPtr = XGpio_Config()
-        self.Spi = Xspi(self.parent,'VCU128_axi_quad_spi')
-        self.Spi.XSpi_CfgInitialize(ConfigPtr)
-        self.Spi.XSpi_Reset()
-        self.Spi.XSpi_Start()
-        # Setup the HMC988
-        self.WriteHMC988(HMC988_SETUP0)
-        self.WriteHMC988(HMC988_SETUP1)
-        # Set all of the VREFCRLs to max (=VCC)
-        # All of the VREFLSBs to VCC-260mv
-        self.WriteDAC(1, VREFCRLA)
-        self.WriteDAC(2, VREFCRLB)
-        self.WriteDAC(3, VREFCRLC)
-        self.WriteDAC(4, VREFCRLD)
-        self.WriteDAC(5, VREFCRLA)
-        self.WriteDAC(6, VREFCRLB)
-        self.WriteDAC(7, VREFCRLC)
-        self.WriteDAC(8, VREFCRLD)
-
-        #Gpio devices Init
-        ConfigPtr0 = XGpio_Config()
-        self.Gpio0 = XGpio(self.parent, 'VCU128_adc_config')
-        self.Gpio0.XGpio_CfgInitialize(ConfigPtr0)
-        self.Gpio0.XGpio_SetDataDirection(1, 0x0)
-        ConfigPtr1 = XGpio_Config()
-        self.Gpio1 = XGpio(self.parent, 'VCU128_match_pattern_config')
-        self.Gpio1.XGpio_CfgInitialize(ConfigPtr1)
-        self.Gpio1.XGpio_SetDataDirection(1, 0x0)
-        ConfigPtr3 = XGpio_Config()
-        self.Gpio3 = XGpio(self.parent, 'VCU128_drp_config')
-        self.Gpio3.XGpio_CfgInitialize(ConfigPtr3)
-        self.Gpio3.XGpio_SetDataDirection(1, 0x0)
-        # Turn PRBS ON, data OFF, HS_CLK, DAC ON
-        self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
-        self.WriteGPIO0(DACON_MASK, DACON_MASK)
-        # Pulse ResetAll
-        self.Gpio0.XGpio_DiscreteWrite(1, PRBS_MATCH)
-        self.WriteGPIO0(PATMATCHENABLE_MASK, PATMATCHENABLE_MASK)
     
     """
     The following methods are converted from Rick's C code in the while loop,
     which is used for python cmds.
     """
     def ser_slow(self, string_to_send, data):
-        if(string_to_send == 'R'):
+        if(string_to_send == 'T'):
+            chan = data[0]
+            #Select which channel
+            self.WriteGPIO0(CHANSEL_MASK,chan<<CHANSEL_LSB)
+            #Pulse the Fifo Reset
+            self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
+            time.sleep(0.1)
+            self.WriteGPIO0(FIFORESET_MASK,0)
+            time.sleep(0.1)
+        elif(string_to_send == 'R'):
             time.sleep(0.1)
             self.WriteGPIO0(PRBSON_MASK, 0)
             time.sleep(0.1)
@@ -285,12 +237,31 @@ class Adc_4X16G_ASNT(object):
             chan = data[1]
             steps = data[2]
             self.StepRXSlide(adc, chan, steps)
-    
-    def get_samples(self,chan,nsamp, val_list):
-        #break the data acquisition into blocks of 256 samples, to not fill the PC buffer
-        nsamp = int(nsamp/256) * 256
-        numloops = int(nsamp/256)
-    
+
+    # The depth of the ram in simulink is 2^10 * 2 * 128bit
+    # so the maxium of nsamp is 2^10 * 2 * 32 =  65536 
+    def get_samples(self,chan, nsamp, val_list):
+        self.ser_slow('T', chan)
+        #TODO- The bitfield_snapshot here should be same as they showed up in simulink
+        #       We should let the medthod know the name of snapshot automatically
+        #arm the snap shot
+        self.snapshot.bitfield_snapshot_ss.arm()
+        self.snapshot.bitfield_snapshot1_ss.arm()
+        #start the snap shot triggering and reset the counters
+        self.cntrl.write(rst_cntrl = 'pulse')
+        #grab the snapshots
+        data_samples0 = self.snapshot.bitfield_snapshot_ss.read(arm=False)['data']
+        data_samples1 = self.snapshot.bitfield_snapshot1_ss.read(arm=False)['data'] 
+        #The high speed data stream is divided to 64 streams, 32 in each snapshot
+        loop_num = nsamp//64
+        for loop in range(loop_num):
+            for i in range(32):
+                val_list += [data_samples0['a'+str(i)]]
+            for i in range(32):
+                val_list += [data_samples1['a'+str(i)]]
+        #wait for the rest of the data to come out
+        time.sleep(0.6)
+
     def setADC(self):
         if self.DAC_ON == 1:
             adc_a = 8*self.ADC_params[0][3] + 4 + 2*self.ADC_params[0][1] + self.ADC_params[0][0]
@@ -499,3 +470,71 @@ class Adc_4X16G_ASNT(object):
             plt.plot(t, val_list3)
 
             plt.show()
+
+    """
+    ADC Initization
+    """
+    def adc_init(self,snapshot,cntrl):
+        """
+        This is used for adc initlization, including:
+        * AXI_GPIO Cores initlization
+        * AXI_QUAD_SPI Core initlization
+        * HMC988 configuration via SPI
+        * DAC configuration via SPI
+        """
+        
+        # The snapshot and cntrl is used for capturing data for alignment
+        # They are here temporarily
+        self.snapshot = snapshot
+        self.cntrl = cntrl
+
+        #Spi devices Init
+        """
+        fifo_exit               1         
+        spi_slave_only          0
+        num_ss_bits,            4
+        num_transfer_bits       16
+        spi_mode                0
+        type_of_axi4_interface  0
+        axi4_baseaddr           0
+        xip_mode                0
+        use_startup             0
+        """
+        ConfigPtr = XGpio_Config()
+        self.Spi = Xspi(self.parent,'VCU128_axi_quad_spi')
+        self.Spi.XSpi_CfgInitialize(ConfigPtr)
+        self.Spi.XSpi_Reset()
+        self.Spi.XSpi_Start()
+        # Setup the HMC988
+        self.WriteHMC988(HMC988_SETUP0)
+        self.WriteHMC988(HMC988_SETUP1)
+        # Set all of the VREFCRLs to max (=VCC)
+        # All of the VREFLSBs to VCC-260mv
+        self.WriteDAC(1, VREFCRLA)
+        self.WriteDAC(2, VREFCRLB)
+        self.WriteDAC(3, VREFCRLC)
+        self.WriteDAC(4, VREFCRLD)
+        self.WriteDAC(5, VREFCRLA)
+        self.WriteDAC(6, VREFCRLB)
+        self.WriteDAC(7, VREFCRLC)
+        self.WriteDAC(8, VREFCRLD)
+
+        #Gpio devices Init
+        ConfigPtr0 = XGpio_Config()
+        self.Gpio0 = XGpio(self.parent, 'VCU128_adc_config')
+        self.Gpio0.XGpio_CfgInitialize(ConfigPtr0)
+        self.Gpio0.XGpio_SetDataDirection(1, 0x0)
+        ConfigPtr1 = XGpio_Config()
+        self.Gpio1 = XGpio(self.parent, 'VCU128_match_pattern_config')
+        self.Gpio1.XGpio_CfgInitialize(ConfigPtr1)
+        self.Gpio1.XGpio_SetDataDirection(1, 0x0)
+        ConfigPtr3 = XGpio_Config()
+        self.Gpio3 = XGpio(self.parent, 'VCU128_drp_config')
+        self.Gpio3.XGpio_CfgInitialize(ConfigPtr3)
+        self.Gpio3.XGpio_SetDataDirection(1, 0x0)
+        # Turn PRBS ON, data OFF, HS_CLK, DAC ON
+        self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
+        self.WriteGPIO0(DACON_MASK, DACON_MASK)
+        # Pulse ResetAll
+        self.Gpio0.XGpio_DiscreteWrite(1, PRBS_MATCH)
+        self.WriteGPIO0(PATMATCHENABLE_MASK, PATMATCHENABLE_MASK)

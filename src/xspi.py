@@ -233,7 +233,7 @@ class Xspi_Config(object):
     def __init__(self,  fifo_exit = 1,              \
                         spi_slave_only = 0,         \
                         num_ss_bits = 4,            \
-                        num_transfer_bits = 16,      \
+                        num_transfer_bits = 16,     \
                         spi_mode = 0,               \
                         type_of_axi4_interface = 0, \
                         axi4_baseaddr = 0,          \
