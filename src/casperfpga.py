@@ -16,6 +16,7 @@ import hmc
 import katadc
 import skarabadc
 import xil_device
+import adc_4x16g_asnt
 
 from attribute_container import AttributeContainer
 from utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
@@ -46,8 +47,8 @@ CASPER_MEMORY_DEVICES = {
 CASPER_ADC_DEVICES = {
     'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
     'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
-    'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'}
-    #'xps:adc_4x16g_asnt':           {'class': adc_4x16g_asnt.Adc_4X16G_ASNT, 'container': 'adcs'}
+    'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:adc_4x16g_asnt':           {'class': adc_4x16g_asnt.Adc_4X16G_ASNT, 'container': 'adcs'}
 }
 
 # other devices - blocks that aren't memory devices nor ADCs, but about which we'd
@@ -622,7 +623,7 @@ class CasperFpga(object):
         :return: None
         """
         for device_name, device_info in device_dict.items():
-            
+            print(device_name, device_info)
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank '
                                 'device name?')
@@ -746,7 +747,6 @@ class CasperFpga(object):
             self.rcs_info['git'].pop('tag')
         except:
             pass
-
         # Create Register Map
         self._create_memory_devices(device_dict, memorymap_dict,
                                     initialise=initialise_objects)

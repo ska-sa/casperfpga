@@ -25,7 +25,11 @@ HMC988_SETUP0   = 0x1420
 #reg 2: set divide = 4
 HMC988_SETUP1   = 0x0110
 
-#The two DACs which set ADC range and offset
+# The two DACs which set ADC range and offset
+# These values are only for SN3 board
+# The needed settings vary a lot from one chip to the next
+# You can get the value for other board from Rick's test report
+# TODO-We may need to add a dac value list for all the boards 
 VREFCRLA    = 825
 VREFCRLB    = 775
 VREFCRLC    = 700
@@ -93,7 +97,8 @@ class Adc_4X16G_ASNT(object):
         self.DAC_ON = 0
         #Set this to debug without hardware connected
         self.no_hw = 0
-    
+        print('adc_4x16g_asnt is created')
+
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, initialise=False, **kwargs):
         """
@@ -107,7 +112,10 @@ class Adc_4X16G_ASNT(object):
         :param kwargs:
         :return:
         """
+        print('Info of adc_4x16g_asnt is received')
         return cls(parent, device_name, device_info, initialise, **kwargs)
+        
+        
     
     def process_device_info(self, device_info):
 
@@ -183,12 +191,6 @@ class Adc_4X16G_ASNT(object):
             #for (delay = 0; delay < 10; delay++);
             time.sleep(0.1)
 
-
-    
-    """
-    The following methods are converted from Rick's C code in the while loop,
-    which is used for python cmds.
-    """
     def ser_slow(self, string_to_send, data):
         if(string_to_send == 'T'):
             chan = data[0]
@@ -199,6 +201,31 @@ class Adc_4X16G_ASNT(object):
             time.sleep(0.1)
             self.WriteGPIO0(FIFORESET_MASK,0)
             time.sleep(0.1)
+        elif(string_to_send == 'X'):
+            addr = data[0]
+            val = data[1]
+            if(addr == 0):
+                outval = val & 0xffff
+                self.WriteGPIO0(0xffff, outval)
+            elif(addr < 9):
+                self.WriteDAC(addr, val)
+        elif(string_to_send == 'Y'):
+            val = data[0]
+            if (val == 0):
+                self.WriteGPIO0(PATMATCHENABLE_MASK, 0)
+            else:
+                self.WriteGPIO0(PATMATCHENABLE_MASK, PATMATCHENABLE_MASK)
+        elif(string_to_send == 'Z'):
+            val = data[0]
+            if (val == 0):
+                self.WriteGPIO0(XORON_MASK, 0)
+            else:
+                self.WriteGPIO0(XORON_MASK, XORON_MASK)
+        elif(string_to_send == 'P'):
+            adc = data[0]
+            chan = data[1]
+            steps = data[2]
+            self.StepRXSlide(adc, chan, steps)
         elif(string_to_send == 'R'):
             time.sleep(0.1)
             self.WriteGPIO0(PRBSON_MASK, 0)
@@ -212,32 +239,75 @@ class Adc_4X16G_ASNT(object):
             self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
             time.sleep(0.1)
             self.WriteGPIO0(FIFORESET_MASK,0)
-        elif(string_to_send == 'X'):
-            addr = data[0]
-            val = data[1]
-            if(addr == 0):
-                outval = val & 0xffff
-                self.WriteGPIO0(0xffff, outval)
-            elif(addr < 9):
-                self.WriteDAC(addr, val)
-        elif(string_to_send == 'Z'):
-            val = data[0]
-            if (val == 0):
-                self.WriteGPIO0(XORON_MASK, 0)
+        elif(string_to_send == 'H'):
+            #Get the temperatures
+            temp0 = self.GetTMP125(0)
+            temp1 = self.GetTMP125(1)
+            return [temp0, temp1]
+        elif(string_to_send == 'S'):
+            #Select which channel
+            chan = data[0]
+            if (chan == 0):
+                self.WriteGPIO0(TPSEL_MASK, 0)
             else:
-                self.WriteGPIO0(XORON_MASK, XORON_MASK)
-        elif(string_to_send == 'Y'):
-            val = data[0]
-            if (val == 0):
-                self.WriteGPIO0(PATMATCHENABLE_MASK, 0)
-            else:
-                self.WriteGPIO0(PATMATCHENABLE_MASK, PATMATCHENABLE_MASK)
-        elif(string_to_send == 'P'):
-            adc = data[0]
-            chan = data[1]
-            steps = data[2]
-            self.StepRXSlide(adc, chan, steps)
+                self.WriteGPIO0(TPSEL_MASK, TPSEL_MASK)
+        """
+        elif(string_to_send == 'U'):
+            #Get the prbs error counters for each of the 16 lanes
+            #Pulse the DRP reset
+            self.WriteGPIO3(DRP_RESET_MASK, DRP_RESET_MASK)
+            #for (delay = 0; delay < 100; delay++);
+            time.sleep(0.1)
+            self.WriteGPIO3(DRP_RESET_MASK, 0)
+            #Pulse the error counter reset
+            self.WriteGPIO3(PRBSERR_RESET_MASK, PRBSERR_RESET_MASK)
+            #for (delay = 0; delay < 100; delay++);
+            self.WriteGPIO3(PRBSERR_RESET_MASK, 0)
+            # Wait a while
+            #for (delay = 0; delay < PRBSERROR_TIME; delay++);
+            time.sleep(0.1)
+			#for (chan = 0; chan < 16; chan++)
+            for chan in range(16):
+                #{
+                #select the channel
+                self.WriteGPIO0(0xf<<BITSEL_LSB, chan<<BITSEL_LSB)
+                prbs_locked = (self.XGpio_DiscreteRead(&Gpio3, 1) == PRBS_LOCKED_MASK)
+                if (prbs_locked):
+                    #{
+                    #Set the DRP Address
+                    self.WriteGPIO3(0x3ff, PRBSERR_LS_PORT)
+                    #Pulse the read bit
+                    self.WriteGPIO3(PRBSERR_READ_MASK, PRBSERR_READ_MASK)
+                    self.WriteGPIO3(PRBSERR_READ_MASK, 0)
+                    #for (delay = 0; delay < 100; delay++);
+                    time.sleep(0.1)
+                    error_count[chan] = (self.XGpio_DiscreteRead(&Gpio3, 1) & 0xffff)
+                    #Set the DRP Address
+                    self.WriteGPIO3(0x3ff, PRBSERR_MS_PORT)
+                    #Pulse the read bit
+                    self.WriteGPIO3(PRBSERR_READ_MASK, PRBSERR_READ_MASK)
+                    self.WriteGPIO3(PRBSERR_READ_MASK, 0)
+                    error_count[chan] = error_count[chan] | (self.XGpio_DiscreteRead(&Gpio3, 1)<<16)
+                    #}
+                else:
+                    error_count[chan] = 0xffffffff
+                #}
+            #Now send out the data.  There will be four bytes for each counter, 64B in all
+            #for (chan = 0; chan < 16; chan++)
+            for chan in range(16):
+                #{
+                SendBuffer[0] = error_count[chan] & 0xff
+                SendBuffer[1] = error_count[chan] >>8
+                SendBuffer[2] = error_count[chan] >>16
+                SendBuffer[3] = error_count[chan] >>24
+                #}
+            return SendBuffer
+        """
 
+    """
+    The following methods are converted from Rick's C code in the while loop,
+    which is used for python cmds.
+    """
     # The depth of the ram in simulink is 2^10 * 2 * 128bit
     # so the maxium of nsamp is 2^10 * 2 * 32 =  65536 
     def get_samples(self,chan, nsamp, val_list):

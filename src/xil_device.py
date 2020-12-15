@@ -46,7 +46,7 @@ class Xil_Device(Memory):
         print(hex(data))
     
     def write_int(self,value,word_offset):
-        data = self.parent.write_int(self.name,value,False,word_offset)
-        
+        self.parent.write_int(self.name,value,False,word_offset)
+
     
 
