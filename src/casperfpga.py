@@ -623,7 +623,6 @@ class CasperFpga(object):
         :return: None
         """
         for device_name, device_info in device_dict.items():
-            print(device_name, device_info)
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank '
                                 'device name?')

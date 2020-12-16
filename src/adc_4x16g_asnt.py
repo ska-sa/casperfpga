@@ -97,7 +97,6 @@ class Adc_4X16G_ASNT(object):
         self.DAC_ON = 0
         #Set this to debug without hardware connected
         self.no_hw = 0
-        print('adc_4x16g_asnt is created')
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, initialise=False, **kwargs):
@@ -112,7 +111,6 @@ class Adc_4X16G_ASNT(object):
         :param kwargs:
         :return:
         """
-        print('Info of adc_4x16g_asnt is received')
         return cls(parent, device_name, device_info, initialise, **kwargs)
         
         
@@ -172,12 +170,19 @@ class Adc_4X16G_ASNT(object):
         self.GPIO0_val = (self.GPIO0_val & mask) | val
         self.Gpio0.XGpio_DiscreteWrite(1, self.GPIO0_val)
     
+    def ReadGPIO0(self):
+        return self.Gpio0.XGpio_DiscreteRead(1)
+
     def WriteGPIO3(self,mask,val):
         mask = 0xffffffff - mask
         self.GPIO3_val = (self.GPIO3_val & mask) | val
         self.Gpio3.XGpio_DiscreteWrite(1, self.GPIO3_val)
     
     def StepRXSlide(self, adc, chan, steps):
+        # Rick's code is for 4 channel ADC, so he has the chan parameter
+        # In the current, we only implemented one channel in each yellow block,
+        # and we know which channel it is frm self.channel_sel
+        chan = self.channel_sel
         self.WriteGPIO0(CHANSEL_MASK, adc<<CHANSEL_LSB)
         self.WriteGPIO0(BITSEL_MASK, chan<<BITSEL_LSB)
         #for (n = 0; n < steps; n++)
@@ -227,13 +232,13 @@ class Adc_4X16G_ASNT(object):
             steps = data[2]
             self.StepRXSlide(adc, chan, steps)
         elif(string_to_send == 'R'):
-            time.sleep(0.1)
+            time.sleep(0.5)
             self.WriteGPIO0(PRBSON_MASK, 0)
-            time.sleep(0.1)
+            time.sleep(0.5)
             self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
-            time.sleep(0.1)
+            time.sleep(0.5)
             self.WriteGPIO0(RESETALL_MASK, RESETALL_MASK)
-            time.sleep(0.1)
+            time.sleep(0.5)
             self.WriteGPIO0(RESETALL_MASK, 0)
         elif(string_to_send == 'V'):
             self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
@@ -311,6 +316,10 @@ class Adc_4X16G_ASNT(object):
     # The depth of the ram in simulink is 2^10 * 2 * 128bit
     # so the maxium of nsamp is 2^10 * 2 * 32 =  65536 
     def get_samples(self,chan, nsamp, val_list):
+        # Rick's code is for 4 channel ADC, so he has the chan parameter
+        # In the current, we only implemented one channel in each yellow block,
+        # and we know which channel it is frm self.channel_sel
+        chan = self.channel_sel
         self.ser_slow('T', chan)
         #TODO- The bitfield_snapshot here should be same as they showed up in simulink
         #       We should let the medthod know the name of snapshot automatically
@@ -346,6 +355,24 @@ class Adc_4X16G_ASNT(object):
     
         val = (adc_d<<12) + (adc_c<<8) + (adc_b<<4) + adc_a
         addr = 0x0000
+        """
+        # Rick's sedADC is used for the 4-channel design
+        # so he writes the registers in adc)a/b/c/d.
+        # In our design, we only implemented one channl,
+        # so we need to modify this method for one channel design
+        """
+        # The code here is stupid, but it will be easy to let everyone know what I'm doing...
+        mask = 0xf << (self.channel_sel*4)
+        mask = 0xffffffff - mask
+        val_reg = self.ReadGPIO0()
+        if(self.channel_sel == 0):
+            val = (val_reg & mask) + adc_a
+        elif(self.channel_sel == 1):
+            val = (val_reg & mask) + (adc_b << 4)
+        elif(self.channel_sel == 2):
+            val = (val_reg & mask) + (adc_c << 8)
+        elif(self.channel_sel == 3):
+            val = (val_reg & mask) + (adc_d << 12)
         #print(string_to_send)
         if (self.no_hw == 0):
             self.ser_slow('X',[addr, val])
@@ -357,6 +384,10 @@ class Adc_4X16G_ASNT(object):
         numsteps = hex(steps)
         vals=[]
         #bit is hex, 0 to 3      
+        # Rick's code is for 4 channel ADC, so he has the chan parameter
+        # In the current, we only implemented one channel in each yellow block,
+        # and we know which channel it is frm self.channel_sel
+        adc_chan = self.channel_sel
         vals.append(str(adc_chan))
         vals.append(str(bit))
         vals.append(numsteps.split('x')[1])
@@ -368,8 +399,85 @@ class Adc_4X16G_ASNT(object):
         self.ser_slow('P',[adc_chan, bit,steps])
     
     def check_alignment(self, adc_chan):
-        #TODO
-        pass
+        # Rick's code is for 4 channel ADC, so he has the chan parameter
+        # In the current, we only implemented one channel in each yellow block,
+        # and we know which channel it is frm self.channel_sel
+        adc_chan = self.channel_sel
+        #Returns a 0 if alignment is good, 1 if bad
+        samples_2_get = 1024
+        #CLKSEL = 0, PRBS ON, DAC ON, DATA OFF all channels
+        for i in range(4): 
+            self.ADC_params[i] = [0,1,1,0]
+        self.setADC()
+        #XOR OFF
+        self.ser_slow('Z',[0])                
+        #pattern_match ON
+        self.ser_slow('Y',[1])      
+        val_list = []
+        self.get_samples(adc_chan, samples_2_get, val_list)     
+        bit3=[]
+        bit2=[]
+        bit1=[]
+        bit0=[]
+        for val in val_list:
+            bit3.append((val & 0x8) == 0x8)
+            bit2.append((val & 0x4) == 0x4)
+            bit1.append((val & 0x2) == 0x2) 
+            bit0.append((val & 0x1) == 0x1)
+        #save the 32b patterns in a file
+        pat_array0 = []
+        pat_array1 = []
+        pat_array2 = []
+        pat_array3 = []
+        #get the 32-bit pattern at offset 200 for bit3
+        numbits = 32
+        match_pattern = 0
+        test_offset = 200
+        for n in range(test_offset, test_offset + numbits):
+            match_pattern = (match_pattern<<1) | bit3[n]
+        print("Match pattern = " + hex(match_pattern))
+        #now find the position of that pattern in each of the bits
+        #We'll record those positions here
+        match_pos = [999,999,999,999]
+        for position in range(0, samples_2_get - numbits):
+            pattern = 0
+            for n in range(0,numbits):
+                pattern = (pattern<<1) | bit3[position + n]
+            pat_array3.append(pattern)
+            if (pattern == match_pattern): 
+                match_pos[3] = position
+        for position in range(0, samples_2_get - numbits):
+            pattern = 0
+            for n in range(0,numbits):
+                pattern = (pattern<<1) | bit2[position + n]
+            pat_array2.append(pattern)
+            if (pattern == match_pattern): 
+                match_pos[2] = position
+        for position in range(0, samples_2_get - numbits):
+            pattern = 0
+            for n in range(0,numbits):
+                pattern = (pattern<<1) | bit1[position + n]
+            pat_array1.append(pattern)
+            if (pattern == match_pattern): 
+                match_pos[1] = position
+        for position in range(0, samples_2_get - numbits):
+            pattern = 0
+            for n in range(0,numbits):
+                pattern = (pattern<<1) | bit0[position + n]
+            pat_array0.append(pattern)
+            if (pattern == match_pattern): 
+                match_pos[0] = position
+        #print("Check Alignment", end = "")
+        print("Check Alignment=")
+        print(match_pos)
+        fhand1 = open("./patfile.csv", 'w')
+        for n in range(0, samples_2_get - numbits):
+            fhand1.write(hex(pat_array3[n]) + ',' + hex(pat_array2[n]) + ',' + hex(pat_array1[n]) + ',' + hex(pat_array0[n]) + '\n')
+        fhand1.close()
+        time.sleep(.5)
+        if (match_pos[0] == match_pos[1]) & (match_pos[1] == match_pos[2]) & (match_pos[2] == match_pos[3]):
+            return 0
+        else: return 1
 
     """
     The following methods are from Rick's python script
