@@ -179,10 +179,6 @@ class Adc_4X16G_ASNT(object):
         self.Gpio3.XGpio_DiscreteWrite(1, self.GPIO3_val)
     
     def StepRXSlide(self, adc, chan, steps):
-        # Rick's code is for 4 channel ADC, so he has the chan parameter
-        # In the current, we only implemented one channel in each yellow block,
-        # and we know which channel it is frm self.channel_sel
-        chan = self.channel_sel
         self.WriteGPIO0(CHANSEL_MASK, adc<<CHANSEL_LSB)
         self.WriteGPIO0(BITSEL_MASK, chan<<BITSEL_LSB)
         #for (n = 0; n < steps; n++)
@@ -316,10 +312,6 @@ class Adc_4X16G_ASNT(object):
     # The depth of the ram in simulink is 2^10 * 2 * 128bit
     # so the maxium of nsamp is 2^10 * 2 * 32 =  65536 
     def get_samples(self,chan, nsamp, val_list):
-        # Rick's code is for 4 channel ADC, so he has the chan parameter
-        # In the current, we only implemented one channel in each yellow block,
-        # and we know which channel it is frm self.channel_sel
-        chan = self.channel_sel
         self.ser_slow('T', chan)
         #TODO- The bitfield_snapshot here should be same as they showed up in simulink
         #       We should let the medthod know the name of snapshot automatically
@@ -381,13 +373,10 @@ class Adc_4X16G_ASNT(object):
     def bit_shift(self, adc_chan, bit, steps):
         if steps == 0: 
             return
+        """
         numsteps = hex(steps)
         vals=[]
         #bit is hex, 0 to 3      
-        # Rick's code is for 4 channel ADC, so he has the chan parameter
-        # In the current, we only implemented one channel in each yellow block,
-        # and we know which channel it is frm self.channel_sel
-        adc_chan = self.channel_sel
         vals.append(str(adc_chan))
         vals.append(str(bit))
         vals.append(numsteps.split('x')[1])
@@ -395,14 +384,10 @@ class Adc_4X16G_ASNT(object):
         for n in range(3):
             string_to_send += vals[n].rjust(4,'0')        
         string_to_send += 'P'
-        
+        """
         self.ser_slow('P',[adc_chan, bit,steps])
     
     def check_alignment(self, adc_chan):
-        # Rick's code is for 4 channel ADC, so he has the chan parameter
-        # In the current, we only implemented one channel in each yellow block,
-        # and we know which channel it is frm self.channel_sel
-        adc_chan = self.channel_sel
         #Returns a 0 if alignment is good, 1 if bad
         samples_2_get = 1024
         #CLKSEL = 0, PRBS ON, DAC ON, DATA OFF all channels
@@ -507,92 +492,94 @@ class Adc_4X16G_ASNT(object):
             samples_2_get = 1024
             align_fail = [0,0,0,0]
             #We'll do the two crossed-over channels first, and do a check_alignment
-            chan_list = [1, 2, 0, 3]
-            for adc_chan in chan_list:
-                #Reset the data fifos
-                #ser_slow('V')
-                print("adjusting ADC channel ", adc_chan)
-                val_list = []
-                self.get_samples(adc_chan, samples_2_get, val_list)
-                bit3=[]
-                bit2=[]
-                bit1=[]
-                bit0=[]
-                for val in val_list:
-                    bit3.append((val & 0x8) == 0x8)
-                    bit2.append((val & 0x4) == 0x4)
-                    bit1.append((val & 0x2) == 0x2) 
-                    bit0.append((val & 0x1) == 0x1)
-                #get the 32-bit pattern at some offset for bit3
-                numbits = 32
-                match_pattern = 0
-                test_offset = 200
-                for n in range(test_offset, test_offset + numbits):
-                    match_pattern = (match_pattern<<1) | bit3[n]
-                print("Match pattern = " + hex(match_pattern))
-                #now find the position of that pattern in each of the bits
-                #We'll record those positions here
-                match_pos = [999,999,999,999]
-                for position in range(test_offset -64, samples_2_get - numbits):
-                    pattern = 0
-                    for n in range(0,numbits):
-                        pattern = (pattern<<1) | bit3[position + n]
-                    if (pattern == match_pattern): 
-                        match_pos[3] = position
-                for position in range(test_offset -64, samples_2_get - numbits):
-                    pattern = 0
-                    for n in range(0,numbits):
-                        pattern = (pattern<<1) | bit2[position + n]
-                    if (pattern == match_pattern): 
-                        match_pos[2] = position
-                for position in range(test_offset-64, samples_2_get - numbits):
-                    pattern = 0
-                    for n in range(0,numbits):
-                        pattern = (pattern<<1) | bit1[position + n]
-                    if (pattern == match_pattern): 
-                        match_pos[1] = position
-                for position in range(test_offset-64, samples_2_get - numbits):
-                    pattern = 0
-                    for n in range(0,numbits):
-                        pattern = (pattern<<1) | bit0[position + n]
-                    if (pattern == match_pattern): 
-                        match_pos[0] = position
-                print("Offset of each lane's match pattern ", match_pos)
-                #Now we calculate how many bits to shift each channel to align them
-                min_pos = min(match_pos)
-                max_pos = max(match_pos)
-                min_chan = match_pos.index(min(match_pos))
-                max_chan = match_pos.index(max(match_pos))
-                if min_pos == 999: 
-                    print("No pattern match in channel " + str(min_chan))
-                    print("Alignment failed for channel ", adc_chan)
-                    align_fail[adc_chan] = 1
+            #chan_list = [1, 2, 0, 3]
+            #for adc_chan in chan_list:
+            #Reset the data fifos
+            #ser_slow('V')
+            print("adjusting ADC channel ", self.channel_sel)
+            val_list = []
+            self.get_samples(self.channel_sel, samples_2_get, val_list)
+            bit3=[]
+            bit2=[]
+            bit1=[]
+            bit0=[]
+            for val in val_list:
+                bit3.append((val & 0x8) == 0x8)
+                bit2.append((val & 0x4) == 0x4)
+                bit1.append((val & 0x2) == 0x2) 
+                bit0.append((val & 0x1) == 0x1)
+            #get the 32-bit pattern at some offset for bit3
+            numbits = 32
+            match_pattern = 0
+            test_offset = 200
+            for n in range(test_offset, test_offset + numbits):
+                match_pattern = (match_pattern<<1) | bit3[n]
+            print("Match pattern = " + hex(match_pattern))
+            #now find the position of that pattern in each of the bits
+            #We'll record those positions here
+            match_pos = [999,999,999,999]
+            for position in range(test_offset -64, samples_2_get - numbits):
+                pattern = 0
+                for n in range(0,numbits):
+                    pattern = (pattern<<1) | bit3[position + n]
+                if (pattern == match_pattern): 
+                    match_pos[3] = position
+            for position in range(test_offset -64, samples_2_get - numbits):
+                pattern = 0
+                for n in range(0,numbits):
+                    pattern = (pattern<<1) | bit2[position + n]
+                if (pattern == match_pattern): 
+                    match_pos[2] = position
+            for position in range(test_offset-64, samples_2_get - numbits):
+                pattern = 0
+                for n in range(0,numbits):
+                    pattern = (pattern<<1) | bit1[position + n]
+                if (pattern == match_pattern): 
+                    match_pos[1] = position
+            for position in range(test_offset-64, samples_2_get - numbits):
+                pattern = 0
+                for n in range(0,numbits):
+                    pattern = (pattern<<1) | bit0[position + n]
+                if (pattern == match_pattern): 
+                    match_pos[0] = position
+            print("Offset of each lane's match pattern ", match_pos)
+            #Now we calculate how many bits to shift each channel to align them
+            min_pos = min(match_pos)
+            max_pos = max(match_pos)
+            min_chan = match_pos.index(min(match_pos))
+            max_chan = match_pos.index(max(match_pos))
+            if min_pos == 999: 
+                print("No pattern match in channel " + str(min_chan))
+                print("Alignment failed for channel ", self.channel_sel)
+                align_fail = 1
+                time.sleep(0.5)
+            for n in range(3, -1, -1):
+                steps_to_shift = match_pos[n] - min_pos
+                if steps_to_shift > 63: 
+                    print("Necessary shift exceeds 63 in bit ", n)
+                    print("Alignment failed for channel ", self.channel_sel)
+                    align_fail = 1
                     time.sleep(0.5)
-                for n in range(3, -1, -1):
-                    steps_to_shift = match_pos[n] - min_pos
-                    if steps_to_shift > 63: 
-                        print("Necessary shift exceeds 63 in bit ", n)
-                        print("Alignment failed for channel ", adc_chan)
-                        align_fail[adc_chan] = 1
-                        time.sleep(0.5)
                             
-                #do the adjustment
-                if align_fail[adc_chan] == 0:
-                    for n in range(3, -1, -1):
-                        if (match_pos[n] != 999):
-                            steps_to_shift = match_pos[n] - min_pos
-                            if steps_to_shift > 64: steps_to_shift = 64
-                            print("Shift bit " + str(n) + " " + str(steps_to_shift))                   
-                            self.bit_shift(adc_chan, n, steps_to_shift)
-                            time.sleep(.1)
-                else:break
-            #For channels 1 and 2 check the alignment
-            if align_fail == [0,0,0,0]:
-                for adc_chan in range(1,3):
-                    print("Checking alignment channel ", adc_chan)
-                    align_fail[adc_chan] = self.check_alignment(adc_chan)
-                    if align_fail[adc_chan] == 1: break
-            if align_fail == [0,0,0,0]:
+            #do the adjustment
+            if align_fail == 0:
+                for n in range(3, -1, -1):
+                    if (match_pos[n] != 999):
+                        steps_to_shift = match_pos[n] - min_pos
+                        if steps_to_shift > 64: steps_to_shift = 64
+                        print("Shift bit " + str(n) + " " + str(steps_to_shift))                   
+                        self.bit_shift(self.channel_sel, n, steps_to_shift)
+                        time.sleep(.1)
+            else:
+                break
+            # In Rick's design, it's for channels 1 and 2 check the alignment
+            # In the current design, it's only for the current channel
+            if align_fail == 0:
+                #for adc_chan in range(1,3):
+                print("Checking alignment channel ", self.channel_sel)
+                align_fail = self.check_alignment(self.channel_sel)
+                if align_fail == 1: break
+            if align_fail == 0:
                 print("Alignment successful")
                 print("")
                 break
