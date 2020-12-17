@@ -314,7 +314,7 @@ class Adc_4X16G_ASNT(object):
     # The depth of the ram in simulink is 2^10 * 2 * 128bit
     # so the maxium of nsamp is 2^10 * 2 * 32 =  65536 
     def get_samples(self,chan, nsamp, val_list):
-        self.ser_slow('T', chan)
+        self.ser_slow('T', [chan])
         #TODO- The bitfield_snapshot here should be same as they showed up in simulink
         #       We should let the medthod know the name of snapshot automatically
         #arm the snap shot
