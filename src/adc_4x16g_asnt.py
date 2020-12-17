@@ -121,7 +121,7 @@ class Adc_4X16G_ASNT(object):
 
         if device_info is None:
             return
-        self.channel_sel = device_info['channel_sel']
+        self.channel_sel = int(device_info['channel_sel'])
 
     """
     The following methods are converted from Rick's C code:
