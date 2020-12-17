@@ -686,7 +686,7 @@ class Adc_4X16G_ASNT(object):
         xip_mode                0
         use_startup             0
         """
-        ConfigPtr = XGpio_Config()
+        ConfigPtr = Xspi_Config()
         self.Spi = Xspi(self.parent,'VCU128_axi_quad_spi')
         self.Spi.XSpi_CfgInitialize(ConfigPtr)
         self.Spi.XSpi_Reset()
