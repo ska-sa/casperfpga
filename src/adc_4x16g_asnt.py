@@ -97,6 +97,8 @@ class Adc_4X16G_ASNT(object):
         self.DAC_ON = 0
         #Set this to debug without hardware connected
         self.no_hw = 0
+        #Save the config.txt DAC values here each time we read them- 9 places, we'll skip 0 and use 1 to 8
+        self.initial_DACvals = [-1,-1,-1,-1,-1,-1,-1,-1, -1]
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, initialise=False, **kwargs):
@@ -369,7 +371,24 @@ class Adc_4X16G_ASNT(object):
         if (self.no_hw == 0):
             self.ser_slow('X',[addr, val])
         #return string_to_send
-    
+
+    def set_DACs(self,reg_add, value):
+        for i in range(8):
+            self.initial_DACvals[reg_add[i]] = value[i]
+            self.write_DAC_value(reg_add[i], value[i])
+        print (self.initial_DACvals)
+
+    def write_DAC_value(self,DAC_add, DAC_val):
+        print("DAC",DAC_add, "set to ", DAC_val)
+        #value_hex_no_0x = hex(DAC_val).split('x')[1]
+        #string_to_send = ""
+        #string_to_send += str(DAC_add).rjust(4, '0')        
+        #string_to_send += value_hex_no_0x.rjust(4, '0')        
+        #string_to_send += 'X'
+        #print(string_to_send)
+        #ser_slow(string_to_send)
+        self.ser_slow('X',[DAC_add, DAC_val])
+
     def bit_shift(self, adc_chan, bit, steps):
         if steps == 0: 
             return
@@ -648,6 +667,8 @@ class Adc_4X16G_ASNT(object):
         * DAC configuration via SPI
         """
         
+        # The following method is called in Rick's C code
+
         # The snapshot and cntrl is used for capturing data for alignment
         # They are here temporarily
         self.snapshot = snapshot

@@ -16,6 +16,7 @@ class Xil_Device(Memory):
         :param device_info: Information about this device
         """
         self.parent = parent
+        self.process_device_info(device_info)
         Memory.__init__(self, name, 32, address, length_bytes)
     
     @classmethod
@@ -40,7 +41,13 @@ class Xil_Device(Memory):
             raise RuntimeError('Could not find address or length '
                                'for Xil device %s' % device_name)
         return cls(parent, device_name, address, length_bytes, device_info)
-    
+
+    def process_device_info(self, device_info):
+
+        if device_info is None:
+            return
+        self.device_type = device_info['devtype']
+
     def read_int(self,word_offset):
         data = self.parent.read_int(self.name,word_offset)
         print(hex(data))
