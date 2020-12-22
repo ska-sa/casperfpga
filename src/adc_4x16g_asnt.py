@@ -179,7 +179,7 @@ class Adc_4X16G_ASNT(object):
         mask = 0xffffffff - mask
         self.GPIO3_val = (self.GPIO3_val & mask) | val
         self.Gpio3.XGpio_DiscreteWrite(1, self.GPIO3_val)
-    
+    c
     def StepRXSlide(self, adc, chan, steps):
         self.WriteGPIO0(CHANSEL_MASK, adc<<CHANSEL_LSB)
         self.WriteGPIO0(BITSEL_MASK, chan<<BITSEL_LSB)
@@ -691,6 +691,7 @@ class Adc_4X16G_ASNT(object):
         self.Spi.XSpi_CfgInitialize(ConfigPtr)
         self.Spi.XSpi_Reset()
         self.Spi.XSpi_Start()
+        self.Spi.XSpi_IntrGlobalDisable()
         # Setup the HMC988
         self.WriteHMC988(HMC988_SETUP0)
         self.WriteHMC988(HMC988_SETUP1)
@@ -722,5 +723,5 @@ class Adc_4X16G_ASNT(object):
         self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
         self.WriteGPIO0(DACON_MASK, DACON_MASK)
         # Pulse ResetAll
-        self.Gpio0.XGpio_DiscreteWrite(1, PRBS_MATCH)
+        self.Gpio1.XGpio_DiscreteWrite(1, PRBS_MATCH)
         self.WriteGPIO0(PATMATCHENABLE_MASK, PATMATCHENABLE_MASK)
