@@ -204,6 +204,7 @@ class Adc_4X16G_ASNT(object):
             time.sleep(0.1)
             self.WriteGPIO0(FIFORESET_MASK,0)
             time.sleep(0.1)
+            self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
         elif(string_to_send == 'X'):
             addr = data[0]
             val = data[1]
