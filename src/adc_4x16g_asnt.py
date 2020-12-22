@@ -179,7 +179,7 @@ class Adc_4X16G_ASNT(object):
         mask = 0xffffffff - mask
         self.GPIO3_val = (self.GPIO3_val & mask) | val
         self.Gpio3.XGpio_DiscreteWrite(1, self.GPIO3_val)
-    c
+    
     def StepRXSlide(self, adc, chan, steps):
         self.WriteGPIO0(CHANSEL_MASK, adc<<CHANSEL_LSB)
         self.WriteGPIO0(BITSEL_MASK, chan<<BITSEL_LSB)
