@@ -510,7 +510,7 @@ class Adc_4X16G_ASNT(object):
             #ser_slow('1Y')
             self.ser_slow('Y',[1])
             samples_2_get = 1024
-            align_fail = [0,0,0,0]
+            align_fail = 0
             #We'll do the two crossed-over channels first, and do a check_alignment
             #chan_list = [1, 2, 0, 3]
             #for adc_chan in chan_list:
@@ -591,18 +591,22 @@ class Adc_4X16G_ASNT(object):
                         self.bit_shift(self.channel_sel, n, steps_to_shift)
                         time.sleep(.1)
             else:
-                break
+                #break
+                continue
             # In Rick's design, it's for channels 1 and 2 check the alignment
             # In the current design, it's only for the current channel
             if align_fail == 0:
                 #for adc_chan in range(1,3):
                 print("Checking alignment channel ", self.channel_sel)
                 align_fail = self.check_alignment(self.channel_sel)
-                if align_fail == 1: break
+                if align_fail == 1: 
+                    #break
+                    continue
             if align_fail == 0:
                 print("Alignment successful")
                 print("")
-                break
+                #break
+                continue
             else: 
                 print("Alignment Failed")
                 print("")
@@ -621,7 +625,7 @@ class Adc_4X16G_ASNT(object):
         #ser_slow("1Z")
         self.ser_slow('Z',[1])
 
-        if align_fail == [0,0,0,0]:
+        if align_fail == 0:
             #Now take and display all four channels
             val_list0=[]
             val_list1=[]
