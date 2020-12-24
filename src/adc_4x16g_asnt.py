@@ -204,7 +204,6 @@ class Adc_4X16G_ASNT(object):
             time.sleep(0.1)
             self.WriteGPIO0(FIFORESET_MASK,0)
             time.sleep(0.1)
-            self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
         elif(string_to_send == 'X'):
             addr = data[0]
             val = data[1]
@@ -239,6 +238,7 @@ class Adc_4X16G_ASNT(object):
             self.WriteGPIO0(RESETALL_MASK, RESETALL_MASK)
             time.sleep(0.5)
             self.WriteGPIO0(RESETALL_MASK, 0)
+            time.sleep(0.5)
         elif(string_to_send == 'V'):
             self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
             time.sleep(0.1)
@@ -518,7 +518,9 @@ class Adc_4X16G_ASNT(object):
             #ser_slow('V')
             print("adjusting ADC channel ", self.channel_sel)
             val_list = []
+            self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
             self.get_samples(self.channel_sel, samples_2_get, val_list)
+            self.WriteGPIO0(FIFOREAD_MASK,0)
             bit3=[]
             bit2=[]
             bit1=[]
