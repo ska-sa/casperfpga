@@ -335,6 +335,11 @@ class Adc_4X16G_ASNT(object):
                 val_list += [data_samples1['a'+str(i)][loop]]
         #wait for the rest of the data to come out
         time.sleep(0.6)
+        # for debugging
+        f = open('alignment_data.txt','w')
+        for i in range(len(val_list)):
+            f.writelines(str(val_list[i])+'\n')
+        f.close()
 
     def setADC(self):
         if self.DAC_ON == 1:
