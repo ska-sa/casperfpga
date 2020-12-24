@@ -728,5 +728,8 @@ class Adc_4X16G_ASNT(object):
         self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
         self.WriteGPIO0(DACON_MASK, DACON_MASK)
         # Pulse ResetAll
+        self.WriteGPIO0(RESETALL_MASK, RESETALL_MASK)
+        self.WriteGPIO0(RESETALL_MASK, 0)
+        #Turn on the pattern match function, to sync the FPGAs PRBS generators
         self.Gpio1.XGpio_DiscreteWrite(1, PRBS_MATCH)
         self.WriteGPIO0(PATMATCHENABLE_MASK, PATMATCHENABLE_MASK)
