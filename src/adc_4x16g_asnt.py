@@ -155,7 +155,12 @@ class Adc_4X16G_ASNT(object):
         #TODO- maybe we need some delays here 
         time.sleep(1)
         self.Spi.XSpi_SetSlaveSelect(0xff)
-        return (RxBuf[0]>>5) + (RxBuf[1]<<3)
+        temp_tmp = (RxBuf[0]>>5) + (RxBuf[1]<<3)
+        bytes = [0,0]
+        bytes[0] = temp_tmp & 0xff
+        bytes[1] = (temp_tmp >> 8)
+        temp = (int((bytes[1])<<8) + int(bytes[0]))/4
+        return temp
 
     def WriteDAC(self, chan, val):
         self.Spi.XSpi_SetOptions(XSP_MASTER_OPTION | XSP_MANUAL_SSELECT_OPTION)
