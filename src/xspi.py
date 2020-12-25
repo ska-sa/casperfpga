@@ -697,6 +697,7 @@ class Xspi(object):
                 * buffer if it points to something (the upper layer
                 * software may not care to receive data).
                 """
+                RecvBUffer_Index = 0
                 StatusReg = self.XSpi_GetStatusReg()
                 while ((StatusReg & XSP_SR_RX_EMPTY_MASK) == 0):
                     Data = self.XSpi_ReadReg(XSP_DRR_OFFSET)
@@ -706,7 +707,8 @@ class Xspi(object):
                         """
                         if(RecvBufPtr != []):
                             #TODO
-                            RecvBufPtr.append(Data)
+                            #RecvBufPtr.append(Data)
+                            RecvBufPtr[RecvBUffer_Index] = Data
                     elif (DataWidth == XSP_DATAWIDTH_HALF_WORD):
                         """
                         * Data Transfer Width is Half Word
@@ -714,18 +716,21 @@ class Xspi(object):
                         """
                         #TODO
                         if (RecvBufPtr != []):
-                            RecvBufPtr.append(Data)
+                            #RecvBufPtr.append(Data)
                             #self.RecvBufferPtr += 2
+                            RecvBufPtr[RecvBUffer_Index] = Data
                     elif (DataWidth == XSP_DATAWIDTH_WORD):
                         """
                         * Data Transfer Width is Word (32 bit).
                         """
                         #TODO
                         if (RecvBufPtr != []):
-                            RecvBufPtr.append(Data)
+                            #RecvBufPtr.append(Data)
                             #self.RecvBufferPtr += 4
+                            RecvBufPtr[RecvBUffer_Index] = Data
                     self.Stats.BytesTransferred += (DataWidth >> 3)
                     ByteCount -= (DataWidth >> 3)
+                    RecvBUffer_Index += 1
                     StatusReg = self.XSpi_GetStatusReg()
 
 
