@@ -232,13 +232,13 @@ class Adc_4X16G_ASNT(object):
         elif(string_to_send == 'R'):
             time.sleep(0.5)
             self.WriteGPIO0(PRBSON_MASK, 0)
-            time.sleep(0.5)
+            time.sleep(1)
             self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
-            time.sleep(0.5)
+            time.sleep(1)
             self.WriteGPIO0(RESETALL_MASK, RESETALL_MASK)
-            time.sleep(0.5)
+            time.sleep(1)
             self.WriteGPIO0(RESETALL_MASK, 0)
-            time.sleep(0.5)
+            time.sleep(1)
         elif(string_to_send == 'V'):
             self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
             time.sleep(0.1)
@@ -327,6 +327,7 @@ class Adc_4X16G_ASNT(object):
         data_samples0 = self.snapshot.bitfield_snapshot_ss.read(arm=False)['data']
         data_samples1 = self.snapshot.bitfield_snapshot1_ss.read(arm=False)['data'] 
         #The high speed data stream is divided to 64 streams, 32 in each snapshot
+        nsamp = 65536
         loop_num = nsamp//64
         for loop in range(loop_num):
             for i in range(32):
