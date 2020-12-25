@@ -153,7 +153,7 @@ class Adc_4X16G_ASNT(object):
         self.Spi.XSpi_Transfer(SendBuf, RxBuf, 2)
         #TODO- figure out how to check when Spi is ready rather than just waiting
         #TODO- maybe we need some delays here 
-        time.sleep(0.1)
+        time.sleep(1)
         self.Spi.XSpi_SetSlaveSelect(0xff)
         return (RxBuf[0]>>5) + (RxBuf[1]<<3)
 

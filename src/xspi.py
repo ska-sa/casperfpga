@@ -590,7 +590,7 @@ class Xspi(object):
         * Set up buffer pointers.
         """
         self.SendBufferPtr = SendBufPtr
-        self.RecvBufferPtr = RecvBufPtr
+        #self.RecvBufferPtr = RecvBufPtr
 
         self.RequestedBytes = ByteCount
         self.RemainingBytes = ByteCount
@@ -704,25 +704,25 @@ class Xspi(object):
                         """
                         * Data Transfer Width is Byte (8 bit).
                         """
-                        if(self.RecvBufferPtr != []):
+                        if(RecvBufPtr != []):
                             #TODO
-                            self.RecvBufferPtr.append(Data)
+                            RecvBufPtr.append(Data)
                     elif (DataWidth == XSP_DATAWIDTH_HALF_WORD):
                         """
                         * Data Transfer Width is Half Word
                         * (16 bit).
                         """
                         #TODO
-                        if (self.RecvBufferPtr != []):
-                            self.RecvBufferPtr.append(Data)
+                        if (RecvBufPtr != []):
+                            RecvBufPtr.append(Data)
                             #self.RecvBufferPtr += 2
                     elif (DataWidth == XSP_DATAWIDTH_WORD):
                         """
                         * Data Transfer Width is Word (32 bit).
                         """
                         #TODO
-                        if (self.RecvBufferPtr != []):
-                            self.RecvBufferPtr.append(Data)
+                        if (RecvBufPtr != []):
+                            RecvBufPtr.append(Data)
                             #self.RecvBufferPtr += 4
                     self.Stats.BytesTransferred += (DataWidth >> 3)
                     ByteCount -= (DataWidth >> 3)
