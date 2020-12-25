@@ -709,6 +709,7 @@ class Xspi(object):
                             #TODO
                             #RecvBufPtr.append(Data)
                             RecvBufPtr[RecvBUffer_Index] = Data
+                            RecvBUffer_Index += 1
                     elif (DataWidth == XSP_DATAWIDTH_HALF_WORD):
                         """
                         * Data Transfer Width is Half Word
@@ -718,7 +719,10 @@ class Xspi(object):
                         if (RecvBufPtr != []):
                             #RecvBufPtr.append(Data)
                             #self.RecvBufferPtr += 2
-                            RecvBufPtr[RecvBUffer_Index] = Data
+                            RecvBufPtr[RecvBUffer_Index] = (Data & 0xff)
+                            RecvBUffer_Index += 1
+                            RecvBufPtr[RecvBUffer_Index] = (Data >> 8)
+                            RecvBUffer_Index += 1
                     elif (DataWidth == XSP_DATAWIDTH_WORD):
                         """
                         * Data Transfer Width is Word (32 bit).
@@ -727,10 +731,16 @@ class Xspi(object):
                         if (RecvBufPtr != []):
                             #RecvBufPtr.append(Data)
                             #self.RecvBufferPtr += 4
-                            RecvBufPtr[RecvBUffer_Index] = Data
+                            RecvBufPtr[RecvBUffer_Index] = (Data & 0xff)
+                            RecvBUffer_Index += 1
+                            RecvBufPtr[RecvBUffer_Index] = ((Data >>8) & 0xff)
+                            RecvBUffer_Index += 1
+                            RecvBufPtr[RecvBUffer_Index] = ((Data >>16) & 0xff)
+                            RecvBUffer_Index += 1
+                            RecvBufPtr[RecvBUffer_Index] = ((Data >>24) & 0xff)
+                            RecvBUffer_Index += 1
                     self.Stats.BytesTransferred += (DataWidth >> 3)
                     ByteCount -= (DataWidth >> 3)
-                    RecvBUffer_Index += 1
                     StatusReg = self.XSpi_GetStatusReg()
 
 
