@@ -351,9 +351,9 @@ class Adc_4X16G_ASNT(object):
         loop_num = nsamp//64
         for loop in range(loop_num):
             for i in range(32):
-                val_list += [data_samples1['a'+str(seq[i])][loop]]
+                val_list += [data_samples1['a'+str(i)][loop]]
             for i in range(32):
-                val_list += [data_samples0['a'+str(seq[i])][loop]]
+                val_list += [data_samples0['a'+str(i)][loop]]
         #wait for the rest of the data to come out
         time.sleep(0.6)
         # for debugging
