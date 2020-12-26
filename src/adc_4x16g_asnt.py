@@ -212,6 +212,8 @@ class Adc_4X16G_ASNT(object):
         elif(string_to_send == 'X'):
             addr = data[0]
             val = data[1]
+            print(addr)
+            print(val)
             if(addr == 0):
                 outval = val & 0xffff
                 self.WriteGPIO0(0xffff, outval)
