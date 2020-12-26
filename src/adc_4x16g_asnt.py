@@ -212,8 +212,6 @@ class Adc_4X16G_ASNT(object):
         elif(string_to_send == 'X'):
             addr = data[0]
             val = data[1]
-            print(addr)
-            print(val)
             if(addr == 0):
                 outval = val & 0xffff
                 self.WriteGPIO0(0xffff, outval)
@@ -398,6 +396,8 @@ class Adc_4X16G_ASNT(object):
             val = (val_reg & mask) + (adc_d << 12)
         #print(string_to_send)
         if (self.no_hw == 0):
+            print(addr)
+            print(hex(val))
             self.ser_slow('X',[addr, val])
         #return string_to_send
 
