@@ -323,6 +323,21 @@ class Adc_4X16G_ASNT(object):
         self.ser_slow('T', [chan])
         #TODO- The bitfield_snapshot here should be same as they showed up in simulink
         #       We should let the medthod know the name of snapshot automatically
+        #In the FPGA design, the data is arranged for 32bit output
+        # we should find out the correct seq
+        seq_fpga = [7,6,5,4,3,2,1,0,         \
+               15,14,13,12,11,10,9,8,   \
+               23,22,21,20,19,18,17,16, \
+               31,30,29,28,27,26,25,24]
+        seq_index = 0
+        seq = []
+        for j in range(32):
+            for i in range(32):
+                if(seq_fpga[i] == seq_index):
+                    seq += [31-i]
+                    seq_index += 1
+                    break
+
         #arm the snap shot
         self.snapshot.bitfield_snapshot_ss.arm()
         self.snapshot.bitfield_snapshot1_ss.arm()
@@ -336,9 +351,9 @@ class Adc_4X16G_ASNT(object):
         loop_num = nsamp//64
         for loop in range(loop_num):
             for i in range(32):
-                val_list += [data_samples0['a'+str(i)][loop]]
+                val_list += [data_samples0['a'+str(seq[i])][loop]]
             for i in range(32):
-                val_list += [data_samples1['a'+str(i)][loop]]
+                val_list += [data_samples1['a'+str(seq[i])][loop]]
         #wait for the rest of the data to come out
         time.sleep(0.6)
         # for debugging
