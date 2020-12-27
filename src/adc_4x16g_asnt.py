@@ -347,7 +347,6 @@ class Adc_4X16G_ASNT(object):
         data_samples0 = self.snapshot.bitfield_snapshot_ss.read(arm=False)['data']
         data_samples1 = self.snapshot.bitfield_snapshot1_ss.read(arm=False)['data'] 
         #The high speed data stream is divided to 64 streams, 32 in each snapshot
-        nsamp = 65536
         loop_num = nsamp//64
         for loop in range(loop_num):
             for i in range(32):
