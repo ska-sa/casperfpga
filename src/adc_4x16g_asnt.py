@@ -566,7 +566,7 @@ class Adc_4X16G_ASNT(object):
     The following methods are from Rick's python script
     """
     def set_alignment(self):
-        for trial in range(1,2):
+        for trial in range(1,5):
             print("")
             print("Trial #", trial)
             #Reset the transceivers and logic
