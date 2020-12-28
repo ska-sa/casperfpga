@@ -546,9 +546,9 @@ class Adc_4X16G_ASNT(object):
             #ser_slow('V')
             print("adjusting ADC channel ", self.channel_sel)
             val_list = []
-            self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
+            #self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
             self.get_samples(self.channel_sel, samples_2_get, val_list)
-            self.WriteGPIO0(FIFOREAD_MASK,0)
+            #self.WriteGPIO0(FIFOREAD_MASK,0)
             bit3=[]
             bit2=[]
             bit1=[]
@@ -763,3 +763,4 @@ class Adc_4X16G_ASNT(object):
         #Turn on the pattern match function, to sync the FPGAs PRBS generators
         self.Gpio1.XGpio_DiscreteWrite(1, PRBS_MATCH)
         self.WriteGPIO0(PATMATCHENABLE_MASK, PATMATCHENABLE_MASK)
+        self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
