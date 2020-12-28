@@ -516,7 +516,7 @@ class Adc_4X16G_ASNT(object):
     The following methods are from Rick's python script
     """
     def set_alignment(self):
-        for trial in range(1,5):
+        for trial in range(1,1):
             print("")
             print("Trial #", trial)
             #Reset the transceivers and logic
@@ -546,9 +546,9 @@ class Adc_4X16G_ASNT(object):
             #ser_slow('V')
             print("adjusting ADC channel ", self.channel_sel)
             val_list = []
-            #self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
+            self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
             self.get_samples(self.channel_sel, samples_2_get, val_list)
-            #self.WriteGPIO0(FIFOREAD_MASK,0)
+            self.WriteGPIO0(FIFOREAD_MASK,0)
             bit3=[]
             bit2=[]
             bit1=[]
