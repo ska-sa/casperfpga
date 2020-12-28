@@ -341,7 +341,7 @@ class Adc_4X16G_ASNT(object):
         The following is for 128-bit snapshot.
         We use two 128-bit snapshots here.
         """
-        """
+        
         #arm the snap shot
         self.snapshot.bitfield_snapshot_ss.arm()
         self.snapshot.bitfield_snapshot1_ss.arm()
@@ -359,10 +359,11 @@ class Adc_4X16G_ASNT(object):
                 val_list += [data_samples1['a'+str(i)][loop]]
         #wait for the rest of the data to come out
         time.sleep(0.6)
-        """
+        
         """
         The following is for 32-bit snapshot.
         We use eight 128-bit snapshots here.
+        """
         """
         #arm the snap shot
         self.snapshot.snapshot0_ss.arm()
@@ -405,6 +406,7 @@ class Adc_4X16G_ASNT(object):
                 val_list += [data_samples7['a'+str(i)][loop]]
         #wait for the rest of the data to come out
         time.sleep(0.6)
+        """
         # for debugging
         f = open('alignment_data.txt','w')
         for i in range(len(val_list)):
