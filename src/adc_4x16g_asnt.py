@@ -23,8 +23,8 @@ DIV_SPI_MASK    = 0x08
 #reg 4: set bit 3 = 1 (input bias) and bit 4 = 1 (bypass vreg)
 HMC988_SETUP0   = 0x1420
 #reg 2: set divide = 4
-HMC988_SETUP1   = 0x0110
-#HMC988_SETUP1   = 0x0450
+#HMC988_SETUP1   = 0x0110
+HMC988_SETUP1   = 0x0450
 # The two DACs which set ADC range and offset
 # These values are only for SN3 board
 # The needed settings vary a lot from one chip to the next
@@ -596,9 +596,9 @@ class Adc_4X16G_ASNT(object):
             #ser_slow('V')
             print("adjusting ADC channel ", self.channel_sel)
             val_list = []
-            self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
+            #self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
             self.get_samples(self.channel_sel, samples_2_get, val_list)
-            self.WriteGPIO0(FIFOREAD_MASK,0)
+            #self.WriteGPIO0(FIFOREAD_MASK,0)
             bit3=[]
             bit2=[]
             bit1=[]
