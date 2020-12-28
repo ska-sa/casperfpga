@@ -598,6 +598,7 @@ class Adc_4X16G_ASNT(object):
             print("adjusting ADC channel ", self.channel_sel)
             val_list = []
             #self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
+            self.WriteGPIO0(FIFOREAD_MASK,0)
             self.get_samples(self.channel_sel, samples_2_get, val_list)
             #self.WriteGPIO0(FIFOREAD_MASK,0)
             bit3=[]
