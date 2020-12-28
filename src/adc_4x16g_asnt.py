@@ -337,7 +337,11 @@ class Adc_4X16G_ASNT(object):
                     seq += [31-i]
                     seq_index += 1
                     break
-
+        """
+        The following is for 128-bit snapshot.
+        We use two 128-bit snapshots here.
+        """
+        """
         #arm the snap shot
         self.snapshot.bitfield_snapshot_ss.arm()
         self.snapshot.bitfield_snapshot1_ss.arm()
@@ -353,6 +357,52 @@ class Adc_4X16G_ASNT(object):
                 val_list += [data_samples0['a'+str(i)][loop]]
             for i in range(32):
                 val_list += [data_samples1['a'+str(i)][loop]]
+        #wait for the rest of the data to come out
+        time.sleep(0.6)
+        """
+        """
+        The following is for 32-bit snapshot.
+        We use eight 128-bit snapshots here.
+        """
+        #arm the snap shot
+        self.snapshot.bitfield_snapshot0_ss.arm()
+        self.snapshot.bitfield_snapshot1_ss.arm()
+        self.snapshot.bitfield_snapshot2_ss.arm()
+        self.snapshot.bitfield_snapshot3_ss.arm()
+        self.snapshot.bitfield_snapshot4_ss.arm()
+        self.snapshot.bitfield_snapshot5_ss.arm()
+        self.snapshot.bitfield_snapshot6_ss.arm()
+        self.snapshot.bitfield_snapshot7_ss.arm()
+        #start the snap shot triggering and reset the counters
+        self.cntrl.write(rst_cntrl = 'pulse')
+        #grab the snapshots
+        data_samples0 = self.snapshot.bitfield_snapshot0_ss.read(arm=False)['data']
+        data_samples1 = self.snapshot.bitfield_snapshot1_ss.read(arm=False)['data']
+        data_samples2 = self.snapshot.bitfield_snapshot2_ss.read(arm=False)['data']
+        data_samples3 = self.snapshot.bitfield_snapshot3_ss.read(arm=False)['data'] 
+        data_samples4 = self.snapshot.bitfield_snapshot4_ss.read(arm=False)['data']
+        data_samples5 = self.snapshot.bitfield_snapshot5_ss.read(arm=False)['data'] 
+        data_samples6 = self.snapshot.bitfield_snapshot6_ss.read(arm=False)['data']
+        data_samples7 = self.snapshot.bitfield_snapshot7_ss.read(arm=False)['data'] 
+        #The high speed data stream is divided to 64 streams, 32 in each snapshot
+        loop_num = nsamp//64
+        for loop in range(loop_num):
+            for i in range(8):
+                val_list += [data_samples0['a'+str(i)][loop]]
+            for i in range(8):
+                val_list += [data_samples1['a'+str(i)][loop]]
+            for i in range(8):
+                val_list += [data_samples2['a'+str(i)][loop]]
+            for i in range(8):
+                val_list += [data_samples3['a'+str(i)][loop]]
+            for i in range(8):
+                val_list += [data_samples4['a'+str(i)][loop]]
+            for i in range(8):
+                val_list += [data_samples5['a'+str(i)][loop]]
+            for i in range(8):
+                val_list += [data_samples6['a'+str(i)][loop]]
+            for i in range(8):
+                val_list += [data_samples7['a'+str(i)][loop]]
         #wait for the rest of the data to come out
         time.sleep(0.6)
         # for debugging
