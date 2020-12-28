@@ -204,9 +204,9 @@ class Adc_4X16G_ASNT(object):
             #Select which channel
             self.WriteGPIO0(CHANSEL_MASK,chan<<CHANSEL_LSB)
             #Pulse the Fifo Reset
-            self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
-            time.sleep(0.1)
-            self.WriteGPIO0(FIFORESET_MASK,0)
+            #self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
+            #time.sleep(0.1)
+            #self.WriteGPIO0(FIFORESET_MASK,0)
             time.sleep(0.1)
         elif(string_to_send == 'X'):
             addr = data[0]
@@ -575,7 +575,7 @@ class Adc_4X16G_ASNT(object):
             self.ser_slow('R',[])
             time.sleep(1)
             #Reset the data fifos
-            #ser_slow('V')
+            ser_slow('V')
             #self.ser_slow('V',[])
             #set up the hardware.
             #CLKSEL = 0, PRBS ON, DAC ON, DATA OFF all channels
