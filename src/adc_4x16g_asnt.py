@@ -365,25 +365,25 @@ class Adc_4X16G_ASNT(object):
         We use eight 128-bit snapshots here.
         """
         #arm the snap shot
-        self.snapshot.bitfield_snapshot0_ss.arm()
-        self.snapshot.bitfield_snapshot1_ss.arm()
-        self.snapshot.bitfield_snapshot2_ss.arm()
-        self.snapshot.bitfield_snapshot3_ss.arm()
-        self.snapshot.bitfield_snapshot4_ss.arm()
-        self.snapshot.bitfield_snapshot5_ss.arm()
-        self.snapshot.bitfield_snapshot6_ss.arm()
-        self.snapshot.bitfield_snapshot7_ss.arm()
+        self.snapshot.snapshot0_ss.arm()
+        self.snapshot.snapshot1_ss.arm()
+        self.snapshot.snapshot2_ss.arm()
+        self.snapshot.snapshot3_ss.arm()
+        self.snapshot.snapshot4_ss.arm()
+        self.snapshot.snapshot5_ss.arm()
+        self.snapshot.snapshot6_ss.arm()
+        self.snapshot.snapshot7_ss.arm()
         #start the snap shot triggering and reset the counters
         self.cntrl.write(rst_cntrl = 'pulse')
         #grab the snapshots
-        data_samples0 = self.snapshot.bitfield_snapshot0_ss.read(arm=False)['data']
-        data_samples1 = self.snapshot.bitfield_snapshot1_ss.read(arm=False)['data']
-        data_samples2 = self.snapshot.bitfield_snapshot2_ss.read(arm=False)['data']
-        data_samples3 = self.snapshot.bitfield_snapshot3_ss.read(arm=False)['data'] 
-        data_samples4 = self.snapshot.bitfield_snapshot4_ss.read(arm=False)['data']
-        data_samples5 = self.snapshot.bitfield_snapshot5_ss.read(arm=False)['data'] 
-        data_samples6 = self.snapshot.bitfield_snapshot6_ss.read(arm=False)['data']
-        data_samples7 = self.snapshot.bitfield_snapshot7_ss.read(arm=False)['data'] 
+        data_samples0 = self.snapshot.snapshot0_ss.read(arm=False)['data']
+        data_samples1 = self.snapshot.snapshot1_ss.read(arm=False)['data']
+        data_samples2 = self.snapshot.snapshot2_ss.read(arm=False)['data']
+        data_samples3 = self.snapshot.snapshot3_ss.read(arm=False)['data'] 
+        data_samples4 = self.snapshot.snapshot4_ss.read(arm=False)['data']
+        data_samples5 = self.snapshot.snapshot5_ss.read(arm=False)['data'] 
+        data_samples6 = self.snapshot.snapshot6_ss.read(arm=False)['data']
+        data_samples7 = self.snapshot.snapshot7_ss.read(arm=False)['data'] 
         #The high speed data stream is divided to 64 streams, 32 in each snapshot
         loop_num = nsamp//64
         for loop in range(loop_num):
