@@ -575,8 +575,8 @@ class Adc_4X16G_ASNT(object):
             self.ser_slow('R',[])
             time.sleep(1)
             #Reset the data fifos
-            ser_slow('V')
-            #self.ser_slow('V',[])
+            #ser_slow('V')
+            self.ser_slow('V',[])
             #set up the hardware.
             #CLKSEL = 0, PRBS ON, DAC ON, DATA OFF all channels
             for i in range(4): 
