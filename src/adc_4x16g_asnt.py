@@ -203,10 +203,11 @@ class Adc_4X16G_ASNT(object):
             chan = data[0]
             #Select which channel
             self.WriteGPIO0(CHANSEL_MASK,chan<<CHANSEL_LSB)
+            time.sleep(0.1)
             #Pulse the Fifo Reset
-            #self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
-            #time.sleep(0.1)
-            #self.WriteGPIO0(FIFORESET_MASK,0)
+            self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
+            time.sleep(0.1)
+            self.WriteGPIO0(FIFORESET_MASK,0)
             time.sleep(0.1)
         elif(string_to_send == 'X'):
             addr = data[0]
@@ -436,7 +437,7 @@ class Adc_4X16G_ASNT(object):
         mask = 0xf << (self.channel_sel*4)
         mask = 0xffffffff - mask
         val_reg = self.ReadGPIO0()
-        print('val_reg=%s'%hex(val_reg))
+        #print('val_reg=%s'%hex(val_reg))
         if(self.channel_sel == 0):
             val = (val_reg & mask) + adc_a
         elif(self.channel_sel == 1):
@@ -447,8 +448,8 @@ class Adc_4X16G_ASNT(object):
             val = (val_reg & mask) + (adc_d << 12)
         #print(string_to_send)
         if (self.no_hw == 0):
-            print(addr)
-            print(hex(val))
+            #print(addr)
+            #print(hex(val))
             self.ser_slow('X',[addr, val])
         #return string_to_send
 
@@ -807,11 +808,18 @@ class Adc_4X16G_ASNT(object):
         self.Gpio3.XGpio_SetDataDirection(1, 0x0)
         # Turn PRBS ON, data OFF, HS_CLK, DAC ON
         self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
+        time.sleep(0.5)
         self.WriteGPIO0(DACON_MASK, DACON_MASK)
+        time.sleep(0.5)
         # Pulse ResetAll
         self.WriteGPIO0(RESETALL_MASK, RESETALL_MASK)
+        time.sleep(0.5)
         self.WriteGPIO0(RESETALL_MASK, 0)
+        time.sleep(0.5)
         #Turn on the pattern match function, to sync the FPGAs PRBS generators
         self.Gpio1.XGpio_DiscreteWrite(1, PRBS_MATCH)
+        time.sleep(0.5)
         self.WriteGPIO0(PATMATCHENABLE_MASK, PATMATCHENABLE_MASK)
+        time.sleep(0.5)
         self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
+        time.sleep(0.5)
