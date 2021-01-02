@@ -188,7 +188,7 @@ class ADS5296():
 class ADS5296fw():
     def print(self,x):
         if not self.quiet:
-            print(x)
+            print(x, file=sys.stderr)
 
     def __init__(self, fpga, fmc=0):
         self.quiet = True
@@ -198,7 +198,7 @@ class ADS5296fw():
 
     def init(self, cs):
         self.reset(cs)
-        print("CS:%d 0x0 (wrote 0) "%cs, hex(self.read_spi(0, cs)), file=sys.stderr)
+        print("CS:%d 0x0 (wrote 1) "%cs, hex(self.read_spi(0, cs)), file=sys.stderr)
         self.write_spi(0x0F, 0x0400, cs) # power down pin partial
         print("CS:%d 0x0f (wrote 0x0400)"%cs, hex(self.read_spi(0x0F, cs)), file=sys.stderr)
         self.write_spi(0x07, 0x0001, cs) # enable interleave
@@ -207,7 +207,7 @@ class ADS5296fw():
         #print("CS:%d"%cs, hex(self.read_spi(0x42, cs)))
         self.write_spi(0x46, 0x8104, cs) # 10b serialization, LSB first, 2's complement, DDR
         #self.write_spi(0x46, 0x8100, cs) # 10b serialization, LSB first, offset binary, DDR
-        print("CS:%d 0x46 (wrote 0x8100)"%cs, hex(self.read_spi(0x46, cs)), file=sys.stderr)
+        print("CS:%d 0x46 (wrote 0x8104)"%cs, hex(self.read_spi(0x46, cs)), file=sys.stderr)
         self.write_spi(0x40, 0x8000, cs) # input selection
         print("CS:%d 0x40 (wrote 0x8000)"%cs, hex(self.read_spi(0x40, cs)), file=sys.stderr)
         self.write_spi(0x25, 0x8000, cs) # Enable external sync
@@ -402,10 +402,10 @@ class ADS5296fw():
         self.fpga.write_int("sync", 0)
 
     def disable_readout(self, cs):
-        self.write_spi(1, 0, cs)
+        self.blindwrite_spi(1, 0, cs)
 
     def enable_readout(self, cs):
-        self.write_spi(1, 1, cs)
+        self.blindwrite_spi(1, 1, cs)
 
     def read_spi(self, addr, cs):
         # put everyone out of read mode
@@ -414,7 +414,7 @@ class ADS5296fw():
         # put the chip we want to read in read mode
         self.enable_readout(cs)
         # read value
-        d = self.write_spi(addr, 0, cs, readback=True)
+        d = self.blindwrite_spi(addr, 0, cs, readback=True)
         # put the chip back in write mode
         self.disable_readout(cs)
         return d
@@ -423,21 +423,31 @@ class ADS5296fw():
         # Don't do a blind write. The successful readback will
         # verify that the SPI transaction completed, and was ack'd
         # by the wishbone core.
-        self.print("WB writing 0x%x to offset 0x%x" % (data, offset))
+        #self.print("WB writing 0x%x to offset 0x%x" % (data, offset))
         self.fpga.write_int(self.spi_ctrl_reg, data, word_offset=offset)
 
     def _read(self, offset=0):
         return self.fpga.read_uint(self.spi_ctrl_reg, word_offset=offset)
 
-    def write_spi(self, addr, data, chip, readback=True):
+    def blindwrite_spi(self, addr, data, chip, readback=True):
         addr = addr & 0xff
         data = data & 0xffff
-        self.print("Writing 0x%x to address 0x%x, CS:0x%x" % (data, addr, chip))
+        #self.print("Writing 0x%x to address 0x%x, CS:0x%x" % (data, addr, chip))
         payload = (addr << 16) + data
         self._write(payload, 1)
         self._write((((chip+1)%8) << 8) +  chip, 0)
         if readback:
-            return self._read(2) & 0xffff
+            readback = self._read(2) & 0xffff
+            return readback
+
+    def write_spi(self, addr, data, chip):
+        self.print("Writing 0x%x to address 0x%x, CS:0x%x" % (data, addr, chip))
+        self.blindwrite_spi(addr, data, chip)
+        readback = self.read_spi(addr, chip)
+        self.print("readback: 0x%x" % readback)
+        if readback != data:
+            print("WARNING >>>> SPI readback error")
+        return readback
 
     def read_clk_rates(self, board):
         now = time.time()
