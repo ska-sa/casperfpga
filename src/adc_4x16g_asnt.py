@@ -323,20 +323,6 @@ class Adc_4X16G_ASNT(object):
         self.ser_slow('T', [chan])
         #TODO- The bitfield_snapshot here should be same as they showed up in simulink
         #       We should let the medthod know the name of snapshot automatically
-        #In the FPGA design, the data is arranged for 32bit output
-        # we should find out the correct seq
-        seq_fpga = [7,6,5,4,3,2,1,0,         \
-               15,14,13,12,11,10,9,8,   \
-               23,22,21,20,19,18,17,16, \
-               31,30,29,28,27,26,25,24]
-        seq_index = 0
-        seq = []
-        for j in range(32):
-            for i in range(32):
-                if(seq_fpga[i] == seq_index):
-                    seq += [31-i]
-                    seq_index += 1
-                    break
         """
         The following is for 128-bit snapshot.
         We use two 128-bit snapshots here.
@@ -360,58 +346,12 @@ class Adc_4X16G_ASNT(object):
         #wait for the rest of the data to come out
         time.sleep(0.6)
         
-        """
-        The following is for 32-bit snapshot.
-        We use eight 128-bit snapshots here.
-        """
-        """
-        #arm the snap shot
-        self.snapshot.snapshot0_ss.arm()
-        self.snapshot.snapshot1_ss.arm()
-        self.snapshot.snapshot2_ss.arm()
-        self.snapshot.snapshot3_ss.arm()
-        self.snapshot.snapshot4_ss.arm()
-        self.snapshot.snapshot5_ss.arm()
-        self.snapshot.snapshot6_ss.arm()
-        self.snapshot.snapshot7_ss.arm()
-        #start the snap shot triggering and reset the counters
-        self.cntrl.write(rst_cntrl = 'pulse')
-        #grab the snapshots
-        data_samples0 = self.snapshot.snapshot0_ss.read(arm=False)['data']
-        data_samples1 = self.snapshot.snapshot1_ss.read(arm=False)['data']
-        data_samples2 = self.snapshot.snapshot2_ss.read(arm=False)['data']
-        data_samples3 = self.snapshot.snapshot3_ss.read(arm=False)['data'] 
-        data_samples4 = self.snapshot.snapshot4_ss.read(arm=False)['data']
-        data_samples5 = self.snapshot.snapshot5_ss.read(arm=False)['data'] 
-        data_samples6 = self.snapshot.snapshot6_ss.read(arm=False)['data']
-        data_samples7 = self.snapshot.snapshot7_ss.read(arm=False)['data'] 
-        #The high speed data stream is divided to 64 streams, 32 in each snapshot
-        loop_num = nsamp//64
-        for loop in range(loop_num):
-            for i in range(8):
-                val_list += [data_samples0['a'+str(i)][loop]]
-            for i in range(8):
-                val_list += [data_samples1['a'+str(i)][loop]]
-            for i in range(8):
-                val_list += [data_samples2['a'+str(i)][loop]]
-            for i in range(8):
-                val_list += [data_samples3['a'+str(i)][loop]]
-            for i in range(8):
-                val_list += [data_samples4['a'+str(i)][loop]]
-            for i in range(8):
-                val_list += [data_samples5['a'+str(i)][loop]]
-            for i in range(8):
-                val_list += [data_samples6['a'+str(i)][loop]]
-            for i in range(8):
-                val_list += [data_samples7['a'+str(i)][loop]]
-        #wait for the rest of the data to come out
-        time.sleep(0.6)
-        """
         # for debugging
         f = open('alignment_data.txt','w')
         for i in range(len(val_list)):
             f.writelines(str(val_list[i])+'\n')
         f.close()
+        
 
     def setADC(self):
         if self.DAC_ON == 1:
@@ -722,6 +662,7 @@ class Adc_4X16G_ASNT(object):
             self.get_samples(3, 1024, val_list3)
             
             #A 600-by-600 pixel plot
+            """
             plt.figure(figsize = (6,6))
             t = np.arange(len(val_list0))
             ax = plt.subplot(221)
@@ -739,8 +680,8 @@ class Adc_4X16G_ASNT(object):
             ax = plt.subplot(224)
             ax.set(ylim=(0, 15))
             plt.plot(t, val_list3)
-
             plt.show()
+            """
 
     """
     ADC Initization
