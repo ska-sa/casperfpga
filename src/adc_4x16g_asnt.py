@@ -1,8 +1,9 @@
 import os
 import IPython
 import time
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
+from wishbonedevice import WishBoneDevice
 
 from xspi import Xspi, Xspi_Config
 from xspi_h import *
@@ -98,6 +99,11 @@ class Adc_4X16G_ASNT(object):
         self.no_hw = 0
         #Save the config.txt DAC values here each time we read them- 9 places, we'll skip 0 and use 1 to 8
         self.initial_DACvals = [-1,-1,-1,-1,-1,-1,-1,-1, -1]
+
+        # wb_ram. It's used for capturing data.
+        self.wbram = WishBoneDevice(self.parent, 'adc4x16g_wb_ram%d'%self.channel_sel)
+        # wb_controller. It's used for generating snap_we and snap_addr on wb_bram
+        self.wbctrl = WishBoneDevice(self.parent, 'adc4x16g_controller%d'%self.channel_sel)
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, initialise=False, **kwargs):
@@ -327,7 +333,7 @@ class Adc_4X16G_ASNT(object):
         The following is for 128-bit snapshot.
         We use two 128-bit snapshots here.
         """
-        
+        """
         #arm the snap shot
         self.snapshot.bitfield_snapshot_ss.arm()
         self.snapshot.bitfield_snapshot1_ss.arm()
@@ -345,7 +351,20 @@ class Adc_4X16G_ASNT(object):
                 val_list += [data_samples1['a'+str(i)][loop]]
         #wait for the rest of the data to come out
         time.sleep(0.6)
-        
+        """
+        # In wbctrl, bit0 in reg0 is snap_req, which is used for generating snap_we and snap_addr.
+        self.wbctrl._write(0,0)
+        time.sleep(0.1)
+        self.wbctrl._write(1,0)
+        time.sleep(0.1)
+        self.wbctrl._write(0,1)
+        time.sleep(0.5)
+        # the input width of the wb_bram 256bits input, and the width is 2^6
+        length = 256*2**6/8
+        vals = self.wbram._read(addr=0, size=length)
+        for val in vals:
+            val_list += val & 0xf
+            val_list += val >> 4
         # for debugging
         f = open('alignment_data.txt','w')
         for i in range(len(val_list)):
