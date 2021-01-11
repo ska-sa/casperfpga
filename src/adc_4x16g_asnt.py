@@ -363,8 +363,8 @@ class Adc_4X16G_ASNT(object):
         length = 256*2**6/8
         vals = self.wbram._read(addr=0, size=length)
         for val in vals:
-            val_list += val & 0xf
-            val_list += val >> 4
+            val_list += int(val) & 0xf
+            val_list += int(val) >> 4
         # for debugging
         f = open('alignment_data.txt','w')
         for i in range(len(val_list)):
