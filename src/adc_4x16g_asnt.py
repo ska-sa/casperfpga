@@ -81,8 +81,6 @@ class Adc_4X16G_ASNT(object):
         self.channel_sel = 0
         self.process_device_info(device_info)
         
-        self.snapshot = 0
-        self.cntrl = 0
         # The following parameters are used for adc initlization
         # They are related to xil_devices
         self.Spi = 0
@@ -365,12 +363,8 @@ class Adc_4X16G_ASNT(object):
         length = 256*2**6/8
         vals = self.wbram._read(addr=0, size=length)
         fmt = '<2048'+'B'
-                print(type(vals))   
-        print(len(vals))
         #vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
         vals=struct.unpack(fmt,vals)
-        print(type(vals))
-        print(len(vals))
         for val in vals:
             val_list += [int(val) & 0xf]
             val_list += [int(val) >> 4]
@@ -714,7 +708,7 @@ class Adc_4X16G_ASNT(object):
     """
     ADC Initization
     """
-    def adc_init(self,snapshot,cntrl):
+    def adc_init(self):
         """
         This is used for adc initlization, including:
         * AXI_GPIO Cores initlization
@@ -724,11 +718,6 @@ class Adc_4X16G_ASNT(object):
         """
         
         # The following method is called in Rick's C code
-
-        # The snapshot and cntrl is used for capturing data for alignment
-        # They are here temporarily
-        self.snapshot = snapshot
-        self.cntrl = cntrl
 
         #Spi devices Init
         """
