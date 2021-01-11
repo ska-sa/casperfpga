@@ -365,6 +365,8 @@ class Adc_4X16G_ASNT(object):
         length = 256*2**6/8
         vals = self.wbram._read(addr=0, size=length)
         fmt = '!2048'+'B'
+        print(type(vals))
+        print(len(vals))
         vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
         for val in vals:
             val_list += int(val) & 0xf
