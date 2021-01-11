@@ -357,7 +357,7 @@ class Adc_4X16G_ASNT(object):
         time.sleep(0.1)
         self.wbctrl._write(1,0)
         time.sleep(0.1)
-        self.wbctrl._write(0,1)
+        self.wbctrl._write(0,0)
         time.sleep(0.5)
         # the input width of the wb_bram 256bits input, and the width is 2^6
         length = 256*2**6/8
