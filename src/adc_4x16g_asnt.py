@@ -367,7 +367,10 @@ class Adc_4X16G_ASNT(object):
         fmt = '!2048'+'B'
         print(type(vals))
         print(len(vals))
-        vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
+        #vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
+        vals=struct.unpack(fmt,vals)
+        print(type(vals))
+        print(len(vals))
         for val in vals:
             val_list += int(val) & 0xf
             val_list += int(val) >> 4
