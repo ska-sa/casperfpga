@@ -372,8 +372,8 @@ class Adc_4X16G_ASNT(object):
         print(type(vals))
         print(len(vals))
         for val in vals:
-            val_list += int(val) & 0xf
-            val_list += int(val) >> 4
+            val_list += [int(val) & 0xf]
+            val_list += [int(val) >> 4]
         # for debugging
         f = open('alignment_data.txt','w')
         for i in range(len(val_list)):
