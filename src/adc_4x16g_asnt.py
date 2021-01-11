@@ -362,12 +362,19 @@ class Adc_4X16G_ASNT(object):
         # so it's 2048
         length = 256*2**6/8
         vals = self.wbram._read(addr=0, size=length)
-        fmt = '<2048'+'B'
+        fmt = '!2048'+'B'
         #vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
         vals=struct.unpack(fmt,vals)
         for val in vals:
             val_list += [int(val) & 0xf]
             val_list += [int(val) >> 4]
+        #re-order the data
+        index=[6,7,4,5,2,3,0,1]
+        for i in range(int(len(val_list)/8)):
+            for j in range(8):
+                tmp[j]=val_list[8*i+j]
+            for j in range(8):
+                val_list[8*i+j]=tmp[index[j]]
         # for debugging
         f = open('alignment_data.txt','w')
         for i in range(len(val_list)):
