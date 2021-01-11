@@ -369,6 +369,7 @@ class Adc_4X16G_ASNT(object):
             val_list += [int(val) & 0xf]
             val_list += [int(val) >> 4]
         #re-order the data
+        tmp=[0,0,0,0,0,0,0,0]
         index=[6,7,4,5,2,3,0,1]
         for i in range(int(len(val_list)/8)):
             for j in range(8):
