@@ -863,8 +863,8 @@ class SkarabTransport(Transport):
         request_payload = request_object.create_payload(sequence_number)
         retransmit_count = 0
         while retransmit_count < retries:
-            self.logger.debug('{}: retransmit attempts: {}'.format(
-                hostname, retransmit_count))
+            self.logger.debug('{}: retransmit attempts: {}, timeout = {}, retries = {}'.format(
+                hostname, retransmit_count, timeout, retries))
             try:
                 self.logger.debug('{}: sending pkt({}, {}) to port {}.'.format(
                     hostname, request_object.packet['command_type'],
@@ -904,7 +904,8 @@ class SkarabTransport(Transport):
                 raise KeyboardInterrupt
             retransmit_count += 1
         self._lock.release()
-        errmsg = '{}: retransmit count exceeded. Giving up.'.format(hostname)
+        errmsg = ('{}: retransmit count exceeded, giving up: {}, timeout = {}, retries = {}'.format(
+            hostname, retransmit_count, timeout, retries))
         self.logger.debug(errmsg)
         raise SkarabSendPacketError(errmsg)
 
@@ -1261,6 +1262,9 @@ class SkarabTransport(Transport):
                 raise SkarabReadFailed(errmsg)
             else:
                 return response
+        else:
+            errmsg = 'Wishbone timeout. Address 0x{:x}'.format(wb_address)
+            raise SkarabReadFailed(errmsg)
 
     def read_wishbone(self, wb_address,
                       timeout=None,

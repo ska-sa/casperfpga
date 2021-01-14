@@ -402,7 +402,7 @@ def threaded_fpga_function(fpga_list, timeout, target_function):
         fpga_list, timeout, (dofunc, target_function[1], target_function[2]))
 
 
-def threaded_fpga_operation(fpga_list, timeout, target_function):
+def threaded_fpga_operation(fpga_list, timeout, target_function, num_retries=5, retry_sleep_time=5):
     """
     Thread any operation against many FPGA objects
 
@@ -422,29 +422,52 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
         rv = target_function[0](fpga, *target_function[1], **target_function[2])
         resultq.put_nowait((fpga.host, rv))
 
-    num_fpgas = len(fpga_list)
-    result_queue = Queue.Queue(maxsize=num_fpgas)
-    thread_list = []
-    for fpga_ in fpga_list:
-        thread = threading.Thread(target=jobfunc, args=(result_queue, fpga_))
-        thread.setDaemon(True)
-        thread.start()
-        thread_list.append(thread)
-    for thread_ in thread_list:
-        thread_.join(timeout)
-        if thread_.isAlive():
+    def run_threaded_op(int_fpga_list):
+        num_fpgas = len(int_fpga_list)
+        result_queue = Queue.Queue(maxsize=num_fpgas)
+        thread_list = []
+        for fpga_ in int_fpga_list:
+            thread = threading.Thread(target=jobfunc, args=(result_queue, fpga_))
+            thread.setDaemon(True)
+            thread.start()
+            thread_list.append(thread)
+        for thread_ in thread_list:
+            thread_.join(timeout)
+            if thread_.isAlive():
+                break
+        returnval = {}
+        hosts_missing = [fpga.host for fpga in int_fpga_list]
+        while True:
+            try:
+                result = result_queue.get_nowait()
+                returnval[result[0]] = result[1]
+                hosts_missing.pop(hosts_missing.index(result[0]))
+            except Queue.Empty:
+                break
+        return returnval, hosts_missing
+    
+    retry = 0
+    current_fpga_list = fpga_list[:]
+    while retry < num_retries:
+        returnval, hosts_missing = run_threaded_op(current_fpga_list)
+        if hosts_missing:
+            #warnmsg = ('Ran function {} on hosts. Did not get a response '
+            #           'from {}.'.format(target_function[0].__name__, hosts_missing))
+            warnmsg = ('Ran function {} on hosts. Did not get a response '
+                       'from {}.'.format(target_function[0].func_name, hosts_missing))
+            LOGGER.warning(warnmsg)
+            retry += 1
+            new_fpga_list = []
+            for fpga_obj in current_fpga_list:
+                if fpga_obj.host in hosts_missing:
+                    new_fpga_list.append(fpga_obj)
+            current_fpga_list = new_fpga_list[:]
+            time.sleep(retry_sleep_time)
+        else:
             break
-    returnval = {}
-    hosts_missing = [fpga.host for fpga in fpga_list]
-    while True:
-        try:
-            result = result_queue.get_nowait()
-            returnval[result[0]] = result[1]
-            hosts_missing.pop(hosts_missing.index(result[0]))
-        except Queue.Empty:
-            break
+
     if hosts_missing:
-        errmsg = 'Ran \'%s\' on hosts. Did not get a response ' \
+        errmsg = 'Ran function \'%s\' on hosts. Did not get a response ' \
                  'from %s.' % (target_function[0].__name__, hosts_missing)
         LOGGER.error(errmsg)
     return returnval
