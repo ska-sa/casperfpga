@@ -324,7 +324,8 @@ class Adc_4X16G_ASNT(object):
     """
     # The depth of the ram in simulink is 2^10 * 2 * 128bit
     # so the maxium of nsamp is 2^10 * 2 * 32 =  65536 
-    def get_samples(self,chan, nsamp, val_list):
+    def get_samples(self, nsamp, val_list):
+        chan = self.channel_sel
         self.ser_slow('T', [chan])
         #TODO- The bitfield_snapshot here should be same as they showed up in simulink
         #       We should let the medthod know the name of snapshot automatically
@@ -469,7 +470,7 @@ class Adc_4X16G_ASNT(object):
         #pattern_match ON
         self.ser_slow('Y',[1])      
         val_list = []
-        self.get_samples(adc_chan, samples_2_get, val_list)     
+        self.get_samples(samples_2_get, val_list)     
         bit3=[]
         bit2=[]
         bit1=[]
@@ -538,6 +539,8 @@ class Adc_4X16G_ASNT(object):
     The following methods are from Rick's python script
     """
     def set_alignment(self):
+        channel_no = self.channel_sel
+        self.WriteGPIO0(CHANSEL_MASK, channel_no<<CHANSEL_LSB)
         for trial in range(1,5):
             print("")
             print("Trial #", trial)
@@ -569,7 +572,7 @@ class Adc_4X16G_ASNT(object):
             print("adjusting ADC channel ", self.channel_sel)
             val_list = []
             #self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
-            self.get_samples(self.channel_sel, samples_2_get, val_list)
+            self.get_samples(samples_2_get, val_list)
             #self.WriteGPIO0(FIFOREAD_MASK,0)
             bit3=[]
             bit2=[]
@@ -676,7 +679,7 @@ class Adc_4X16G_ASNT(object):
         #XOR ON
         #ser_slow("1Z")
         self.ser_slow('Z',[1])
-
+        """
         if align_fail == 0:
             #Now take and display all four channels
             val_list0=[]
@@ -692,7 +695,7 @@ class Adc_4X16G_ASNT(object):
             self.get_samples(3, 1024, val_list3)
             
             #A 600-by-600 pixel plot
-            """
+            
             plt.figure(figsize = (6,6))
             t = np.arange(len(val_list0))
             ax = plt.subplot(221)
@@ -712,6 +715,7 @@ class Adc_4X16G_ASNT(object):
             plt.plot(t, val_list3)
             plt.show()
             """
+        
 
     """
     ADC Initization
