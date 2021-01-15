@@ -458,7 +458,9 @@ class Adc_4X16G_ASNT(object):
         """
         self.ser_slow('P',[adc_chan, bit,steps])
     
-    def check_alignment(self, adc_chan):
+    def check_alignment(self):
+        channel_no = self.channel_sel
+        self.WriteGPIO0(CHANSEL_MASK, channel_no<<CHANSEL_LSB)
         #Returns a 0 if alignment is good, 1 if bad
         samples_2_get = 1024
         #CLKSEL = 0, PRBS ON, DAC ON, DATA OFF all channels
@@ -530,7 +532,14 @@ class Adc_4X16G_ASNT(object):
         for n in range(0, samples_2_get - numbits):
             fhand1.write(hex(pat_array3[n]) + ',' + hex(pat_array2[n]) + ',' + hex(pat_array1[n]) + ',' + hex(pat_array0[n]) + '\n')
         fhand1.close()
-        time.sleep(.5)
+        time.sleep(.5)              
+        #pattern_match OFF
+        self.ser_slow('Y',[0]) 
+        for i in range(4): 
+            self.ADC_params[i] = [0,1,1,1]
+        self.setADC()
+        #XOR ON
+        self.ser_slow('Z',[1])  
         if (match_pos[0] == match_pos[1]) & (match_pos[1] == match_pos[2]) & (match_pos[2] == match_pos[3]):
             return 0
         else: return 1
@@ -547,7 +556,7 @@ class Adc_4X16G_ASNT(object):
             #Reset the transceivers and logic
             #ser_slow('R')
             self.ser_slow('R',[])
-            time.sleep(1)
+            time.sleep(0.1)
             #Reset the data fifos
             #ser_slow('V')
             self.ser_slow('V',[])
@@ -627,14 +636,14 @@ class Adc_4X16G_ASNT(object):
                 print("No pattern match in channel " + str(min_chan))
                 print("Alignment failed for channel ", self.channel_sel)
                 align_fail = 1
-                time.sleep(0.5)
+                time.sleep(0.1)
             for n in range(3, -1, -1):
                 steps_to_shift = match_pos[n] - min_pos
                 if steps_to_shift > 63: 
                     print("Necessary shift exceeds 63 in bit ", n)
                     print("Alignment failed for channel ", self.channel_sel)
                     align_fail = 1
-                    time.sleep(0.5)
+                    time.sleep(0.1)
                             
             #do the adjustment
             if align_fail == 0:
@@ -653,7 +662,7 @@ class Adc_4X16G_ASNT(object):
             if align_fail == 0:
                 #for adc_chan in range(1,3):
                 print("Checking alignment channel ", self.channel_sel)
-                align_fail = self.check_alignment(self.channel_sel)
+                align_fail = self.check_alignment()
                 if align_fail == 1: 
                     #break
                     continue
@@ -667,7 +676,7 @@ class Adc_4X16G_ASNT(object):
                 print("")
         # pattern_match On
         # ser_slow('1Y')
-        self.ser_slow('Y',[1])
+        #self.ser_slow('Y',[1])
         #pattern_match OFF
         #ser_slow('0Y')
         self.ser_slow('Y',[0])
@@ -679,42 +688,6 @@ class Adc_4X16G_ASNT(object):
         #XOR ON
         #ser_slow("1Z")
         self.ser_slow('Z',[1])
-        """
-        if align_fail == 0:
-            #Now take and display all four channels
-            val_list0=[]
-            val_list1=[]
-            val_list2=[]
-            val_list3=[]      
-            self.get_samples(0, 1024, val_list0)   
-            #time.sleep(.5)
-            self.get_samples(1, 1024, val_list1)
-            #time.sleep(.5)
-            self.get_samples(2, 1024, val_list2)
-            #time.sleep(.5)
-            self.get_samples(3, 1024, val_list3)
-            
-            #A 600-by-600 pixel plot
-            
-            plt.figure(figsize = (6,6))
-            t = np.arange(len(val_list0))
-            ax = plt.subplot(221)
-            ax.set(ylim=(0, 15))
-            plt.plot(t, val_list0)
-            t = np.arange(len(val_list1))
-            ax = plt.subplot(222)
-            ax.set(ylim=(0, 15))
-            plt.plot(t, val_list1)
-            t = np.arange(len(val_list2))
-            ax = plt.subplot(223)
-            ax.set(ylim=(0, 15))
-            plt.plot(t, val_list2)
-            t = np.arange(len(val_list3))
-            ax = plt.subplot(224)
-            ax.set(ylim=(0, 15))
-            plt.plot(t, val_list3)
-            plt.show()
-            """
         
 
     """
