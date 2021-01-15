@@ -461,6 +461,7 @@ class Adc_4X16G_ASNT(object):
     def check_alignment(self):
         channel_no = self.channel_sel
         self.WriteGPIO0(CHANSEL_MASK, channel_no<<CHANSEL_LSB)
+        time.sleep(0.5)
         #Returns a 0 if alignment is good, 1 if bad
         samples_2_get = 1024
         #CLKSEL = 0, PRBS ON, DAC ON, DATA OFF all channels
@@ -550,6 +551,7 @@ class Adc_4X16G_ASNT(object):
     def set_alignment(self):
         channel_no = self.channel_sel
         self.WriteGPIO0(CHANSEL_MASK, channel_no<<CHANSEL_LSB)
+        time.sleep(0.5)
         for trial in range(1,3):
             print("")
             print("Trial #", trial)
@@ -653,7 +655,7 @@ class Adc_4X16G_ASNT(object):
                         if steps_to_shift > 64: steps_to_shift = 64
                         print("Shift bit " + str(n) + " " + str(steps_to_shift))                   
                         self.bit_shift(self.channel_sel, n, steps_to_shift)
-                        time.sleep(.1)
+                        #time.sleep(.1)
             else:
                 #break
                 continue
