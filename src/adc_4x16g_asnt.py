@@ -550,7 +550,7 @@ class Adc_4X16G_ASNT(object):
     def set_alignment(self):
         channel_no = self.channel_sel
         self.WriteGPIO0(CHANSEL_MASK, channel_no<<CHANSEL_LSB)
-        for trial in range(1,5):
+        for trial in range(1,3):
             print("")
             print("Trial #", trial)
             #Reset the transceivers and logic
