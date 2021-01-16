@@ -45,6 +45,10 @@ PRBSON_MASK    = 0x2222
 DACON_MASK     = 0x4444
 DATAON_MASK    = 0x8888 #For all four ADCs
 RESETALL_MASK  = 0x10000
+RESETALL0_MASK  = 0x10000
+RESETALL1_MASK  = 0x10000000
+RESETALL2_MASK  = 0x20000000
+RESETALL3_MASK  = 0x40000000
 FIFORESET_MASK = 0x20000
 BITSEL_MASK    = 0xC0000
 BITSEL_LSB     = 18
@@ -249,15 +253,28 @@ class Adc_4X16G_ASNT(object):
             steps = data[2]
             self.StepRXSlide(adc, chan, steps)
         elif(string_to_send == 'R'):
-            time.sleep(0.5)
+            time.sleep(0.1)
             self.WriteGPIO0(PRBSON_MASK, 0)
-            time.sleep(1)
+            time.sleep(0.1)
             self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
-            time.sleep(1)
-            self.WriteGPIO0(RESETALL_MASK, RESETALL_MASK)
-            time.sleep(1)
-            self.WriteGPIO0(RESETALL_MASK, 0)
-            time.sleep(1)
+            time.sleep(0.1)
+            if(self.channel_sel == 0):
+                self.WriteGPIO0(RESETALL0_MASK, RESETALL0_MASK)
+                time.sleep(0.1)
+                self.WriteGPIO0(RESETALL0_MASK, 0)
+            elif(self.channel_sel == 1):
+                self.WriteGPIO0(RESETALL1_MASK, RESETALL1_MASK)
+                time.sleep(0.1)
+                self.WriteGPIO0(RESETALL1_MASK, 0)
+            elif(self.channel_sel == 1):
+                self.WriteGPIO0(RESETALL2_MASK, RESETALL2_MASK)
+                time.sleep(0.1)
+                self.WriteGPIO0(RESETALL2_MASK, 0)
+            elif(self.channel_sel == 1):
+                self.WriteGPIO0(RESETALL3_MASK, RESETALL3_MASK)
+                time.sleep(0.1)
+                self.WriteGPIO0(RESETALL3_MASK, 0)
+            time.sleep(0.1)
         elif(string_to_send == 'V'):
             self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
             time.sleep(0.1)
@@ -561,12 +578,12 @@ class Adc_4X16G_ASNT(object):
         channel_no = self.channel_sel
         self.WriteGPIO0(CHANSEL_MASK, channel_no<<CHANSEL_LSB)
         time.sleep(0.5)
-        for trial in range(1,2):
+        for trial in range(1,3):
             print("")
             print("Trial #", trial)
             #Reset the transceivers and logic
             #ser_slow('R')
-            #self.ser_slow('R',[])
+            self.ser_slow('R',[])
             time.sleep(0.1)
             #Reset the data fifos
             #ser_slow('V')
@@ -701,25 +718,6 @@ class Adc_4X16G_ASNT(object):
         self.ser_slow('Z',[1])
         
     """
-    This method is used for GTY transcievers reset
-    Because all the transceivers are reset at the same time, we need call this method before all the set_alignment().
-    """
-    def transceivers_reset(self):
-        # reset gty transcievers
-        self.ser_slow('R',[])
-        # get the invalid data from fifo
-        self.wbctrl._write(0,0)
-        time.sleep(0.1)
-        self.wbctrl._write(1,0)
-        time.sleep(0.1)
-        self.wbctrl._write(0,0)
-        time.sleep(0.5)
-        # the input width of the wb_bram 256bits input, and the width is 2^6
-        # so it's 2048
-        length = 256*2**6/8
-        vals = self.wbram._read(addr=0, size=length)
-
-    """
     ADC Initization
     """
     def adc_init(self):
@@ -784,10 +782,12 @@ class Adc_4X16G_ASNT(object):
         self.WriteGPIO0(DACON_MASK, DACON_MASK)
         time.sleep(0.5)
         # Pulse ResetAll
+        """
         self.WriteGPIO0(RESETALL_MASK, RESETALL_MASK)
         time.sleep(0.5)
         self.WriteGPIO0(RESETALL_MASK, 0)
         time.sleep(0.5)
+        """
         #Turn on the pattern match function, to sync the FPGAs PRBS generators
         self.Gpio1.XGpio_DiscreteWrite(1, PRBS_MATCH)
         time.sleep(0.5)
@@ -795,4 +795,3 @@ class Adc_4X16G_ASNT(object):
         time.sleep(0.5)
         self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
         time.sleep(0.5)
-        self.transceivers_reset()
