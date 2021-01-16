@@ -542,7 +542,7 @@ class Adc_4X16G_ASNT(object):
         for n in range(0, samples_2_get - numbits):
             fhand1.write(hex(pat_array3[n]) + ',' + hex(pat_array2[n]) + ',' + hex(pat_array1[n]) + ',' + hex(pat_array0[n]) + '\n')
         fhand1.close()
-        time.sleep(.5)              
+        time.sleep(.5)
         #pattern_match OFF
         self.ser_slow('Y',[0]) 
         for i in range(4): 
@@ -561,7 +561,7 @@ class Adc_4X16G_ASNT(object):
         channel_no = self.channel_sel
         self.WriteGPIO0(CHANSEL_MASK, channel_no<<CHANSEL_LSB)
         time.sleep(0.5)
-        for trial in range(1,3):
+        for trial in range(1,2):
             print("")
             print("Trial #", trial)
             #Reset the transceivers and logic
@@ -570,7 +570,7 @@ class Adc_4X16G_ASNT(object):
             time.sleep(0.1)
             #Reset the data fifos
             #ser_slow('V')
-            #self.ser_slow('V',[])
+            self.ser_slow('V',[])
             #set up the hardware.
             #CLKSEL = 0, PRBS ON, DAC ON, DATA OFF all channels
             for i in range(4): 
@@ -700,6 +700,24 @@ class Adc_4X16G_ASNT(object):
         #ser_slow("1Z")
         self.ser_slow('Z',[1])
         
+    """
+    This method is used for GTY transcievers reset
+    Because all the transceivers are reset at the same time, we need call this method before all the set_alignment().
+    """
+    def transceivers_reset(self):
+        # reset gty transcievers
+        self.ser_slow('R',[])
+        # get the invalid data from fifo
+        self.wbctrl._write(0,0)
+        time.sleep(0.1)
+        self.wbctrl._write(1,0)
+        time.sleep(0.1)
+        self.wbctrl._write(0,0)
+        time.sleep(0.5)
+        # the input width of the wb_bram 256bits input, and the width is 2^6
+        # so it's 2048
+        length = 256*2**6/8
+        vals = self.wbram._read(addr=0, size=length)
 
     """
     ADC Initization
@@ -777,3 +795,4 @@ class Adc_4X16G_ASNT(object):
         time.sleep(0.5)
         self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
         time.sleep(0.5)
+        self.transceivers_reset()
