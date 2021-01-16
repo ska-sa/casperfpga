@@ -72,7 +72,8 @@ class Adc_4X16G_ASNT(object):
     """
     This is the class definition for the ASNT 4bit/16GSps ADC
     """
-
+    GPIO0_val = 0
+    GPIO3_val = 0
     def __init__(self, parent, device_name, device_info, initalise=False):
         self.parent = parent
         self.logger = parent.logger
@@ -89,8 +90,8 @@ class Adc_4X16G_ASNT(object):
         # in Rick's design, Gpio2 is used for capturing data, which is not needed here
         self.Gpio3 = 0
         #parameters used in the program
-        self.GPIO0_val = 0
-        self.GPIO3_val = 0
+        #self.GPIO0_val = 0
+        #self.GPIO3_val = 0
         self.ADC_params = [[],[],[],[]]
         #Set this to set the four ADC DAC outputs ON
         self.DAC_ON = 0
@@ -178,17 +179,25 @@ class Adc_4X16G_ASNT(object):
 
     def WriteGPIO0(self,mask,val):
         mask = 0xffffffff - mask
+        """
         self.GPIO0_val = (self.GPIO0_val & mask) | val
         self.Gpio0.XGpio_DiscreteWrite(1, self.GPIO0_val)
-    
+        """
+        Adc_4X16G_ASNT.GPIO0_val = (Adc_4X16G_ASNT.GPIO0_val & mask) | val
+        self.Gpio0.XGpio_DiscreteWrite(1, Adc_4X16G_ASNT.GPIO0_val)
+
     def ReadGPIO0(self):
         return self.Gpio0.XGpio_DiscreteRead(1)
 
     def WriteGPIO3(self,mask,val):
         mask = 0xffffffff - mask
+        """
         self.GPIO3_val = (self.GPIO3_val & mask) | val
         self.Gpio3.XGpio_DiscreteWrite(1, self.GPIO3_val)
-    
+        """
+        Adc_4X16G_ASNT.GPIO3_val = (Adc_4X16G_ASNT.GPIO3_val & mask) | val
+        self.Gpio3.XGpio_DiscreteWrite(1, Adc_4X16G_ASNT.GPIO3_val)
+
     def StepRXSlide(self, adc, chan, steps):
         self.WriteGPIO0(CHANSEL_MASK, adc<<CHANSEL_LSB)
         self.WriteGPIO0(BITSEL_MASK, chan<<BITSEL_LSB)
@@ -420,7 +429,7 @@ class Adc_4X16G_ASNT(object):
         #print(string_to_send)
         if (self.no_hw == 0):
             #print(addr)
-            print(hex(val))
+                print(hex(val))
             self.ser_slow('X',[addr, val])
         #return string_to_send
 
