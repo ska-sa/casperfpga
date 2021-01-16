@@ -408,7 +408,7 @@ class Adc_4X16G_ASNT(object):
         mask = 0xf << (self.channel_sel*4)
         mask = 0xffffffff - mask
         val_reg = self.ReadGPIO0()
-        #print('val_reg=%s'%hex(val_reg))
+        print('val_reg=%s'%hex(val_reg))
         if(self.channel_sel == 0):
             val = (val_reg & mask) + adc_a
         elif(self.channel_sel == 1):
@@ -420,7 +420,7 @@ class Adc_4X16G_ASNT(object):
         #print(string_to_send)
         if (self.no_hw == 0):
             #print(addr)
-            #print(hex(val))
+            print(hex(val))
             self.ser_slow('X',[addr, val])
         #return string_to_send
 
