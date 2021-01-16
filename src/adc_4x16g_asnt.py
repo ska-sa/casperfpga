@@ -566,7 +566,7 @@ class Adc_4X16G_ASNT(object):
             print("Trial #", trial)
             #Reset the transceivers and logic
             #ser_slow('R')
-            self.ser_slow('R',[])
+            #self.ser_slow('R',[])
             time.sleep(0.1)
             #Reset the data fifos
             #ser_slow('V')
