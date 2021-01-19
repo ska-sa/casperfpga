@@ -281,6 +281,10 @@ class Adc_4X16G_ASNT(object):
                 time.sleep(0.1)
                 self.WriteGPIO0(PRBSON_MASK3, PRBSON_MASK3)
                 time.sleep(0.1)
+            self.WriteGPIO0(RESETALL_MASK, RESETALL_MASK)
+            time.sleep(0.1)
+            self.WriteGPIO0(RESETALL_MASK, 0)
+            """
             if(self.channel_sel == 0):
                 self.WriteGPIO0(RESETALL0_MASK, RESETALL0_MASK)
                 time.sleep(0.1)
@@ -298,6 +302,7 @@ class Adc_4X16G_ASNT(object):
                 time.sleep(0.1)
                 self.WriteGPIO0(RESETALL3_MASK, 0)
             time.sleep(0.1)
+            """
         elif(string_to_send == 'V'):
             self.WriteGPIO0(FIFORESET_MASK,FIFORESET_MASK)
             time.sleep(0.1)
