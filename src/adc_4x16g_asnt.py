@@ -253,11 +253,11 @@ class Adc_4X16G_ASNT(object):
             steps = data[2]
             self.StepRXSlide(adc, chan, steps)
         elif(string_to_send == 'R'):
-            #time.sleep(0.1)
-            #self.WriteGPIO0(PRBSON_MASK, 0)
-            #time.sleep(0.1)
-            #self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
-            #time.sleep(0.1)
+            time.sleep(0.1)
+            self.WriteGPIO0(PRBSON_MASK, 0)
+            time.sleep(0.1)
+            self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
+            time.sleep(0.1)
             if(self.channel_sel == 0):
                 self.WriteGPIO0(RESETALL0_MASK, RESETALL0_MASK)
                 time.sleep(0.1)
