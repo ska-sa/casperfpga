@@ -42,6 +42,10 @@ VREFLSBD    = 410
 
 CLKSEL_MASK    = 0x1111 #1 is LS_CLK, 0 is HS_CLK
 PRBSON_MASK    = 0x2222
+PRBSON_MASK0   = 0x0002
+PRBSON_MASK1   = 0x0020
+PRBSON_MASK2   = 0x0200
+PRBSON_MASK3   = 0x2000
 DACON_MASK     = 0x4444
 DATAON_MASK    = 0x8888 #For all four ADCs
 RESETALL_MASK  = 0x10000
@@ -253,11 +257,30 @@ class Adc_4X16G_ASNT(object):
             steps = data[2]
             self.StepRXSlide(adc, chan, steps)
         elif(string_to_send == 'R'):
-            time.sleep(0.1)
-            self.WriteGPIO0(PRBSON_MASK, 0)
-            time.sleep(0.1)
-            self.WriteGPIO0(PRBSON_MASK, PRBSON_MASK)
-            time.sleep(0.1)
+            if(self.channel_sel ==0):
+                time.sleep(0.1)
+                self.WriteGPIO0(PRBSON_MASK0, 0)
+                time.sleep(0.1)
+                self.WriteGPIO0(PRBSON_MASK0, PRBSON_MASK0)
+                time.sleep(0.1)
+            elif(self.channel_sel ==1):
+                time.sleep(0.1)
+                self.WriteGPIO0(PRBSON_MASK1, 0)
+                time.sleep(0.1)
+                self.WriteGPIO0(PRBSON_MASK1, PRBSON_MASK1)
+                time.sleep(0.1)
+            elif(self.channel_sel ==2):
+                time.sleep(0.1)
+                self.WriteGPIO0(PRBSON_MASK2, 0)
+                time.sleep(0.1)
+                self.WriteGPIO0(PRBSON_MASK2, PRBSON_MASK2)
+                time.sleep(0.1)
+            elif(self.channel_sel ==3):
+                time.sleep(0.1)
+                self.WriteGPIO0(PRBSON_MASK3, 0)
+                time.sleep(0.1)
+                self.WriteGPIO0(PRBSON_MASK3, PRBSON_MASK3)
+                time.sleep(0.1)
             if(self.channel_sel == 0):
                 self.WriteGPIO0(RESETALL0_MASK, RESETALL0_MASK)
                 time.sleep(0.1)
