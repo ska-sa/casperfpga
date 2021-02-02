@@ -219,6 +219,20 @@ class ADS5296fw():
     def get_fclk_err_cnt(self, board):
         return self._read_ctrl(7, board)
 
+    def bitslip(self, channel, board):
+        self._write_ctrl(0, 15, board)
+        self._write_ctrl(1<<channel, 15, board)
+        self._write_ctrl(0, 15, board)
+
+    def set_clock_source(self, source, board):
+        x = self._read_ctrl(9, board)
+        reset_state = x & 0xff
+        if source == board:
+            clksel = 0
+        else:
+            clksel = 1
+        self._write_ctrl((clksel << 8) + reset_state, 9, board)
+
     def calibrate_fclk(self, board, apply_to_fclk=True, apply_to_data=True):
         NTAPS = 512
         STEP_SIZE = 4
@@ -269,14 +283,30 @@ class ADS5296fw():
 
     def _write_ctrl(self, data, offset=0, board=0):
         #print("Writing 0x%8x to address %d of controller %d" % (data, offset, board))
-        self.fpga.write_int("ads5296_controller%d_%d" % (self.fmc, board), data, word_offset=offset)
+        self.fpga.write_int("ads5296_controller%d_%d" % (self.fmc, board), data, word_offset=offset, blindwrite=True)
 
     def _read_ctrl(self, offset=0, board=0):
         return self.fpga.read_uint("ads5296_controller%d_%d" % (self.fmc, board), word_offset=offset)
 
     def reset_mmcm(self, board):
-        self._write_ctrl(1, offset=9, board=board)
-        self._write_ctrl(0, offset=9, board=board)
+        x = self._read_ctrl(offset=9, board=board)
+        self._write_ctrl(x | 0b1, offset=9, board=board)
+        self._write_ctrl(x & 0b0, offset=9, board=board)
+
+    def mmcm_get_lock(self, board):
+        """
+        Get a board's MMCM lock status.
+        Return True if MMCM is locked, False if not. Or,
+        return None if the MMCM doesn't exist for this board
+        (because it is using another board's clocks)
+        """
+        x = self._read_ctrl(offset=9, board=board)
+        master = bool(x & (1<<24))
+        locked = bool(x & (1<<16))
+        if master:
+            return locked
+        else:
+            return None
 
     def reset_iserdes(self, board):
         self._write_ctrl(1, offset=8, board=board)
@@ -393,7 +423,7 @@ class ADS5296fw():
         self.write_spi(0x25, (1<<15) + (val<<4) + ((val1 >> 10)<<2) + (val0 >> 10), cs)
     
     def reset(self, cs):
-        self.write_spi(0, 1, cs)
+        self.write_spi(0, 1, cs, readback=False) # The reset register auto-clears
 
     def assert_sync(self, fmc):
         self.fpga.write_int("sync", 1)
@@ -440,14 +470,14 @@ class ADS5296fw():
             readback = self._read(2) & 0xffff
             return readback
 
-    def write_spi(self, addr, data, chip):
+    def write_spi(self, addr, data, chip, readback=True):
         self.print("Writing 0x%x to address 0x%x, CS:0x%x" % (data, addr, chip))
         self.blindwrite_spi(addr, data, chip)
-        readback = self.read_spi(addr, chip)
-        self.print("readback: 0x%x" % readback)
-        if readback != data:
-            print("WARNING >>>> SPI readback error")
-        return readback
+        readback_data = self.read_spi(addr, chip)
+        self.print("readback: 0x%x" % readback_data)
+        if readback and readback_data != data:
+            print("WARNING >>>> SPI readback error (chip %d, addr %x)" % (addr, data))
+        return readback_data
 
     def read_clk_rates(self, board):
         now = time.time()
