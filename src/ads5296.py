@@ -291,7 +291,7 @@ class ADS5296fw():
     def reset_mmcm(self, board):
         x = self._read_ctrl(offset=9, board=board)
         self._write_ctrl(x | 0b1, offset=9, board=board)
-        self._write_ctrl(x & 0b0, offset=9, board=board)
+        self._write_ctrl(x &~0b1, offset=9, board=board)
 
     def mmcm_get_lock(self, board):
         """
