@@ -476,7 +476,7 @@ class ADS5296fw():
         readback_data = self.read_spi(addr, chip)
         self.print("readback: 0x%x" % readback_data)
         if readback and readback_data != data:
-            print("WARNING >>>> SPI readback error (chip %d, addr %x)" % (addr, data))
+            print("WARNING >>>> SPI readback error (chip %d, addr 0x%x)" % (chip, addr))
         return readback_data
 
     def read_clk_rates(self, board):
