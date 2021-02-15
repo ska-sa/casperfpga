@@ -18,6 +18,7 @@ from . import hmc
 from . import katadc
 from . import skarabadc
 from . import snapadc
+from .memory import Memory
 
 from .attribute_container import AttributeContainer
 from .utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
@@ -636,6 +637,17 @@ class CasperFpga(object):
                 device.post_create_update(device_dict)
             except AttributeError:  # the device may not have an update function
                 pass
+        # Add any memory entries which are not associated with known devices.
+        for name, memdevice in memorymap_dict.items():
+            # If this is already in the device list, skip. It should have
+            # been added as a sw_reg / other thing already
+            # Else, add the device as a vanilla register
+            if name in device_dict.keys():
+                pass
+            else:
+                if name in self.memory_devices:
+                    raise NameError("Device named %s is already in memory device list" % name)
+                self.memory_devices[name] = Memory(name, 32, memdevice['address'], memdevice['bytes'])
 
     def _create_casper_adc_devices(self, device_dict, initialise=False, **kwargs):
         """
@@ -742,6 +754,10 @@ class CasperFpga(object):
             raise RuntimeError('Either filename or parsed fpg data '
                                'must be given.')
         if filename is not None:
+            # device_dict is a dictionary of XPS-tagged devices, keyed by
+            # block name, with values reflecting yellow block parameters.
+            # memorymap_dict is a list of registers, keyed by register name, 
+            # with vales {'address': <address>, 'bytes': <size in bytes>
             device_dict, memorymap_dict = parse_fpg(filename)
         else:
             device_dict = fpg_info[0]
