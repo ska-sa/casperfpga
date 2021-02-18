@@ -20,11 +20,6 @@ class Gbe(object):
         self.name = name
         self.address = address
         self.length_bytes = length_bytes
-        self.mac = None
-        self.ip_address = None
-        self.port = None
-        self.gateway = None
-        self.subnet_mask = None
         self.fullname = self.parent.host + ':' + self.name
         self.block_info = device_info
         self.process_device_info(device_info)
@@ -35,6 +30,18 @@ class Gbe(object):
         # TODO
         # if self.parent.is_connected():
         #     self._check()
+
+    @property
+    def mac(self):
+        return None
+
+    @property
+    def ip_address(self):
+        return None
+
+    @property
+    def port(self):
+        return None
 
     @classmethod
     def from_device_info(cls, parent, device_name, device_info, memorymap_dict, **kwargs):
@@ -101,23 +108,16 @@ class Gbe(object):
         if mac is None or ip_address is None or port is None:
             raise ValueError('%s: 10Gbe interface must '
                              'have mac, ip and port.' % self.fullname)
-        self.setup(mac, ip_address, port)
 
     def setup(self, mac, ipaddress, port, gateway=None, subnet_mask=None):
         """
-        Set up the MAC, IP and port for this interface
-
-        :param mac: String or Integer input, MAC address (e.g. '02:00:00:00:00:01')
-        :param ipaddress: String or Integer input, IP address (eg '10.0.0.1')
-        :param port: String or Integer input
-        :param gateway: String or Integer input, an IP address
-        :param subnet_mask: string or integer, subnet mask (e.g. '255.255.255.0')
+        No longer implemented. See `configure_core`
         """
-        self.mac         = Mac(mac)
-        self.ip_address  = IpAddress(ipaddress)
-        self.port        = port if isinstance(port, int) else int(port)
-        self.gateway     = None if gateway is None else IpAddress(gateway)
-        self.subnet_mask = None if subnet_mask is None else IpAddress(subnet_mask)
+        raise NotImplementedError('This is no longer required as the mac, '
+                                  'ip_address and port are no longer stored '
+                                  'as attributes. These values are retrieved '
+                                  'from the processing node when required.'
+                                  'You probably want the `configure_core` method')
 
     def post_create_update(self, raw_device_info):
         """
