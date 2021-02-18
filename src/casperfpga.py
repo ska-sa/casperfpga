@@ -600,6 +600,7 @@ class CasperFpga(object):
 
         # create and add memory devices to the memory device dictionary
         for device_name, device_info in list(device_dict.items()):
+            self.logger.debug("Creating memory device: %s" % device_name)
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank '
                                 'device name?')
@@ -629,9 +630,11 @@ class CasperFpga(object):
                 setattr(container, device_name, new_device)
                 assert id(getattr(container, device_name)) == id(new_device)
                 assert id(new_device) == id(self.memory_devices[device_name])
+            self.logger.debug("Done creating memory device: %s" % device_name)
         # allow created devices to update themselves with full device info
         # link control registers, etc
         for name, device in list(self.memory_devices.items()):
+            self.logger.debug("Running post_create_update for device: %s" % name)
             try:
                 device.post_create_update(device_dict)
             except AttributeError:  # the device may not have an update function
@@ -775,14 +778,19 @@ class CasperFpga(object):
             pass
 
         # Create Register Map
+        self.logger.info("Creating memory devices")
         self._create_memory_devices(device_dict, memorymap_dict,
                                     initialise=initialise_objects)
+        self.logger.info("Creating other devices")
         self._create_other_devices(device_dict, initialise=initialise_objects)
+        self.logger.info("Creating ADC devices")
         self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
+        self.logger.info("Running post_get_system_information")
         self.transport.post_get_system_information()
         # we may not have been able to detect endianness until now
         # that we know the register map
+        self.logger.info("Detecting endianness")
         try:
             self._detect_little_endianness()
         except:

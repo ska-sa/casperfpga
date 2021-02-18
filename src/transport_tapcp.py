@@ -435,10 +435,17 @@ class TapcpTransport(Transport):
         :param use_bulk: Does nothing. Kept for API compatibility
         :return: binary data string
         """
+        # If accessing raw FPGA or CPU addresses, offset and size are in bytes.
+        # Otherwise, in 32-bit words
+        if device_name in ['/cpu', '/fpga']:
+            pass
+        else:
+            offset //= 4
+            size //= 4
         for retry in range(self.retries - 1):
             try:
                 buf = BytesIO()
-                self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
+                self.t.download('%s.%x.%x' % (device_name, offset, size), buf, timeout=self.timeout)
                 try:
                     self.t.context.end()
                 except:
@@ -464,7 +471,7 @@ class TapcpTransport(Transport):
         self.logger.warning('Several Tftp errors on read -- final retry.')
         try:
             buf = BytesIO()
-            self.t.download('%s.%x.%x' % (device_name, offset//4, size//4), buf, timeout=self.timeout)
+            self.t.download('%s.%x.%x' % (device_name, offset, size), buf, timeout=self.timeout)
             try:
                 self.t.context.end()
             except:
@@ -489,10 +496,17 @@ class TapcpTransport(Transport):
         assert (type(data) == str or type(data) == bytes), 'Must supply binary packed string data'
         assert (len(data) % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
+        # If accessing raw FPGA or CPU addresses, offset and size are in bytes.
+        # Otherwise, in 32-bit words
+        if device_name in ['/cpu', '/fpga']:
+            pass
+        else:
+            offset //= 4
+        self.logger.debug("Writing %s to %s address 0x%x" % (data, device_name, offset))
         for retry in range(self.retries - 1):
             try:
                 buf = BytesIO(data)
-                self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
+                self.t.upload('%s.%x.0' % (device_name, offset), buf, timeout=self.timeout)
                 try:
                     self.t.context.end()
                 except:
@@ -510,7 +524,7 @@ class TapcpTransport(Transport):
         self.logger.warning('Several Tftp errors on write-- final retry.')
         try:
             buf = BytesIO(data)
-            self.t.upload('%s.%x.0' % (device_name, offset//4), buf, timeout=self.timeout)
+            self.t.upload('%s.%x.0' % (device_name, offset), buf, timeout=self.timeout)
             try:
                 self.t.context.end()
             except:
@@ -536,20 +550,20 @@ class TapcpTransport(Transport):
         Used to perform low level wishbone write to a wishbone slave. Gives
         low level direct access to wishbone bus.
         
-        :param wb_address: address of the wishbone slave to write to
-        :param data: data to write
+        :param wb_address: byte address of the wishbone slave to write to
+        :param data: integer data to write
         :return: response object
         """
-        self.blindwrite('/fpga', data, offset=wb_address)
+        return self.blindwrite('/fpga', struct.pack('>I', data), offset=wb_address)
 
     def read_wishbone(self, wb_address):
         """
-        Used to perform low level wishbone read from a Wishbone slave.
+        Used to perform low level wishbone read of 32 bits from a Wishbone slave.
         
-        :param wb_address: address of the wishbone slave to read from
-        :return: Read Data or None
+        :param wb_address: byte address of the wishbone slave to read from
+        :return: unsigned integer read data or None
         """
-        return self.read('/fpga', 4, offset=wb_address)
+        return struct.unpack('>I', self.read('/fpga', 4, offset=wb_address))[0]
 
     def get_firmware_version(self):
         """
