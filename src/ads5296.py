@@ -288,10 +288,17 @@ class ADS5296fw():
     def _read_ctrl(self, offset=0, board=0):
         return self.fpga.read_uint("ads5296_controller%d_%d" % (self.fmc, board), word_offset=offset)
 
-    def reset_mmcm(self, board):
+    def reset_mmcm_assert(self, board):
         x = self._read_ctrl(offset=9, board=board)
         self._write_ctrl(x | 0b1, offset=9, board=board)
+
+    def reset_mmcm_deassert(self, board):
+        x = self._read_ctrl(offset=9, board=board)
         self._write_ctrl(x &~0b1, offset=9, board=board)
+
+    def reset_mmcm(self, board):
+        self.reset_mmcm_assert(board)
+        self.reset_mmcm_deassert(board)
 
     def mmcm_get_lock(self, board):
         """
