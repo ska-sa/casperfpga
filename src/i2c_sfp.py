@@ -21,6 +21,17 @@ class Sfp:
 
     OFFSET_CDR = 98
 
+    OFFSET_VENDOR = 148
+    NBYTES_VENDOR = 16
+    OFFSET_VENDOR_PN = 168
+    NBYTES_VENDOR_PN = 16
+    OFFSET_VENDOR_REV = 184
+    NBYTES_VENDOR_REV = 2
+
+    OFFSET_WAVELENGTH = 186
+    NBYTES_WAVELENGTH = 2
+
+
     PHYS_TYPES = [
         'Unknown',
         'GBIC',
@@ -104,6 +115,13 @@ class Sfp:
             rx_pow += [self._conv_power(x[self.OFFSET_RX_POWER + 2*i], x[self.OFFSET_RX_POWER + 2*i + 1])]
         cdr = x[self.OFFSET_CDR]
         eth_type = x[self.OFFSET_ETH_TYPE]
+        vendor_list = x[self.OFFSET_VENDOR : self.OFFSET_VENDOR + self.NBYTES_VENDOR]
+        vendor_str = ''.join([chr(c) for c in vendor_list])
+        vendor_pn_list = x[self.OFFSET_VENDOR_PN : self.OFFSET_VENDOR_PN + self.NBYTES_VENDOR_PN]
+        vendor_pn_str = ''.join([chr(c) for c in vendor_pn_list])
+        vendor_rev_list = x[self.OFFSET_VENDOR_REV : self.OFFSET_VENDOR_REV + self.NBYTES_VENDOR_REV]
+        vendor_rev_str = ''.join([chr(c) for c in vendor_rev_list])
+        
         supported_eth_types = []
         for i in range(8):
             if (eth_type >> i) & 0b1:
@@ -123,6 +141,9 @@ class Sfp:
             'Supported Ethernet Types': supported_eth_types,
             'TX Power': tx_pow,
             rx_pow_key: rx_pow,
+            'vendor': vendor_str,
+            'vendor part': vendor_pn_str,
+            'vendor rev': vendor_rev_str,
         }
         return rv
 
