@@ -29,8 +29,6 @@ class Sfp:
     NBYTES_VENDOR_REV = 2
 
     OFFSET_WAVELENGTH = 186
-    NBYTES_WAVELENGTH = 2
-
 
     PHYS_TYPES = [
         'Unknown',
@@ -121,6 +119,7 @@ class Sfp:
         vendor_pn_str = ''.join([chr(c) for c in vendor_pn_list])
         vendor_rev_list = x[self.OFFSET_VENDOR_REV : self.OFFSET_VENDOR_REV + self.NBYTES_VENDOR_REV]
         vendor_rev_str = ''.join([chr(c) for c in vendor_rev_list])
+        wavelength = self._conv_wavelength(x[self.OFFSET_WAVELENGTH], x[self.OFFSET_WAVELENGTH+1])
         
         supported_eth_types = []
         for i in range(8):
@@ -144,8 +143,14 @@ class Sfp:
             'vendor': vendor_str,
             'vendor part': vendor_pn_str,
             'vendor rev': vendor_rev_str,
+            'wavelength (nm)': wavelength,
         }
         return rv
+
+    def _conv_wavelength(self, msb, lsb):
+        wavelength = (msb<<8) + lsb
+        wavelength /= 20.
+        return wavelength
 
     def _conv_power(self, msb, lsb):
         """
