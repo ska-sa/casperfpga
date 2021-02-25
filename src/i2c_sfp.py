@@ -27,6 +27,8 @@ class Sfp:
     NBYTES_VENDOR_PN = 16
     OFFSET_VENDOR_REV = 184
     NBYTES_VENDOR_REV = 2
+    OFFSET_VENDOR_SN = 196
+    NBYTES_VENDOR_SN = 16
 
     OFFSET_WAVELENGTH = 186
 
@@ -117,6 +119,8 @@ class Sfp:
         vendor_str = ''.join([chr(c) for c in vendor_list])
         vendor_pn_list = x[self.OFFSET_VENDOR_PN : self.OFFSET_VENDOR_PN + self.NBYTES_VENDOR_PN]
         vendor_pn_str = ''.join([chr(c) for c in vendor_pn_list])
+        vendor_sn_list = x[self.OFFSET_VENDOR_SN : self.OFFSET_VENDOR_SN + self.NBYTES_VENDOR_SN]
+        vendor_sn_str = ''.join([chr(c) for c in vendor_sn_list])
         vendor_rev_list = x[self.OFFSET_VENDOR_REV : self.OFFSET_VENDOR_REV + self.NBYTES_VENDOR_REV]
         vendor_rev_str = ''.join([chr(c) for c in vendor_rev_list])
         wavelength = self._conv_wavelength(x[self.OFFSET_WAVELENGTH], x[self.OFFSET_WAVELENGTH+1])
@@ -143,6 +147,7 @@ class Sfp:
             'vendor': vendor_str,
             'vendor part': vendor_pn_str,
             'vendor rev': vendor_rev_str,
+            'vendor serial': vendor_sn_str,
             'wavelength (nm)': wavelength,
         }
         return rv
