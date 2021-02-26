@@ -4384,19 +4384,26 @@ class SkarabTransport(Transport):
         else:
             return True
 
-    def _set_1v0_trip_current_threshold(self, trip_threshold=35):
+    def _set_1v0_trip_current_threshold(self, trip_threshold=35, 
+                                        force_over_30=False):
         """
         Reconfigure the 1V0 current trip threshold
         :param trip_threshold: The desired 1V0 current trip threshold (Amps)
+        :param force_over_30: a flag that must be explicity set if the 
+        threshold is to be set above 30A (i.e. the reccomended operating limit)
         :return: True if success, False otherwise
         """
 
         # check that the desired threshold is within the acceptable range
 
-        if trip_threshold < 20:
-            self.logger.warning("Desired current limit too low! "
-                                "Threshold must be >= 20A")
-            return False
+        if trip_threshold not in range(20, 37):
+            self.logger.warning("Desired current limit must be between 20A and 36A!")
+            raise ValueError("Desired current limit not in acceptable range: [20:36]A")
+        
+        if trip_threshold > 30 and not force_over_30:
+            self.logger.warning(
+                "Must explicitly set flag 'force_over_30' to set current limit above reccomended limit of 30A")
+            raise Warning("Must explicitly set flag 'force_over_30' to set current limit above reccomended limit of 30A")
 
         # work out the [LSB, MSB] to set the threshold
 
