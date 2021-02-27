@@ -18,6 +18,7 @@ from . import hmc
 from . import katadc
 from . import skarabadc
 from . import snapadc
+from . import sysmon
 
 from .attribute_container import AttributeContainer
 from .utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
@@ -640,6 +641,10 @@ class CasperFpga(object):
             except AttributeError:  # the device may not have an update function
                 pass
 
+    def _create_casper_device_by_regname(device_dict):
+        if 'sysmon' in device_dict:
+            self.sensors = sysmon.Sysmon(self)
+
     def _create_casper_adc_devices(self, device_dict, initialise=False, **kwargs):
         """
         New method to instantiate CASPER ADC objects and attach them to the
@@ -786,6 +791,8 @@ class CasperFpga(object):
         self.logger.info("Creating ADC devices")
         self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
+        self.logger.info("Creating devices by register name")
+        self._create_casper_device_by_regname(device_dict)
         self.logger.info("Running post_get_system_information")
         self.transport.post_get_system_information()
         # we may not have been able to detect endianness until now
