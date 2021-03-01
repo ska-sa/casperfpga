@@ -4388,9 +4388,13 @@ class SkarabTransport(Transport):
                                         force_over_30=False):
         """
         Reconfigure the 1V0 current trip threshold
+        
+        The recommended 1v0 current trip threshold is 30 A. Exceeding this 
+        is done at your own risk and may potentially void the warranty 
+        of your SKARABs.
         :param trip_threshold: The desired 1V0 current trip threshold (Amps)
         :param force_over_30: a flag that must be explicity set if the 
-        threshold is to be set above 30A (i.e. the reccomended operating limit)
+        threshold is to be set above 30A (i.e. the recomended operating limit)
         :return: True if success, False otherwise
         """
 
