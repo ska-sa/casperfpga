@@ -482,7 +482,7 @@ class TapcpTransport(Transport):
                 self.t.context.end()
             except:
                 pass
-        raise RuntimeError
+        raise RuntimeError("Failed to read size %d from register %s at offset %d" % (size, device_name, offset))
 
     def blindwrite(self, device_name, data, offset=0, use_bulk=True):
         """
@@ -534,7 +534,7 @@ class TapcpTransport(Transport):
                 self.t.context.end()
             except:
                 pass
-        raise RuntimeError
+        raise RuntimeError("Failed to write to register %s at offset %d" % (device_name, offset))
 
     def deprogram(self):
         """
