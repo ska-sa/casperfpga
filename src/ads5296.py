@@ -296,6 +296,11 @@ class ADS5296fw():
         x = self._read_ctrl(offset=9, board=board)
         self._write_ctrl(x &~0b1, offset=9, board=board)
 
+    def trigger_snapshot(self, board):
+        self._write_ctrl(0, offset=16, board=board)
+        self._write_ctrl(1, offset=16, board=board)
+        self._write_ctrl(0, offset=16, board=board)
+
     def reset_mmcm(self, board):
         self.reset_mmcm_assert(board)
         self.reset_mmcm_deassert(board)
