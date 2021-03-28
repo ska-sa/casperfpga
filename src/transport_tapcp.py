@@ -4,6 +4,7 @@ from io import BytesIO as BytesIO
 import zlib
 import hashlib
 import time
+import progressbar
 
 from .transport import Transport
 
@@ -324,7 +325,7 @@ class TapcpTransport(Transport):
                 payload = header + prog
                 complete_blocks = len(payload) // FLASH_SECTOR_SIZE
                 trailing_bytes = len(payload) % FLASH_SECTOR_SIZE
-                for i in range(complete_blocks):
+                for i in progressbar.progressbar(range(complete_blocks)):
                     self.logger.debug("block %d of %d: writing %d bytes to address 0x%x:" % (i+1, complete_blocks, len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE]), head_loc+i*FLASH_SECTOR_SIZE))
                     self.blindwrite('/flash', payload[i*FLASH_SECTOR_SIZE: (i+1)*FLASH_SECTOR_SIZE], offset=head_loc+i*FLASH_SECTOR_SIZE)
                     readback = self.read('/flash', len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE]), offset=head_loc+i*FLASH_SECTOR_SIZE)
@@ -359,7 +360,7 @@ class TapcpTransport(Transport):
                 payload = fh.read()
             complete_blocks = len(payload) // FLASH_SECTOR_SIZE
             trailing_bytes = len(payload) % FLASH_SECTOR_SIZE
-            for i in range(complete_blocks):
+            for i in progressbar.progressbar(range(complete_blocks)):
                 self.logger.debug("block %d of %d: writing %d bytes:" % (i+1, complete_blocks, len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE])))
                 self.blindwrite('/flash', payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE], offset=user_flash_loc+i*FLASH_SECTOR_SIZE)
                 readback = self.read('/flash', len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE]), offset=user_flash_loc+i*FLASH_SECTOR_SIZE)
@@ -401,8 +402,7 @@ class TapcpTransport(Transport):
         self.timeout = 1.5
         complete_blocks = len(payload) // sector_size
         trailing_bytes = len(payload) % sector_size
-        for i in range(complete_blocks):
-            print(("Writing block {} of {}".format(i+1, complete_blocks)))
+        for i in progressbar.progressbar(range(complete_blocks)):
             self.blindwrite('/flash', payload[i*sector_size : (i+1)*sector_size], offset=i*sector_size)
             readback = self.read('/flash', sector_size, offset=i*sector_size)
             if payload[i*sector_size : (i+1)*sector_size] != readback:
