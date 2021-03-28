@@ -1,6 +1,7 @@
 from matplotlib import pyplot as plt
 import sys
 import time
+import logging
 
 def make_wave(x):
     s = ""
@@ -35,186 +36,43 @@ def print_waveforms(sclk, mosi, cs):
     print("MOSI: %s" % mosi_str)
     print("CS  : %s" % cs_str)
             
-   
-
-class ADS5296():
-    def print(self,x):
-        if not self.quiet:
-            print(x)
-
-    def __init__(self, fpga):
-        self.quiet = True
-        self.fpga = fpga
-        #self.ctrl_reg = "ads5296_controller%d" % board_id
-    
-    def set_spi_out(self, sclk, mosi, cs, fmc):
-        #v = ((mosi & 1) << 4) + ((sclk & 1) << 3) + (cs & 0b111)
-        # From Larry:
-        #signal     spreadsheet     actual
-        #cs[0] CSO  LA33_P          LA32_P
-        #cs[1] CS1  LA33_N          LA32_N
-        #MOSI = SDA LA32_P          LA33_P
-        #SCLK = SCL LA32_N          LA33_N
-        # register is based on spreadsheet values:
-        # bit0 = cs0
-        # bit1 = cs1
-        # bit2 = cs2
-        # bit3 = sclk
-        # bit4 = mosi
-
-        # Need to swap cs0 <-> MOSI; cs1 <-> SCLK
-        # bit0 = mosi
-        # bit1 = sclk
-        # bit2 = cs2
-        # bit3 = cs1
-        # bit4 = cs0
-        v = ((cs & 1) << 4) + (((cs >> 1) & 1) << 3) + (((cs >> 2) & 1) << 2) + ((sclk & 1) << 1) + (mosi & 1)
-        self.fpga.write_int("ads5296_spi_out%d"%fmc, v)
-        return sclk, mosi, cs
-
-    def get_spi_in(self, fmc):
-        return self.fpga.read_uint("ads5296_spi_in%d"%fmc)
-
-    def assert_reset(self, fmc):
-        self.fpga.write_int("ads5296_rst%d"%fmc, 1)
-
-    def deassert_reset(self, fmc):
-        self.fpga.write_int("ads5296_rst%d"%fmc, 0)
-
-    def assert_sync(self, fmc):
-        self.fpga.write_int("ads5296_sync%d"%fmc, 1)
-
-    def deassert_sync(self, fmc):
-        self.fpga.write_int("ads5296_sync%d"%fmc, 0)
-
-    def send_spi(self, addr, val, cs, fmc, show_diagram=False):
-        NBITS = 24
-        # record SPI so we can plot
-        spi = []
-        data = ((addr & 0xff) << 16) + (val & 0xffff)
-        # set clock high and cs to something we don't care about
-        cs = cs & 0b111
-        spi += self.set_spi_out(1, 0, (cs+1)&0b111, fmc)
-        # lower cs
-        spi+= self.set_spi_out(1, 0, cs, fmc)
-        # set data and toggle clock
-        dout = 0
-        for i in range(NBITS):
-            # lower clock
-            spi += self.set_spi_out(0, 0, cs, fmc)
-            # set data
-            spi += self.set_spi_out(0, (data >> (NBITS - 1 - i)) & 1, cs, fmc)
-            # assert clock
-            spi += self.set_spi_out(1, (data >> (NBITS - 1 - i)) & 1, cs, fmc)
-            # get miso bit
-            dout += (self.get_spi_in(fmc) << (NBITS - 1 - i))
-        # once we get to here we've sent / received all the data and the clock is still high
-        # deassert cs
-        spi += self.set_spi_out(1, (data & 1), (cs+1)&0b111, fmc)
-        #print("SCLK: %s" % spi[0::3])
-        #print("MOSI: %s" % spi[1::3])
-        #print("CS  : %s" % spi[2::3])
-        if show_diagram:
-            print_waveforms(spi[0::3], spi[1::3], spi[2::3])
-        #if plot:
-        #    print("plotting")
-        #    plt.figure()
-        #    plt.subplot(1,3,1)
-        #    plt.plot(spi[0::3], label="SCLK")
-        #    plt.legend()
-        #    plt.subplot(1,3,2)
-        #    plt.plot(spi[1::3], label="MOSI")
-        #    plt.legend()
-        #    plt.subplot(1,3,3)
-        #    plt.plot(spi[2::3], label="CS")
-        #    plt.legend()
-        #    plt.show()
-        return dout
-
-    def disable_readout(self, cs, fmc):
-        self.send_spi(1, 0, cs, fmc)
-
-    def enable_readout(self, cs, fmc):
-        self.send_spi(1, 1, cs, fmc)
-
-    def read_spi(self, addr, cs, fmc):
-        # put everyone out of read mode
-        for i in range(8):
-            self.disable_readout(i, fmc)
-        # put the chip we want to read in read mode
-        self.enable_readout(cs, fmc)
-        # read value
-        d = self.send_spi(addr, 0, cs, fmc)
-        # put the chip back in write mode
-        self.disable_readout(cs, fmc)
-        return d
-
-    #def _write(self, data, offset=0):
-    #    # Don't do a blind write. The successful readback will
-    #    # verify that the SPI transaction completed, and was ack'd
-    #    # by the wishbone core.
-    #    self.print("WB writing 0x%x to offset 0x%x" % (data, offset))
-    #    self.fpga.write_int(self.ctrl_reg, data, word_offset=offset)
-
-    #def _read(self, offset=0):
-    #    return self.fpga.read_uint(self.ctrl_reg, word_offset=offset)
-
-    #def write_spi(self, addr, data, chip):
-    #    addr = addr & 0xff
-    #    data = data & 0xffff
-    #    self.print("Writing 0x%x to address 0x%x, CS:0x%x" % (data, addr, chip))
-    #    payload = (addr << 16) + data
-    #    self._write(payload, 1)
-    #    self._write(chip, 0)
-
-    #def disable_readout(self, chip):
-    #    self.print("Writing 0x%x to address 0x%x, CS:0x%x" % (0, 1, chip))
-    #    self.write_spi(1, 0, chip)
-
-    #def enable_readout(self, chip):
-    #    # Disable readout for all chips
-    #    for i in range(8):
-    #        self.disable_readout(i)
-    #    self.print("Writing 0x%x to address 0x%x, CS:0x%x" % (1, 1, chip))
-    #    self.write_spi(1, 1, chip)
-    #        
-    #def read_spi(self, addr, chip):
-    #    self.enable_readout(chip)
-    #    self.write_spi(addr, 0xaabb, chip)
-    #    x = self._read(offset=2)
-    #    self.disable_readout(chip)
-    #    return x
         
 class ADS5296fw():
-    def print(self,x):
-        if not self.quiet:
-            print(x, file=sys.stderr)
-
-    def __init__(self, fpga, fmc=0):
-        self.quiet = True
+    def __init__(self, fpga, fmc=0, logger=None):
+        self.logger = logger or logging.getLogger(__name__)
         self.fpga = fpga
         self.fmc = fmc
         self.spi_ctrl_reg = "ads5296_spi_controller%d" % fmc
 
     def init(self, cs):
         self.reset(cs)
-        print("CS:%d 0x0 (wrote 1) "%cs, hex(self.read_spi(0, cs)), file=sys.stderr)
+        self.logger.debug("CS:%d 0x0 (wrote 1) read 0x%x" % (cs, self.read_spi(0, cs)))
         self.write_spi(0x0F, 0x0400, cs) # power down pin partial
-        print("CS:%d 0x0f (wrote 0x0400)"%cs, hex(self.read_spi(0x0F, cs)), file=sys.stderr)
+        self.logger.debug("CS:%d 0x0f (wrote 0x0400) read 0x%x" % (cs, self.read_spi(0x0F, cs)))
         self.write_spi(0x07, 0x0001, cs) # enable interleave
-        print("CS:%d 0x07 (wrote 0x0001)"%cs, hex(self.read_spi(0x07, cs)), file=sys.stderr)
+        self.logger.debug("CS:%d 0x07 (wrote 0x0001) read 0x%x" % (cs, self.read_spi(0x07, cs)))
         #self.write_spi(0x42, 0x8000, cs) # DDR phase
-        #print("CS:%d"%cs, hex(self.read_spi(0x42, cs)))
+        #self.logger.debug("CS:%d"%cs, hex(self.read_spi(0x42, cs)))
         self.write_spi(0x46, 0x8104, cs) # 10b serialization, LSB first, 2's complement, DDR
-        #self.write_spi(0x46, 0x8100, cs) # 10b serialization, LSB first, offset binary, DDR
-        print("CS:%d 0x46 (wrote 0x8104)"%cs, hex(self.read_spi(0x46, cs)), file=sys.stderr)
+        self.logger.debug("CS:%d 0x46 (wrote 0x8104) read 0x%x" % (cs, self.read_spi(0x46, cs)))
         self.write_spi(0x40, 0x8000, cs) # input selection
-        print("CS:%d 0x40 (wrote 0x8000)"%cs, hex(self.read_spi(0x40, cs)), file=sys.stderr)
+        self.logger.debug("CS:%d 0x40 (wrote 0x8000) 0x%x" %(cs, self.read_spi(0x40, cs)))
         self.write_spi(0x25, 0x8000, cs) # Enable external sync
-        print("CS:%d 0x25 (wrote 0x8000)"%cs, hex(self.read_spi(0x25, cs)), file=sys.stderr)
-        print("Enabling VTC on IDELAYs", file=sys.stderr)
+        self.logger.debug("CS:%d 0x25 (wrote 0x8000) 0x%x" % (cs, self.read_spi(0x25, cs)))
+        self.logger.debug("Enabling VTC on IDELAYs")
         self.enable_vtc_data(range(8), cs)
         self.enable_vtc_fclk(cs)
+
+    def is_connected(self):
+        """
+        Read the reset register for all chip selects. If it is not 0x0, assume this
+        chip isn't present. Returns an 8 element boolean array, element i is True
+        if chip select i responded correctly to the i2c read.
+        """
+        rv = []
+        for cs in range(8):
+            rv += [self.read_spi(0, cs) == 0]
+        return rv
 
     def get_fclk_err_cnt(self, board):
         return self._read_ctrl(7, board)
@@ -246,10 +104,10 @@ class ADS5296fw():
             c0 = self.get_fclk_err_cnt(board)
             c1 = self.get_fclk_err_cnt(board)
             if c1 < c0:
-                print("!!!!!", c0, c1)
+                self.logger.warning("Error count went backwards!", c0, c1)
                 c1 += 2**32
             errs += [c1 - c0]
-            print("FCLK cal: %d: %d errs" % (i, errs[-1]), file=sys.stderr)
+            self.logger.debug("FCLK cal: %d: %d errs" % (i, errs[-1]))
         slack = []
         for i in range(NSTEPS):
             #count number of zeros before this slot
@@ -425,7 +283,8 @@ class ADS5296fw():
         elif mode == "data":
             val = 0b000
         else:
-            print("Error, test mode not understood. Try 'ramp', 'toggle', 'data', or 'constant'")
+            self.logger.error("Error, test mode not understood. Try 'ramp', 'toggle', 'data', or 'constant'")
+            return
         val0 = val0 << 2
         val1 = val1 << 2
         self.write_spi(0x26, (val0 & 0x3ff) << 6, cs)
@@ -466,7 +325,7 @@ class ADS5296fw():
         # verify that the SPI transaction completed, and was ack'd
         # by the wishbone core.
         #self.print("WB writing 0x%x to offset 0x%x" % (data, offset))
-        self.fpga.write_int(self.spi_ctrl_reg, data, word_offset=offset)
+        self.fpga.write_int(self.spi_ctrl_reg, data, word_offset=offset, blindwrite=True)
 
     def _read(self, offset=0):
         return self.fpga.read_uint(self.spi_ctrl_reg, word_offset=offset)
@@ -483,12 +342,12 @@ class ADS5296fw():
             return readback
 
     def write_spi(self, addr, data, chip, readback=True):
-        self.print("Writing 0x%x to address 0x%x, CS:0x%x" % (data, addr, chip))
+        self.logger.debug("Writing 0x%x to address 0x%x, CS:0x%x" % (data, addr, chip))
         self.blindwrite_spi(addr, data, chip)
         readback_data = self.read_spi(addr, chip)
-        self.print("readback: 0x%x" % readback_data)
+        self.logger.debug("readback: 0x%x" % readback_data)
         if readback and readback_data != data:
-            print("WARNING >>>> SPI readback error (chip %d, addr 0x%x)" % (chip, addr))
+            self.logger.warning("WARNING >>>> SPI readback error (chip %d, addr 0x%x)" % (chip, addr))
         return readback_data
 
     def read_clk_rates(self, board):
