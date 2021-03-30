@@ -44,22 +44,25 @@ class ADS5296fw():
         self.fmc = fmc
         self.spi_ctrl_reg = "ads5296_spi_controller%d" % fmc
 
+    def _desperate_debug(self, message):
+        self.logger.log(logging.DEBUG-1, message)
+
     def init(self, cs):
         self.reset(cs)
-        self.logger.debug("CS:%d 0x0 (wrote 1) read 0x%x" % (cs, self.read_spi(0, cs)))
+        self._desperate_debug("CS:%d 0x0 (wrote 1) read 0x%x" % (cs, self.read_spi(0, cs)))
         self.write_spi(0x0F, 0x0400, cs) # power down pin partial
-        self.logger.debug("CS:%d 0x0f (wrote 0x0400) read 0x%x" % (cs, self.read_spi(0x0F, cs)))
+        self._desperate_debug("CS:%d 0x0f (wrote 0x0400) read 0x%x" % (cs, self.read_spi(0x0F, cs)))
         self.write_spi(0x07, 0x0001, cs) # enable interleave
-        self.logger.debug("CS:%d 0x07 (wrote 0x0001) read 0x%x" % (cs, self.read_spi(0x07, cs)))
+        self._desperate_debug("CS:%d 0x07 (wrote 0x0001) read 0x%x" % (cs, self.read_spi(0x07, cs)))
         #self.write_spi(0x42, 0x8000, cs) # DDR phase
-        #self.logger.debug("CS:%d"%cs, hex(self.read_spi(0x42, cs)))
+        #self.logger._desperate_debug("CS:%d"%cs, hex(self.read_spi(0x42, cs)))
         self.write_spi(0x46, 0x8104, cs) # 10b serialization, LSB first, 2's complement, DDR
-        self.logger.debug("CS:%d 0x46 (wrote 0x8104) read 0x%x" % (cs, self.read_spi(0x46, cs)))
+        self._desperate_debug("CS:%d 0x46 (wrote 0x8104) read 0x%x" % (cs, self.read_spi(0x46, cs)))
         self.write_spi(0x40, 0x8000, cs) # input selection
-        self.logger.debug("CS:%d 0x40 (wrote 0x8000) 0x%x" %(cs, self.read_spi(0x40, cs)))
+        self._desperate_debug("CS:%d 0x40 (wrote 0x8000) 0x%x" %(cs, self.read_spi(0x40, cs)))
         self.write_spi(0x25, 0x8000, cs) # Enable external sync
-        self.logger.debug("CS:%d 0x25 (wrote 0x8000) 0x%x" % (cs, self.read_spi(0x25, cs)))
-        self.logger.debug("Enabling VTC on IDELAYs")
+        self._desperate_debug("CS:%d 0x25 (wrote 0x8000) 0x%x" % (cs, self.read_spi(0x25, cs)))
+        self._desperate_debug("Enabling VTC on IDELAYs")
         self.enable_vtc_data(range(8), cs)
         self.enable_vtc_fclk(cs)
 
@@ -342,12 +345,12 @@ class ADS5296fw():
             return readback
 
     def write_spi(self, addr, data, chip, readback=True):
-        self.logger.debug("Writing 0x%x to address 0x%x, CS:0x%x" % (data, addr, chip))
+        self._desperate_debug("FMC %d: Writing 0x%x to address 0x%x, CS:0x%x" % (self.fmc, data, addr, chip))
         self.blindwrite_spi(addr, data, chip)
         readback_data = self.read_spi(addr, chip)
-        self.logger.debug("readback: 0x%x" % readback_data)
+        self._desperate_debug("FMC %d: readback: 0x%x" % (self.fmc, readback_data))
         if readback and readback_data != data:
-            self.logger.warning("WARNING >>>> SPI readback error (chip %d, addr 0x%x)" % (chip, addr))
+            self.logger.warning("WARNING >>>> SPI readback error (FMC %d, chip %d, addr 0x%x)" % (self.fmc, chip, addr))
         return readback_data
 
     def read_clk_rates(self, board):
