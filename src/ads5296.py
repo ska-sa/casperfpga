@@ -35,6 +35,7 @@ def print_waveforms(sclk, mosi, cs):
     print("SCLK: %s" % sclk_str)
     print("MOSI: %s" % mosi_str)
     print("CS  : %s" % cs_str)
+
             
         
 class ADS5296fw():
@@ -79,6 +80,12 @@ class ADS5296fw():
 
     def get_fclk_err_cnt(self, board):
         return self._read_ctrl(7, board)
+
+    def get_version(self):
+        """
+        Read and return the board's version number.
+        """
+        return self._read_ctrl(offset=17, board=0)
 
     def bitslip(self, channel, board):
         self._write_ctrl(0, 15, board)
