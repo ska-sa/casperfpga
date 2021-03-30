@@ -297,6 +297,52 @@ class TapcpTransport(Transport):
 
         return head_loc, prog_loc
 
+    def write_to_flash(self, payload, address):
+        """
+        Write a binary string to flash in blocks, performing readbacks/retries after each block.
+        If you wish to write the bianry contained in an fpg file, use
+        `fpgheader, bin, md5 = self._extract_bitstream(fpgfilename)`
+
+        Parameters:
+            payload : Binary string to be written to flash
+            address (int) : Flash address to which to write
+
+        Returns:
+            Address of next available flash sector. I.e., the next address you can write to without messing
+            up what has just been written
+        """
+        old_timeout = self.timeout
+        self.logger.debug("Old timeout was %f" % old_timeout)
+        self.logger.debug("Setting new timeout to 1.5 seconds")
+        self.timeout = 1.5
+        complete_blocks = len(payload) // FLASH_SECTOR_SIZE
+        trailing_bytes = len(payload) % FLASH_SECTOR_SIZE
+        for i in progressbar.progressbar(range(complete_blocks)):
+            self.logger.debug("block %d of %d: writing %d bytes to address 0x%x:" % (i+1, complete_blocks, len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE]), address+i*FLASH_SECTOR_SIZE))
+            self.blindwrite('/flash', payload[i*FLASH_SECTOR_SIZE: (i+1)*FLASH_SECTOR_SIZE], offset=address+i*FLASH_SECTOR_SIZE)
+            readback = self.read('/flash', len(payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE]), offset=address+i*FLASH_SECTOR_SIZE)
+            if payload[i*FLASH_SECTOR_SIZE : (i+1)*FLASH_SECTOR_SIZE] != readback:
+                self.logger.error("Readback of flash failed!")
+                raise RuntimeError("Readback of flash failed!")
+        # Write the not-complete last sector (if any)
+        if trailing_bytes:
+            self.logger.debug("writing trailing %d bytes" % trailing_bytes)
+            last_offset = complete_blocks * FLASH_SECTOR_SIZE
+            self.blindwrite('/flash', payload[last_offset :], offset=address+last_offset)
+            readback = self.read('/flash', len(payload[last_offset :]), offset=address+last_offset)
+            if payload[last_offset :] != readback:
+                raise RuntimeError("Readback of flash failed!")
+
+        self.logger.debug("Returning timeout to %f" % old_timeout)
+        self.timeout = old_timeout
+
+        if trailing_bytes:
+            next_avail_loc = (complete_blocks + 1) * FLASH_SECTOR_SIZE
+        else:
+            next_avail_loc = complete_blocks * FLASH_SECTOR_SIZE
+        return next_avail_loc
+
+
     def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True, force=False):
         user_flash_loc = self.get_user_flash_loc()
         # Flash writes can take a long time, due to ~1s erase cycle
