@@ -328,6 +328,10 @@ class CasperFpga(object):
                 self._detect_little_endianness()
             except:
                 pass
+            
+            return True
+        else:
+            return False
 
     def is_connected(self, **kwargs):
         """
