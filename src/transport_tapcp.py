@@ -345,7 +345,7 @@ class TapcpTransport(Transport):
             next_avail_loc = (complete_blocks + 1) * FLASH_SECTOR_SIZE
         else:
             next_avail_loc = complete_blocks * FLASH_SECTOR_SIZE
-        return next_avail_loc
+        return address + next_avail_loc
 
 
     def upload_to_ram_and_program(self, filename, port=None, timeout=None, wait_complete=True, force=False):
