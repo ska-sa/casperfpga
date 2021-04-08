@@ -13,18 +13,22 @@ __date__ = 'June 2017'
 
 
 LOGGER = logging.getLogger(__name__)
-TFTPY = logging.getLogger('tftpy')
 
 FLASH_SECTOR_SIZE = 0x10000
 
 
-def set_log_level(level):
-    LOGGER.setLevel(level)
-    #TFTPY.setLevel(level)
-
-def get_log_level():
-    #return min(TFTPY.getEffectiveLevel(),LOGGER.getEffectiveLevel())
-    return LOGGER.getEffectiveLevel()
+def set_tftpy_log_level(level):
+    logger_names = [
+        'tftpy.TftpClient',
+        'tftpy.TftpContext',
+        'tftpy.TftpPacketFactory',
+        'tftpy.TftpPacketTypes',
+        'tftpy.TftpServer',
+        'tftpy.TftpStates',
+    ]
+    for logger_name in logger_names:
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(level)
 
 
 def get_core_info_payload(payload_str):
@@ -84,6 +88,7 @@ class TapcpTransport(Transport):
             import tftpy
             global TFTPY
             TFTPY = tftpy
+            set_tftpy_log_level(logging.CRITICAL)
         except ImportError:
             raise ImportError('You need to install tftpy to use TapcpTransport')
         
@@ -126,13 +131,13 @@ class TapcpTransport(Transport):
         # Temporarily turn off logging so if tftp doesn't respond
         # there's no error. Remember the existing log level so that
         # it can be re-set afterwards if tftp connects ok.
-        log_level = get_log_level()
-        set_log_level(logging.CRITICAL)
+        log_level = self.logger.getEffectiveLevel()
+        self.logger.setLevel(logging.CRITICAL)
         if board.is_connected():
-            set_log_level(log_level)
+            self.logger.setLevel(log_level)
             self.logger.debug('%s seems to be a Tapcp host' % host_ip)
             return True
-        LOGGER.debug("{} not a Tapcp host".format(host_ip))
+        self.logger.debug("{} not a Tapcp host".format(host_ip))
         return False
 
     @staticmethod
