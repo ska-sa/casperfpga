@@ -7,6 +7,7 @@ import time
 import progressbar
 
 from .transport import Transport
+from .utils import parse_fpg
 
 __author__ = 'jackh'
 __date__ = 'June 2017'
@@ -272,6 +273,23 @@ class TapcpTransport(Transport):
                  metadict[args[0].decode()] = args[1].decode()
 
         return metadict
+
+    def get_system_information_from_transport(self):
+        """
+        Read the fpg information from flash. Warning: this might not necessarily
+        reflect what firmware the FPGA is actually running.
+        """
+        meta = self.get_metadata()
+        try:
+            header_length = int(meta["header_length"])
+        except:
+            return None, None
+        try:
+            header_start = int(meta["header_start"])
+        except:
+            return None, None
+        fpgbuf = BytesIO(self.read("/flash", header_length, offset=header_start))
+        return None, (parse_fpg(fpgbuf, isbuf=True))
 
 
     def _update_metadata(self,filename,hlen,plen,md5):

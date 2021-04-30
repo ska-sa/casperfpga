@@ -641,7 +641,7 @@ class CasperFpga(object):
             except AttributeError:  # the device may not have an update function
                 pass
 
-    def _create_casper_device_by_regname(device_dict):
+    def _create_casper_device_by_regname(self, device_dict):
         if 'sysmon' in device_dict:
             self.sensors = sysmon.Sysmon(self)
 
