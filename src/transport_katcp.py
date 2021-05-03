@@ -257,7 +257,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
 
         while retries == 0 or (require_ok and retries < max_retries and (reply.arguments[0] != katcp.Message.OK)):
             if retries > 0:
-                time.delay(retry_delay_s)
+                time.sleep(retry_delay_s)
             reply, informs = self.blocking_request(request, timeout=request_timeout)
             retries += 1
         
