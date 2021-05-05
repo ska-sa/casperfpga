@@ -101,6 +101,21 @@ class ADS5296fw():
             clksel = 1
         self._write_ctrl((clksel << 8) + reset_state, 9, board)
 
+    def set_bitslip_index(self, index, board):
+        assert index <= 4
+        self._write_ctrl(index, 18, board)
+
+    def get_bitslip_index(self, board):
+        return self._read_ctrl(18, board)
+
+    def increment_bitslip_index(self, board):
+        v = self.get_bitslip_index(board)
+        self.set_bitslip_index((v+1) % 5, board)
+
+    def decrement_bitslip_index(self, board):
+        v = self.get_bitslip_index(board)
+        self.set_bitslip_index((v-1) % 5, board)
+
     def calibrate_fclk(self, board, apply_to_fclk=True, apply_to_data=True):
         NTAPS = 512
         STEP_SIZE = 4
