@@ -11,9 +11,9 @@ from mmap import mmap, PROT_READ, PROT_WRITE, MAP_SHARED
 AXIL_DEV = "/dev/xdma0_user"
 # AXI -> PCIe offset defined in firmware block diagram. PCI transactions
 # on address N get translated to AXI transactions on address N+AXIL_PCI_ADDR_TRANSLATION
-AXIL_PCI_ADDR_TRANSLATION = 0x10000000
+AXIL_PCI_ADDR_TRANSLATION = 0x00000000
 # Size of AXI-lite memory to map
-MAP_SIZE = 1024*1024
+MAP_SIZE = 8*1024*1024
 # AXI Streaming device for uploading bitstreams
 AXIS_DEV = "/dev/xdma0_h2c_1"
 

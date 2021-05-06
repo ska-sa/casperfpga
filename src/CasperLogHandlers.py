@@ -241,7 +241,7 @@ def configure_console_logging(logger_entity, console_handler_name=None):
     # Check if a log-handler with the specified name already exists
     if console_handler_name is None:
         # Use the name of the logger specified
-        if logger_entity.name is None or logger_entity.name is '':
+        if logger_entity.name is None or logger_entity.name == '':
             # Problem!
             errmsg = 'Cannot have a logger without a name!'
             LOGGER.error(errmsg)
