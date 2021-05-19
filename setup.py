@@ -47,11 +47,11 @@ setuptools.setup(
     long_description_content_type='text/markdown',
     # Specify version in-line here
     install_requires=[
-        'katcp>=0.6.2',
-        'numpy<1.17',
+        'katcp==0.6.2',
+        'numpy==1.16',
         'odict',
         'setuptools',
-        'tornado<5',
+        'tornado==4.3',
     ],
     packages=['casperfpga'],
     package_dir={'casperfpga': 'src'},
