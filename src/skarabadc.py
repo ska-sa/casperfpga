@@ -75,7 +75,7 @@ class SkarabAdc(object):
         A neater function call to obtain the
         SKARAB ADC's Embedded Software Version
         :param:
-        :return: Tuple - (int, int) - (major_version, minor_version)
+        :return: Tuple - (int, int) - (major_version,minor_version)
         """
 
         self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.ADC_FIRMWARE_MAJOR_VERSION_REG)
