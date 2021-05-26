@@ -176,6 +176,7 @@ class SkarabAdc(object):
     def configure_skarab_adc_ddcs(self, channel, ddc0_centre_frequency = 1e9, ddc1_centre_frequency = 0, dual_band_mode_enable = False, real_ddc_output_enable=False, print_actual_frequency=False):
         """
         Configure the DDCs of the SKARAB ADC board.
+        Note that the Nyquist zone is also set automatically based on the chosen centre frequency.
         
         :param channel: Index of ADC channel (0 to 3)
         :type channel: int
@@ -675,7 +676,7 @@ class SkarabAdc(object):
             major_version = skarab_adcs[i].parent.transport.read_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)[0]
             skarab_adcs[i].parent.transport.write_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.ADC_FIRMWARE_MINOR_VERSION_REG)
             minor_version = skarab_adcs[i].parent.transport.read_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)[0]
-            if not (major_version==1 and minor_version>=7):
+            if not (major_version==2 and minor_version>=0):
                 print(str("sync_skarab_adc ERROR: SKARAB ADC " + str(i) +  " not programmed with correct software version"))
                 exit()
 
