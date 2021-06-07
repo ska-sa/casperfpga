@@ -314,6 +314,7 @@ class ADS5296fw():
         # set pattern selection
         # 1<<15 enables the external sync enable bit
         self.write_spi(0x25, (1<<15) + (val<<4) + ((val1 >> 10)<<2) + (val0 >> 10), cs)
+        self.read_spi(0x26, cs) #TODO. After reading address 0x25, future reads of some addresses return 0xff. ?!?!
     
     def reset(self, cs):
         self.write_spi(0, 1, cs, readback=False) # The reset register auto-clears
