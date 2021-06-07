@@ -95,10 +95,7 @@ class ADS5296fw():
     def set_clock_source(self, source, board):
         x = self._read_ctrl(9, board)
         reset_state = x & 0xff
-        if source == board:
-            clksel = 0
-        else:
-            clksel = 1
+        clksel = source
         self._write_ctrl((clksel << 8) + reset_state, 9, board)
 
     def set_bitslip_index(self, index, board):
