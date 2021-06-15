@@ -1,5 +1,5 @@
 import time,numpy as np,logging,struct
-from i2c import I2C_DEVICE
+from .i2c import I2C_DEVICE
 
 class LTC2990(I2C_DEVICE):
     """ Quad I2C Voltage, Current and Temperature Monitor """
@@ -357,7 +357,7 @@ class INA219(I2C_DEVICE):
 
     def _get(self, data, mask):
         data = data & mask
-        return data / (mask & -mask)
+        return data // (mask & -mask)
 
     def _getMask(self, dicts, name):
         for rid in dicts:
@@ -371,6 +371,18 @@ class INA219(I2C_DEVICE):
     def read(self,reg=None,length=2):
         msb, lsb = self.itf.read(self.addr,reg,length)
         return (msb << 8) | lsb
+
+    def readCurrent(self, r):
+        """ Read current by reading voltage
+            over shunt resistor and applying
+            Ohm's law.
+
+            r : resistance of shunt resistor
+
+            returns: Current in Amps
+        """
+        v = self.readVolt('shunt')
+        return v / r
 
     def readVolt(self,name):
         """ Read Voltage
