@@ -310,3 +310,54 @@ class RFDC(object):
       print(i.arguments[0].decode())
 
     return True
+
+  def get_dsa(self):
+    """
+    Reports digital step attenuator (DSA) values for all enabled ADCs and ADC Blocks
+
+    Returns:
+      True when completes
+
+    Raises:
+      KatcpRequestFail if KatcpTransport encounters an error
+    """
+    t = self.parent.transport
+
+    reply, informs = t.katcprequest(name='rfdc-get-dsa', request_timeout=t._timeout)
+    for i in informs:
+      print(i.arguments[0].decode())
+
+    return True
+
+  def set_dsa(self, ntile, nblk, atten_dB):
+    """
+    Set the digital step attenuator (DSA) of tile "ntile" and adc block "nblk" to the value specified by
+    atten_dB. After write the attenuation value is read and displayed to show the actual value. If
+    a tile/blk pair result in a disabled a message is printed showing the pair as disabled and nothing
+    is done. For now, tbs and the rfdc driver handles much of the error handling.
+
+    ES1 silicon can command attenuation levels from 0-11 dB with a step of 0.5 dB. Production silicon
+    can command to levels 0-27 dB with a step of 1.0 dB.
+
+    See PG 269 for more details on the DSA in the RFDC.
+
+    Args:
+      ntile (int): tile index of target block to apply attenuation, in the range (0-3)
+      nblk  (int): block index of target adc to apply attenuation, must be in the range (0- NUM_BLKS)
+      atten_dB (float): requested attenuation level
+
+    Returns:
+      True when completes
+
+    Raises:
+      KatcpRequestFail if KatcpTransport encounters an error
+    """
+    t = self.parent.transport
+
+    args = (ntile, nblk, atten_dB,)
+    reply, informs = t.katcprequest(name='rfdc-set-dsa', request_timeout=t._timeout, request_args=args)
+
+    for i in informs:
+      print(i.arguments[0].decode())
+
+    return True
