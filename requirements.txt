@@ -1,8 +1,13 @@
 future
-ipython
 katcp
-numpy
+numpy<=1.18
 odict
 tornado<5,>=4.3
 redis
 tftpy==0.8.0
+progressbar2
+#ipython reqs for py3.5
+traitlets<5
+jedi<=0.16
+parso<=0.6.1
+ipython<7

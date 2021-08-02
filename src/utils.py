@@ -72,37 +72,35 @@ def get_hostname(**kwargs):
     return host, bitstream
 
 
-def parse_fpg(filename):
+def parse_fpg(filename, isbuf=False):
     """
     Read the meta information from the FPG file.
 
     :param filename: the name of the fpg file to parse
+    :param isbuf: If True, the filename is not actually a name, it is a
+        BytesIO buffer.
     :return: device info dictionary, memory map info (coreinfo.tab) dictionary
     """
 
-    is_p2 = sys.version_info[0] < 3
 
     LOGGER.debug('Parsing file %s for system information' % filename)
     if filename is not None:
-        fptr = open(filename, 'r')
-        if is_p2:
-            firstline = fptr.readline().decode('latin-1').strip().rstrip('\n')
+        if not isbuf:
+            fptr = open(filename, 'rb')
         else:
-            firstline = fptr.buffer.readline().decode('latin-1').strip().rstrip('\n')
+            fptr = filename
+        firstline = fptr.readline().decode('latin-1').strip().rstrip('\n')
         if firstline != '#!/bin/kcpfpg':
             fptr.close()
             raise RuntimeError('%s does not look like an fpg file we can '
                                'parse.' % filename)
     else:
         raise IOError('No such file %s' % filename)
+
     memorydict = {}
     metalist = []
     while True:
-        if is_p2:
-            line = fptr.readline().decode('latin-1').strip().rstrip('\n')
-        else:
-            line = fptr.buffer.readline().decode('latin-1').strip().rstrip('\n')
-        #line = fptr.readline().strip().rstrip('\n')
+        line = fptr.readline().decode('latin-1').strip().rstrip('\n')
         if line.lstrip().rstrip() == '?quit':
             break
         elif line.startswith('?meta'):
