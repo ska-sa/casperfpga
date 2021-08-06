@@ -1,5 +1,6 @@
 import skarab_definitions as sd
 import os
+import time
 
 import IPython
 
@@ -12,7 +13,7 @@ class SkarabAdc(object):
             -> #TODO [Add readthedocs link here]
     """
 
-    def __init__(self, parent, device_name, device_info, initialise=False):
+    def __init__(self, parent, device_name, device_info, address, initialise=False):
         """
         Initialise SkarabAdc Object
         :param parent: Parent object creating the SkarabAdc Object
@@ -33,12 +34,15 @@ class SkarabAdc(object):
         self.logger = parent.logger
         self.name = device_name
         self.device_info = device_info
-        try:
-            self.mezzanine_site = int(device_info['mez'])
-        except KeyError:
-            self.mezzanine_site = 2
-
+        self.address = address
+        self.mezzanine_site = int(device_info['mez'])
         self.i2c_interface = self.mezzanine_site + 1
+        self.master_slave = device_info['sync_ms']
+        self.yb_type = 0
+        if self.device_info['tag'] == 'xps:skarab_adc4x3g_14':
+            self.yb_type = sd.YB_SKARAB_ADC4X3G_14
+        elif self.device_info['tag'] == 'xps:skarab_adc4x3g_14_byp':
+            self.yb_type = sd.YB_SKARAB_ADC4X3G_14_BYP
 
         if initialise:
             # Perform ADC PLL Sync
@@ -46,9 +50,8 @@ class SkarabAdc(object):
             self.logger.debug(debugmsg)
             self.perform_adc_pll_sync()
 
-
     @classmethod
-    def from_device_info(cls, parent, device_name, device_info, initialise=False, **kwargs):
+    def from_device_info(cls, parent, device_name, device_info, memorymap_dict, initialise=False, **kwargs):
         """
         Process device info and the memory map to get all the necessary info
         and return a SKARAB ADC instance.
@@ -60,17 +63,21 @@ class SkarabAdc(object):
         :param kwargs:
         :return:
         """
-        return cls(parent, device_name, device_info, initialise, **kwargs)
+        
+        # Get Yellow Block Wishbone Address
+        address = memorymap_dict[device_name]['address']
+        
+        return cls(parent, device_name, device_info, address, initialise, **kwargs)
             
-    
     # TODO: Make this a static method (somehow)
     def get_adc_embedded_software_version(self):
         """
         A neater function call to obtain the
         SKARAB ADC's Embedded Software Version
         :param:
-        :return: Tuple - (int, int) - (major_version, minor_version)
+        :return: Tuple - (int, int) - (major_version,minor_version)
         """
+
         self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.ADC_FIRMWARE_MAJOR_VERSION_REG)
         major_version = self.parent.transport.read_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
 
@@ -79,627 +86,835 @@ class SkarabAdc(object):
 
         return major_version[0], minor_version[0]
 
-
-    def enable_adc_ramp_data(self):
+    def write_skarab_adc_register(self, write_address, write_byte):
         """
-        Function used to configure the SKARAB ADC 4x3G-14
-        Mezzanine Module to produce a ramp patter
-        :param :
-        :return: Boolean - Success/Fail - True/False
-        """
-        try:
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5839, 0x00)
-
-            # Pattern Code for ChB: all_0=0x11, all_1=0x22,
-            #                       toggle(16h'AAAA/16h'5555)=0x33,
-            #                       Ramp=0x44, custom_single_pattern1=0x66,
-            #                       custom_double_pattern1&2=0x77
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5837, 0x44)
-
-            # Pattern Code for ChB: all_0=0x11, all_1=0x22,
-            #                       toggle(16h'AAAA/16h'5555)=0x33,
-            #                       Ramp=0x44, custom_single_pattern1=0x66,
-            #                       custom_double_pattern1&2=0x77
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5838, 0x44)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x01)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x03)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5039, 0x00)
-
-            # Pattern Code for ChA: all_0=0x11, all_1=0x22,
-            #                       toggle(16h'AAAA/16h'5555)=0x33,
-            #                       Ramp=0x44, custom_single_pattern1=0x66,
-            #                       custom_double_pattern1&2=0x77
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5037, 0x44)
-
-            # Pattern Code for ChA: all_0=0x11, all_1=0x22,
-            #                       toggle(16h'AAAA/16h'5555)=0x33,
-            #                       Ramp=0x44, custom_single_pattern1=0x66,
-            #                       custom_double_pattern1&2=0x77
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5038, 0x44)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x01)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x03)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
-
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5839, 0x00)
-
-            # Pattern Code for ChB: all_0=0x11, all_1=0x22,
-            #                       toggle(16h'AAAA/16h'5555)=0x33,
-            #                       Ramp=0x44, custom_single_pattern1=0x66,
-            #                       custom_double_pattern1&2=0x77
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5837, 0x44)
-
-            # Pattern Code for ChB: all_0=0x11, all_1=0x22,
-            #                       toggle(16h'AAAA/16h'5555)=0x33,
-            #                       Ramp=0x44, custom_single_pattern1=0x66,
-            #                       custom_double_pattern1&2=0x77
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5838, 0x44)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x01)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x03)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5039, 0x00)
-
-            # Pattern Code for ChA: all_0=0x11, all_1=0x22,
-            #                       toggle(16h'AAAA/16h'5555)=0x33,
-            #                       Ramp=0x44, custom_single_pattern1=0x66,
-            #                       custom_double_pattern1&2=0x77
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5037, 0x44)
-
-            # Pattern Code for ChA: all_0=0x11, all_1=0x22,
-            #                       toggle(16h'AAAA/16h'5555)=0x33,
-            #                       Ramp=0x44, custom_single_pattern1=0x66,
-            #                       custom_double_pattern1&2=0x77
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5038, 0x44)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x01)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x03)
-            self.parent.transport.direct_spi_write(
-                    self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
-
-            return True
-        except Exception as exc:
-            self.logger.exception(exc)
-
-
-    
-
-
-    def configure_adc_ddc(self, adc_channel,
-                            real_ddc_output_enable=False,
-                            adc_sample_rate=3e9,
-                            decimation_rate=4,
-                            ddc0_centre_frequency=1e9,
-                            ddc1_centre_frequency=0,
-                            dual_band_mode=False):
-        """
-        Function used to configure the DDCs on the SKARAB ADC Mezzanine Card
-        :param adc_channel: ADC Channel to configure E [0, 3]
-        :type adc_channel: int
+        Write a byte to one of the registers of the SKARAB ADC board.
         
-        :param real_ddc_output_enable: Enable/Disable the real DDC output values
-        :type real_ddc_output_enable: Boolean - True/False
-        
-        :param adc_sample_rate: ADC Sample Rate in Hertz (Hz)
-        :type: float
-
-        :param decimation_rate: 
-        :type decimation_rate: int
-
-        :param ddc0_centre_frequency: Centre Frequency of the first
-                                    Digital Downconverter in Hertz (Hz)
-        :type ddc0_centre_frequency: float, default = 1e9
-
-        :param ddc1_centre_frequency: Centre Frequency of the second
-                                    Digital Downconverter in Hertz (Hz)
-        :type ddc1_centre_frequency: float, default = 0
-
-        :param dual_band_mode: Flag to instruct DDCs to operate in Dual-band Mode
-        :type dual_band_mode: Boolean - True/False
-
-        :return: None
+        :param write_address: Register address (0 to 255)
+        :type write_address: int
+        :param write_byte: Byte to write
+        :type write_byte: int
         """
-        #TODO: Find out what the ball-park figures are for these parameters!
+        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, write_address, write_byte)
+        
+    def read_skarab_adc_register(self, read_address):
+        """
+        Read a byte from one of the registers of the SKARAB ADC board.
+        
+        :param read_address: Register address (0 to 255)
+        :type read_address: int
+        :return read_byte: Byte read from register
+        :type read_byte: int
+        """
+        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, read_address)
+        read_byte = self.parent.transport.read_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)[0]
+        return read_byte
 
-        ADC = 0
-        channel = None
-        adc_channel_list = [0, 1, 2, 3]
+    def configure_skarab_adc(self, nyquist_zone):
+        """
+        Configure the SKARAB ADC board in a specific sample mode and for a specific Nyquist zone.
+        
+        :param nyquist_zone: Nyquist zone for which the SKARAB ADC board should be optimised:
+                            FIRST_NYQ_ZONE  (0): First Nyquist zone
+                            SECOND_NYQ_ZONE (1): Second Nyquist zone
+        :type nyquist_zone: int
+        """
 
-        if adc_channel not in adc_channel_list:
-            # ADC Channel specified is out of range (?)
-            errmsg = 'ADC Channel: {} is not valid (0,1,2,3)'.format(adc_channel)
-            self.logger.error(errmsg)
-            raise ValueError(errmsg)
-        # else: Should be legit from here
-        elif adc_channel == 0:
-            ADC = 0
-            channel = 'B'
-        elif adc_channel == 1:
-            ADC = 0
-            channel = 'A'
-        elif adc_channel == 2:
-            ADC = 1
-            channel = 'B'
-        elif adc_channel == 3:
-            ADC = 1
-            channel = 'A'
-        # else: Shouldn't need to accommodate for this case
+        # ---------------------------------------------------------------
+        # 1. ARGUMENT ERROR CHECKING
+        # ---------------------------------------------------------------
+        # 1.1 CHECK ARGUMENT TYPES
+        if (isinstance(nyquist_zone, int) == False):
+            print("SkarabAdc.configure_skarab_adc ERROR: nyquist_zone is not an int")
+            return
+        # 1.2 CHECK ARGUMENT VALUES
+        if not (nyquist_zone==sd.FIRST_NYQ_ZONE or nyquist_zone==sd.SECOND_NYQ_ZONE):
+            print("SkarabAdc.configure_skarab_adc ERROR: invalid value provided for nyquist_zone")
+            return
+        # 1.3 CHECK DEVICE TAG
+        if not (self.device_info['tag'] == 'xps:skarab_adc4x3g_14' or self.device_info['tag'] == 'xps:skarab_adc4x3g_14_byp'):
+            print("SkarabAdc.configure_skarab_adc ERROR: unknown Yellow Block tag:")
+            print(self.device_info['tag'])
+            return
+        
+        # --------------------------------------------------------------
+        # 2. DERIVE SAMPLE MODE FROM YELLOW BLOCK TAG
+        # --------------------------------------------------------------
+        device_tag = self.device_info['tag']
+        sample_mode = 0
+        if device_tag == 'xps:skarab_adc4x3g_14':
+            sample_mode = sd.DDCDEC4_3GSPS_SAMPLE_MODE
+        elif device_tag == 'xps:skarab_adc4x3g_14_byp':
+            sample_mode = sd.FULLBW_2P8GSPS_SAMPLE_MODE
+        
+        # --------------------------------------------------------------
+        # 3. SET SAMPLE MODE
+        # --------------------------------------------------------------
+        SkarabAdc.write_skarab_adc_register(self, sd.BOARD_SAMPLE_MODE_REG, sample_mode)
 
-        # Onwards!
-        # Configure ADC DDC
-        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 
-                                        sd.DECIMATION_RATE_REG, decimation_rate)
+        # --------------------------------------------------------------
+        # 4. SET NYQUIST ZONE
+        # --------------------------------------------------------------
+        SkarabAdc.write_skarab_adc_register(self, sd.NYQ_ZONE_REG, nyquist_zone)
+        
+        # --------------------------------------------------------------
+        # 5. TRIGGER BOARD CONFIGURATION
+        # --------------------------------------------------------------
+        SkarabAdc.write_skarab_adc_register(self, sd.RECONFIG_BOARD_REG, sd.RECONFIG_BOARD)
+        
+        # --------------------------------------------------------------
+        # 6. WAIT FOR CONFIGURATION COMPLETION
+        # --------------------------------------------------------------
+        timeout = 0
+        while ((SkarabAdc.read_skarab_adc_register(self, sd.RECONFIG_BOARD_REG) != 0) and (timeout < 100)): 
+            time.sleep(0.1)
+            timeout = timeout + 1
+        if timeout == 100:
+            print("SkarabAdc.configure_skarab_adc ERROR: Wait for configuration completion timeout")
+            return
 
-        # Calculate the NCO value
-        nco_register_setting = pow(2.0, 16.0) * (ddc0_centre_frequency / adc_sample_rate)
-        nco_register_setting = int(nco_register_setting)
-
-        write_byte = (nco_register_setting >> 8) & 0xFF
-        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-                                        sd.DDC0_NCO_SETTING_MSB_REG, write_byte)
-
-        write_byte = nco_register_setting & 0xFF
-        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-                                        sd.DDC0_NCO_SETTING_LSB_REG, write_byte)
-
-        # If in dual band mode, calculate the second NCO value
-        if dual_band_mode == True:
-            nco_register_setting = pow(2.0, 16.0) * (ddc1_centre_frequency / adc_sample_rate)
-            nco_register_setting = int(nco_register_setting)
-
-            write_byte = (nco_register_setting >> 8) & 0xFF
-            self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-                                            sd.DDC1_NCO_SETTING_MSB_REG, write_byte)
-
-            write_byte = nco_register_setting & 0xFF
-            self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-                                            sd.DDC1_NCO_SETTING_LSB_REG, write_byte)
-
-        # Trigger a configuration
-        write_byte = 0
+    def configure_skarab_adc_ddcs(self, channel, ddc0_centre_frequency = 1e9, ddc1_centre_frequency = 0, dual_band_mode_enable = False, real_ddc_output_enable=False, print_actual_frequency=False):
+        """
+        Configure the DDCs of the SKARAB ADC board.
+        Note that the Nyquist zone is also set automatically based on the chosen centre frequency.
+        
+        :param channel: Index of ADC channel (0 to 3)
+        :type channel: int
+        :param ddc0_centre_frequency: DDC 0 Centre Frequency
+        :type ddc0_centre_frequency: int
+        :param ddc1_centre_frequency: DDC 1 Centre Frequency
+        :type ddc1_centre_frequency: int
+        :param dual_band_mode_enable: Enable/Disable dual band mode
+        :type dual_band_mode_enable: boolean
+        :param real_ddc_output_enable: Enable/Disable real DDC output values
+        :type real_ddc_output_enable: boolean
+        :param print_actual_frequency: Enable/Disable printing of actual DDC frequency
+        :type print_actual_frequency: boolean
+        """
+        
+        # --------------------------------------------------
+        # 1. VARIABLES
+        # --------------------------------------------------
+        adc_sample_rate = 3e9 #NOTE: CURRENTLY HARDCODED
+        decimation_rate = 4    #NOTE: CURRENTLY HARDCODED
+        
+        # --------------------------------------------------
+        # 2. ARGUMENT ERROR CHECKING
+        # --------------------------------------------------
+        # 2.1 CHECK ARGUMENT TYPES
+        if (isinstance(channel, int) == False):
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: channel is not an int")
+            return
+        if (isinstance(ddc0_centre_frequency, int) == False):
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: ddc0_centre_frequency is not an int")
+            return
+        if (isinstance(ddc1_centre_frequency, int) == False):
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: ddc1_centre_frequency is not an int")
+            return
+        if (isinstance(dual_band_mode_enable, bool) == False):
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: dual_band_mode_enable is not a bool")
+            return
+        if (isinstance(real_ddc_output_enable, bool) == False):
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: real_ddc_output_enable is not a bool")
+            return
+        if (isinstance(print_actual_frequency, bool) == False):
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: print_actual_frequency is not a bool")
+            return
+        # 2.2 CHECK ARGUMENT VALUES
+        if not (channel >=0 and channel <= 3):
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: invalid channel provided")
+            return
+        if not (ddc0_centre_frequency >=0 and ddc0_centre_frequency <= adc_sample_rate):
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: Invalid DDC 0 frequency specified")
+            return
+        if not (ddc1_centre_frequency >=0 and ddc1_centre_frequency <= adc_sample_rate):
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: Invalid DDC 1 frequency specified")
+            return
+        
+        # --------------------------------------------------
+        # 3. CALCULATE NCO 0 VALUE
+        # --------------------------------------------------
+        nco_0_register_setting_f = pow(2.0, 16.0) * (ddc0_centre_frequency / adc_sample_rate)
+        nco_0_register_setting = int(round(nco_0_register_setting_f))
+        nco_0_register_setting_msb = (nco_0_register_setting >> 8) & 0xFF
+        nco_0_register_setting_lsb = nco_0_register_setting & 0xFF
+        
+        # --------------------------------------------------
+        # 4. CALCULATE NCO 1 VALUE
+        # --------------------------------------------------
+        nco_1_register_setting_f = pow(2.0, 16.0) * (ddc1_centre_frequency / adc_sample_rate)
+        nco_1_register_setting = int(round(nco_1_register_setting_f))
+        nco_1_register_setting_msb = (nco_1_register_setting >> 8) & 0xFF
+        nco_1_register_setting_lsb = nco_1_register_setting & 0xFF
+        
+        # --------------------------------------------------
+        # 5. PRINT ACTUAL DDC FREQUENCIES (DEBUGGING ONLY)
+        # --------------------------------------------------
+        ddc0_centre_frequency_actual = (float(nco_0_register_setting)/pow(2.0, 16.0))*float(adc_sample_rate)
+        ddc1_centre_frequency_actual = (float(nco_1_register_setting)/pow(2.0, 16.0))*float(adc_sample_rate)
+        # if print_actual_frequency == True:
+            # print(str("ADC channel " + str(channel) + " DDC 0 requested centre frequency (Hz): " + str(ddc0_centre_frequency)))
+            # print(str("ADC channel " + str(channel) + " DDC 0 actual centre frequency (Hz): "    + str(ddc0_centre_frequency_actual)))
+            # print(str("ADC channel " + str(channel) + " DDC 1 requested centre frequency (Hz): " + str(ddc1_centre_frequency)))
+            # print(str("ADC channel " + str(channel) + " DDC 1 actual centre frequency (Hz): "    + str(ddc1_centre_frequency_actual)))
+        
+        # --------------------------------------------------
+        # 6. SET DECIMATION RATE
+        # --------------------------------------------------
+        SkarabAdc.write_skarab_adc_register(self, sd.DECIMATION_RATE_REG, decimation_rate)
+        
+        # --------------------------------------------------
+        # 7. SET NCO 0 SETTINGS
+        # --------------------------------------------------
+        SkarabAdc.write_skarab_adc_register(self, sd.DDC0_NCO_SETTING_MSB_REG, nco_0_register_setting_msb)
+        SkarabAdc.write_skarab_adc_register(self, sd.DDC0_NCO_SETTING_LSB_REG, nco_0_register_setting_lsb)
+        
+        # -------------------------------------------------------
+        # 8. SET NCO 1 SETTINGS (IF REQUIRED)
+        # -------------------------------------------------------
+        if dual_band_mode_enable == True:
+            SkarabAdc.write_skarab_adc_register(self, sd.DDC1_NCO_SETTING_MSB_REG, nco_1_register_setting_msb)
+            SkarabAdc.write_skarab_adc_register(self, sd.DDC1_NCO_SETTING_LSB_REG, nco_1_register_setting_lsb)
+        
+        # -------------------------------------------------------
+        # 9. TRIGGER A CONFIGURATION
+        # -------------------------------------------------------
+        # 9.1 SELECT DDC CONTROL REG BYTE
+        ADC = int(channel/2)
+        adc_channel = ('B','A')[channel%2]
+        ddc_control_reg_byte = 0
         if ADC == 1:
-                write_byte = write_byte | sd.DDC_ADC_SELECT
-
-        if channel == 'B':
-                write_byte = write_byte | sd.DDC_CHANNEL_SELECT
-
-        if dual_band_mode == True:
-                write_byte = write_byte | sd.DUAL_BAND_ENABLE
-                
-        # 08/08/2018 ADD SUPPORT FOR REAL DDC OUTPUT SAMPLES    
+            ddc_control_reg_byte = ddc_control_reg_byte | sd.DDC_ADC_SELECT
+        if adc_channel == 'B':
+            ddc_control_reg_byte = ddc_control_reg_byte | sd.DDC_CHANNEL_SELECT
+        if dual_band_mode_enable == True:
+            ddc_control_reg_byte = ddc_control_reg_byte | sd.DUAL_BAND_ENABLE
         if real_ddc_output_enable == True:
-                write_byte = write_byte | sd.REAL_DDC_OUTPUT_SELECT
-
-        # Determine if in second nyquist zone
+            ddc_control_reg_byte = ddc_control_reg_byte | sd.REAL_DDC_OUTPUT_SELECT
         if (ddc0_centre_frequency > (adc_sample_rate / 2)):
-                write_byte = write_byte | sd.SECOND_NYQUIST_ZONE_SELECT
-
-        write_byte = write_byte | sd.UPDATE_DDC_CHANGE
-
-        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-                                        sd.DDC_CONTROL_REG, write_byte)
-
-        # Wait for the update to complete
-        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DDC_CONTROL_REG)
-        read_byte = self.parent.transport.read_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
-
+            ddc_control_reg_byte = ddc_control_reg_byte | sd.SECOND_NYQUIST_ZONE_SELECT
+        ddc_control_reg_byte = ddc_control_reg_byte | sd.UPDATE_DDC_CHANGE
+        # 9.2 SET DDC CONTROL REG
+        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DDC_CONTROL_REG, ddc_control_reg_byte)
+        
+        # --------------------------------------------------------------
+        # 10. WAIT FOR THE UPDATE TO COMPLETE
+        # --------------------------------------------------------------
         timeout = 0
-        while (((read_byte[0] & sd.UPDATE_DDC_CHANGE) != 0) and (timeout < 1000)):
-            self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DDC_CONTROL_REG)
-            read_byte = self.parent.transport.read_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
+        while (((SkarabAdc.read_skarab_adc_register(self, sd.DDC_CONTROL_REG) & sd.UPDATE_DDC_CHANGE) != 0) and (timeout < 1000)):
+            time.sleep(0.1)
             timeout = timeout + 1
-
         if timeout == 1000:
-            errmsg = 'Timeout waiting for configure DDC to complete!'
-            self.logger.error(errmsg)
-
-
-    def configure_adc_channel_gain(self, adc_channel, gain):
-        """
-        Function to configure the gain of each ADC Channel on the
-        SKARAB ADC Mezzanine Card
-        :param adc_channel: ADC channel whose gain to set
-        :type adc_channel: int E [0, 3]
-        :param gain: Gain value to be set
-        :type gain: int E [-6, 15] dB
-        :return: None
-        """
+            print("SkarabAdc.configure_skarab_adc_ddcs ERROR: Timeout waiting for DDC configuration to complete")
+            return
         
-        gain_channel = 0
-        if adc_channel == 0:
-            gain_channel = sd.ADC_GAIN_CHANNEL_0
-        elif adc_channel == 1:
-            gain_channel = sd.ADC_GAIN_CHANNEL_1
-        elif adc_channel == 2:
-            gain_channel = sd.ADC_GAIN_CHANNEL_2
-        else:
-            gain_channel = sd.ADC_GAIN_CHANNEL_3
+        # --------------------------------------------------------------
+        # 11. RETURN ACTUAL DDC FREQUENCIES
+        # --------------------------------------------------------------
+        return (ddc0_centre_frequency_actual, ddc1_centre_frequency_actual)
 
-        gain_control_word = (-1 * gain) + 15
-
-        write_byte = gain_channel | (gain_control_word << 2) | sd.UPDATE_GAIN
-
-        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-                                        sd.GAIN_CONTROL_REG, write_byte)
+    def set_skarab_adc_data_mode(self, data_mode):
+        """
+        Set the SKARAB ADC board data mode.
         
-        # This command requires a fourth field: bytes_to_write
-        # - Assuming the call above is the correct one
-        # self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-        #                                 sd.GAIN_CONTROL_REG)
+        :param data_mode: The data mode of SKARAB ADC board:
+                          ADC_DATA_MODE (0):  Default ADC sample data mode
+                          RAMP_DATA_MODE (1): Ramp pattern test mode
+                          TP_LAYER_DATA_MODE (2): Long transport layer test pattern mode according to section 5.1.6.3 of the JESD204B specification.
+        :type data_mode: int
+        """
 
-        read_byte = self.parent.transport.read_i2c(self.i2c_interface,
-                                                    sd.STM_I2C_DEVICE_ADDRESS, 1)
+        # ---------------------------------------------------------------
+        # 1. ARGUMENT ERROR CHECKING
+        # ---------------------------------------------------------------
+        # 1.1 CHECK ARGUMENT TYPE
+        if (isinstance(data_mode, int) == False):
+            print("SkarabAdc.set_skarab_adc_data_mode ERROR: data_mode is not an int")
+            return
+        # 1.2 CHECK ARGUMENT VALUE
+        if not (data_mode==sd.ADC_DATA_MODE or data_mode==sd.RAMP_DATA_MODE or data_mode==sd.TP_LAYER_DATA_MODE):
+            print("SkarabAdc.set_skarab_adc_data_mode ERROR: invalid value provided for data_mode")
+            return
+        # 1.3 CHECK DEVICE TAG
+        if not (self.device_info['tag'] == 'xps:skarab_adc4x3g_14' or self.device_info['tag'] == 'xps:skarab_adc4x3g_14_byp'):
+            print("SkarabAdc.set_skarab_adc_data_mode ERROR: unknown Yellow Block tag:")
+            print(self.device_info['tag'])
+            return
+        
+        # --------------------------------------------------------------
+        # 2. GET DEVICE TAG
+        # --------------------------------------------------------------
+        device_tag = self.device_info['tag']
 
+        # --------------------------------------------------------------
+        # 2. SET DATA MODE TO RAMP OR ADC
+        # --------------------------------------------------------------
+        if device_tag == 'xps:skarab_adc4x3g_14':
+            if data_mode == sd.RAMP_DATA_MODE:
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5839, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5837, 0x44) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5838, 0x44) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5039, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5037, 0x44) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5038, 0x44) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5839, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5837, 0x44) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5838, 0x44) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5039, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5037, 0x44) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5038, 0x44) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_CTRL_K, 0x80); 
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+            elif data_mode == sd.ADC_DATA_MODE:
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5839, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5837, 0x00) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5838, 0x00) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5039, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5037, 0x00) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5038, 0x00) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5839, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5837, 0x00) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5838, 0x00) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5039, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5037, 0x00) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5038, 0x00) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_CTRL_K, 0x80); 
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+            elif data_mode == sd.TP_LAYER_DATA_MODE:
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5839, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5837, 0x00) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5838, 0x00) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5039, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5037, 0x00) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x5038, 0x00) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5839, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5837, 0x00) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5838, 0x00) # Pattern Code for ChB: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x583A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5039, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5037, 0x00) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x5038, 0x00) # Pattern Code for ChA: all_0=0x11, all_1=0x22, toggle(16h'AAAA/16h'5555)=0x33, Ramp=0x44, custom_single_pattern1=0x66, custom_double_pattern1&2=0x77
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x01)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x03)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, 0x503A, 0x00)
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_CTRL_K, 0x90);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_CTRL_K, 0x90);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_CTRL_K, 0x90); 
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_CTRL_K, 0x90);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+            else:
+                print("SkarabAdc.set_skarab_adc_data_mode ERROR: Unknown SKARAB ADC board data mode")
+                return
+        elif device_tag == 'xps:skarab_adc4x3g_14_byp':
+            if data_mode == sd.RAMP_DATA_MODE:
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x01);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x01);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_CTRL_K, 0x80); 
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x01);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x01);
+            elif data_mode == sd.ADC_DATA_MODE:
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_CTRL_K, 0x80); 
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_CTRL_K, 0x80);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+            elif data_mode == sd.TP_LAYER_DATA_MODE:
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_CTRL_K, 0x90);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_CTRL_K, 0x90);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_LSB, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MID, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_DIGITAL_BANK_PAGE_SEL_MSB, 0x69);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_CTRL_K, 0x90); 
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_CTRL_K, 0x90);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_A_LINK_LAYER_TESTMODE, 0x00);
+                self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_JESD_CHAN_B_LINK_LAYER_TESTMODE, 0x00);
+            else:    
+                print("SkarabAdc.set_skarab_adc_data_mode ERROR: Unknown SKARAB ADC board data mode")
+                return
+
+    def set_skarab_adc_channel_gain(self, channel, gain):
+        """
+        Set the gain of the SKARAB ADC board amplifiers.
+        
+        :param channel: Index of ADC channel (0 to 3)
+        :type channel: int
+        :param gain: Gain of ADC channel (-6 to 15 (dB))
+        :type gain: int
+        """
+
+        # ---------------------------------------------------------------
+        # 1. ARGUMENT ERROR CHECKING
+        # ---------------------------------------------------------------
+        # 1.1 CHECK ARGUMENT TYPES
+        if (isinstance(channel, int) == False):
+            print("SkarabAdc.set_skarab_adc_channel_gain ERROR: channel is not an int")
+            return
+        if (isinstance(gain, int) == False):
+            print("SkarabAdc.set_skarab_adc_channel_gain ERROR: gain is not an int")
+            return
+        # 1.2 CHECK ARGUMENT VALUES
+        if not (channel >=0 and channel <= 3):
+            print("SkarabAdc.set_skarab_adc_channel_gain ERROR: invalid channel provided")
+            return
+        if not (gain >=-6 and gain <= 15):
+            print("SkarabAdc.set_skarab_adc_channel_gain ERROR: invalid gain provided")
+            return
+
+        # --------------------------------------------------------------
+        # 2. CALCULATE GAIN CONTROL BYTE
+        # --------------------------------------------------------------
+        gain_code = (-1 * gain) + 15
+        channel_code = 1 + channel - 2*(channel % 2)
+        gain_control_byte = channel_code | (gain_code << 2) | sd.UPDATE_GAIN
+
+        # --------------------------------------------------------------
+        # 3. TRIGGER GAIN UPDATE
+        # --------------------------------------------------------------
+        SkarabAdc.write_skarab_adc_register(self, sd.GAIN_CONTROL_REG, gain_control_byte)
+
+        # --------------------------------------------------------------
+        # 4. WAIT FOR GAIN UPDATE TO COMPLETE
+        # --------------------------------------------------------------
         timeout = 0
-        while ((read_byte[0] & sd.UPDATE_GAIN != 0) and (timeout < 1000)):
-            self.parent.transport.write_i2c(self.i2c_interface,
-                                            sd.STM_I2C_DEVICE_ADDRESS, sd.GAIN_CONTROL_REG)
-            read_byte = self.parent.transport.read_i2c(self.i2c_interface,
-                                                    sd.STM_I2C_DEVICE_ADDRESS, 1)
-        if timeout == 1000:
-            errmsg = 'Timeout waiting for ConfigureGainRequest to complete!'
-            self.logger.errmsg(errmsg)
-            
-    
-    def perform_adc_pll_sync(self):
-        """
-        Function used to synchronise the ADCs and PLL on the SKARAB ADC4x3G-14 mezzanine module.
-        After syncrhonisation is performed, ADC sampling begins.
-        
-        """
-        # Get embedded software version
-        major_version, minor_version = self.get_adc_embedded_software_version()
-        
-        # Synchronise PLL and ADC
-        self.parent.write_int('pll_sync_start_in', 0)
-        self.parent.write_int('adc_sync_start_in', 0)
-        self.parent.write_int('adc_trig', 0)    
-        
-        pll_loss_of_reference = False
-        synchronise_mezzanine = [False, False, False, False]
-        synchronise_mezzanine[self.mezzanine_site] = True
-
-        if (not ((major_version == sd.CURRENT_ADC_MAJOR_VERSION) 
-                and (minor_version < sd.CURRENT_ADC_MINOR_VERSION))):
-            # region Old(er) SKARAB ADC Firmware Version
-
-            # TO DO: Implement LVDS SYSREF
-            debugmsg = 'Synchronising PLL with LVDS SYSREF'
-            self.logger.debug(debugmsg)
-
-            for mezzanine in range(0, 4):
-                
-                debugmsg = 'Checking PLL loss of reference for mezzanine: {}'.format(mezzanine)
-                self.logger.debug(debugmsg)
-                
-                if synchronise_mezzanine[mezzanine]:
-
-                    self.parent.transport.write_i2c(self.i2c_interface,
-                                sd.STM_I2C_DEVICE_ADDRESS, sd.HOST_PLL_GPIO_CONTROL_REG)
-                    read_byte = self.parent.transport.read_i2c(self.i2c_interface,
-                                                                 sd.STM_I2C_DEVICE_ADDRESS, 1)
-
-                    if ((read_byte[0] & 0x01) == 0x01):
-                        # PLL reporting loss of reference
-                        pll_loss_of_reference = True
-                        errmsg = 'PLL reporting loss of reference'
-                        self.logger.error(errmsg)
-                        # And then?
-                    else:
-                        self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-                                                sd.PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xD1)
-                        self.parent.transport.direct_spi_write(self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-                                                sd.PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xD1)
-
-                        # Enable PLL SYNC
-                        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-                                                        sd.MEZ_CONTROL_REG, sd.ENABLE_PLL_SYNC)
-
-            # Only try to synchronise PLLs if all SKARAB ADC32RF45X2 mezzanines have reference
-            if pll_loss_of_reference == False:
-                # region PLL Loss of Reference == False 
-
-                # Synchronise HMC7044 first
-                debugmsg = 'Synchronising PLL'
-                self.logger.debug(debugmsg)
-
-                # Trigger a PLL SYNC signal from the MB firmware
-                self.parent.write_int('pll_sync_start_in', 0)
-                self.parent.write_int('pll_sync_start_in', 1)
-
-                # Wait for the PLL SYNC to complete
-                timeout = 0
-                read_reg = self.parent.read_int('pll_sync_complete_out')
-                while ((read_reg == 0) and (timeout < 100)):
-                    read_reg = self.parent.read_int('pll_sync_complete_out')
-                    timeout = timeout + 1
-
-                if timeout == 100:
-                    errmsg = 'Timeout waiting for PLL SYNC to complete'
-                    self.logger.error(errmsg)
-
-                for mezzanine in range(0, 4):
-                    if synchronise_mezzanine[mezzanine]:
-                        # Disable the PLL SYNC and wait for SYSREF outputs to be in phase
-                        debugmsg = 'Disabling ADC SYNC on mezzanine: {}'.format(mezzanine)
-                        self.logger.debug(debugmsg)
-
-                        self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS,
-                                                        sd.MEZ_CONTROL_REG, 0x0)
-
-                        spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
-                                                        sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
-                        
-                        timeout = 0
-                        while (((spi_read_word & sd.PLL_CLOCK_OUTPUT_PHASE_STATUS) == 0x0) and (timeout < 1000)):
-                            spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
-                                                            sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
-                            timeout = timeout + 1
-
-                        if timeout == 1000:
-                            errmsg = 'Timeout waiting for the mezzanine PLL outputs to be in phase'
-                            self.logger.error(errmsg)
-
-                        # Power up SYSREF input buffer on ADCs
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_MASTER_PDN_SYSREF, 0x00)
-
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_MASTER_PDN_SYSREF, 0x00)
-
-                        time.sleep(1)
-                        
-                        # Need to disable both at the same time so NCOs have same phase
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_DUAL_ADC, sd.ADC_MASTER_PDN_SYSREF, 0x10)
-                        
-                        # Disable SYSREF again
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-                            sd.PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xD0)
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-                            sd.PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xD0)
-
-                # endregion
-
-            # endregion
-        else:
-            # region Newer SKARAB ADC Firmware Version 
-            debugmsg = 'Synchronising PLL with LVPECL SYSREF'
-            self.logger.debug(debugmsg)
-            
-            # Check first to see if mezzanine has a reference clock
-            for mezzanine in range(0, 4):
-                debugmsg = 'Checking PLL loss of reference for mezzanine: {}'.format(mezzanine)
-                self.logger.debug(debugmsg)
-
-                if synchronise_mezzanine[mezzanine]:
-
-                    self.parent.transport.write_i2c(self.i2c_interface,
-                                    sd.STM_I2C_DEVICE_ADDRESS, sd.HOST_PLL_GPIO_CONTROL_REG)
-                    read_byte = self.parent.transport.read_i2c(self.i2c_interface,
-                                                            sd.STM_I2C_DEVICE_ADDRESS, 1)
-
-                    if ((read_byte[0] & 0x01) == 0x01):
-                        # PLL reporting loss of reference
-                        pll_loss_of_reference = True
-                        debugmsg = 'PLL reporting loss of reference'
-                        self.logger.debug(debugmsg)
-                    else:
-                        # Change the SYNC pin to SYNC source
-                        self.parent.transport.direct_spi_write(self.mezzanine_site,
-                                sd.SPI_DESTINATION_PLL, sd.PLL_GLOBAL_MODE_AND_ENABLE_CONTROL, 0x41)
-
-                        # Change SYSREF to pulse gen mode so don't generate any pulses yet
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-                            sd.PLL_CHANNEL_OUTPUT_3_CONTROL_FORCE_MUTE, 0x88)
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-                            sd.PLL_CHANNEL_OUTPUT_7_CONTROL_FORCE_MUTE, 0x88)
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-                            sd.PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xDD)
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_PLL,
-                            sd.PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xDD)
-
-                        # Enable PLL SYNC
-                        self.parent.transport.write_i2c(self.i2c_interface,
-                                sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, sd.ENABLE_PLL_SYNC)
-                
-            # Only try to synchronise PLLs if all self.parent ADC32RF45X2 mezzanines have reference
-            if pll_loss_of_reference == False:
-                # region PLL Loss of Reference == False 
-
-
-                # Synchronise HMC7044 first
-                debugmsg = 'Synchronising PLL'
-                self.logger.debug(debugmsg)
-
-                # Trigger a PLL SYNC signal from the MB firmware
-                self.parent.write_int('pll_sync_start_in', 0)
-                self.parent.write_int('pll_sync_start_in', 1)
-
-                # Wait for the PLL SYNC to complete
-                timeout = 0
-                read_reg = self.parent.read_int('pll_sync_complete_out')
-                while ((read_reg == 0) and (timeout < 100)):
-                    read_reg = self.parent.read_int('pll_sync_complete_out')
-                    timeout = timeout + 1
-
-                if timeout == 100:
-                    errmsg = 'Timeout waiting for PLL SYNC to complete'
-                    self.logger.debug(errmsg)
-
-                # Wait for the PLL to report valid SYNC status
-                for mezzanine in range(0, 4):
-                    debugmsg = 'Checking PLL SYNC status for mezzanine: {}'.format(mezzanine)
-                    self.logger.debug(debugmsg)
-                    
-                    if synchronise_mezzanine[mezzanine]:
-                        spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
-                                                        sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
-                        timeout = 0
-                        while (((spi_read_word & sd.PLL_CLOCK_OUTPUT_PHASE_STATUS) == 0x0) and (timeout < 1000)):
-                            spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
-                                                            sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
-                            timeout = timeout + 1
-
-                        if timeout == 1000:
-                            errmsg = 'Timeout waiting for the mezzanine PLL outputs to be in phase'
-                            self.logger.error(errmsg)
-
-                # Synchronise ADCs to SYSREF next
-                for mezzanine in range(0, 4):
-                    debugmsg = 'Using SYSREF to synchronise ADC on mezzanine: {}'.format(mezzanine)
-                    self.logger.debug(debugmsg)
-                    
-                    if synchronise_mezzanine[mezzanine]:
-                        # Change the SYNC pin to pulse generator
-                        self.parent.transport.direct_spi_write(self.mezzanine_site,
-                            sd.SPI_DESTINATION_PLL, PLL_GLOBAL_MODE_AND_ENABLE_CONTROL, 0x81)
-
-                        # Power up SYSREF input buffer on ADCs
-                        self.parent.transport.direct_spi_write(self.mezzanine_site,
-                            sd.SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
-                        self.parent.transport.direct_spi_write(self.mezzanine_site,
-                            sd.SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
-                        self.parent.transport.direct_spi_write(self.mezzanine_site,
-                            sd.SPI_DESTINATION_ADC_0, sd.ADC_MASTER_PDN_SYSREF, 0x00)
-
-                        self.parent.transport.direct_spi_write(self.mezzanine_site,
-                            sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
-                        self.parent.transport.direct_spi_write(self.mezzanine_site,
-                            sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
-                        self.parent.transport.direct_spi_write(self.mezzanine_site,
-                            sd.SPI_DESTINATION_ADC_1, sd.ADC_MASTER_PDN_SYSREF, 0x00)
-
-                # Trigger a PLL SYNC signal from the MB firmware
-                self.parent.write_int('pll_sync_start_in', 0)
-                self.parent.write_int('pll_sync_start_in', 1)
-
-                timeout = 0
-                read_reg = self.parent.read_int('pll_sync_complete_out')
-                while ((read_reg == 0) and (timeout < 1000)):
-                    read_reg = self.parent.read_int('pll_sync_complete_out')
-                    timeout = timeout + 1
-
-                if timeout == 1000:
-                    errmsg = 'Timeout waiting for PLL outputs to be in-phase'
-                    self.logger.error(errmsg)
-
-                for mezzanine in range(0, 4):
-                    debugmsg = 'Power down SYSREF bugger for ADC on mezzanine: {}'.format(mezzanine)
-                    self.logger.debug(debugmsg)
-
-                    if synchronise_mezzanine[mezzanine]:
-                        # Power down SYSREF input buffer on ADCs
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_MASTER_PDN_SYSREF, 0x10)
-                        self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_MASTER_PDN_SYSREF, 0x10)
-
-                # endregion
-
-            # endregion
-
-        # At this point, all the PLLs across all mezzanine sites should be in sync
-
-        # Enable the ADC SYNC
-        for mezzanine in range(0, 4):
-            if synchronise_mezzanine[mezzanine]:
-                debugmsg = 'Enabling ADC SYNC on mezzanine: {}'.format(mezzanine)
-                self.logger.debug(debugmsg)
-
-                self.parent.transport.write_i2c(
-                    self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, sd.ENABLE_ADC_SYNC)
-
-        # Trigger a ADC SYNC signal from the MB firmware
-        self.parent.write_int('adc_sync_start_in', 0)
-        self.parent.write_int('adc_sync_start_in', 1)
-
-        timeout = 0
-        read_reg = self.parent.read_int('adc_sync_complete_out')
-        while ((read_reg == 0) and (timeout < 1000)):
-            read_reg = self.parent.read_int('adc_sync_complete_out')
+        while (((SkarabAdc.read_skarab_adc_register(self, sd.GAIN_CONTROL_REG) & sd.UPDATE_GAIN) != 0) and (timeout < 100)):
+            time.sleep(0.1)
             timeout = timeout + 1
+        if timeout == 100:
+            print("SkarabAdc.set_skarab_adc_channel_gain ERROR: Wait for gain update completion timeout")
+            return
 
-        if timeout == 1000:
-            errmsg = 'Timeout waiting for ADC SYNC to complete'
-            self.logger.error(errmsg)
-
-        # Disable the ADC SYNC
-        for mezzanine in range(0, 4):
-            if synchronise_mezzanine[mezzanine]:
-                debugmsg = 'Disabling ADC SYNC on mezzanine'.format(mezzanine)
-                self.logger.debug(debugmsg)
-                self.parent.transport.write_i2c(self.i2c_interface, 
-                    sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, 0x0)
-
-
-    def get_status_register_values(self):
+    def reset_skarab_adc(self):
         """
-        Not Status Register *exactly*, but they seem to indicate
-        fundamental status of the ADC itself
-        :param:
-        :return: Dictionary
-                 - Key: Status-register Name,
-                 - Value: Status-register Value
+        Reset the SKARAB ADC board to its initial state (no sample data provided yet)
         """
+
+        # ---------------------------------------------------------------
+        # 1. GET WB BASE ADDRESS
+        # ---------------------------------------------------------------
+        wb_base_adr = self.address
+
+        # ---------------------------------------------------------------
+        # 2. RESET CORE
+        # ---------------------------------------------------------------
+        self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_ADC_SYNC_START      , 0)
+        self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_ADC_SYNC_PART2_START, 0)
+        self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_ADC_SYNC_PART3_START, 0)
+        self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_PLL_SYNC_START      , 0)
+        self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_PLL_PULSE_GEN_START , 0)
+        self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_MEZZANINE_RESET     , 0)
+        self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_RESET_CORE          , 1)
+        time.sleep(0.1)
+        self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_RESET_CORE          , 0)
+        time.sleep(0.1)
+
+    def print_status(self):
+        """
+        TODO
+        """
+
+        # ---------------------------------------------------------------
+        # 1. GET WB BASE ADDRESS
+        # ---------------------------------------------------------------
+        wb_base_adr = self.address
+
+        # ---------------------------------------------------------------
+        # 3. ADC STATUS REGISTER CHECK (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        adc0_status_out = (self.parent.transport.read_wishbone(wb_base_adr+sd.REGADR_RD_ADC0_STATUS)) & 0xFFBFFFFF
+        adc1_status_out = (self.parent.transport.read_wishbone(wb_base_adr+sd.REGADR_RD_ADC1_STATUS)) & 0xFFBFFFFF
+        adc2_status_out = (self.parent.transport.read_wishbone(wb_base_adr+sd.REGADR_RD_ADC2_STATUS)) & 0xFFBFFFFF
+        adc3_status_out = (self.parent.transport.read_wishbone(wb_base_adr+sd.REGADR_RD_ADC3_STATUS)) & 0xFFBFFFFF
+        print(str("ADC 0 STATUS REG: " + str(hex(adc0_status_out))))
+        print(str("ADC 1 STATUS REG: " + str(hex(adc1_status_out))))
+        print(str("ADC 2 STATUS REG: " + str(hex(adc2_status_out))))
+        print(str("ADC 3 STATUS REG: " + str(hex(adc3_status_out))))
+
+
+    def sync_skarab_adc(self, skarab_adc_slaves=[]):
+        """
+        Synchronise the SKARAB ADC board (master) so that the sample data of its four channels can be provided synchronously from its corresponding Yellow Block.
         
-        reg_names_list = ['adc0_data', 'sync_complete', 'data_val']
-        sreg_dict = {}
-        devices_list = self.parent.listdev()
+        A list of other SkarabAdc objects may also be provided so that each of their corresponding SKARAB ADC boards (slaves) can be synchronized to this SKARAB ADC board master. In this case, the sample data among all the SKARAB ADC boards (master + all slaves) will be provided synchronously from their corresponding Yellow Blocks. 
+        
+        :param skarab_adc_slaves: Optional list of SkarabAdc objects (for the corresponding SKARAB ADC board slaves)
+        :type skarab_adc_slaves: List of SkarabAdc objects
+        """
 
-        for device_name in devices_list:
-            for reg_name in reg_names_list:
-                if reg_name in device_name:
-                    sreg_dict[device_name] = None
+        # ---------------------------------------------------------------
+        # 1. ARGUMENT ERROR CHECKING
+        # ---------------------------------------------------------------
+        # 1.1 CHECK ARGUMENT TYPE
+        if (isinstance(skarab_adc_slaves, list) == False):
+            print("sync_skarab_adc ERROR: skarab_adc_slaves is not a list")
+            return
+        if (len(skarab_adc_slaves) > 0):
+            for i in range(len(skarab_adc_slaves)):
+                if (isinstance(skarab_adc_slaves[i], SkarabAdc) == False):
+                    print("sync_skarab_adc ERROR: skarab_adc_slaves needs to contain SkarabAdc objects")
+                    return
+        if self.master_slave != 'Master':
+            print("sync_skarab_adc ERROR: Only Master can perform sync")
+            return
 
-        for device_name in sreg_dict.keys():
-            sreg_dict[device_name] = self.parent.read_int(device_name)
+        # ---------------------------------------------------------------
+        # 2. GET SKARAB OBJECTS (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        skarab_adc_slaves_num = len(skarab_adc_slaves)
+        skarab_adc_num = 1 + skarab_adc_slaves_num
+        skarab_adcs = [None] * skarab_adc_num
+        skarab_adcs[0] = self
+        if skarab_adc_slaves_num > 0:
+            for i in range(skarab_adc_slaves_num):
+                skarab_adcs[i + 1] = skarab_adc_slaves[i]
 
-        return sreg_dict
+        # ---------------------------------------------------------------
+        # 3. EMBEDDED SOFTWARE VERSION CHECK (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Checking embedded software version...")
+        for i in range(skarab_adc_num):
+            skarab_adcs[i].parent.transport.write_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.ADC_FIRMWARE_MAJOR_VERSION_REG)
+            major_version = skarab_adcs[i].parent.transport.read_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)[0]
+            skarab_adcs[i].parent.transport.write_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.ADC_FIRMWARE_MINOR_VERSION_REG)
+            minor_version = skarab_adcs[i].parent.transport.read_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)[0]
+            if not (major_version==2 and minor_version>=0):
+                print(str("sync_skarab_adc ERROR: SKARAB ADC " + str(i) +  " not programmed with correct software version"))
+                exit()
 
+        # ---------------------------------------------------------------
+        # 4. RESET YELLOW BLOCK REGISTERS (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Resetting registers...")
+        for i in range(skarab_adc_num):
+            skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_ADC_SYNC_START      , 0)
+            skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_ADC_SYNC_PART2_START, 0)
+            skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_ADC_SYNC_PART3_START, 0)
+            skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_PLL_SYNC_START      , 0)
+            skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_PLL_PULSE_GEN_START , 0)
+            skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_MEZZANINE_RESET     , 0)
+
+        # ---------------------------------------------------------------
+        # 5. REFERENCE CLOCK CHECK (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Checking reference clock...")
+        for i in range(skarab_adc_num):
+            skarab_adcs[i].parent.transport.write_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.HOST_PLL_GPIO_CONTROL_REG)
+            read_reg = skarab_adcs[i].parent.transport.read_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)[0]
+            if ((read_reg & 0x01) == 0x01):
+                print(str("sync_skarab_adc ERROR: SKARAB ADC " + str(i) +  " reporting loss of reference"))
+                exit()
+
+        # ---------------------------------------------------------------
+        # 6. PREPARE PLL SYNC (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Preparing PLL sync...")
+        for i in range(skarab_adc_num):
+            # 6.1 CHANGE SYNC PIN TO SYNC SOURCE
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_PLL, sd.PLL_GLOBAL_MODE_AND_ENABLE_CONTROL, 0x41)
+            # 6.2 CHANGE SYSREF TO PULSE GEN MODE
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_PLL, sd.PLL_CHANNEL_OUTPUT_3_CONTROL_FORCE_MUTE, 0x88)
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_PLL, sd.PLL_CHANNEL_OUTPUT_7_CONTROL_FORCE_MUTE, 0x88)
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_PLL, sd.PLL_CHANNEL_OUTPUT_3_CONTROL_HIGH_PERFORMANCE_MODE, 0xDD)
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_PLL, sd.PLL_CHANNEL_OUTPUT_7_CONTROL_HIGH_PERFORMANCE_MODE, 0xDD)
+            # 6.3 ENABLE PLL SYNC
+            skarab_adcs[i].parent.transport.write_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, sd.ENABLE_PLL_SYNC)
+
+        # ---------------------------------------------------------------
+        # 7. PERFORM PLL SYNC (MASTER SKARAB ADC)
+        # ---------------------------------------------------------------
+        print("Performing PLL sync...")
+        # 7.1 TRIGGER PLL SYNC
+        skarab_adcs[0].parent.transport.write_wishbone(skarab_adcs[0].address+sd.REGADR_WR_PLL_SYNC_START, 0)
+        skarab_adcs[0].parent.transport.write_wishbone(skarab_adcs[0].address+sd.REGADR_WR_PLL_SYNC_START, 1)
+        # 7.2 WAIT FOR PLL SYNC COMPLETION
+        timeout = 0
+        read_reg = skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_PLL_SYNC_COMPLETE)
+        while ((read_reg == 0) and (timeout < 100)):
+            read_reg = skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_PLL_SYNC_COMPLETE)
+            time.sleep(0.1)
+            timeout = timeout + 1
+        if timeout == 100:
+            print("sync_skarab_adc ERROR: Master SKARAB ADC ADC PLL SYNC timeout")
+            exit()
+
+        # ---------------------------------------------------------------
+        # 8. CHECK SYNC STATUS (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Checking sync status...")
+        for i in range(skarab_adc_num):
+            spi_read_word = skarab_adcs[i].parent.transport.direct_spi_read(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
+            timeout = 0
+            while (((spi_read_word & sd.PLL_CLOCK_OUTPUT_PHASE_STATUS) == 0x0) and (timeout < 1000)):
+                spi_read_word = skarab_adcs[i].parent.transport.direct_spi_read(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
+                time.sleep(0.1)
+                timeout = timeout + 1
+            if timeout == 1000:
+                print(str("sync_skarab_adc ERROR: SKARAB ADC " + str(i) + " check SYNC status timeout"))
+                exit()
+
+        # ---------------------------------------------------------------
+        # 9. PREPARE LMFC ALIGN (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Preparing LMFC align...")
+        for i in range(skarab_adc_num):
+            # 9.1 CHANGE SYNC PIN TO PULSE GENERATOR
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_PLL, sd.PLL_GLOBAL_MODE_AND_ENABLE_CONTROL, 0x81)
+            # 9.2 POWER UP ADC SYSREF INPUT BUFFERS
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_MASTER_PDN_SYSREF, 0x00)
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_MASTER_PDN_SYSREF, 0x00)
+
+        # ---------------------------------------------------------------
+        # 10. PERFORM LMFC ALIGN (MASTER SKARAB ADC)
+        # ---------------------------------------------------------------
+        print("Performing LMFC align...")
+        # 10.1 TRIGGER PULSE GENERATION
+        skarab_adcs[0].parent.transport.write_wishbone(skarab_adcs[0].address+sd.REGADR_WR_PLL_PULSE_GEN_START, 0)
+        skarab_adcs[0].parent.transport.write_wishbone(skarab_adcs[0].address+sd.REGADR_WR_PLL_PULSE_GEN_START, 1)
+        # 10.2 WAIT FOR PULSE GENERATION TO COMPLETE
+        timeout = 0
+        read_reg = skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_PLL_SYNC_COMPLETE)
+        while ((read_reg == 0) and (timeout < 100)):
+            read_reg = skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_PLL_SYNC_COMPLETE)
+            time.sleep(0.1)
+            timeout = timeout + 1
+        if timeout == 100:
+            print(str("sync_skarab_adc ERROR: Master SKARAB ADC LMFC align timeout"))
+            exit()
+        time.sleep(0.1)
+
+        # ---------------------------------------------------------------
+        # 11. POWER DOWN SYSREF BUFFERS (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Powering down SYSREF buffers...")
+        for i in range(skarab_adc_num):
+            skarab_adcs[i].parent.transport.direct_spi_write(skarab_adcs[i].mezzanine_site, sd.SPI_DESTINATION_DUAL_ADC, sd.ADC_MASTER_PDN_SYSREF, 0x10)
+
+        # ---------------------------------------------------------------
+        # 12. PREPARE ADC SYNC (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Preparing ADC sync...")
+        for i in range(skarab_adc_num):
+            skarab_adcs[i].parent.transport.write_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, sd.ENABLE_ADC_SYNC)
+
+        # ---------------------------------------------------------------
+        # 13. ADC SYNC PART 1 (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Performing ADC sync part 1...")
+        for i in range(skarab_adc_num):
+            # 13.1 TRIGGER ADC SYNC PART 1
+            skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_ADC_SYNC_START, 0)
+            skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_ADC_SYNC_START, 1)
+            # 13.2 WAIT FOR ADC SYNC PART 1 COMPLETION
+            timeout = 0
+            read_reg = skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC_SYNC_COMPLETE)
+            while ((read_reg == 0) and (timeout < 100)):
+                read_reg = skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC_SYNC_COMPLETE)
+                time.sleep(0.1)
+                timeout = timeout + 1
+            if timeout == 100:
+                print(str("sync_skarab_adc ERROR: SKARAB ADC " + str(i) +  " ADC SYNC PART 1 timeout"))
+                exit()
+
+        # ---------------------------------------------------------------
+        # 14. WAIT FOR ADC SYNC REQUEST ASSERT (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Waiting for ADC sync request assertion...")
+        for i in range(skarab_adc_num):
+            timeout = 0
+            read_reg = skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC_SYNC_REQUEST)
+            while ((read_reg != 0xF) and (timeout < 100)):
+                read_reg = skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC_SYNC_REQUEST)
+                time.sleep(0.1)
+                timeout = timeout + 1
+            if timeout == 100:
+                print(str("sync_skarab_adc ERROR: SKARAB ADC " + str(i) +  " wait for SYNC request assert timeout"))
+                exit()
+
+        # ---------------------------------------------------------------
+        # 15. ADC SYNC PART 2 (MASTER SKARAB ADC)
+        # ---------------------------------------------------------------
+        print("Performing ADC sync part 2...")
+        # 15.1 TRIGGER ADC SYNC PART 2
+        skarab_adcs[0].parent.transport.write_wishbone(skarab_adcs[0].address+sd.REGADR_WR_ADC_SYNC_PART2_START, 0)
+        skarab_adcs[0].parent.transport.write_wishbone(skarab_adcs[0].address+sd.REGADR_WR_ADC_SYNC_PART2_START, 1)
+        # 15.2 WAIT FOR ADC SYNC PART 2 COMPLETION
+        timeout = 0
+        read_reg = skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_ADC_SYNC_COMPLETE)
+        while ((read_reg == 0) and (timeout < 100)):
+            read_reg = skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_ADC_SYNC_COMPLETE)
+            time.sleep(0.1)
+            timeout = timeout + 1
+        if timeout == 100:
+            print(str("sync_skarab_adc ERROR: Master SKARAB ADC wait for ADC SYNC PART 2 timeout"))
+            exit()
+
+        # ---------------------------------------------------------------
+        # 16. WAIT FOR SYNC REQUEST DE-ASSERT (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Waiting for ADC sync request de-assertion...")
+        for i in range(skarab_adc_num):
+            timeout = 0
+            read_reg = skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC_SYNC_REQUEST)
+            while ((read_reg != 0) and (timeout < 100)):
+                read_reg = skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC_SYNC_REQUEST)
+                time.sleep(0.1)
+                timeout = timeout + 1
+            if timeout == 100:
+                print(str("sync_skarab_adc ERROR: SKARAB ADC " + str(i) +  " wait for SYNC request de-assert timeout"))
+                exit()
+
+        # ---------------------------------------------------------------
+        # 17. ADC SYNC PART 3 (MASTER SKARAB ADC)
+        # ---------------------------------------------------------------
+        print("Performing ADC sync part 3...")
+        # 17.1 TRIGGER ADC SYNC PART 3
+        skarab_adcs[0].parent.transport.write_wishbone(skarab_adcs[0].address+sd.REGADR_WR_ADC_SYNC_PART3_START, 0)
+        skarab_adcs[0].parent.transport.write_wishbone(skarab_adcs[0].address+sd.REGADR_WR_ADC_SYNC_PART3_START, 1)
+        # 17.2 WAIT FOR ADC SYNC PART 3 COMPLETION
+        timeout = 0
+        read_reg = skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_ADC_SYNC_COMPLETE)
+        while ((read_reg == 0) and (timeout < 100)):
+            read_reg = skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_ADC_SYNC_COMPLETE)
+            time.sleep(0.1)
+            timeout = timeout + 1
+        if timeout == 100:
+            print(str("sync_skarab_adc ERROR: Master SKARAB ADC wait for ADC SYNC PART 3 timeout"))
+            exit()
+
+        # ---------------------------------------------------------------
+        # 18. DISABLE THE ADC SYNC (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Disabling ADC sync...")
+        for i in range(skarab_adc_num):
+            skarab_adcs[i].parent.transport.write_i2c(skarab_adcs[i].i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.MEZ_CONTROL_REG, 0x0)
+
+        # ---------------------------------------------------------------
+        # 19. ADC STATUS REGISTER CHECK (ALL SKARAB ADCs)
+        # ---------------------------------------------------------------
+        print("Performing ADC status reg check...")
+        for i in range(skarab_adc_num):
+            adc0_status_out = (skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC0_STATUS)) & 0xFFBFFFFF
+            adc1_status_out = (skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC1_STATUS)) & 0xFFBFFFFF
+            adc2_status_out = (skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC2_STATUS)) & 0xFFBFFFFF
+            adc3_status_out = (skarab_adcs[i].parent.transport.read_wishbone(skarab_adcs[i].address+sd.REGADR_RD_ADC3_STATUS)) & 0xFFBFFFFF
+            if (adc0_status_out != 0xE0000000 or adc1_status_out != 0xE0000000 or adc2_status_out != 0xE0000000 or adc3_status_out != 0xE0000000):                
+                print(str("sync_skarab_adc WARNING: SKARAB ADC " + str(i) +  " status register invalid"))
+                print(str("ADC 0 STATUS REG: " + str(hex(adc0_status_out))))
+                print(str("ADC 1 STATUS REG: " + str(hex(adc1_status_out))))
+                print(str("ADC 2 STATUS REG: " + str(hex(adc2_status_out))))
+                print(str("ADC 3 STATUS REG: " + str(hex(adc3_status_out))))
+
+        # ---------------------------------------------------------------
+        # 20. ADC/PLL SYNC ERROR CHECK (MASTER SKARAB ADC)
+        # ---------------------------------------------------------------
+        print("Performing ADC/PLL sync check...")
+        if skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_PLL_SYNC_COMPLETE) != 1:
+            print(str("sync_skarab_adc ERROR: PLL SYNC COULD NOT COMPLETE"))
+        if skarab_adcs[0].parent.transport.read_wishbone(skarab_adcs[0].address+sd.REGADR_RD_ADC_SYNC_COMPLETE) != 1:
+            print(str("sync_skarab_adc ERROR: ADC SYNC COULD NOT COMPLETE"))
 
     def arm_and_trigger(self):
         """
@@ -716,7 +931,6 @@ class SkarabAdc(object):
         debugmsg = 'Enabling trigger...'
         self.logger.debug(debugmsg)
         self.parent.write_int('adc_trig', 1)
-
 
     def arm_and_trigger_and_capture(self, file_dir='.'):
         """
@@ -766,6 +980,3 @@ class SkarabAdc(object):
                 adc_data_file_obj.write(str(adc_data_in_full['q_3'][array_index]))
                 adc_data_file_obj.write("\n")
             adc_data_file_obj.close()
-
-
-        

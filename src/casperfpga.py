@@ -39,12 +39,12 @@ CASPER_MEMORY_DEVICES = {
     'xps:onegbe':       {'class': onegbe.OneGbe,     'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
     'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
+    'xps:skarab_adc4x3g_14':     {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:skarab_adc4x3g_14_byp': {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
 }
 
 CASPER_ADC_DEVICES = {
     'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
-    'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
-    'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
 }
 
 # other devices - blocks that aren't memory devices nor ADCs, but about which we'd
