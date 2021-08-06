@@ -117,9 +117,9 @@ class RFDC(object):
     Initialize the rfdc driver, optionally program rfplls if file is present.
 
     Args:
-      lmk_file (string): lmk tics hexdump (.txt) register file name
-      lmx_file (string): lmx tics hexdump (.txt) register file name
-      upload (bool): inidicate that the configuration files are local to the client and
+      lmk_file (string, optional): lmk tics hexdump (.txt) register file name
+      lmx_file (string, optional): lmx tics hexdump (.txt) register file name
+      upload (bool, optional): inidicate that the configuration files are local to the client and
         should be uploaded to the remote, will overwrite if exists on remote filesystem
 
     Returns:

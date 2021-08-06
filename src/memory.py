@@ -28,7 +28,7 @@ def bin2fp(raw_word, bitwidth, bin_pt, signed):
         if bitwidth <= 63:
             return int(word_masked)
         else:
-            return long(word_masked)
+            return int(word_masked)
     else:
         quotient = word_masked // (2**bin_pt)
         rem = word_masked - (quotient * (2**bin_pt))
