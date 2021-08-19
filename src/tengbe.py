@@ -135,8 +135,9 @@ class TenGbe(Memory, Gbe):
             n_elem = int(4 / bytesize)
             pcode  = '>%i%s' % (n_elem, ctype)
             current_value  = self.parent.read(self.name, size=4, offset=rw_addr)
-            new_arr = list(struct.unpack(pcode, current_value))
+            new_arr = list(struct.unpack(pcode, current_value))[::-1]
             new_arr[offset % n_elem] = value
+            new_arr = new_arr[::-1]
             packed = struct.pack(pcode, *new_arr)
 
         elif bytesize in (4, 8):
@@ -167,7 +168,7 @@ class TenGbe(Memory, Gbe):
             read_addr = offset - offset % 4
             value = self.parent.read(self.name, size=4, offset=read_addr)
             valuearr = struct.unpack('>%i%s' % (int(4 / bytesize), ctype), value)
-            value = valuearr[int((offset % 4) / bytesize)]
+            value = valuearr[::-1][int((offset % 4) / bytesize)]
         else:
             raise RuntimeError("Cannot read %s of size %i: only 1,2,4,8 B supported" % (register, bytesize))
         return value
