@@ -23,9 +23,8 @@ class OneHundredGbe(TenGbe):
         :param ip (string) : IP whose MAC we should set. E.g. '10.0.1.123'
         :param mac (int)   : MAC address to associate with this IP. Eg. 0x020304050607
         """
-        # The 100G core reads the MAC big-endian
-        if self.parent.is_little_endian:
-            mac = struct.unpack('>Q', struct.pack('<Q', (mac&0xffffffffffff)<<16))[0]
+        # The 100G core reads the MAC little-endian. Casper registers are big-endian
+        mac = struct.unpack('>Q', struct.pack('<Q', (mac&0xffffffffffff)<<16))[0]
         # disable CPU ARP writes
         self.parent.write_int(self.name, 0, word_offset=self.ADDR_ARP_WRITE_ENABLE//4)
         # disable CPU ARP reads
@@ -70,8 +69,7 @@ class OneHundredGbe(TenGbe):
             self.parent.write_int(self.name, 2*i+1, word_offset=self.ADDR_ARP_READ_ADDR//4)
             mac_hi = self.parent.read_uint(self.name, word_offset=self.ADDR_ARP_READ_DATA//4)
             mac = (mac_hi << 32) + mac_lo
-            if self.parent.is_little_endian:
-                mac = struct.unpack('<Q', struct.pack('>Q', (mac&0xffffffffffff)<<16))[0]
+            mac = struct.unpack('<Q', struct.pack('>Q', (mac&0xffffffffffff)<<16))[0]
             macs += [mac]
         # disable CPU ARP reads
         self.parent.write_int(self.name, 0, word_offset=self.ADDR_ARP_READ_ENABLE//4)
