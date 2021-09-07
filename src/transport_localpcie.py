@@ -159,12 +159,15 @@ class LocalPcieTransport(Transport):
 
         header, bitstream, md5 = self._extract_bitstream(filename)
         
-        size = len(bitstream)
-        binfile_temp = '/tmp/%s.bin' % os.path.basename(filename)
-        with open(binfile_temp, 'wb') as fh:
+        with open(AXIS_DEV, 'wb') as fh:
             fh.write(bitstream)
 
-        subprocess.run(['dma_to_device', '-d', AXIS_DEV, '-s', str(size), '-c', '1', '-f', binfile_temp], check=True)
+        #size = len(bitstream)
+        #binfile_temp = '/tmp/%s.bin' % os.path.basename(filename)
+        #with open(binfile_temp, 'wb') as fh:
+        #    fh.write(bitstream)
+
+        #subprocess.run(['dma_to_device', '-d', AXIS_DEV, '-s', str(size), '-c', '1', '-f', binfile_temp], check=True)
 
         return True
 
