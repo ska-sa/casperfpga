@@ -7,16 +7,11 @@ import subprocess
 
 from mmap import mmap, PROT_READ, PROT_WRITE, MAP_SHARED
 
-# Local char devices for comms. Only suitable for a single, local, board
-AXIL_DEV = "/dev/xdma0_user"
 # AXI -> PCIe offset defined in firmware block diagram. PCI transactions
 # on address N get translated to AXI transactions on address N+AXIL_PCI_ADDR_TRANSLATION
 AXIL_PCI_ADDR_TRANSLATION = 0x00000000
 # Size of AXI-lite memory to map
 MAP_SIZE = 8*1024*1024
-# AXI Streaming device for uploading bitstreams
-AXIS_DEV = "/dev/xdma0_h2c_1"
-
 
 from .transport import Transport
 from .network import IpAddress
@@ -44,6 +39,12 @@ class LocalPcieTransport(Transport):
             errmsg = 'parent_fpga argument not supplied when creating skarab'
             # Pointless trying to log to a logger
             raise RuntimeError(errmsg)
+
+        self.instance_id = kwargs.get('instance_id', 0)
+        # Local char devices for comms
+        self._axil_dev = "/dev/xdma%d_user" % self.instance_id
+        # AXI Streaming device for uploading bitstreams
+        self._axid_dev = "/dev/xdma%d_h2c_1" % self.instance_id
         
         new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
         self.logger.debug(new_connection_msg)
@@ -52,7 +53,7 @@ class LocalPcieTransport(Transport):
         # as a byte buffer, i.e. writing as axil_mm[start:stop] = b"....",
         # but not when using as a file, i.e. axil_mm.seek(start); axil_mm.write(b"....").
         # Python2 seems to work with file-like ops.
-        self.fh = open(AXIL_DEV, "r+b", buffering=0)
+        self.fh = open(self._axil_dev, "r+b", buffering=0)
         self.axil_mm = mmap(self.fh.fileno(), MAP_SIZE, flags=MAP_SHARED, prot=PROT_READ | PROT_WRITE)
 
     def __del__(self):
@@ -159,7 +160,7 @@ class LocalPcieTransport(Transport):
 
         header, bitstream, md5 = self._extract_bitstream(filename)
         
-        with open(AXIS_DEV, 'wb') as fh:
+        with open(self._axid_dev, 'wb') as fh:
             fh.write(bitstream)
 
         #size = len(bitstream)
@@ -167,7 +168,7 @@ class LocalPcieTransport(Transport):
         #with open(binfile_temp, 'wb') as fh:
         #    fh.write(bitstream)
 
-        #subprocess.run(['dma_to_device', '-d', AXIS_DEV, '-s', str(size), '-c', '1', '-f', binfile_temp], check=True)
+        #subprocess.run(['dma_to_device', '-d', self._axid_dev, '-s', str(size), '-c', '1', '-f', binfile_temp], check=True)
 
         return True
 
