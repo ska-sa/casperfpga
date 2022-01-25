@@ -29,8 +29,9 @@ class OneHundredGbe(TenGbe):
         self.parent.write_int(self.name, 0, word_offset=self.ADDR_ARP_WRITE_ENABLE//4)
         # disable CPU ARP reads
         self.parent.write_int(self.name, 0, word_offset=self.ADDR_ARP_READ_ENABLE//4)
-        # TODO this is hardcoded for 256 entries
-        arp_addr = int(ip.split('.')[-1])
+        # TODO this is hardcoded for 512 entries
+        ip_octets = ip.split('.')
+        arp_addr = (int(ip_octets[-2])*256 + int(ip_octets[-1])) % 512
         # set address and data for LSBs
         self.parent.write_int(self.name, 2*arp_addr, word_offset=self.ADDR_ARP_WRITE_ADDR//4)
         self.parent.write_int(self.name, mac & 0xffffffff, word_offset=self.ADDR_ARP_WRITE_DATA//4)
@@ -53,7 +54,7 @@ class OneHundredGbe(TenGbe):
         if isinstance(macs[0], Mac):
             macs = [m.mac_int for m in macs]
         for i, mac in enumerate(macs):
-            self.set_single_arp_entry("0.0.0.%d" % i, mac)
+            self.set_single_arp_entry("0.0.%d.%d" % (i // 256, i % 256), mac)
 
     def get_arp_details(self, N=256):
         """ Get ARP details from this interface. """
