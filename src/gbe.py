@@ -315,15 +315,16 @@ class Gbe(object):
         print('%5d' % details['fabric_port'])
         print('Fabric interface is currently: %s' %
               'Enabled' if details['fabric_en'] else 'Disabled')
-        print('XAUI Status: ', details['xaui_status'])
-        for ctr in range(0, 4):
-            print('\tlane sync %i:  %i' % (ctr, details['xaui_lane_sync'][ctr]))
-        print('\tChannel bond: %i' % details['xaui_chan_bond'])
-        print('XAUI PHY config: ')
-        print('\tRX_eq_mix: %2X' % details['xaui_phy']['rx_eq_mix'])
-        print('\tRX_eq_pol: %2X' % details['xaui_phy']['rx_eq_pol'])
-        print('\tTX_pre-emph: %2X' % details['xaui_phy']['tx_preemph'])
-        print('\tTX_diff_ctrl: %2X' % details['xaui_phy']['tx_swing'])
+        if 'xaui_status' in details:
+            print('XAUI Status: ', details['xaui_status'])
+            for ctr in range(0, 4):
+                print('\tlane sync %i:  %i' % (ctr, details['xaui_lane_sync'][ctr]))
+            print('\tChannel bond: %i' % details['xaui_chan_bond'])
+            print('XAUI PHY config: ')
+            print('\tRX_eq_mix: %2X' % details['xaui_phy']['rx_eq_mix'])
+            print('\tRX_eq_pol: %2X' % details['xaui_phy']['rx_eq_pol'])
+            print('\tTX_pre-emph: %2X' % details['xaui_phy']['tx_preemph'])
+            print('\tTX_diff_ctrl: %2X' % details['xaui_phy']['tx_swing'])
         print('Multicast:')
         for k in details['multicast']:
             print('\t%s: %s' % (k, details['multicast'][k]))
