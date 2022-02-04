@@ -146,9 +146,15 @@ class LocalPcieTransport(Transport):
         assert (size % 4 == 0), 'Must write 32-bit-bounded words'
         assert (offset % 4 == 0), 'Must write 32-bit-bounded words'
 
-        # map device name to address, if can't find, bail
         addr = self._get_device_address(device_name) - AXIL_PCI_ADDR_TRANSLATION + offset
-        self.axil_mm[addr : addr + size] = data
+        # Write in 4096 byte chunks. Why do i get errors with larger writes?
+        written = 0
+        block_size = 4096
+        for i in range(size//block_size + 1):
+            n_bytes = min(size - written, block_size)
+            if n_bytes > 0:
+                self.axil_mm[addr + written : addr + written + n_bytes] = data[written : written + n_bytes]
+            written += n_bytes
 
 
     def upload_to_ram_and_program(self, filename, wait_complete=None):
