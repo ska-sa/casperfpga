@@ -331,8 +331,10 @@ class RFDC(object):
 
   def set_dsa(self, ntile, nblk, atten_dB):
     """
-    Set the digital step attenuator (DSA) of tile "ntile" and adc block "nblk" to the value specified by
-    atten_dB. After write the attenuation value is read and displayed to show the actual value. If
+    Set the digital step attenuator (DSA) of tile "ntile" and adc block "nblk" to the
+    value specified by atten_dB.
+
+    After write the attenuation value is read and displayed to show the actual value. If
     a tile/blk pair result in a disabled a message is printed showing the pair as disabled and nothing
     is done. For now, tbs and the rfdc driver handles much of the error handling.
 
@@ -361,3 +363,24 @@ class RFDC(object):
       print(i.arguments[0].decode())
 
     return True
+
+  def run_mts(self, tile_mask, target_latency=None):
+    """
+    Execute multi-tile synchronization (MTS) to synchronize tiles set by "tile_mask".
+    Optionally request to synch with latency specified by "target_latency".
+    """
+    raise NotImplemented()
+
+  def get_mts_report(self):
+    """
+    Get a detailed report of the most recent multi-tile synchronization run.
+
+    Returns information such as latency on each tile, delay maker, delay bit
+    """
+    raise NotImplemented()
+
+  def get_adc_snapshot(self, ntile, nblk):
+    """
+    """
+
+    raise NotImplemented()
