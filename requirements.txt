@@ -1,7 +1,7 @@
 future==0.16.0
 ipython==5.3.0
 katcp==0.6.2
-numpy==1.16
+numpy==1.21.0
 odict
 tornado==4
 -e git://github.com/casper-astro/tftpy.git#egg=tftpy-0.6.3_fork-py2.7.egg
