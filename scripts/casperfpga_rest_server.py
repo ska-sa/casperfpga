@@ -84,11 +84,16 @@ class RestTransport_Device(Resource):
         transportTarget = getTransportTarget(target)
 
         size = request.args.get('size', type = int)
-        offset = request.args.get('offset', default = 1, type = int)
+        offset = request.args.get('offset', default = 0, type = int)
 
         try:
             bytes_read = transportTarget.cfpga.transport.read(device_name, size, offset)
-            response = make_response(bytes_read, 200, {'Content-Type': 'application/octet-stream'})
+            response = make_response(bytes_read, 200,
+                {
+                    'Content-Type': 'application/octet-stream',
+                    'Content-Length': str(size)
+                }
+            )
         except:
             response = make_response({
                 'response': 'Failed to read. Confirm device_name \'{}\'.'.format(device_name),
@@ -103,7 +108,13 @@ class RestTransport_Device(Resource):
         try:
             transportTarget.cfpga.transport.blindwrite(device_name, data, offset)
             bytes_read = transportTarget.cfpga.transport.read(device_name, len(data), offset)
-            response = make_response(bytes_read, 200, {'Content-Type': 'application/octet-stream'})
+
+            response = make_response(bytes_read, 200,
+                {
+                    'Content-Type': 'application/octet-stream',
+                    'Content-Length': str(len(data))
+                }
+            )
         except:
             response = make_response({
                 'response': 'Unknown device_name \'{}\''.format(device_name),
@@ -230,7 +241,7 @@ api.add_resource(RestTransport_IsProgrammed, '/<string:target>/programmed')
 api.add_resource(RestTransport_Version, '/version')
 
 if __name__ == '__main__':
-    app.run(debug=False)  # run our Flask app
+    app.run(host='0.0.0.0', debug=False)  # run our Flask app
     # TODO disconnect instances when closing
     # for (target, cfpga) in TARGET_CFPGA_DICT.items():
     #     print('Disconnecting from "{}"'.format(target))

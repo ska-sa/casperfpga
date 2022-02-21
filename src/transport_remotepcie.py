@@ -31,12 +31,16 @@ class RemotePcieTransport(Transport):
             # Pointless trying to log to a logger
             raise RuntimeError(errmsg)
 
+        response = None
         try:
             response = requests.get(url=self.server_uri+'/version')
             if response.status_code == 200:
                 assert response.json()['response'] == '1.0.0'
         except:
-            errmsg = 'Server at uri not functional or not version 1.0.0:\n\t{} responded with {}'.format(self.server_uri, response.json())
+            errmsg = 'Server at uri not functional or not version 1.0.0:\n\t@{} {}'.format(
+                self.server_uri,
+                "responded with:\n{}".format(response.json()) if response is not None else "did not respond"
+            )
             raise RuntimeError(errmsg)
 
         self.instance_id = kwargs.get('instance_id', 0)
@@ -51,7 +55,9 @@ class RemotePcieTransport(Transport):
                 return json.dumps(data), {"Content-Type": "application/json"}
             except:
                 pass
-        return bytes(data), {"Content-Type": 'application/octet-stream'}
+        bytes_data = bytes(data) if not isinstance(data, bytes) else data
+        bytes_data_len = len(bytes_data)
+        return bytes_data, {"Content-Type": 'application/octet-stream', "Content-Length": str(bytes_data_len)}
 
     def _put(self, endpoint, data = None, params = None, files = None):
         uri = self.server_uri + '/' + self.host + endpoint
@@ -170,7 +176,9 @@ class RemotePcieTransport(Transport):
             },
             data = data,
         )
-        if response.status_code != 200:
+        if response.status_code == 200: # remote blindwrite returns the read result at the written location
+            return response.content
+        else:
             self.logger.warning(response.json())
             raise RuntimeError(response.json())
 
