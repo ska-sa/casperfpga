@@ -43,6 +43,7 @@ class SkarabAdc(object):
             self.yb_type = sd.YB_SKARAB_ADC4X3G_14
         elif self.device_info['tag'] == 'xps:skarab_adc4x3g_14_byp':
             self.yb_type = sd.YB_SKARAB_ADC4X3G_14_BYP
+        self.decimation_rate = 4
 
         if initialise:
             # Perform ADC PLL Sync
@@ -110,14 +111,21 @@ class SkarabAdc(object):
         read_byte = self.parent.transport.read_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)[0]
         return read_byte
 
-    def configure_skarab_adc(self, nyquist_zone):
+    def configure_skarab_adc(self, nyquist_zone, decimation_rate=4):
         """
         Configure the SKARAB ADC board in a specific sample mode and for a specific Nyquist zone.
         
         :param nyquist_zone: Nyquist zone for which the SKARAB ADC board should be optimised:
-                            FIRST_NYQ_ZONE  (0): First Nyquist zone
-                            SECOND_NYQ_ZONE (1): Second Nyquist zone
+                                 FIRST_NYQ_ZONE  (0): First Nyquist zone
+                                 SECOND_NYQ_ZONE (1): Second Nyquist zone
         :type nyquist_zone: int
+        :param decimation_rate: SKARAB ADC board decimation rate for when using the DDC bandwidth
+                                (sample) mode. Supported decimation rates are:
+                                    4 (default)
+                                    8
+                                    16
+                                    32
+        :type decimation_rate: int
         """
 
         # ---------------------------------------------------------------
@@ -136,21 +144,33 @@ class SkarabAdc(object):
             print("SkarabAdc.configure_skarab_adc ERROR: unknown Yellow Block tag:")
             print(self.device_info['tag'])
             return
-        
+        # 1.4 CHECK DECIMATION RATE
+        if not (decimation_rate in (4, 8, 16, 32)):
+            print("SkarabAdc.configure_skarab_adc ERROR: Invalid decimation rate:")
+            print(decimation_rate)
+            return
+        if (decimation_rate == 32) and not (self.device_info['dec_modes'] == "4,8,16,32"):
+            print("SkarabAdc.configure_skarab_adc ERROR: Yellow Block is not configured to support decimate by 32")
+            return
+
         # --------------------------------------------------------------
-        # 2. DERIVE SAMPLE MODE FROM YELLOW BLOCK TAG
+        # 2. SET DECIMATION RATE
         # --------------------------------------------------------------
-        device_tag = self.device_info['tag']
-        sample_mode = 0
-        if device_tag == 'xps:skarab_adc4x3g_14':
-            sample_mode = sd.DDCDEC4_3GSPS_SAMPLE_MODE
-        elif device_tag == 'xps:skarab_adc4x3g_14_byp':
-            sample_mode = sd.FULLBW_2P8GSPS_SAMPLE_MODE
-        
+        self.decimation_rate = decimation_rate
+
         # --------------------------------------------------------------
         # 3. SET SAMPLE MODE
         # --------------------------------------------------------------
-        SkarabAdc.write_skarab_adc_register(self, sd.BOARD_SAMPLE_MODE_REG, sample_mode)
+        device_tag = self.device_info['tag']
+        if device_tag == 'xps:skarab_adc4x3g_14':
+            if   self.decimation_rate == 4:
+                SkarabAdc.write_skarab_adc_register(self, sd.BOARD_SAMPLE_MODE_REG, sd.DDCDEC4_3GSPS_SAMPLE_MODE)
+            elif self.decimation_rate == 8:
+                SkarabAdc.write_skarab_adc_register(self, sd.BOARD_SAMPLE_MODE_REG, sd.DDCDEC8_3GSPS_SAMPLE_MODE)
+            else: # dec 16 or 32
+                SkarabAdc.write_skarab_adc_register(self, sd.BOARD_SAMPLE_MODE_REG, sd.DDCDEC16_3GSPS_SAMPLE_MODE)
+        elif device_tag == 'xps:skarab_adc4x3g_14_byp':
+            SkarabAdc.write_skarab_adc_register(self, sd.BOARD_SAMPLE_MODE_REG, sd.FULLBW_2P8GSPS_SAMPLE_MODE)
 
         # --------------------------------------------------------------
         # 4. SET NYQUIST ZONE
@@ -195,8 +215,7 @@ class SkarabAdc(object):
         # --------------------------------------------------
         # 1. VARIABLES
         # --------------------------------------------------
-        adc_sample_rate = 3e9 #NOTE: CURRENTLY HARDCODED
-        decimation_rate = 4    #NOTE: CURRENTLY HARDCODED
+        adc_sample_rate = 3e9 # NOTE: CURRENTLY HARDCODED
         
         # --------------------------------------------------
         # 2. ARGUMENT ERROR CHECKING
@@ -232,7 +251,7 @@ class SkarabAdc(object):
             return
         
         # --------------------------------------------------
-        # 3. CALCULATE NCO 0 VALUE
+        # 4. CALCULATE NCO 0 VALUE
         # --------------------------------------------------
         nco_0_register_setting_f = pow(2.0, 16.0) * (ddc0_centre_frequency / adc_sample_rate)
         nco_0_register_setting = int(round(nco_0_register_setting_f))
@@ -240,7 +259,7 @@ class SkarabAdc(object):
         nco_0_register_setting_lsb = nco_0_register_setting & 0xFF
         
         # --------------------------------------------------
-        # 4. CALCULATE NCO 1 VALUE
+        # 5. CALCULATE NCO 1 VALUE
         # --------------------------------------------------
         nco_1_register_setting_f = pow(2.0, 16.0) * (ddc1_centre_frequency / adc_sample_rate)
         nco_1_register_setting = int(round(nco_1_register_setting_f))
@@ -248,7 +267,7 @@ class SkarabAdc(object):
         nco_1_register_setting_lsb = nco_1_register_setting & 0xFF
         
         # --------------------------------------------------
-        # 5. PRINT ACTUAL DDC FREQUENCIES (DEBUGGING ONLY)
+        # 6. PRINT ACTUAL DDC FREQUENCIES (DEBUGGING ONLY)
         # --------------------------------------------------
         ddc0_centre_frequency_actual = (float(nco_0_register_setting)/pow(2.0, 16.0))*float(adc_sample_rate)
         ddc1_centre_frequency_actual = (float(nco_1_register_setting)/pow(2.0, 16.0))*float(adc_sample_rate)
@@ -259,27 +278,32 @@ class SkarabAdc(object):
             # print(str("ADC channel " + str(channel) + " DDC 1 actual centre frequency (Hz): "    + str(ddc1_centre_frequency_actual)))
         
         # --------------------------------------------------
-        # 6. SET DECIMATION RATE
+        # 7. SET DECIMATION RATE
         # --------------------------------------------------
-        SkarabAdc.write_skarab_adc_register(self, sd.DECIMATION_RATE_REG, decimation_rate)
+        if   self.decimation_rate == 4:
+            SkarabAdc.write_skarab_adc_register(self, sd.DECIMATION_RATE_REG, 4)
+        elif self.decimation_rate == 8:
+            SkarabAdc.write_skarab_adc_register(self, sd.DECIMATION_RATE_REG, 8)
+        else: # dec 16 or 32
+            SkarabAdc.write_skarab_adc_register(self, sd.DECIMATION_RATE_REG, 16)
         
         # --------------------------------------------------
-        # 7. SET NCO 0 SETTINGS
+        # 8. SET NCO 0 SETTINGS
         # --------------------------------------------------
         SkarabAdc.write_skarab_adc_register(self, sd.DDC0_NCO_SETTING_MSB_REG, nco_0_register_setting_msb)
         SkarabAdc.write_skarab_adc_register(self, sd.DDC0_NCO_SETTING_LSB_REG, nco_0_register_setting_lsb)
         
         # -------------------------------------------------------
-        # 8. SET NCO 1 SETTINGS (IF REQUIRED)
+        # 9. SET NCO 1 SETTINGS (IF REQUIRED)
         # -------------------------------------------------------
         if dual_band_mode_enable == True:
             SkarabAdc.write_skarab_adc_register(self, sd.DDC1_NCO_SETTING_MSB_REG, nco_1_register_setting_msb)
             SkarabAdc.write_skarab_adc_register(self, sd.DDC1_NCO_SETTING_LSB_REG, nco_1_register_setting_lsb)
         
         # -------------------------------------------------------
-        # 9. TRIGGER A CONFIGURATION
+        # 10. TRIGGER A CONFIGURATION
         # -------------------------------------------------------
-        # 9.1 SELECT DDC CONTROL REG BYTE
+        # 10.1 SELECT DDC CONTROL REG BYTE
         ADC = int(channel/2)
         adc_channel = ('B','A')[channel%2]
         ddc_control_reg_byte = 0
@@ -294,11 +318,11 @@ class SkarabAdc(object):
         if (ddc0_centre_frequency > (adc_sample_rate / 2)):
             ddc_control_reg_byte = ddc_control_reg_byte | sd.SECOND_NYQUIST_ZONE_SELECT
         ddc_control_reg_byte = ddc_control_reg_byte | sd.UPDATE_DDC_CHANGE
-        # 9.2 SET DDC CONTROL REG
+        # 10.2 SET DDC CONTROL REG
         self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DDC_CONTROL_REG, ddc_control_reg_byte)
         
         # --------------------------------------------------------------
-        # 10. WAIT FOR THE UPDATE TO COMPLETE
+        # 11. WAIT FOR THE UPDATE TO COMPLETE
         # --------------------------------------------------------------
         timeout = 0
         while (((SkarabAdc.read_skarab_adc_register(self, sd.DDC_CONTROL_REG) & sd.UPDATE_DDC_CHANGE) != 0) and (timeout < 1000)):
@@ -309,7 +333,7 @@ class SkarabAdc(object):
             return
         
         # --------------------------------------------------------------
-        # 11. RETURN ACTUAL DDC FREQUENCIES
+        # 12. RETURN ACTUAL DDC FREQUENCIES
         # --------------------------------------------------------------
         return (ddc0_centre_frequency_actual, ddc1_centre_frequency_actual)
 
@@ -583,6 +607,34 @@ class SkarabAdc(object):
             print("SkarabAdc.set_skarab_adc_channel_gain ERROR: Wait for gain update completion timeout")
             return
 
+    def enable_skarab_adc_dout(self, enable_or_disable):
+        """
+        Enable/Disable the data output SKARAB ADC Yellow Block
+
+        :param enable_or_disable: Enable/Disable (True/False) the data output 
+        :type enable_or_disable: boolean
+        """
+
+        # ---------------------------------------------------------------
+        # 1. GET WB BASE ADDRESS
+        # ---------------------------------------------------------------
+        wb_base_adr = self.address
+
+        # --------------------------------------------------
+        # 2. ARGUMENT ERROR CHECKING
+        # --------------------------------------------------
+        if (isinstance(enable_or_disable, bool) == False):
+            print("SkarabAdc.enable_skarab_adc_dout ERROR: enable_or_disable is not a bool")
+            return
+
+        # --------------------------------------------------
+        # 3. ENABLE/DISABLE DATA OUTPUT
+        # --------------------------------------------------
+        if enable_or_disable == True:
+            self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_ENABLE_DOUT, 1)
+        else:
+            self.parent.transport.write_wishbone(wb_base_adr+sd.REGADR_WR_ENABLE_DOUT, 0)
+
     def reset_skarab_adc(self):
         """
         Reset the SKARAB ADC board to its initial state (no sample data provided yet)
@@ -691,6 +743,18 @@ class SkarabAdc(object):
             skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_PLL_SYNC_START      , 0)
             skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_PLL_PULSE_GEN_START , 0)
             skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_MEZZANINE_RESET     , 0)
+
+        device_tag = self.device_info['tag']
+        if device_tag == 'xps:skarab_adc4x3g_14':
+            for i in range(skarab_adc_num):
+                if   self.decimation_rate == 4:
+                    skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_DECIMATION_RATE, 0)
+                elif self.decimation_rate == 8:
+                    skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_DECIMATION_RATE, 1)
+                elif self.decimation_rate == 16:
+                    skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_DECIMATION_RATE, 2)
+                else: # dec 32
+                    skarab_adcs[i].parent.transport.write_wishbone(skarab_adcs[i].address+sd.REGADR_WR_DECIMATION_RATE, 3)
 
         # ---------------------------------------------------------------
         # 5. REFERENCE CLOCK CHECK (ALL SKARAB ADCs)
