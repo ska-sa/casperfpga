@@ -35,15 +35,16 @@ class RemotePcieTransport(Transport):
         try:
             response = requests.get(url=self.server_uri+'/version')
             if response.status_code == 200:
-                assert response.json()['response'] == '1.0.0'
+                assert response.json()['response'] == '1.1.0'
         except:
-            errmsg = 'Server at uri not functional or not version 1.0.0:\n\t@{} {}'.format(
+            errmsg = 'Server at uri not functional or not version 1.1.0:\n\t@{} {}'.format(
                 self.server_uri,
                 "responded with:\n{}".format(response.json()) if response is not None else "did not respond"
             )
             raise RuntimeError(errmsg)
 
         self.instance_id = kwargs.get('instance_id', 0)
+        self.pci_id = kwargs.get('pci_id', None)
 
         new_connection_msg = '*** NEW REST CLIENT MADE TO {} ***'.format(self.server_uri)
         self.logger.info(new_connection_msg)
@@ -59,7 +60,18 @@ class RemotePcieTransport(Transport):
         bytes_data_len = len(bytes_data)
         return bytes_data, {"Content-Type": 'application/octet-stream', "Content-Length": str(bytes_data_len)}
 
-    def _put(self, endpoint, data = None, params = None, files = None):
+    def _extend_params_with_id(self, params):
+        if (params is not None and
+            'pci_id' not in params and
+            self.pci_id is not None):
+            params['pci_id'] = self.pci_id
+        elif (params is not None and
+            'instance_id' not in params):
+            params['instance_id'] = self.instance_id
+        return params
+
+    def _put(self, endpoint, data = None, params = {}, files = None):
+        params = self._extend_params_with_id(params)
         uri = self.server_uri + '/' + self.host + endpoint
         self.logger.info(uri)
         if data is None and files is None:
@@ -70,7 +82,8 @@ class RemotePcieTransport(Transport):
             reqdata, header = self._content_type(data)
             return requests.put(url=uri, params=params, data=reqdata, headers=header)
 
-    def _get(self, endpoint, data = None, params = None):
+    def _get(self, endpoint, data = None, params = {}):
+        params = self._extend_params_with_id(params)        
         uri = self.server_uri + '/' + self.host + endpoint
         self.logger.info(uri)
         if data is None:
@@ -220,10 +233,10 @@ if __name__ == "__main__":
     # some basic tests
     DEFAULT_FPGFILE = "/home/cosmic/src/vla-dev/adm_pcie_9h7_dts_dual_2x100g_dsp_8b/outputs/cosmic_feng_8b.fpg"
 
-    remotepcie = RemotePcieTransport(uri='http://localhost:5000', host='pcie0')
+    remotepcie = RemotePcieTransport(uri='http://localhost:5000', host='pcie0', pci_id='3e')
     if remotepcie.is_connected(0, 0) and not remotepcie.is_programmed():
         print("Programmed Successfully:", remotepcie.upload_to_ram_and_program(DEFAULT_FPGFILE))
-    print(remotepcie.listdev())
-    print(remotepcie.read('version_type', 4))
-    remotepcie.blindwrite('version_type', bytes([2,0,0,1]))
-    print(remotepcie.read('version_type', 4))
+    # print(remotepcie.listdev())
+    # print(remotepcie.read('version_type', 4))
+    # remotepcie.blindwrite('version_type', bytes([2,0,0,1]))
+    # print(remotepcie.read('version_type', 4))
