@@ -312,7 +312,7 @@ if __name__ == '__main__':
             localtransport._setFpgfile_path(args.fpgfile)
 
 
-    app.run(host='0.0.0.0', port=5001, debug=False)  # run our Flask app
+    app.run(host='0.0.0.0', port=5000, debug=False)  # run our Flask app
     # TODO disconnect instances when closing
     # for (target, cfpga) in TARGET_CFPGA_DICT.items():
     #     print('Disconnecting from "{}"'.format(target))
