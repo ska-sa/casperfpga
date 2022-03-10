@@ -177,13 +177,13 @@ class RestTransport_FpgFile(Resource):
         transportTarget = getTransportTarget(target)
 
         try:
-            send_file(transportTarget.fpgfile_path)
+            return send_file(transportTarget.fpgfile_path)
         except:
             response = {
                 'response':  'Failed to send fpgafile: {}'.format(transportTarget.fpgfile_path)
             }
             code = 500
-        return response, code
+            return response, code
 
 
     def put(self, target):
