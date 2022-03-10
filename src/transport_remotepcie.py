@@ -3,8 +3,10 @@ import time
 import os
 import requests
 import json
+from io import BytesIO
 
 from .transport import Transport
+from .utils import parse_fpg
 
 __author__ = 'radonnachie'
 __date__ = 'Feb 2022'
@@ -217,6 +219,20 @@ class RemotePcieTransport(Transport):
             self.logger.warning(response.json())
             raise RuntimeError(response.json())
 
+    def get_system_information_from_transport(self):
+        """
+        Retrieves the fpg file (as bytes[]) from the server.
+
+        :return: None, {
+            [device info dictionary, memory map info (coreinfo.tab) dictionary],
+            None
+        }
+        """
+        response = self._get('/fpgfile')
+        if response.status_code == 200:
+            return None, parse_fpg(BytesIO(response.content), isbuf=True)
+        else:
+            return None, None
 
 if __name__ == "__main__":
     # some basic tests
