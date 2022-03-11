@@ -45,6 +45,7 @@ class TransportTarget(object):
         self.instance_id = int(xdma_id)
         self.cfpga = cfpga
         self.fpgfile_path = None
+        self.fpg_template = None
 
         if self.cfpga is None:
             LOG_INFO('Connecting to "{}"'.format(self.target))
@@ -62,6 +63,12 @@ class TransportTarget(object):
         LOG_INFO('"{}" is programmed with "{}"'.format(self.target, fpgfile_path))
         self.fpgfile_path = fpgfile_path
         self.cfpga.get_system_information(self.fpgfile_path)
+        fpg_header = parse_fpg(self.fpgfile_path)[0]
+        self.fpg_template = None
+        try:
+            self.fpg_template = fpg_header[list(fpg_header.keys())[0]]['pr_template']
+        except:
+            pass
     
     def upload_to_ram_and_program(self, fpgfile_path):
         if fpgfile_path != self.fpgfile_path:
@@ -72,6 +79,18 @@ class TransportTarget(object):
 
                 LOG_INFO('Removing previously uploaded fpg file for "{}": "{}"'.format(self.target, fpgfile_path))
                 os.remove(self.fpgfile_path)
+            
+            new_fpg_header = parse_fpg(fpgfile_path)[0]
+            new_fpg_template = None
+            try:
+                new_fpg_template = new_fpg_header[list(new_fpg_header.keys())[0]]['pr_template']
+            except:
+                pass
+            
+            if(new_fpg_template != self.fpg_template and self.fpg_template is not None):
+                LOG_INFO('Previously uploaded fpg file used template {}. Current fpg supplied for programming uses template {}. '
+                'This is not a permitted action.'.format(self.fpg_template, new_fpg_template))
+                return False
             
             LOG_INFO('Programming "{}" with "{}"'.format(self.target, fpgfile_path))
             self.cfpga.transport.upload_to_ram_and_program(fpgfile_path)
@@ -312,7 +331,7 @@ if __name__ == '__main__':
             localtransport._setFpgfile_path(args.fpgfile)
 
 
-    app.run(host='0.0.0.0', port=5000, debug=False)  # run our Flask app
+    app.run(host='0.0.0.0', port=5001, debug=False)  # run our Flask app
     # TODO disconnect instances when closing
     # for (target, cfpga) in TARGET_CFPGA_DICT.items():
     #     print('Disconnecting from "{}"'.format(target))
