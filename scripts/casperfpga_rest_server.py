@@ -20,6 +20,9 @@ __author__ = 'radonnachie'
 __date__ = 'Feb 2022'
 
 LOGGER = logging.getLogger(__name__)
+# Set log format to DEBUG  level
+logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s",
+        level=logging.INFO)
 
 UPLOAD_FOLDER = '/tmp'
 ALLOWED_EXTENSIONS = {'fpg'}
@@ -35,10 +38,6 @@ TRANSPORT_TARGET_DICT = {}
 XDMA_PCIE_DICT = None
 PCIE_XDMA_DICT = None
 
-def LOG_INFO(str):
-    LOGGER.info(str)
-    print(str)
-
 class TransportTarget(object):
     def __init__(self, xdma_id, cfpga = None):
         self.target = 'pcie%s'%XDMA_PCIE_DICT[xdma_id]
@@ -48,7 +47,7 @@ class TransportTarget(object):
         self.fpg_template = None
 
         if self.cfpga is None:
-            LOG_INFO('Connecting to "{}"'.format(self.target))
+            LOGGER.info('Connecting to "{}"'.format(self.target))
             self.cfpga = casperfpga.CasperFpga(
                         host=self.target,
                         instance_id=self.instance_id,
@@ -60,7 +59,7 @@ class TransportTarget(object):
             self.cfpga.disconnect()
     
     def _setFpgfile_path(self, fpgfile_path):
-        LOG_INFO('"{}" is programmed with "{}"'.format(self.target, fpgfile_path))
+        LOGGER.info('"{}" is programmed with "{}"'.format(self.target, fpgfile_path))
         self.fpgfile_path = fpgfile_path
         self.cfpga.get_system_information(self.fpgfile_path)
         fpg_header = parse_fpg(self.fpgfile_path)[0]
@@ -70,29 +69,34 @@ class TransportTarget(object):
         except:
             pass
     
+    def _fpgfileMatchesCurrentTemplate(self, fpgfile_path):
+        new_fpg_header = parse_fpg(fpgfile_path)[0]
+        new_fpg_template = None
+        try:
+            new_fpg_template = new_fpg_header[list(new_fpg_header.keys())[0]]['pr_template']
+        except:
+            pass
+        
+        if(self.fpg_template is not None and new_fpg_template != self.fpg_template):
+            LOGGER.info('Previously uploaded fpg file used template {}. Current '
+            'fpg supplied for programming uses template {}. '
+            'This is not a permitted action.'.format(self.fpg_template, new_fpg_template))
+            return False
+        return True
+    
     def upload_to_ram_and_program(self, fpgfile_path):
         if fpgfile_path != self.fpgfile_path:
+            if not self._fpgfileMatchesCurrentTemplate(fpgfile_path):
+                return False
+            
             if (self.fpgfile_path is not None and
                 os.path.exists(self.fpgfile_path) and
                 self.fpgfile_path.startswith(app.config['UPLOAD_FOLDER'])
             ):
-
-                LOG_INFO('Removing previously uploaded fpg file for "{}": "{}"'.format(self.target, fpgfile_path))
+                LOGGER.info('Removing previously uploaded fpg file for "{}": "{}"'.format(self.target, fpgfile_path))
                 os.remove(self.fpgfile_path)
             
-            new_fpg_header = parse_fpg(fpgfile_path)[0]
-            new_fpg_template = None
-            try:
-                new_fpg_template = new_fpg_header[list(new_fpg_header.keys())[0]]['pr_template']
-            except:
-                pass
-            
-            if(new_fpg_template != self.fpg_template and self.fpg_template is not None):
-                LOG_INFO('Previously uploaded fpg file used template {}. Current fpg supplied for programming uses template {}. '
-                'This is not a permitted action.'.format(self.fpg_template, new_fpg_template))
-                return False
-            
-            LOG_INFO('Programming "{}" with "{}"'.format(self.target, fpgfile_path))
+            LOGGER.info('Programming "{}" with "{}"'.format(self.target, fpgfile_path))
             self.cfpga.transport.upload_to_ram_and_program(fpgfile_path)
             self._setFpgfile_path(fpgfile_path)
         return True
@@ -228,11 +232,17 @@ class RestTransport_FpgFile(Resource):
             else:
                 filepath = request.args.get('fpgfile_path')
 
-            transportTarget.upload_to_ram_and_program(filepath)
-            response = {
-                'response':  transportTarget.fpgfile_path
-            }
-            code = 200
+            if not transportTarget.upload_to_ram_and_program(filepath):
+                response = {
+                    'response': ('Provided fpg file does not match '
+                        '`pr_template`: "{}"'.format(transportTarget.fpg_template))
+                }
+                code = 500
+            else:
+                response = {
+                    'response':  transportTarget.fpgfile_path
+                }
+                code = 200
         except:
             if filepath is not None:
                 response = {
