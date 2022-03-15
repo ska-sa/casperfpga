@@ -3,11 +3,15 @@ import time
 import os
 import requests
 import json
+from io import BytesIO
 
 from .transport import Transport
+from .utils import parse_fpg
 
 __author__ = 'radonnachie'
 __date__ = 'Feb 2022'
+
+REST_SERVER_VERSION_REQUIREMENT = '1.2.0'
 
 class RemotePcieTransport(Transport):
     """
@@ -16,6 +20,7 @@ class RemotePcieTransport(Transport):
 
     def __init__(self, **kwargs):
         """
+        :param host: Identifier of target PCIe FPGA card [pcieAB, xdmaX, or direct xdma ID].
         :param uri: URI for the remote machine hosting the target PCIe FPGA card.
         """
         Transport.__init__(self, **kwargs)
@@ -35,16 +40,14 @@ class RemotePcieTransport(Transport):
         try:
             response = requests.get(url=self.server_uri+'/version')
             if response.status_code == 200:
-                assert response.json()['response'] == '1.1.0'
+                assert response.json()['response'] == REST_SERVER_VERSION_REQUIREMENT
         except:
-            errmsg = 'Server at uri not functional or not version 1.1.0:\n\t@{} {}'.format(
+            errmsg = 'Server at uri not functional or not version {}:\n\t@{} {}'.format(
+                REST_SERVER_VERSION_REQUIREMENT,
                 self.server_uri,
                 "responded with:\n{}".format(response.json()) if response is not None else "did not respond"
             )
             raise RuntimeError(errmsg)
-
-        self.instance_id = kwargs.get('instance_id', 0)
-        self.pci_id = kwargs.get('pci_id', None)
 
         new_connection_msg = '*** NEW REST CLIENT MADE TO {} ***'.format(self.server_uri)
         self.logger.info(new_connection_msg)
@@ -60,18 +63,7 @@ class RemotePcieTransport(Transport):
         bytes_data_len = len(bytes_data)
         return bytes_data, {"Content-Type": 'application/octet-stream', "Content-Length": str(bytes_data_len)}
 
-    def _extend_params_with_id(self, params):
-        if (params is not None and
-            'pci_id' not in params and
-            self.pci_id is not None):
-            params['pci_id'] = self.pci_id
-        elif (params is not None and
-            'instance_id' not in params):
-            params['instance_id'] = self.instance_id
-        return params
-
-    def _put(self, endpoint, data = None, params = {}, files = None):
-        params = self._extend_params_with_id(params)
+    def _put(self, endpoint, data = None, params = None, files = None):
         uri = self.server_uri + '/' + self.host + endpoint
         self.logger.info(uri)
         if data is None and files is None:
@@ -82,8 +74,7 @@ class RemotePcieTransport(Transport):
             reqdata, header = self._content_type(data)
             return requests.put(url=uri, params=params, data=reqdata, headers=header)
 
-    def _get(self, endpoint, data = None, params = {}):
-        params = self._extend_params_with_id(params)        
+    def _get(self, endpoint, data = None, params = None):     
         uri = self.server_uri + '/' + self.host + endpoint
         self.logger.info(uri)
         if data is None:
@@ -228,12 +219,26 @@ class RemotePcieTransport(Transport):
             self.logger.warning(response.json())
             raise RuntimeError(response.json())
 
+    def get_system_information_from_transport(self):
+        """
+        Retrieves the fpg file (as bytes[]) from the server.
+
+        :return: None, {
+            [device info dictionary, memory map info (coreinfo.tab) dictionary],
+            None
+        }
+        """
+        response = self._get('/fpgfile')
+        if response.status_code == 200:
+            return None, parse_fpg(BytesIO(response.content), isbuf=True)
+        else:
+            return None, None
 
 if __name__ == "__main__":
     # some basic tests
     DEFAULT_FPGFILE = "/home/cosmic/src/vla-dev/adm_pcie_9h7_dts_dual_2x100g_dsp_8b/outputs/cosmic_feng_8b.fpg"
 
-    remotepcie = RemotePcieTransport(uri='http://localhost:5000', host='pcie0', pci_id='3e')
+    remotepcie = RemotePcieTransport(uri='http://localhost:5000', host='pcie3e')
     if remotepcie.is_connected(0, 0) and not remotepcie.is_programmed():
         print("Programmed Successfully:", remotepcie.upload_to_ram_and_program(DEFAULT_FPGFILE))
     # print(remotepcie.listdev())
