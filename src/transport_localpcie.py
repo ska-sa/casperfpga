@@ -4,7 +4,8 @@ import logging
 import time
 import os
 import subprocess
-
+import glob
+import re
 from mmap import mmap, PROT_READ, PROT_WRITE, MAP_SHARED
 
 # AXI -> PCIe offset defined in firmware block diagram. PCI transactions
@@ -43,7 +44,7 @@ class LocalPcieTransport(Transport):
             # Pointless trying to log to a logger
             raise RuntimeError(errmsg)
 
-        self.instance_id = kwargs.get('instance_id', 0)
+        self.instance_id = self.getXdmaIdFromTarget(kwargs.get('host', 0))
         # Local char devices for comms
         self._axil_dev = "/dev/xdma%d_user" % self.instance_id
         # AXI Streaming device for uploading bitstreams
@@ -114,6 +115,45 @@ class LocalPcieTransport(Transport):
             return True
         except:
             return False
+    
+    @staticmethod
+    def get_pcie_xdma_map():
+        pcie_xdma_regex = r'/sys/bus/pci/drivers/xdma/\d+:(?P<pci_id>.*?):.*?/xdma/xdma(?P<xdma_id>\d+)_user'
+        xdma_dev_filepaths = glob.glob('/sys/bus/pci/drivers/xdma/*/xdma/xdma*_user')
+        ret = {}
+        for fp in xdma_dev_filepaths:
+            match = re.match(pcie_xdma_regex, fp)
+            ret[match.group('pci_id')] = int(match.group('xdma_id'))
+        return ret
+
+    @staticmethod
+    def getXdmaIdFromTarget(target, pcie_xdma_map = None):
+        if pcie_xdma_map is None:
+            logging.info("Generating local pcie_xdma_map")
+            pcie_xdma_dict = LocalPcieTransport.get_pcie_xdma_map()
+        else:
+            logging.info("Using supplied pcie_xdma_map")
+            pcie_xdma_dict = pcie_xdma_map
+        if target.startswith('pcie'):
+            logging.info("Target supplied with pcie id, mapping to xdma id")
+            pci_id = target[4:]
+            if pci_id not in pcie_xdma_dict:
+                raise RuntimeError(
+                    'pci_id "{}" not recognised:\n{}'.format(
+                        pci_id, pcie_xdma_dict
+                    )
+                )
+            return pcie_xdma_dict[pci_id]
+        
+        if target.startswith('xdma'):
+            logging.info("Target supplied with xdma id, mapping to pcie id")
+            return target[4:]
+
+        raise RuntimeError((
+            'Specified target "{}" not recognised:\nmust begin with either "pcie"'
+            ' or "xdma" or be an exact XDMA ID ({}).').format(target,
+            pcie_xdma_dict.values()
+        ))
 
     def is_running(self):
         """
