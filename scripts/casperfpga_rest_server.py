@@ -20,7 +20,7 @@ __author__ = 'radonnachie'
 __date__ = 'Feb 2022'
 
 LOGGER = logging.getLogger(__name__)
-# Set log format to DEBUG  level
+# Set log format to INFO  level
 logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s",
         level=logging.INFO)
 
@@ -39,7 +39,7 @@ XDMA_PCIE_DICT = None
 PCIE_XDMA_DICT = None
 
 class TransportTarget(object):
-    def __init__(self, xdma_id, cfpga = None):
+    def __init__(self, xdma_id, cfpga = None, **kwargs):
         self.target = 'pcie%s'%XDMA_PCIE_DICT[xdma_id]
         self.instance_id = int(xdma_id)
         self.cfpga = cfpga
@@ -52,6 +52,7 @@ class TransportTarget(object):
                         host=self.target,
                         instance_id=self.instance_id,
                         transport=casperfpga.LocalPcieTransport,
+                        **kwargs
                 )
     
     def __del__(self):
@@ -62,33 +63,9 @@ class TransportTarget(object):
         LOGGER.info('"{}" is programmed with "{}"'.format(self.target, fpgfile_path))
         self.fpgfile_path = fpgfile_path
         self.cfpga.get_system_information(self.fpgfile_path)
-        fpg_header = parse_fpg(self.fpgfile_path)[0]
-        self.fpg_template = None
-        try:
-            self.fpg_template = fpg_header[list(fpg_header.keys())[0]]['pr_template']
-        except:
-            pass
-    
-    def _fpgfileMatchesCurrentTemplate(self, fpgfile_path):
-        new_fpg_header = parse_fpg(fpgfile_path)[0]
-        new_fpg_template = None
-        try:
-            new_fpg_template = new_fpg_header[list(new_fpg_header.keys())[0]]['pr_template']
-        except:
-            pass
-        
-        if(self.fpg_template is not None and new_fpg_template != self.fpg_template):
-            LOGGER.info('Previously uploaded fpg file used template {}. Current '
-            'fpg supplied for programming uses template {}. '
-            'This is not a permitted action.'.format(self.fpg_template, new_fpg_template))
-            return False
-        return True
     
     def upload_to_ram_and_program(self, fpgfile_path):
-        if fpgfile_path != self.fpgfile_path:
-            if not self._fpgfileMatchesCurrentTemplate(fpgfile_path):
-                return False
-            
+        if fpgfile_path != self.fpgfile_path:            
             if (self.fpgfile_path is not None and
                 os.path.exists(self.fpgfile_path) and
                 self.fpgfile_path.startswith(app.config['UPLOAD_FOLDER'])
@@ -97,7 +74,11 @@ class TransportTarget(object):
                 os.remove(self.fpgfile_path)
             
             LOGGER.info('Programming "{}" with "{}"'.format(self.target, fpgfile_path))
-            self.cfpga.transport.upload_to_ram_and_program(fpgfile_path)
+            try:
+                self.cfpga.transport.upload_to_ram_and_program(fpgfile_path)
+            except RuntimeError as r:
+                print(r)
+                return False
             self._setFpgfile_path(fpgfile_path)
         return True
     
@@ -124,10 +105,10 @@ def getXdmaIdFromTarget(target):
         XDMA_PCIE_DICT.keys()
     ))
 
-def getTransportTarget(target):
+def getTransportTarget(target, **kwargs):
     xdma_id = getXdmaIdFromTarget(target) if target not in XDMA_PCIE_DICT.keys() else target
     if xdma_id not in TRANSPORT_TARGET_DICT:
-        TRANSPORT_TARGET_DICT[xdma_id] = TransportTarget(xdma_id)
+        TRANSPORT_TARGET_DICT[xdma_id] = TransportTarget(xdma_id, **kwargs)
     return TRANSPORT_TARGET_DICT[xdma_id]
 
 class RestTransport_Device(Resource):
@@ -321,7 +302,7 @@ if __name__ == '__main__':
         'remote ones.')
     )
     parser.add_argument('fpgfile', type=str,
-        default='/home/cosmic/dev/vla-dev/pr_templates/adm_4x100g_pr_template_test/outputs/adm_4x100g_pr_template_test_2022-02-03_1951.fpg',
+        # default='/home/cosmic/dev/vla-dev/pr_templates/adm_4x100g_pr_template_test/outputs/adm_4x100g_pr_template_test_2022-02-03_1951.fpg',
         help='Path to the initial fpg file that the PCI devices are programmed with.'
     )
     parser.add_argument('--program', '-p', action='store_true',
@@ -334,14 +315,14 @@ if __name__ == '__main__':
 
     for (pci_id, xdma_id) in PCIE_XDMA_DICT.items():
         XDMA_PCIE_DICT[xdma_id] = pci_id
-        localtransport = getTransportTarget(xdma_id)
+        localtransport = getTransportTarget(xdma_id, fpgfile=args.fpgfile)
         if args.program:
             print('Programmed "pcie{}" successfully: {}'.format(pci_id, localtransport.upload_to_ram_and_program(args.fpgfile)))
         else:
             localtransport._setFpgfile_path(args.fpgfile)
 
 
-    app.run(host='0.0.0.0', port=5001, debug=False)  # run our Flask app
+    app.run(host='0.0.0.0', port=5002, debug=False)  # run our Flask app
     # TODO disconnect instances when closing
     # for (target, cfpga) in TARGET_CFPGA_DICT.items():
     #     print('Disconnecting from "{}"'.format(target))
