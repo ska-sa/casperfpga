@@ -181,9 +181,9 @@ class LocalPcieTransport(Transport):
         generated using an appropriate partial reconfiguration flow.
         """
         assert filename.endswith('.fpg')
+        template = self._parse_template_meta(filename)
         if self.fpg_template is not None:
             # assert that the file's template matches
-            template = self._parse_template_meta(filename)
             if self.fpg_template != template:
                 raise RuntimeError(("Programmed image is "
                     "templated by `{}`. Supplied image has mismatching template"
@@ -201,6 +201,9 @@ class LocalPcieTransport(Transport):
         #    fh.write(bitstream)
 
         #subprocess.run(['dma_to_device', '-d', self._axid_dev, '-s', str(size), '-c', '1', '-f', binfile_temp], check=True)
+            
+        if self.fpg_template is None and template is not None:
+            self.fpg_template = template
 
         return True
 
