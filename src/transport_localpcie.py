@@ -15,7 +15,7 @@ MAP_SIZE = 8*1024*1024
 
 from .transport import Transport
 from .network import IpAddress
-from .utils import socket_closer
+from .utils import socket_closer, parse_fpg
 
 __author__ = 'jackh'
 __date__ = 'May 2020'
@@ -28,6 +28,9 @@ class LocalPcieTransport(Transport):
     def __init__(self, **kwargs):
         """
         :param parent_fpga: Instance of parent_fpga
+        :param instance_id: `xdma{id}` of target device
+        :param fpgfile: filepath to fpg image, setting the fpg template
+            restriction
         """
         Transport.__init__(self, **kwargs)
 
@@ -55,6 +58,21 @@ class LocalPcieTransport(Transport):
         # Python2 seems to work with file-like ops.
         self.fh = open(self._axil_dev, "r+b", buffering=0)
         self.axil_mm = mmap(self.fh.fileno(), MAP_SIZE, flags=MAP_SHARED, prot=PROT_READ | PROT_WRITE)
+
+        self.fpg_template = None
+        fpgfile_path = kwargs.get('fpgfile', None)
+        if fpgfile_path is not None:
+            self.fpg_template = self._parse_template_meta(fpgfile_path)
+            self.logger.info('The fpg_template is `{}`.'.format(self.fpg_template))
+        else:
+            self.logger.info('No fpg_template set.')
+
+    def _parse_template_meta(self, fpgfile):
+        fpg_header = parse_fpg(fpgfile)[0]
+        try:
+            return fpg_header[list(fpg_header.keys())[0]]['pr_template']
+        except:
+            return None
 
     def __del__(self):
         self.axil_mm.close()
@@ -163,6 +181,14 @@ class LocalPcieTransport(Transport):
         generated using an appropriate partial reconfiguration flow.
         """
         assert filename.endswith('.fpg')
+        if self.fpg_template is not None:
+            # assert that the file's template matches
+            template = self._parse_template_meta(filename)
+            if self.fpg_template != template:
+                raise RuntimeError(("Programmed image is "
+                    "templated by `{}`. Supplied image has mismatching template"
+                    "`{}`").format(self.fpg_template, template)
+                )
 
         header, bitstream, md5 = self._extract_bitstream(filename)
         
