@@ -137,6 +137,7 @@ class LocalPcieTransport(Transport):
         else:
             logging.info("Using supplied pcie_xdma_map")
             pcie_xdma_dict = pcie_xdma_map
+        
         if target.startswith('pcie'):
             logging.info("Target supplied with pcie id, mapping to xdma id")
             pci_id = target[4:]
@@ -151,6 +152,12 @@ class LocalPcieTransport(Transport):
         if target.startswith('xdma'):
             logging.info("Target supplied with xdma id, mapping to pcie id")
             return target[4:]
+
+        try:
+            if int(target) in pcie_xdma_dict.values():
+                return int(target)
+        except: # target was not an integer
+            pass
 
         raise RuntimeError((
             'Specified target "{}" not recognised:\nmust begin with either "pcie"'
