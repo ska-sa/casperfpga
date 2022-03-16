@@ -28,8 +28,8 @@ class LocalPcieTransport(Transport):
 
     def __init__(self, **kwargs):
         """
+        :param host: The host-device identifier string (see `getXdmaIdFromTarget`)
         :param parent_fpga: Instance of parent_fpga
-        :param instance_id: `xdma{id}` of target device
         :param fpgfile: filepath to fpg image, setting the fpg template
             restriction
         """
@@ -128,6 +128,9 @@ class LocalPcieTransport(Transport):
 
     @staticmethod
     def getXdmaIdFromTarget(target, pcie_xdma_map = None):
+        '''
+        :param target: Identifier of target PCIe device [pcieAB, xdmaXX, or direct xdma ID].
+        '''
         if pcie_xdma_map is None:
             logging.info("Generating local pcie_xdma_map")
             pcie_xdma_dict = LocalPcieTransport.get_pcie_xdma_map()

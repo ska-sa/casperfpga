@@ -39,8 +39,8 @@ XDMA_PCIE_DICT = None
 PCIE_XDMA_DICT = None
 
 class TransportTarget(object):
-    def __init__(self, target_device, cfpga = None, **kwargs):
-        self.target = 'pcie%s'%XDMA_PCIE_DICT[target_device]
+    def __init__(self, xdma_id, cfpga = None, **kwargs):
+        self.target = 'pcie%s'%XDMA_PCIE_DICT[xdma_id]
         self.cfpga = cfpga
         self.fpgfile_path = None
         self.fpg_template = None
@@ -84,7 +84,8 @@ class TransportTarget(object):
         return self.cfpga.transport.is_connected(timeout, retries)
 
 def getTransportTarget(target, **kwargs):
-    xdma_id = LocalPcieTransport.getXdmaIdFromTarget(target) if target not in XDMA_PCIE_DICT.keys() else target
+    # translate target to xdma_id for uniformity of TransportTarget.host
+    xdma_id = LocalPcieTransport.getXdmaIdFromTarget(target, PCIE_XDMA_DICT)
     if xdma_id not in TRANSPORT_TARGET_DICT:
         TRANSPORT_TARGET_DICT[xdma_id] = TransportTarget(xdma_id, **kwargs)
     return TRANSPORT_TARGET_DICT[xdma_id]
