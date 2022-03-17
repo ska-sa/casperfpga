@@ -37,14 +37,17 @@ class SnapAdc(object):
     M_WB_W_ISERDES_BITSLIP_CHIP_SEL = 0b11111111 << 8
     M_WB_W_ISERDES_BITSLIP_LANE_SEL = 0b111 << 5
 
-    def __init__(self, interface, ADC='HMCAD1511', ref=None, resolution=8, **kwargs):
+    def __init__(self, interface, device_name, device_info, initialise=False, ref=None):
+        self.name = device_name
+        ADC = 'HMCAD1511'
+        resolution = int(device_info.get('adc_resolution', '8'))
         self.RESOLUTION  = 8
         self.adc = None
         self.lmx = None
         self.clksw = None
         self.ram = None
 
-        self.logger = kwargs.get('logger',logging.getLogger(__name__))
+        self.logger = device_info.get('logger',logging.getLogger(__name__))
 
         # Current delay tap settings for all IDELAYE2
         self.curDelay = None
@@ -81,8 +84,8 @@ class SnapAdc(object):
 
         # test pattern for clock aligning
         pats = [0b10101010,0b01010101,0b00000000,0b11111111]
-        mask = (1<<(self.RESOLUTION/2))-1
-        ofst = self.RESOLUTION/2
+        mask = (1<<(self.RESOLUTION//2))-1
+        ofst = self.RESOLUTION//2
         self.p1 = ((pats[0] & mask) << ofst) + (pats[3] & mask)
         self.p2 = ((pats[1] & mask) << ofst) + (pats[2] & mask)
 
@@ -283,7 +286,7 @@ class SnapAdc(object):
 
     def _get(self, data, mask):
         data = data & mask
-        return data / (mask & -mask)
+        return data // (mask & -mask)
 
     def _set(self, d1, d2, mask=None):
         # Update some bits of d1 with d2, while keep other bits unchanged
@@ -450,7 +453,7 @@ class SnapAdc(object):
 
         matc = np.array([(cs*4) for cs in chipSel])
 
-        matla = np.array([int(l/2) for l in laneSel if l%2==0])
+        matla = np.array([int(l//2) for l in laneSel if l%2==0])
         if matla.size:
             mata =  np.repeat(matc.reshape(-1,1),matla.size,1) + \
                 np.repeat(matla.reshape(1,-1),matc.size,0)
@@ -458,7 +461,7 @@ class SnapAdc(object):
         else:
             vala = 0
         
-        matlb = np.array([int(l/2) for l in laneSel if l%2==1])
+        matlb = np.array([int(l//2) for l in laneSel if l%2==1])
         if matlb.size:
             matb =  np.repeat(matc.reshape(-1,1),matlb.size,1) + \
                 np.repeat(matlb.reshape(1,-1),matc.size,0)
@@ -599,7 +602,7 @@ class SnapAdc(object):
             self.adc.test('pat_sync')
             # pattern1 = 0b11110000 when self.RESOLUTION is 8
             # pattern1 = 0b111111000000 when self.RESOLUTION is 12
-            pattern1 = ((2**(self.RESOLUTION/2))-1) << (self.RESOLUTION/2)
+            pattern1 = ((2**(self.RESOLUTION//2))-1) << (self.RESOLUTION//2)
             pattern1 = self._signed(pattern1,self.RESOLUTION)
         elif isinstance(pattern1,int) and pattern2==None:
             # single pattern mode
@@ -872,3 +875,18 @@ class SnapAdc(object):
                 ok = ok and (np.all(d[adc][0] == d[adc][0][0]))
         self.adc.test("off")
         return ok
+
+    @classmethod
+    def from_device_info(cls, parent, device_name, device_info, initialise=False, **kwargs):
+        """
+        Process device info and the memory map to get all the necessary info
+        and return a SKARAB ADC instance.
+        :param parent: The parent device, normally a casperfpga instance
+        :param device_name:
+        :param device_info:
+        :param memorymap_dict:
+        :param initialise:
+        :param kwargs:
+        :return:
+        """
+        return cls(parent, device_name, device_info, initialise, **kwargs)
