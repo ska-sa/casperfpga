@@ -140,18 +140,19 @@ class LocalPcieTransport(Transport):
                 logger.info("Using supplied pcie_xdma_map")
             pcie_xdma_dict = pcie_xdma_map
         
-        if target.startswith('pcie'):
-            if logger is not None:
-                logger.info("Target supplied with pcie id, mapping to xdma id")
-            pci_id = target[4:]
-            if pci_id in pcie_xdma_dict:
-                return pcie_xdma_dict[pci_id]
-        
-        if target.startswith('xdma'):
-            if logger is not None:
-                logger.info("Target supplied with xdma id, mapping to pcie id")
-            if int(target[4:]) in pcie_xdma_dict.values():
-                return int(target[4:])
+        if isinstance(target, str):
+            if target.startswith('pcie'):
+                if logger is not None:
+                    logger.info("Target supplied with pcie id, mapping to xdma id")
+                pci_id = target[4:]
+                if pci_id in pcie_xdma_dict:
+                    return pcie_xdma_dict[pci_id]
+            
+            if target.startswith('xdma'):
+                if logger is not None:
+                    logger.info("Target supplied with xdma id, mapping to pcie id")
+                if int(target[4:]) in pcie_xdma_dict.values():
+                    return int(target[4:])
 
         try:
             if int(target) in pcie_xdma_dict.values():
