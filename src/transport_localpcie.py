@@ -44,7 +44,7 @@ class LocalPcieTransport(Transport):
             # Pointless trying to log to a logger
             raise RuntimeError(errmsg)
 
-        self.instance_id = self.getXdmaIdFromTarget(kwargs.get('host', 0))
+        self.instance_id = self.getXdmaIdFromTarget(kwargs.get('host', 0), logger = self.logger)
         # Local char devices for comms
         self._axil_dev = "/dev/xdma%d_user" % self.instance_id
         # AXI Streaming device for uploading bitstreams
@@ -127,31 +127,31 @@ class LocalPcieTransport(Transport):
         return ret
 
     @staticmethod
-    def getXdmaIdFromTarget(target, pcie_xdma_map = None):
+    def getXdmaIdFromTarget(target, pcie_xdma_map = None, logger = None):
         '''
         :param target: Identifier of target PCIe device [pcieAB, xdmaXX, or direct xdma ID].
         '''
         if pcie_xdma_map is None:
-            logging.info("Generating local pcie_xdma_map")
+            if logger is not None:
+                logger.info("Generating local pcie_xdma_map")
             pcie_xdma_dict = LocalPcieTransport.get_pcie_xdma_map()
         else:
-            logging.info("Using supplied pcie_xdma_map")
+            if logger is not None:
+                logger.info("Using supplied pcie_xdma_map")
             pcie_xdma_dict = pcie_xdma_map
         
         if target.startswith('pcie'):
-            logging.info("Target supplied with pcie id, mapping to xdma id")
+            if logger is not None:
+                logger.info("Target supplied with pcie id, mapping to xdma id")
             pci_id = target[4:]
-            if pci_id not in pcie_xdma_dict:
-                raise RuntimeError(
-                    'pci_id "{}" not recognised:\n{}'.format(
-                        pci_id, pcie_xdma_dict
-                    )
-                )
-            return pcie_xdma_dict[pci_id]
+            if pci_id in pcie_xdma_dict:
+                return pcie_xdma_dict[pci_id]
         
         if target.startswith('xdma'):
-            logging.info("Target supplied with xdma id, mapping to pcie id")
-            return target[4:]
+            if logger is not None:
+                logger.info("Target supplied with xdma id, mapping to pcie id")
+            if int(target[4:]) in pcie_xdma_dict.values():
+                return int(target[4:])
 
         try:
             if int(target) in pcie_xdma_dict.values():
@@ -160,9 +160,9 @@ class LocalPcieTransport(Transport):
             pass
 
         raise RuntimeError((
-            'Specified target "{}" not recognised:\nmust begin with either "pcie"'
+            'Specified target "{}" not recognised:\n\tmust begin with either "pcie"'
             ' or "xdma" or be an exact XDMA ID ({}).').format(target,
-            pcie_xdma_dict.values()
+            {f'pcie{pcie}':f'xdma{xdma}' for pcie, xdma in pcie_xdma_dict.items()}
         ))
 
     def is_running(self):
