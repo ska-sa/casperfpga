@@ -41,7 +41,6 @@ PCIE_XDMA_DICT = None
 class TransportTarget(object):
     def __init__(self, xdma_id, cfpga = None, **kwargs):
         self.target = 'pcie%s'%XDMA_PCIE_DICT[xdma_id]
-        self.instance_id = int(xdma_id)
         self.cfpga = cfpga
         self.fpgfile_path = None
         self.fpg_template = None
@@ -50,7 +49,6 @@ class TransportTarget(object):
             LOGGER.info('Connecting to "{}"'.format(self.target))
             self.cfpga = casperfpga.CasperFpga(
                         host=self.target,
-                        instance_id=self.instance_id,
                         transport=casperfpga.LocalPcieTransport,
                         **kwargs
                 )
@@ -85,28 +83,9 @@ class TransportTarget(object):
     def is_connected(self, timeout=None, retries=None):
         return self.cfpga.transport.is_connected(timeout, retries)
 
-def getXdmaIdFromTarget(target):
-    if target.startswith('pcie'):
-        pci_id = target[4:]
-        if pci_id not in PCIE_XDMA_DICT:
-            raise RuntimeError(
-                'pci_id "{}" not recognised:\n{}'.format(
-                    pci_id, PCIE_XDMA_DICT
-                )
-            )
-        return PCIE_XDMA_DICT[pci_id]
-    
-    if target.startswith('xdma'):
-        return target[4:]
-
-    raise RuntimeError((
-        'Specified target "{}" not recognised:\nmust begin with either "pcie"'
-        ' or "xdma" or be an exact XDMA ID ({}).').format(target,
-        XDMA_PCIE_DICT.keys()
-    ))
-
 def getTransportTarget(target, **kwargs):
-    xdma_id = getXdmaIdFromTarget(target) if target not in XDMA_PCIE_DICT.keys() else target
+    # translate target to xdma_id for uniformity of TransportTarget.host
+    xdma_id = LocalPcieTransport.getXdmaIdFromTarget(target, PCIE_XDMA_DICT)
     if xdma_id not in TRANSPORT_TARGET_DICT:
         TRANSPORT_TARGET_DICT[xdma_id] = TransportTarget(xdma_id, **kwargs)
     return TRANSPORT_TARGET_DICT[xdma_id]
@@ -287,15 +266,6 @@ api.add_resource(RestTransport_IsProgrammed, '/<string:target>/programmed')
 api.add_resource(RestTransport_PciXdmaMap, '/PciXdmaMap')
 api.add_resource(RestTransport_Version, '/version')
 
-def get_pcie_xdma_map():
-    pcie_xdma_regex = r'/sys/bus/pci/drivers/xdma/\d+:(?P<pci_id>.*?):.*?/xdma/xdma(?P<xdma_id>\d+)_user'
-    xdma_dev_filepaths = glob.glob('/sys/bus/pci/drivers/xdma/*/xdma/xdma*_user')
-    ret = {}
-    for fp in xdma_dev_filepaths:
-        match = re.match(pcie_xdma_regex, fp)
-        ret[match.group('pci_id')] = match.group('xdma_id')
-    return ret
-
 if __name__ == '__main__':    
     parser = argparse.ArgumentParser(
         description=('Initialize a REST server exposing localpcietransports as'
@@ -310,7 +280,8 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    PCIE_XDMA_DICT = get_pcie_xdma_map()
+
+    PCIE_XDMA_DICT = LocalPcieTransport.get_pcie_xdma_map()
     XDMA_PCIE_DICT = {}
 
     for (pci_id, xdma_id) in PCIE_XDMA_DICT.items():
@@ -322,7 +293,7 @@ if __name__ == '__main__':
             localtransport._setFpgfile_path(args.fpgfile)
 
 
-    app.run(host='0.0.0.0', port=5002, debug=False)  # run our Flask app
+    app.run(host='0.0.0.0', port=5000, debug=False)  # run our Flask app
     # TODO disconnect instances when closing
     # for (target, cfpga) in TARGET_CFPGA_DICT.items():
     #     print('Disconnecting from "{}"'.format(target))

@@ -4,7 +4,8 @@ import logging
 import time
 import os
 import subprocess
-
+import glob
+import re
 from mmap import mmap, PROT_READ, PROT_WRITE, MAP_SHARED
 
 # AXI -> PCIe offset defined in firmware block diagram. PCI transactions
@@ -27,8 +28,8 @@ class LocalPcieTransport(Transport):
 
     def __init__(self, **kwargs):
         """
+        :param host: The host-device identifier string (see `getXdmaIdFromTarget`)
         :param parent_fpga: Instance of parent_fpga
-        :param instance_id: `xdma{id}` of target device
         :param fpgfile: filepath to fpg image, setting the fpg template
             restriction
         """
@@ -43,7 +44,7 @@ class LocalPcieTransport(Transport):
             # Pointless trying to log to a logger
             raise RuntimeError(errmsg)
 
-        self.instance_id = kwargs.get('instance_id', 0)
+        self.instance_id = self.getXdmaIdFromTarget(kwargs.get('host', 0), logger = self.logger)
         # Local char devices for comms
         self._axil_dev = "/dev/xdma%d_user" % self.instance_id
         # AXI Streaming device for uploading bitstreams
@@ -114,6 +115,55 @@ class LocalPcieTransport(Transport):
             return True
         except:
             return False
+    
+    @staticmethod
+    def get_pcie_xdma_map():
+        pcie_xdma_regex = r'/sys/bus/pci/drivers/xdma/\d+:(?P<pci_id>.*?):.*?/xdma/xdma(?P<xdma_id>\d+)_user'
+        xdma_dev_filepaths = glob.glob('/sys/bus/pci/drivers/xdma/*/xdma/xdma*_user')
+        ret = {}
+        for fp in xdma_dev_filepaths:
+            match = re.match(pcie_xdma_regex, fp)
+            ret[match.group('pci_id')] = int(match.group('xdma_id'))
+        return ret
+
+    @staticmethod
+    def getXdmaIdFromTarget(target, pcie_xdma_map = None, logger = None):
+        '''
+        :param target: Identifier of target PCIe device [pcieAB, xdmaXX, or direct xdma ID].
+        '''
+        if pcie_xdma_map is None:
+            if logger is not None:
+                logger.info("Generating local pcie_xdma_map")
+            pcie_xdma_dict = LocalPcieTransport.get_pcie_xdma_map()
+        else:
+            if logger is not None:
+                logger.info("Using supplied pcie_xdma_map")
+            pcie_xdma_dict = pcie_xdma_map
+        
+        if target.startswith('pcie'):
+            if logger is not None:
+                logger.info("Target supplied with pcie id, mapping to xdma id")
+            pci_id = target[4:]
+            if pci_id in pcie_xdma_dict:
+                return pcie_xdma_dict[pci_id]
+        
+        if target.startswith('xdma'):
+            if logger is not None:
+                logger.info("Target supplied with xdma id, mapping to pcie id")
+            if int(target[4:]) in pcie_xdma_dict.values():
+                return int(target[4:])
+
+        try:
+            if int(target) in pcie_xdma_dict.values():
+                return int(target)
+        except: # target was not an integer
+            pass
+
+        raise RuntimeError((
+            'Specified target "{}" not recognised:\n\tmust begin with either "pcie"'
+            ' or "xdma" or be an exact XDMA ID ({}).').format(target,
+            {f'pcie{pcie}':f'xdma{xdma}' for pcie, xdma in pcie_xdma_dict.items()}
+        ))
 
     def is_running(self):
         """
