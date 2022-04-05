@@ -11,3 +11,4 @@ traitlets<5
 jedi<=0.16
 parso<=0.6.1
 ipython<7
+requests
