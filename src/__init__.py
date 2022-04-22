@@ -6,6 +6,7 @@ control and monitor fpga-based casper designs.
 from bitfield import Bitfield, Field
 from katadc import KatAdc
 from casperfpga import CasperFpga
+from transport_alveo import AlveoTransport
 from transport_katcp import KatcpTransport
 from transport_tapcp import TapcpTransport
 from transport_skarab import SkarabTransport
