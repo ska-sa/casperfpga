@@ -5,7 +5,6 @@ import time
 import logging
 import socket
 import katcp
-#import sys
 
 LOGGER = logging.getLogger(__name__)
 
@@ -25,12 +24,7 @@ class CheckCounter(object):
         self.data = None
         self.changed = False
 
-#import sys
-#
-#class DevNull:
-#    def write(self, msg):
-#        pass
-#
+
 def list_alveos(remote_host_ip):
     for remote_port in range(7150,7160,2):
       #in order to get the output of this function "neat", first look for open TCP sockets
@@ -71,57 +65,6 @@ def list_alveos(remote_host_ip):
 
         except Exception:
           pass
-
-
-#      timeout=1
-##sys.tracebacklimit = 0
-#      sys.stderr = DevNull()
-#      try:
-#        board = katcp.CallbackClient(host=remote_host_ip, port=remote_port, timeout=timeout, auto_reconnect=False)
-#        board.setDaemon(True)
-#        try:
-#          board.start()
-#          connected = board.wait_connected(timeout)
-#        except KatcpClientError:
-#          pass
-#        except Exception:
-#          pass
-#        #have to block here (ie sleep) else board gets stopped before it's used
-#
-#        if connected:
-#          time.sleep(1)
-#          boardtype = board.versions
-#          if boardtype.has_key('alveo-card'):
-#            print('port=%d\ttype=%s\tserial=%s' % (remote_port, boardtype['alveo-card'][0], boardtype['alveo-serial'][0]))
-#          else:
-#            print('port=%d\ttype=None\tserial=None' % (remote_port))
-#
-#        board.stop()
-
-#      timeout=1
-#      try:
-#        board = katcp.BlockingClient(host=remote_host_ip, port=remote_port, timeout=timeout)
-#        board.setDaemon(True)
-#        board.start()
-#        connected = board.wait_connected(timeout)
-#
-#        if connected:
-#        #have to block here (ie sleep) else board gets stopped before it's used
-#          time.sleep(1)
-#          boardtype = board.versions
-#          if boardtype.has_key('alveo-card'):
-#            print('port=%d\ttype=%s\t\tserial=%s' % (remote_port, boardtype['alveo-card'][0], boardtype['alveo-serial'][0]))
-#          else:
-#            print('port=%d\ttype=None\t\tserial=None' % (remote_port))
-#
-#        board.stop()
-#
-#      except AttributeError:
-#        raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
-#
-#      except Exception:
-#        pass
-
 
 
 def create_meta_dictionary(metalist):
