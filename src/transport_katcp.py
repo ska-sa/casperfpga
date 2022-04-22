@@ -114,6 +114,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self._timeout = timeout
         self.connect()
         self.logger.info('%s: port(%s) created and connected.' % (self.host, port))
+        self.sensor_list = {};
 
     @staticmethod
     def test_host_type(host_ip, timeout=5):
@@ -375,6 +376,18 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                           str(size))
         )
         return reply.arguments[1]
+
+
+    def get_sensor_data(self):
+        """
+        :return: sensor data 
+        """
+        #self.sensor_list.update({"12V_PEX": ["12.51", "V"]})
+        _,informs = self.katcprequest(
+            name='sensor-value', request_timeout=self._timeout, require_ok=True,
+        )
+        return [(i.arguments[0], i.arguments[1], i.arguments[2], i.arguments[3], i.arguments[4]) for i in informs]
+        #return self.sensor_list
 
     def blindwrite(self, device_name, data, offset=0):
         """
