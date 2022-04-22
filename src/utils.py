@@ -3,6 +3,9 @@ import threading
 import Queue
 import time
 import logging
+import socket
+import katcp
+#import sys
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +24,104 @@ class CheckCounter(object):
         self.required = required
         self.data = None
         self.changed = False
+
+#import sys
+#
+#class DevNull:
+#    def write(self, msg):
+#        pass
+#
+def list_alveos(remote_host_ip):
+    for remote_port in range(7150,7160,2):
+      #in order to get the output of this function "neat", first look for open TCP sockets
+      #in the given port range, then check if it's a tcpbs svr on the other end. This is due
+      #to the difficulty in catching the "tornado lib" callback exception with a try..except block
+      #and leads to a verbose (and non-concise) output, flooding the user interface with
+      #(unnecessary) traceback output, so the strategy followed is in mitigation of this.
+      #Basically, just tell the user what he/she has asked for - the available alveos.
+
+      sock    = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      remote  = (remote_host_ip, remote_port)
+      result = sock.connect_ex(remote);
+      sock.close()    #don't need this socket anymore, so close
+
+      if result == 0:
+        #this means theres a stream connection available on this remote port
+        #let's see if it's tcpbs on the other end
+        timeout=1
+        try:
+          board = katcp.BlockingClient(host=remote_host_ip, port=remote_port, timeout=timeout)
+          board.setDaemon(True)
+          board.start()
+          connected = board.wait_connected(timeout)
+
+          if connected:
+          #have to block here (ie sleep) else board obj gets stopped before it's used (so it seems)
+            time.sleep(1)
+            boardtype = board.versions
+            if boardtype.has_key('alveo-card'):
+              print('[katcp] port=%d\ttype=%-20s\tserial=%s' % (remote_port, boardtype['alveo-card'][0], boardtype['alveo-serial'][0]))
+            else:
+              print('[katcp] port=%d\ttype=%-20s\tserial=None' % (remote_port, "None"))
+
+          board.stop()
+
+        except AttributeError:
+          raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
+
+        except Exception:
+          pass
+
+
+#      timeout=1
+##sys.tracebacklimit = 0
+#      sys.stderr = DevNull()
+#      try:
+#        board = katcp.CallbackClient(host=remote_host_ip, port=remote_port, timeout=timeout, auto_reconnect=False)
+#        board.setDaemon(True)
+#        try:
+#          board.start()
+#          connected = board.wait_connected(timeout)
+#        except KatcpClientError:
+#          pass
+#        except Exception:
+#          pass
+#        #have to block here (ie sleep) else board gets stopped before it's used
+#
+#        if connected:
+#          time.sleep(1)
+#          boardtype = board.versions
+#          if boardtype.has_key('alveo-card'):
+#            print('port=%d\ttype=%s\tserial=%s' % (remote_port, boardtype['alveo-card'][0], boardtype['alveo-serial'][0]))
+#          else:
+#            print('port=%d\ttype=None\tserial=None' % (remote_port))
+#
+#        board.stop()
+
+#      timeout=1
+#      try:
+#        board = katcp.BlockingClient(host=remote_host_ip, port=remote_port, timeout=timeout)
+#        board.setDaemon(True)
+#        board.start()
+#        connected = board.wait_connected(timeout)
+#
+#        if connected:
+#        #have to block here (ie sleep) else board gets stopped before it's used
+#          time.sleep(1)
+#          boardtype = board.versions
+#          if boardtype.has_key('alveo-card'):
+#            print('port=%d\ttype=%s\t\tserial=%s' % (remote_port, boardtype['alveo-card'][0], boardtype['alveo-serial'][0]))
+#          else:
+#            print('port=%d\ttype=None\t\tserial=None' % (remote_port))
+#
+#        board.stop()
+#
+#      except AttributeError:
+#        raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
+#
+#      except Exception:
+#        pass
+
 
 
 def create_meta_dictionary(metalist):
