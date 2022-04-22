@@ -26,6 +26,16 @@ class CheckCounter(object):
 
 
 def list_alveos(remote_host_ip):
+
+    """
+    Find available Alveos in predefined port range on given host
+
+    :param remote_host_ip: IP Addr of remote node hosting the Alveos
+    :return: a dictionary of dictionaries of available Alveos and respective parameters
+    """
+
+    alveos={}    #empty dictionary detailing available alveo connections in given port range on given host
+
     for remote_port in range(7150,7160,2):
       #in order to get the output of this function "neat", first look for open TCP sockets
       #in the given port range, then check if it's a tcpbs svr on the other end. This is due
@@ -54,9 +64,15 @@ def list_alveos(remote_host_ip):
             time.sleep(1)
             boardtype = board.versions
             if boardtype.has_key('alveo-card'):
-              print('[katcp] port=%d\ttype=%-20s\tserial=%s' % (remote_port, boardtype['alveo-card'][0], boardtype['alveo-serial'][0]))
-            else:
-              print('[katcp] port=%d\ttype=%-20s\tserial=None' % (remote_port, "None"))
+              #print('[katcp] port=%d\ttype=%-20s\tserial=%s' % (remote_port, boardtype['alveo-card'][0], boardtype['alveo-serial'][0]))
+              alveos[boardtype['alveo-card'][0]]={}    #alveos is now dictionary of dictionaries. This key should be unique
+              alveos[boardtype['alveo-card'][0]]['proto']='katcp'
+              alveos[boardtype['alveo-card'][0]]['host']=remote_host_ip
+              alveos[boardtype['alveo-card'][0]]['port']=remote_port
+              alveos[boardtype['alveo-card'][0]]['serial']=boardtype['alveo-serial'][0]
+
+            #else:
+            #  print('[katcp] port=%d\ttype=%-20s\tserial=None' % (remote_port, "None"))
 
           board.stop()
 
@@ -65,6 +81,8 @@ def list_alveos(remote_host_ip):
 
         except Exception:
           pass
+
+    return alveos
 
 
 def create_meta_dictionary(metalist):
