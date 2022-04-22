@@ -304,7 +304,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         reply, _ = self.katcprequest(name='status',
                                      request_timeout=self._timeout)
-        return reply.arguments[1]
+        return reply.arguments[0] == 'ok'
 
     def ping(self):
         """
