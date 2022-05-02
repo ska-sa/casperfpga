@@ -132,10 +132,10 @@ class Hmc(Memory):
 
         # HMC Status Registers (LINK2)
         self.hmc_status_list['hmc_stat_gen_link2'] = (self._wbone_rd(self.address + self.reg_map['HMC_STAT_GEN_LOW_LINK2']) +
-                                                      self._wbone_rd(self.address + self.reg_map['HMC_STAT_GEN_HIGH_LINK2']) << 32)
+                                                      (self._wbone_rd(self.address + self.reg_map['HMC_STAT_GEN_HIGH_LINK2']) << 32))
 
         self.hmc_status_list['hmc_stat_init_link2'] = (self._wbone_rd(self.address + self.reg_map['HMC_STAT_INIT_LOW_LINK2']) +
-                                                      self._wbone_rd(self.address + self.reg_map['HMC_STAT_INIT_HIGH_LINK2']) << 32)
+                                                      (self._wbone_rd(self.address + self.reg_map['HMC_STAT_INIT_HIGH_LINK2']) << 32))
 
         self.hmc_status_list['hmc_ctrl_link2'] = (self._wbone_rd(self.address +
                                                  self.reg_map['HMC_CTRL_LOW_LINK2']) +

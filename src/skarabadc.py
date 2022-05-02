@@ -311,7 +311,7 @@ class SkarabAdc(object):
         read_byte = self.parent.transport.read_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
 
         timeout = 0
-        while (((read_byte[0] & UPDATE_DDC_CHANGE) != 0) and (timeout < 1000)):
+        while (((read_byte[0] & sd.UPDATE_DDC_CHANGE) != 0) and (timeout < 1000)):
             self.parent.transport.write_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, sd.DDC_CONTROL_REG)
             read_byte = self.parent.transport.read_i2c(self.i2c_interface, sd.STM_I2C_DEVICE_ADDRESS, 1)
             timeout = timeout + 1
@@ -458,7 +458,7 @@ class SkarabAdc(object):
                                                         sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
                         
                         timeout = 0
-                        while (((spi_read_word & PLL_CLOCK_OUTPUT_PHASE_STATUS) == 0x0) and (timeout < 1000)):
+                        while (((spi_read_word & sd.PLL_CLOCK_OUTPUT_PHASE_STATUS) == 0x0) and (timeout < 1000)):
                             spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
                                                             sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
                             timeout = timeout + 1
@@ -469,24 +469,24 @@ class SkarabAdc(object):
 
                         # Power up SYSREF input buffer on ADCs
                         self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
+                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
                         self.parent.transport.direct_spi_write(
                             self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
                         self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, ADC_MASTER_PDN_SYSREF, 0x00)
+                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_MASTER_PDN_SYSREF, 0x00)
 
                         self.parent.transport.direct_spi_write(
                             self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
                         self.parent.transport.direct_spi_write(
                             self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
                         self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, ADC_MASTER_PDN_SYSREF, 0x00)
+                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_MASTER_PDN_SYSREF, 0x00)
 
                         time.sleep(1)
                         
                         # Need to disable both at the same time so NCOs have same phase
                         self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_DUAL_ADC, ADC_MASTER_PDN_SYSREF, 0x10)
+                            self.mezzanine_site, sd.SPI_DESTINATION_DUAL_ADC, sd.ADC_MASTER_PDN_SYSREF, 0x10)
                         
                         # Disable SYSREF again
                         self.parent.transport.direct_spi_write(
@@ -524,7 +524,7 @@ class SkarabAdc(object):
                     else:
                         # Change the SYNC pin to SYNC source
                         self.parent.transport.direct_spi_write(self.mezzanine_site,
-                                sd.SPI_DESTINATION_PLL, PLL_GLOBAL_MODE_AND_ENABLE_CONTROL, 0x41)
+                                sd.SPI_DESTINATION_PLL, sd.PLL_GLOBAL_MODE_AND_ENABLE_CONTROL, 0x41)
 
                         # Change SYSREF to pulse gen mode so don't generate any pulses yet
                         self.parent.transport.direct_spi_write(
@@ -577,7 +577,7 @@ class SkarabAdc(object):
                         spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
                                                         sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
                         timeout = 0
-                        while (((spi_read_word & PLL_CLOCK_OUTPUT_PHASE_STATUS) == 0x0) and (timeout < 1000)):
+                        while (((spi_read_word & sd.PLL_CLOCK_OUTPUT_PHASE_STATUS) == 0x0) and (timeout < 1000)):
                             spi_read_word = self.parent.transport.direct_spi_read(self.mezzanine_site,
                                                             sd.SPI_DESTINATION_PLL, sd.PLL_ALARM_READBACK)
                             timeout = timeout + 1
@@ -602,14 +602,14 @@ class SkarabAdc(object):
                         self.parent.transport.direct_spi_write(self.mezzanine_site,
                             sd.SPI_DESTINATION_ADC_0, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
                         self.parent.transport.direct_spi_write(self.mezzanine_site,
-                            sd.SPI_DESTINATION_ADC_0, ADC_MASTER_PDN_SYSREF, 0x00)
+                            sd.SPI_DESTINATION_ADC_0, sd.ADC_MASTER_PDN_SYSREF, 0x00)
 
                         self.parent.transport.direct_spi_write(self.mezzanine_site,
                             sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_ADC_PAGE_SEL, 0x00)
                         self.parent.transport.direct_spi_write(self.mezzanine_site,
                             sd.SPI_DESTINATION_ADC_1, sd.ADC_GENERAL_MASTER_PAGE_SEL, 0x04)
                         self.parent.transport.direct_spi_write(self.mezzanine_site,
-                            sd.SPI_DESTINATION_ADC_1, ADC_MASTER_PDN_SYSREF, 0x00)
+                            sd.SPI_DESTINATION_ADC_1, sd.ADC_MASTER_PDN_SYSREF, 0x00)
 
                 # Trigger a PLL SYNC signal from the MB firmware
                 self.parent.write_int('pll_sync_start_in', 0)
@@ -632,9 +632,9 @@ class SkarabAdc(object):
                     if synchronise_mezzanine[mezzanine]:
                         # Power down SYSREF input buffer on ADCs
                         self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, ADC_MASTER_PDN_SYSREF, 0x10)
+                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_0, sd.ADC_MASTER_PDN_SYSREF, 0x10)
                         self.parent.transport.direct_spi_write(
-                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, ADC_MASTER_PDN_SYSREF, 0x10)
+                            self.mezzanine_site, sd.SPI_DESTINATION_ADC_1, sd.ADC_MASTER_PDN_SYSREF, 0x10)
 
                 # endregion
 

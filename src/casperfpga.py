@@ -19,6 +19,8 @@ from . import katadc
 from . import skarabadc
 from . import snapadc
 from . import sysmon
+from . import xil_device
+from . import adc_4x16g_asnt
 from .memory import Memory
 
 from .attribute_container import AttributeContainer
@@ -31,6 +33,7 @@ from .casper_platform_id_map import PLATFORM_ID
 
 from .CasperLogHandlers import configure_console_logging, configure_file_logging
 from .CasperLogHandlers import getLogger
+
 
 # known CASPER memory-accessible devices and their associated
 # classes and containers
@@ -45,13 +48,16 @@ CASPER_MEMORY_DEVICES = {
     'xps:onegbe':       {'class': onegbe.OneGbe,     'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
     'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
+    'xps:xil_device':   {'class': xil_device.Xil_Device, 'container': 'xil_device'}
 }
 
 CASPER_ADC_DEVICES = {
     'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
     'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
     'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:adc_4x16g_asnt':           {'class': adc_4x16g_asnt.Adc_4X16G_ASNT, 'container': 'adcs'},
     'xps:snap_adc':                 {'class': snapadc.SnapAdc,      'container': 'adcs'}
+
 }
 
 # other devices - blocks that aren't memory devices nor ADCs, but about which we'd
@@ -376,22 +382,8 @@ class CasperFpga(object):
         """
         self.is_little_endian = False
         board_id = self.read_uint('sys_board_id')
-        
-        if (board_id >> 16) == 0xB00B:  # ROACH
-            return self.is_little_endian
-        
-        if (board_id >> 16) == 0xBABE:  # ROACH2
-            return self.is_little_endian
-        
-        if board_id == 0:               # red pitaya
-            self.is_little_endian = True
-            return self.is_little_endian
-        
         msb = (board_id >> 24) & 0xff
-        if msb > 0:
-            self.is_little_endian = True
-            return self.is_little_endian
-        
+        self.is_little_endian = (msb > 0) or (board_id == 0)
         return self.is_little_endian
 
     def _reset_device_info(self):
@@ -669,7 +661,7 @@ class CasperFpga(object):
         :return: None
         """
         for device_name, device_info in list(device_dict.items()):
-            
+
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank '
                                 'device name?')
@@ -797,7 +789,6 @@ class CasperFpga(object):
             self.rcs_info['git'].pop('tag')
         except:
             pass
-
         # Create Register Map
         self.logger.info("Creating memory devices")
         self._create_memory_devices(device_dict, memorymap_dict,
