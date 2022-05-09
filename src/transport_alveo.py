@@ -9,13 +9,13 @@ class AlveoFunctionError(RuntimeError):
 class AlveoTransport(KatcpTransport):
 
   @staticmethod
-  def test_host_type(host_ip, timeout=5):
+  def test_host_type(host_ip, port, timeout=5):
     """
     Is this host_ip assigned to an Alveo?
     """
-    print("new alveo-test-host")
+    #print("new alveo-test-host")
     try:
-      board = katcp.CallbackClient(host=host_ip, port=7147,
+      board = katcp.CallbackClient(host=host_ip, port=port,
       timeout=timeout, auto_reconnect=False)
       board.setDaemon(True)
       board.start()
@@ -24,25 +24,25 @@ class AlveoTransport(KatcpTransport):
       #TODO this read needs to be standardized with the final mem map
       #reply,informs = board.blocking_request(katcp.Message.request('alveo-read','0x28000' ),timeout=timeout)
       #reply,informs = board.blocking_request(katcp.Message.request('alveo-read','0x90004' ),timeout=timeout)
-      reply,informs = board.blocking_request(katcp.Message.request('wordread','gpio' ),timeout=timeout)
+      reply,informs = board.blocking_request(katcp.Message.request('wordread','id' ),timeout=timeout)
       board.stop()
 
       #args = [(i.arguments[0], i.arguments[1]) for i in informs]
       #if args[0][1] == '0x74736574':
       #if args[0][1] == '0xDECADE05':
-      if reply.arguments[1] == '0xdecade08':
-        print("Seems to be an ALVEO")   #TODO to be removed
+      if reply.arguments[1] == '0xdecade05':
+        #print("Seems to be an ALVEO")   #TODO to be removed
         return True
       else:
-        print("Seems not to be an ALVEO")   #TODO to be removed
+        #print("Seems not to be an ALVEO")   #TODO to be removed
         return False
 
     except AttributeError:
-      print("alveo-error")
+      #print("alveo-error")
       raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
 
     except Exception:
-      print("alveo-failed")
+      #print("alveo-failed")
       return False
 
 
