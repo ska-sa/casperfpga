@@ -683,6 +683,20 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.prog_info['last_uploaded'] = filename
         return
 
+#    def upload_and_program(self, filename):
+##try:
+#        self.upload_to_flash(filename)
+#        self.program(filename)
+#
+#        reply, _ = self.katcprequest(
+#        name='alveo-program', request_timeout=120, require_ok=True)
+#        if reply.arguments[0] != 'ok':
+#          raise RuntimeError('%s: could not program alveo' % self.host)
+#
+#        self._delete_bof(filename)
+##except Exception as e:
+##       print(e)
+
     def _delete_bof(self, filename):
         """
         Delete a binary file from the device.
