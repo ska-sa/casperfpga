@@ -1,5 +1,5 @@
-import time,numpy as np,logging,struct
-from i2c import I2C_DEVICE
+import time, numpy as np, logging, struct
+from .i2c import I2C_DEVICE
 
 class LTC2990(I2C_DEVICE):
     """ Quad I2C Voltage, Current and Temperature Monitor """
