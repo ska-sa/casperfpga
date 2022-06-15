@@ -1,9 +1,32 @@
-from wishbonedevice import WishBoneDevice
+from .wishbonedevice import WishBoneDevice
 import fractions as _frac
 import logging
 import time
 
-logging.getLogger(__name__).addHandler(logging.NullHandler())
+class LMXRaw(object):
+
+    def __init__(self, itf, cs=0b0, **kwargs):
+        self.itf = itf
+        self.cs = cs
+        self.logger = kwargs.get('logger',logging.getLogger(__name__))
+
+    def send(self, addr_data):
+        bytes_to_send = [0 for _ in range(3)]
+        bytes_to_send[0] = (addr_data >> 16) & 0xff
+        bytes_to_send[1] = (addr_data >> 8)  & 0xff
+        bytes_to_send[2] = (addr_data >> 0)  & 0xff
+        bytes_received = self.itf.write(self.cs, data=bytes_to_send)
+        return bytes_received
+
+    def readback(self, addr_data):
+        bytes_to_send = [0 for _ in range(3)]
+        bytes_to_send[0] = ((addr_data >> 16) & 0xff) + 0x80
+        bytes_to_send[1] = (addr_data >> 8)  & 0xff
+        bytes_to_send[2] = (addr_data >> 0)  & 0xff
+        bytes_received = self.itf.write(self.cs, data=bytes_to_send)
+        return bytes_received
+
+
 
 class LMX2581(WishBoneDevice):
 	""" LMX2581 Frequency Synthesizer """
@@ -294,9 +317,10 @@ class LMX2581(WishBoneDevice):
 		self.setWord(0, 'NO_FCAL')
 
 		if self.getDiagnoses('LD_PINSTATE'):
+			self.logger.info('LMX2581 locked at {} MHz'.format(synth_mhz))
 			return True
 		else:
-			logging.error('LMX2581 not locked')
+			self.logger.error('LMX2581 not locked')
 			return False
 		
 
@@ -387,5 +411,5 @@ class LMX2581(WishBoneDevice):
 		if self.getDiagnoses('LD_PINSTATE'):
 			return True
 		else:
-			logging.error('LMX2581 not locked')
+			self.logger.error('LMX2581 not locked')
 			return False

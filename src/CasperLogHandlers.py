@@ -1,5 +1,5 @@
 import logging
-import termcolors
+from . import termcolors
 import datetime
 import os
 
@@ -144,20 +144,20 @@ class CasperConsoleHandler(logging.Handler):
         self._records.append(record)
 
         if record.exc_info:
-            print termcolors.colorize('%s: %s Exception: ' % (record.name, record.msg), record.exc_info[0:-1],
-                                      fg='red')
+            print(termcolors.colorize('%s: %s Exception: ' % (record.name, record.msg), record.exc_info[0:-1],
+                                      fg='red'))
         else:
             console_text = self.format(record)
             if record.levelno == logging.DEBUG:
-                print termcolors.colorize(console_text, fg='white')
+                print(termcolors.colorize(console_text, fg='white'))
             elif (record.levelno > logging.DEBUG) and (record.levelno < logging.WARNING):
-                print termcolors.colorize(console_text, fg='green')
+                print(termcolors.colorize(console_text, fg='green'))
             elif (record.levelno >= logging.WARNING) and (record.levelno < logging.ERROR):
-                print termcolors.colorize(console_text, fg='yellow')
+                print(termcolors.colorize(console_text, fg='yellow'))
             elif record.levelno >= logging.ERROR:
-                print termcolors.colorize(console_text, fg='red')
+                print(termcolors.colorize(console_text, fg='red'))
             else:
-                print '%s: %s' % (record.name, record.msg)
+                print('%s: %s' % (record.name, record.msg))
 
     def format(self, record):
         """
@@ -208,17 +208,17 @@ class CasperConsoleHandler(logging.Handler):
             if ctr == num_to_print:
                 break
             if record.exc_info:
-                print termcolors.colorize('%s: %s Exception: ' % (record.name, record.msg), record.exc_info[0:-1],
-                                          fg='red')
+                print(termcolors.colorize('%s: %s Exception: ' % (record.name, record.msg), record.exc_info[0:-1],
+                                          fg='red'))
             else:
                 if record.levelno < logging.WARNING:
-                    print termcolors.colorize('%s: %s' % (record.name, record.msg), fg='green')
+                    print(termcolors.colorize('%s: %s' % (record.name, record.msg), fg='green'))
                 elif (record.levelno >= logging.WARNING) and (record.levelno < logging.ERROR):
-                    print termcolors.colorize('%s: %s' % (record.name, record.msg), fg='yellow')
+                    print(termcolors.colorize('%s: %s' % (record.name, record.msg), fg='yellow'))
                 elif record.levelno >= logging.ERROR:
-                    print termcolors.colorize('%s: %s' % (record.name, record.msg), fg='red')
+                    print(termcolors.colorize('%s: %s' % (record.name, record.msg), fg='red'))
                 else:
-                    print '%s: %s' % (record.name, record.msg)
+                    print('%s: %s' % (record.name, record.msg))
 
 # endregion
 
@@ -241,7 +241,7 @@ def configure_console_logging(logger_entity, console_handler_name=None):
     # Check if a log-handler with the specified name already exists
     if console_handler_name is None:
         # Use the name of the logger specified
-        if logger_entity.name is None or logger_entity.name is '':
+        if logger_entity.name is None or logger_entity.name == '':
             # Problem!
             errmsg = 'Cannot have a logger without a name!'
             LOGGER.error(errmsg)

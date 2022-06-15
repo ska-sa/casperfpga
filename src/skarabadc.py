@@ -1,8 +1,6 @@
-import skarab_definitions as sd
+from . import skarab_definitions as sd
 import os
 import time
-
-import IPython
 
 class SkarabAdc(object):
     """

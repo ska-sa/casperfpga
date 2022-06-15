@@ -1,8 +1,10 @@
 from __future__ import print_function
 import threading
-import Queue
+import queue
 import time
 import logging
+import sys
+import socket
 
 LOGGER = logging.getLogger(__name__)
 
@@ -70,27 +72,35 @@ def get_hostname(**kwargs):
     return host, bitstream
 
 
-def parse_fpg(filename):
+def parse_fpg(filename, isbuf=False):
     """
     Read the meta information from the FPG file.
 
     :param filename: the name of the fpg file to parse
+    :param isbuf: If True, the filename is not actually a name, it is a
+        BytesIO buffer.
     :return: device info dictionary, memory map info (coreinfo.tab) dictionary
     """
+
+
     LOGGER.debug('Parsing file %s for system information' % filename)
     if filename is not None:
-        fptr = open(filename, 'r')
-        firstline = fptr.readline().strip().rstrip('\n')
+        if not isbuf:
+            fptr = open(filename, 'rb')
+        else:
+            fptr = filename
+        firstline = fptr.readline().decode('latin-1').strip().rstrip('\n')
         if firstline != '#!/bin/kcpfpg':
             fptr.close()
             raise RuntimeError('%s does not look like an fpg file we can '
                                'parse.' % filename)
     else:
         raise IOError('No such file %s' % filename)
+
     memorydict = {}
     metalist = []
     while True:
-        line = fptr.readline().strip().rstrip('\n')
+        line = fptr.readline().decode('latin-1').strip().rstrip('\n')
         if line.lstrip().rstrip() == '?quit':
             break
         elif line.startswith('?meta'):
@@ -308,11 +318,11 @@ def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
     :param best_effort: return as many hosts as it was possible to make
     """
     if fpga_class is None:
-        from casperfpga import CasperFpga
+        from .casperfpga import CasperFpga
         fpga_class = CasperFpga
 
     num_hosts = len(host_list)
-    result_queue = Queue.Queue(maxsize=num_hosts)
+    result_queue = queue.Queue(maxsize=num_hosts)
     thread_list = []
 
     def makehost(hostname):
@@ -333,7 +343,7 @@ def threaded_create_fpgas_from_hosts(host_list, fpga_class=None,
             host_pos = host_list.index(result.host)
             fpgas[host_pos] = result
             hosts_missing.pop(hosts_missing.index(result.host))
-        except Queue.Empty:
+        except queue.Empty:
             break
     if hosts_missing:
         for host in hosts_missing:
@@ -356,7 +366,7 @@ def _check_target_func(target_function):
 
     :param target_function:
     """
-    if isinstance(target_function, basestring):
+    if isinstance(target_function, str):
         return target_function, (), {}
     try:
         len(target_function)
@@ -463,8 +473,6 @@ def threaded_fpga_operation(fpga_list, timeout, target_function, num_retries=5, 
                     new_fpga_list.append(fpga_obj)
             current_fpga_list = new_fpga_list[:]
             time.sleep(retry_sleep_time)
-        else:
-            break
 
     if hosts_missing:
         errmsg = 'Ran function \'%s\' on hosts. Did not get a response ' \
@@ -489,7 +497,7 @@ def threaded_non_blocking_request(fpga_list, timeout, request, request_args):
     raise DeprecationWarning
 
     num_fpgas = len(fpga_list)
-    reply_queue = Queue.Queue(maxsize=num_fpgas)
+    reply_queue = queue.Queue(maxsize=num_fpgas)
     requests = {}
     replies = {}
 
@@ -597,5 +605,27 @@ def deprogram_hosts(host_list):
     if len(already_deprogrammed) != 0:
         print('%s: already deprogrammed.' % already_deprogrammed)
     threaded_fpga_function(fpgas, 10, 'disconnect')
+
+def socket_closer(arg_caller, arg_socket):
+    """
+    Ref: https://docs.python.org/3/library/socket.html
+    See warnings about close() and notes on shutdown().
+
+    Shutdown and close the specified socket.
+    Ignore all exceptions.
+
+    :param arg_caller: Identity and/or context of caller.
+    :param arg_socket: socket to be shutdown & closed.
+    :return: nothing
+    """
+    LOGGER.debug("socket_closer: called from {}".format(arg_caller))
+    try:
+        arg_socket.shutdown(socket.SHUT_RDWR)
+    except:
+        pass
+    try:
+        arg_socket.close()
+    except:
+        pass
 
 # end

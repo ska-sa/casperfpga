@@ -4,10 +4,10 @@ import array
 import binascii
 import time
 
-from utils import get_kwarg
-from transport import Transport
-from rmp import rmpNetwork
-import skarab_fileops
+from .utils import get_kwarg
+from .transport import Transport
+from .rmp import rmpNetwork
+from . import skarab_fileops
 
 def swap32(x):
     return (((x << 24) & 0xFF000000) |

@@ -5,27 +5,33 @@ import socket
 from time import strptime
 import string
 
-import register
-import sbram
-import snap
-import onegbe
-import tengbe
-import fortygbe
-import qdr
-import hmc
-import katadc
-import skarabadc
+import collections
 
-from attribute_container import AttributeContainer
-from utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
-from transport_katcp import KatcpTransport
-from transport_tapcp import TapcpTransport
-from transport_skarab import SkarabTransport
-from transport_dummy import DummyTransport
+from . import register
+from . import sbram
+from . import snap
+from . import onegbe
+from . import tengbe
+from . import fortygbe
+from . import onehundredgbe
+from . import qdr
+from . import hmc
+from . import katadc
+from . import skarabadc
+from . import snapadc
+from . import sysmon
+from .memory import Memory
 
-from CasperLogHandlers import configure_console_logging, configure_file_logging
-from CasperLogHandlers import getLogger
+from .attribute_container import AttributeContainer
+from .utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
+from .transport_katcp import KatcpTransport
+from .transport_tapcp import TapcpTransport
+from .transport_skarab import SkarabTransport
+from .transport_dummy import DummyTransport
+from .casper_platform_id_map import PLATFORM_ID
 
+from .CasperLogHandlers import configure_console_logging, configure_file_logging
+from .CasperLogHandlers import getLogger
 
 # known CASPER memory-accessible devices and their associated
 # classes and containers
@@ -36,6 +42,7 @@ CASPER_MEMORY_DEVICES = {
     'xps:tengbe_v2':    {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:ten_gbe':      {'class': tengbe.TenGbe,     'container': 'gbes'},
     'xps:forty_gbe':    {'class': fortygbe.FortyGbe, 'container': 'gbes'},
+    'xps:onehundred_gbe':{'class': onehundredgbe.OneHundredGbe, 'container': 'gbes'},
     'xps:onegbe':       {'class': onegbe.OneGbe,     'container': 'gbes'},
     'casper:snapshot':  {'class': snap.Snap,         'container': 'snapshots'},
     'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
@@ -152,6 +159,10 @@ class CasperFpga(object):
         except:
             pass
 
+        # Store board ID as it may be used to make
+        # comms decisions
+        self.platform = PLATFORM_ID.get(self._get_platform_id(), None)
+        self.transport.platform = self.platform
         
     def choose_transport(self, host_ip):
         """
@@ -179,8 +190,8 @@ class CasperFpga(object):
         except socket.gaierror:
             raise RuntimeError('Address/host %s makes no sense to '
                                'the OS?' % host_ip)
-        except Exception as e:
-            raise RuntimeError('Could not connect to host %s: %s' % (host_ip, e.message))
+        #except Exception as e:
+        #    raise RuntimeError('Could not connect to host {}: {}'.format(host_ip, str(e)))
 
     def connect(self, timeout=None):
         """
@@ -225,6 +236,16 @@ class CasperFpga(object):
         self.logger.info(infomsg)
         return True
 
+    def _get_platform_id(self):
+        """
+        Get the platform ID stored in the toolflow-generated system
+        register `sys_board_id`
+        """
+        try:
+            return self.read_uint("sys_board_id")
+        except:
+            return None
+
     def read(self, device_name, size, offset=0, **kwargs):
         """
         Read size-bytes of binary data with carriage-return escape-sequenced.
@@ -239,7 +260,7 @@ class CasperFpga(object):
             assert ((len(data) % 4) == 0), \
                 "Can only read multiples of 4 bytes because CasperFpga is doing an endianness flip"
             # iterate through 32-bit words and flip them
-            data_byte_swapped = ""
+            data_byte_swapped = b""
             for i in range(0, len(data), 4):
                 data_byte_swapped += data[i:i+4][::-1]
             return data_byte_swapped
@@ -250,10 +271,10 @@ class CasperFpga(object):
             assert ((len(data) % 4) == 0), \
                 "Can only write multiples of 4 bytes because CasperFpga is doing an endianness flip"
             # iterate through 32-bit words and flip them
-            data_byte_swapped = ""
+            data_byte_swapped = b""
             for i in range(0, len(data), 4):
                 data_byte_swapped += data[i:i+4][::-1]
-                return self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
+            return self.transport.blindwrite(device_name, data_byte_swapped, offset, **kwargs)
         return self.transport.blindwrite(device_name, data, offset, **kwargs)
 
     def listdev(self):
@@ -265,7 +286,7 @@ class CasperFpga(object):
         try:
             return self.transport.listdev()
         except AttributeError:
-            return self.memory_devices.keys()
+            return list(self.memory_devices.keys())
 
     def deprogram(self):
         """
@@ -377,10 +398,10 @@ class CasperFpga(object):
         self.other_devices = {}
 
         # containers
-        for container_ in CASPER_MEMORY_DEVICES.values():
+        for container_ in list(CASPER_MEMORY_DEVICES.values()):
             setattr(self, container_['container'], AttributeContainer())
 
-        for container_ in CASPER_ADC_DEVICES.values():
+        for container_ in list(CASPER_ADC_DEVICES.values()):
             setattr(self, container_['container'], AttributeContainer())
 
         # hold misc information about the bof file, program time, etc
@@ -547,10 +568,10 @@ class CasperFpga(object):
         try:
             data = struct.pack('>i' if integer < 0 else '>I', integer)
         except Exception as ve:
-            self.logger.error('Writing integer %i failed with error: %s' % (
-                integer, ve.message))
-            raise ValueError('Writing integer %i failed with error: %s' % (
-                integer, ve.message))
+            self.logger.error('Writing integer {} failed with error: {}'.format(
+                integer, ve))
+            raise ValueError('Writing integer {} failed with error: {}'.format(
+                integer, ve))
         if blindwrite:
             self.blindwrite(device_name, data, word_offset * 4)
         else:
@@ -559,7 +580,7 @@ class CasperFpga(object):
                           'okay%s.' % (integer, device_name, word_offset,
                           ' (blind)' if blindwrite else ''))
 
-    def _create_memory_devices(self, device_dict, memorymap_dict, **kwargs):
+    def _create_memory_devices(self, device_dict, memorymap_dict, legacy_reg_map=True, **kwargs):
         """
         Create memory devices from dictionaries of design information.
         
@@ -570,11 +591,12 @@ class CasperFpga(object):
         """
 
         # create and add memory devices to the memory device dictionary
-        for device_name, device_info in device_dict.items():
+        for device_name, device_info in list(device_dict.items()):
+            self.logger.debug("Creating memory device: %s" % device_name)
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank '
                                 'device name?')
-            if device_name in self.memory_devices.keys():
+            if device_name in list(self.memory_devices.keys()):
                 raise NameError('Memory device %s already exists' % device_name)
             # get the class from the known devices, if it exists there
             tag = device_info['tag']
@@ -584,14 +606,13 @@ class CasperFpga(object):
             except KeyError:
                 pass
             else:
-                if not callable(known_device_class):
+                if not isinstance(known_device_class, collections.Callable):
                     raise TypeError('%s is not a callable Memory class - '
                                     'that\'s a problem.' % known_device_class)
 
                 new_device = known_device_class.from_device_info(
-                    self, device_name, device_info, memorymap_dict)
-
-                if new_device.name in self.memory_devices.keys():
+                    self, device_name, device_info, memorymap_dict, legacy_reg_map=legacy_reg_map)
+                if new_device.name in list(self.memory_devices.keys()):
                     raise NameError(
                         'Device called %s of type %s already exists in '
                         'devices list.' % (new_device.name, type(new_device)))
@@ -601,13 +622,30 @@ class CasperFpga(object):
                 setattr(container, device_name, new_device)
                 assert id(getattr(container, device_name)) == id(new_device)
                 assert id(new_device) == id(self.memory_devices[device_name])
+            self.logger.debug("Done creating memory device: %s" % device_name)
         # allow created devices to update themselves with full device info
         # link control registers, etc
-        for name, device in self.memory_devices.items():
+        for name, device in list(self.memory_devices.items()):
+            self.logger.debug("Running post_create_update for device: %s" % name)
             try:
                 device.post_create_update(device_dict)
             except AttributeError:  # the device may not have an update function
                 pass
+        # Add any memory entries which are not associated with known devices.
+        for name, memdevice in memorymap_dict.items():
+            # If this is already in the device list, skip. It should have
+            # been added as a sw_reg / other thing already
+            # Else, add the device as a vanilla register
+            if name in device_dict.keys():
+                pass
+            else:
+                if name in self.memory_devices:
+                    raise NameError("Device named %s is already in memory device list" % name)
+                self.memory_devices[name] = Memory(name, 32, memdevice['address'], memdevice['bytes'])
+
+    def _create_casper_device_by_regname(self, device_dict):
+        if 'sysmon' in device_dict:
+            self.sensors = sysmon.Sysmon(self)
 
     def _create_casper_adc_devices(self, device_dict, initialise=False, **kwargs):
         """
@@ -620,12 +658,12 @@ class CasperFpga(object):
                            - e.g. The SKARAB ADC's PLL SYNC
         :return: None
         """
-        for device_name, device_info in device_dict.items():
+        for device_name, device_info in list(device_dict.items()):
             
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank '
                                 'device name?')
-            if device_name in self.adc_devices.keys():
+            if device_name in list(self.adc_devices.keys()):
                 raise NameError('ADC device %s already exists' % device_name)
             # get the class from the known devices, if it exists there
             tag = device_info['tag']
@@ -635,14 +673,14 @@ class CasperFpga(object):
             except KeyError:
                 pass
             else:
-                if not callable(known_device_class):
+                if not isinstance(known_device_class, collections.Callable):
                     errmsg = '{} is not a callable ADC Class'.format(known_device_class)
                     raise TypeError(errmsg)
 
                 new_device = known_device_class.from_device_info(self,
                                 device_name, device_info, initialise=initialise)
                 
-                if new_device.name in self.adc_devices.keys():
+                if new_device.name in list(self.adc_devices.keys()):
                     errmsg = 'Device {} of type {} already exists in \
                              the devices list'.format(new_device.name, type(new_device))
 
@@ -665,13 +703,13 @@ class CasperFpga(object):
         :param device_dict: raw dictionary of information from tagged
             blocks in Simulink design, keyed on device name
         """
-        for device_name, device_info in device_dict.items():
+        for device_name, device_info in list(device_dict.items()):
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a '
                                 'blank device name?')
-            if device_name in self.other_devices.keys():
+            if device_name in list(self.other_devices.keys()):
                 raise NameError('Other device %s already exists.' % device_name)
-            if device_info['tag'] in CASPER_OTHER_DEVICES.keys():
+            if device_info['tag'] in list(CASPER_OTHER_DEVICES.keys()):
                 self.devices[device_name] = device_info
                 self.other_devices[device_name] = device_info
 
@@ -683,7 +721,7 @@ class CasperFpga(object):
         :return: List of strings matching the description
         """
         return [devname for devname, container
-                in self.memory_devices.iteritems()
+                in self.memory_devices.items()
                 if container == container_name]
 
     def devices_by_container(self, container):
@@ -714,6 +752,10 @@ class CasperFpga(object):
             raise RuntimeError('Either filename or parsed fpg data '
                                'must be given.')
         if filename is not None:
+            # device_dict is a dictionary of XPS-tagged devices, keyed by
+            # block name, with values reflecting yellow block parameters.
+            # memorymap_dict is a list of registers, keyed by register name, 
+            # with vales {'address': <address>, 'bytes': <size in bytes>
             device_dict, memorymap_dict = parse_fpg(filename)
         else:
             device_dict = fpg_info[0]
@@ -747,12 +789,26 @@ class CasperFpga(object):
             pass
 
         # Create Register Map
+        self.logger.info("Creating memory devices")
         self._create_memory_devices(device_dict, memorymap_dict,
                                     initialise=initialise_objects)
+        self.logger.info("Creating other devices")
+        self._create_other_devices(device_dict, initialise=initialise_objects)
+        self.logger.info("Creating ADC devices")
         self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
         self._create_other_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
+        self.logger.info("Creating devices by register name")
+        self._create_casper_device_by_regname(device_dict)
+        self.logger.info("Running post_get_system_information")
         self.transport.post_get_system_information()
+        # we may not have been able to detect endianness until now
+        # that we know the register map
+        self.logger.info("Detecting endianness")
+        try:
+            self._detect_little_endianness()
+        except:
+            pass
 
     def estimate_fpga_clock(self):
         """
@@ -816,12 +872,12 @@ class CasperFpga(object):
         if len(self.rcs_info['git']) == 0:
             return []
         git_info = self.rcs_info['git']
-        files = git_info.keys()
+        files = list(git_info.keys())
         old_version = hasattr(git_info[files[0]], 'keys')
         if old_version:
             rv = []
             for filename in files:
-                if 'git_info_found' in git_info[filename].keys():
+                if 'git_info_found' in list(git_info[filename].keys()):
                     if git_info[filename]['git_info_found'] == ['1']:
                         rv.append(
                             (filename, git_info[filename]['commit_hash'][0] +

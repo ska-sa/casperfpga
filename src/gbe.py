@@ -1,7 +1,7 @@
 import logging
 
-from network import Mac, IpAddress
-from utils import check_changing_status, CheckCounter
+from .network import Mac, IpAddress
+from .utils import check_changing_status, CheckCounter
 
 
 class Gbe(object):
@@ -111,16 +111,13 @@ class Gbe(object):
 
     def setup(self, mac, ipaddress, port):
         """
-        Set up the MAC, IP and port for this interface
-
-        :param mac: String or Integer input
-        :param ipaddress: String or Integer input
-        :param port: String or Integer input
+        No longer implemented. See `configure_core`
         """
         raise NotImplementedError('This is no longer required as the mac, '
                                   'ip_address and port are no longer stored '
                                   'as attributes. These values are retrieved '
-                                  'from the processing node when required.')
+                                  'from the processing node when required.'
+                                  'You probably want the `configure_core` method')
 
     def post_create_update(self, raw_device_info):
         """
@@ -318,16 +315,17 @@ class Gbe(object):
         print('%5d' % details['fabric_port'])
         print('Fabric interface is currently: %s' %
               'Enabled' if details['fabric_en'] else 'Disabled')
-        print('XAUI Status: ', details['xaui_status'])
-        for ctr in range(0, 4):
-            print('\tlane sync %i:  %i' % (ctr, details['xaui_lane_sync'][ctr]))
-        print('\tChannel bond: %i' % details['xaui_chan_bond'])
-        print('XAUI PHY config: ')
-        print('\tRX_eq_mix: %2X' % details['xaui_phy']['rx_eq_mix'])
-        print('\tRX_eq_pol: %2X' % details['xaui_phy']['rx_eq_pol'])
-        print('\tTX_pre-emph: %2X' % details['xaui_phy']['tx_preemph'])
-        print('\tTX_diff_ctrl: %2X' % details['xaui_phy']['tx_swing'])
-        print('Multicast:')
+        if 'xaui_status' in details:
+            print('XAUI Status: ', details['xaui_status'])
+            for ctr in range(0, 4):
+                print('\tlane sync %i:  %i' % (ctr, details['xaui_lane_sync'][ctr]))
+            print('\tChannel bond: %i' % details['xaui_chan_bond'])
+            print('XAUI PHY config: ')
+            print('\tRX_eq_mix: %2X' % details['xaui_phy']['rx_eq_mix'])
+            print('\tRX_eq_pol: %2X' % details['xaui_phy']['rx_eq_pol'])
+            print('\tTX_pre-emph: %2X' % details['xaui_phy']['tx_preemph'])
+            print('\tTX_diff_ctrl: %2X' % details['xaui_phy']['tx_swing'])
+            print('Multicast:')
         for k in details['multicast']:
             print('\t%s: %s' % (k, details['multicast'][k]))
         if arp:
@@ -354,17 +352,14 @@ class Gbe(object):
             all_fs = True
             if only_hits:
                 for mac in range(0, 6):
-                    if details['arp'][ip_address][mac] != 255:
+                    if details['arp'][ip_address].mac_int != 0xffffffffffff:
                         all_fs = False
                         break
             printmac = True
             if only_hits and all_fs:
                 printmac = False
             if printmac:
-                print('IP: %s%3d: MAC:' % (details['ip_prefix'], ip_address),)
-                for mac in range(0, 6):
-                    print('%02X' % details['arp'][ip_address][mac],)
-                print('')
+                print('IP: %s.%3d: MAC: %s' % (details['ip_prefix'], ip_address, details['arp'][ip_address].mac_str))
 
     def print_cpu_details(self, refresh=False):
         """
@@ -381,7 +376,7 @@ class Gbe(object):
             self.get_gbe_core_details(read_cpu=True)
         print('CPU TX Interface (at offset 4096 bytes):')
         print('Byte offset: Contents (Hex)')
-        for key, value in details['cpu_tx'].iteritems():
+        for key, value in details['cpu_tx'].items():
             print('%04i:    ' % key,)
             for val in value:
                 print('%02x' % val,)
@@ -392,7 +387,7 @@ class Gbe(object):
         print('CPU packet RX buffer unacknowledged data: %i' %
               details['cpu_rx_buf_unack_data'])
         print('Byte offset: Contents (Hex)')
-        for key, value in details['cpu_rx'].iteritems():
+        for key, value in details['cpu_rx'].items():
             print('%04i:    ' % key,)
             for val in value:
                 print('%02x' % val,)

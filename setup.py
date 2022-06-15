@@ -6,8 +6,10 @@ import os
 NAME = 'casperfpga'
 DESCRIPTION = 'Talk to CASPER hardware devices using katcp or dcp. See https://github.com/casper-astro/casperfpga for more.'
 URL = 'https://github.com/casper-astro/casperfpga'
-AUTHOR = 'Tyrone van Balla'
-EMAIL = 'tvanballa at ska.ac.za'
+
+AUTHOR  = 'Tyrone van Balla'
+EMAIL   = 'tvanballa at ska.ac.za'
+VERSION = '0.2.0' # Need to adopt the __version__.py format
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -34,6 +36,7 @@ progska_extension = setuptools.Extension(
     # extra_link_args=['-static'],
 )
 
+data_files = ['tengbe_mmap.txt', 'tengbe_mmap_legacy.txt', 'fortygbe_mmap_legacy.txt']
 
 setuptools.setup(
     name=NAME,
@@ -47,14 +50,17 @@ setuptools.setup(
     long_description_content_type='text/markdown',
     # Specify version in-line here
     install_requires=[
-        'katcp==0.6.2',
-        'numpy==1.16',
+        'numpy',
+        'katcp>=0.7',
         'odict',
         'setuptools',
-        'tornado==4.3',
+        'tornado',
+        'redis',
+        'tftpy==0.8.0',
     ],
-    packages=['casperfpga'],
-    package_dir={'casperfpga': 'src'},
+    packages=['casperfpga', 'casperfpga.debug', 'casperfpga.progska'],
+    package_dir={'casperfpga': 'src', 'casperfpga.debug': 'debug', 'casperfpga.progska': 'progska'},
+    package_data={'casperfpga': data_files},
     scripts=glob.glob('scripts/*'),
     setup_requires=['katversion'],
     use_katversion=True,

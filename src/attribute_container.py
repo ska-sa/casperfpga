@@ -84,6 +84,6 @@ class AttributeContainer(object):
         return self.__repr__()
 
     def __repr__(self):
-        keys = self.__dict__.keys()
+        keys = list(self.__dict__.keys())
         keys.pop(keys.index('_items'))
         return str(keys)

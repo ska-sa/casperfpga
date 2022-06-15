@@ -6,7 +6,7 @@ Created on Feb 28, 2013
 
 import logging
 
-from memory import Memory
+from .memory import Memory
 
 LOGGER = logging.getLogger(__name__)
 

@@ -3,15 +3,16 @@ import katcp
 import time
 import os
 import threading
-import Queue
+import queue
 import random
 import socket
 import struct
 import contextlib
 
-from transport import Transport
-from utils import create_meta_dictionary, get_hostname, get_kwarg
+from .transport import Transport
+from .utils import create_meta_dictionary, get_hostname, get_kwarg, socket_closer
 
+LOGGER = logging.getLogger(__name__)
 
 # monkey-patch the maximum katcp message size
 if hasattr(katcp.CallbackClient, 'MAX_MSG_SIZE'):
@@ -115,6 +116,16 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.connect()
         self.logger.info('%s: port(%s) created and connected.' % (self.host, port))
 
+    def __del__(self):
+        """
+        When the KatcpTransport object is reclaimed, make sure to
+        disconnect from the device server.
+        """
+        try:
+            self.disconnect()
+        except:
+            pass
+
     @staticmethod
     def test_host_type(host_ip, timeout=5):
         """
@@ -124,12 +135,19 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param timeout: as an Integer
         """
         try:
+            
+            llevel = LOGGER.getEffectiveLevel()
+            tlogger = logging.getLogger('tornado')
+            tlevel = LOGGER.getEffectiveLevel()
+            LOGGER.setLevel(logging.CRITICAL)
+            tlogger.setLevel(logging.CRITICAL)
             board = katcp.CallbackClient(host=host_ip, port=7147, timeout=timeout, auto_reconnect=False)
             board.setDaemon(True)
             board.start()
             connected = board.wait_connected(timeout)
             board.stop()
-
+            LOGGER.setLevel(llevel)
+            tlogger.setLevel(tlevel)
             if not connected:
                 return False
             else:
@@ -139,6 +157,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                 raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
 
         except Exception:
+            LOGGER.setLevel(llevel)
+            LOGGER.debug('KATCP-unable to connect to {}'.format(host_ip))
             return False
 
     def sendfile(self, filename, targethost, port, result_queue, timeout=2):
@@ -164,12 +184,13 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             if not connected:
                 result_queue.put('Could not connect to upload port.')
             try:
-                upload_socket.send(open(filename).read())
+                upload_socket.send(open(filename, 'rb').read())
                 result_queue.put('')
             except Exception as e:
-                result_queue.put('Could not send file to upload port(%i): '
-                                 '%s' % (port, e.message))
+                result_queue.put('Could not send file to upload port({}): {}'.format(
+                                 port, e))
             finally:
+                socket_closer("sendfile to {}:{}".format(targethost, port), upload_socket)
                 self.logger.info('%s: upload thread complete at %.3f' %
                                 (targethost, time.time()))
 
@@ -230,6 +251,9 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         Disconnect from the device server.
         :return:
         """
+        katcp.CallbackClient.stop(self)
+        if self.is_connected():
+            katcp.CallbackClient.disconnect(self)
         self.join(timeout=self._timeout)
         self.logger.info('%s: disconnected' % self.host)
 
@@ -279,16 +303,16 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             _, informs = self.katcprequest(name='listdev',
                                            request_timeout=self._timeout,
                                            request_args=('size',))
-            return [(i.arguments[0], i.arguments[1]) for i in informs]
+            return [(i.arguments[0].decode(), i.arguments[1].decode()) for i in informs]
         elif getaddress:
             _, informs = self.katcprequest(name='listdev',
                                            request_timeout=self._timeout,
                                            request_args=('detail',))
-            return [(i.arguments[0], i.arguments[1]) for i in informs]
+            return [(i.arguments[0].decode(), i.arguments[1].decode()) for i in informs]
         else:
             _, informs = self.katcprequest(name='listdev',
                                            request_timeout=self._timeout)
-            return [i.arguments[0] for i in informs]
+            return [i.arguments[0].decode() for i in informs]
 
     def listbof(self):
         """
@@ -296,7 +320,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         _, informs = self.katcprequest(name='listbof',
                                        request_timeout=self._timeout)
-        return [i.arguments[0] for i in informs]
+        return [i.arguments[0].decode() for i in informs]
 
     def status(self):
         """
@@ -304,7 +328,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         reply, _ = self.katcprequest(name='status',
                                      request_timeout=self._timeout)
-        return reply.arguments[1]
+        return reply.arguments[1].decode()
 
     def ping(self):
         """
@@ -314,7 +338,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         reply, _ = self.katcprequest(name='watchdog',
                                      request_timeout=self._timeout)
-        if reply.arguments[0] == 'ok':
+        if reply.arguments[0] == katcp.Message.OK:
             self.logger.info('%s: katcp ping okay' % self.host)
             return True
         else:
@@ -329,7 +353,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         reply, _ = self.katcprequest(
             name='fpgastatus', request_timeout=self._timeout, require_ok=False)
-        return reply.arguments[0] == 'ok'
+        return reply.arguments[0] == katcp.Message.OK
 
     def test_connection(self):
         """
@@ -384,8 +408,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         :param offset: the offset, in bytes, at which to write
         :return: <nothing>
         """
-        assert(type(data) == str), 'You need to supply binary packed ' \
-                                   'string data!'
+        assert (type(data) == str or type(data) == bytes), 'Must supply binary packed string data'
         assert(len(data) % 4) == 0, 'You must write 32-bit-bounded words!'
         assert((offset % 4) == 0), 'You must write 32-bit-bounded words!'
         self.katcprequest(name='write', request_timeout=self._timeout,
@@ -439,7 +462,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         reply, _ = self.katcprequest(name='progdev', request_timeout=10,
                                      request_args=(filename, ))
         self.unhandled_inform_handler = None
-        if reply.arguments[0] == 'ok':
+        if reply.arguments[0] == katcp.Message.OK:
             complete_okay = False
             for inf in unhandled_informs:
                 if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
@@ -447,7 +470,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             if not complete_okay: # Modify to do an extra check
                 reply, _ = self.katcprequest(name='status', request_timeout=1)
                 # Not sure whether 1 second is a good timeout here
-                if reply.arguments[0] == 'ok':
+                if reply.arguments[0] == katcp.Message.OK:
                     complete_okay = True
                 else:
                     self.logger.error('%s: programming %s failed.' %
@@ -558,7 +581,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         if port == -1:
             port = random.randint(2000, 2500)
         # start the request thread and join
-        request_queue = Queue.Queue()
+        request_queue = queue.Queue()
         request_thread = threading.Thread(target=makerequest,
                                           args=(request_queue, ))
         old_timeout = self._timeout
@@ -570,8 +593,8 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             raise RuntimeError('progremote request(%s) on host %s failed' %
                                (request_result, self.host))
         # start the upload thread and join
-        upload_queue = Queue.Queue()
-        unhandled_informs_queue = Queue.Queue()
+        upload_queue = queue.Queue()
+        unhandled_informs_queue = queue.Queue()
         upload_thread = threading.Thread(target=self.sendfile, args=(
             filename, self.host, port, upload_queue, ))
         self.unhandled_inform_handler = \
@@ -590,11 +613,11 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         while not done:
             try:
                 inf = unhandled_informs_queue.get(block=True, timeout=timeout)
-            except Queue.Empty:
+            except queue.Empty:
                 self.logger.error('%s: no programming informs yet. Odd?' % self.host)
                 raise RuntimeError('%s: no programming informs yet. '
                                    'Odd?' % self.host)
-            if (inf.name == 'fpga') and (inf.arguments[0] == 'ready'):
+            if (inf.name == 'fpga') and (inf.arguments[0].decode() == 'ready'):
                 done = True
         self.logger.info('%s: programming done.' % self.host)
         self.unhandled_inform_handler = None
@@ -645,11 +668,11 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             port = random.randint(2000, 2500)
 
         # request thread
-        request_queue = Queue.Queue()
+        request_queue = queue.Queue()
         request_thread = threading.Thread(target=makerequest,
                                           args=(request_queue, ))
         # upload thread
-        upload_queue = Queue.Queue()
+        upload_queue = queue.Queue()
         upload_thread = threading.Thread(target=self.sendfile, args=(
             binary_file, self.host, port, upload_queue, ))
         # start the threads and join
@@ -737,7 +760,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             reply, informs = self.katcprequest(
                 name='meta', request_timeout=10.0, require_ok=True,
                 request_args=(device, ))
-        if reply.arguments[0] != 'ok':
+        if reply.arguments[0] != katcp.Message.OK:
             raise RuntimeError('Could not read meta information '
                                'from %s' % self.host)
         metalist = []
@@ -753,11 +776,11 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                                  'arguments: %s' % str(inform.arguments))
                     continue
             for arg in inform.arguments:
-                arg = arg.replace('\_', ' ')
-            name = inform.arguments[0]
-            tag = inform.arguments[1]
-            param = inform.arguments[2]
-            value = inform.arguments[3:]
+                arg = arg.replace(b'\_', b' ')
+            name = inform.arguments[0].decode()
+            tag = inform.arguments[1].decode()
+            param = inform.arguments[2].decode()
+            value = [x.decode() for x in inform.arguments[3:]]
             if len(value) == 1:
                 value = value[0]
             name = name.replace('/', '_')

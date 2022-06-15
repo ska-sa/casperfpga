@@ -1,11 +1,22 @@
 import logging
 import struct
 
-from memory import Memory
-from network import Mac, IpAddress
-from gbe import Gbe
+import numpy as np
+from pkg_resources import resource_filename
+
+from .memory import Memory
+from .network import Mac, IpAddress
+from .gbe import Gbe
 
 LOGGER = logging.getLogger(__name__)
+
+LOGGER = logging.getLogger(__name__)
+
+STRUCT_CTYPES = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+STRUCT_CTYPES_TO_B = {'B': 1, 'H': 2, 'L': 4, 'Q': 8}
+
+TENGBE_UNIFIED_MMAP_TXT = resource_filename('casperfpga', 'tengbe_mmap.txt')
+TENGBE_MMAP_LEGACY_TXT  = resource_filename('casperfpga', 'tengbe_mmap_legacy.txt')
 
 # Offsets for fields in the memory map, in bytes
 OFFSET_CORE_TYPE   = 0x0
@@ -75,6 +86,27 @@ SIZE_ARP_CACHE   = 0x3000
 SIZE_TX_BUFFER   = 0x4000
 SIZE_RX_BUFFER   = 0x4000
 
+def read_memory_map_definition(filename):
+    """ Read memory map definition from text file.
+
+    Returns a python dictionary:
+        {REGISTER_NAME1: {'offset': offset, 'size': size, 'rwflag': rwflag},
+         REGISTER_NAME2: {'offset': offset, 'size': size, 'rwflag': rwflag}
+         ...}
+
+    Notes:
+        Used by TenGbe.configure_core() to write to mmap.
+    """
+    mmap_arr = np.genfromtxt(filename, dtype='str', skip_header=1)
+    mmap_keys    = list(mmap_arr[:, 0])
+    mmap_offsets = [int(x, 0) for x in mmap_arr[:, 1]]
+    mmap_size    = [int(x, 0) for x in mmap_arr[:, 2]]
+    mmap_rw      = list(mmap_arr[:, 3])
+    mmap  = {}
+    for ii, k in enumerate(mmap_keys):
+        mmap[k] = {'offset': mmap_offsets[ii], 'size': mmap_size[ii], 'rwflag': mmap_rw[ii]}
+    return mmap
+
 class TenGbe(Memory, Gbe):
     """
     To do with the CASPER ten GBE yellow block implemented on FPGAs,
@@ -115,7 +147,7 @@ class TenGbe(Memory, Gbe):
         """
         x = self.parent.read(self.name, 4)
         cpu_tx_en, cpu_rx_en, rev, core_type = struct.unpack('4B', x)
-        if (cpu_tx_en > 1) or (cpu_rx_en > 1) or (core_type != 2):
+        if (cpu_tx_en > 1) or (cpu_rx_en > 1) or ((core_type != 4) and (core_type != 2)):
             return False
         else:
             return True
@@ -153,22 +185,125 @@ class TenGbe(Memory, Gbe):
         """
         return self.snaps['rx'].read(timeout=10)['data']
 
-    # def fabric_start(self):
-    #    """
-    #    Setup the interface by writing to the fabric directly, bypassing tap.
-    #    :param self:
-    #    :return:
-    #    """
-    #    if self.tap_running():
-    #        log_runtime_error(
-    #            LOGGER, 'TAP running on %s, stop tap before '
-    #                    'accessing fabric directly.' % self.name)
-    #    mac_location = 0x00
-    #    ip_location = 0x10
-    #    port_location = 0x22
-    #    self.parent.write(self.name, self.mac.packed(), mac_location)
-    #    self.parent.write(self.name, self.ip_address.packed(), ip_location)
-    #    # self.parent.write_int(self.name, self.port, offset = port_location)
+    def _memmap_write(self, register, value):
+        """ Write to memory map
+        :param register: register to write to. Register must be in memmap.
+        :param value: Value to write.
+        """
+        offset   = self.memmap[register]['offset']
+        bytesize = self.memmap[register]['size']
+        rw_addr  = offset - offset % 4               # Round in case of non 32-bit writes
+        ctype    = STRUCT_CTYPES.get(bytesize, 'L')  # Treat as 32-bit if longer than 8B
+
+        if self.memmap[register]['rwflag'] == 'r':
+            raise RuntimeError("Warning: %s is read-only!" % register)
+
+        if bytesize in (1, 2):
+            n_elem = int(4 / bytesize)
+            pcode  = '>%i%s' % (n_elem, ctype)
+            current_value  = self.parent.read(self.name, size=4, offset=rw_addr)
+            new_arr = list(struct.unpack(pcode, current_value))[::-1]
+            new_arr[offset % n_elem] = value
+            new_arr = new_arr[::-1]
+            packed = struct.pack(pcode, *new_arr)
+
+        elif bytesize in (4, 8):
+            if isinstance(value, str):
+                packed = value
+            else:
+                packed = struct.pack('>%s' % ctype, value)
+        else:
+            raise RuntimeError("Can only write 1,2,4,8 Byte registers with this function.")
+        self.parent.blindwrite(self.name, packed, offset=rw_addr)
+
+    def _memmap_read(self, register):
+        """ Read from memory map
+
+        :param register: register to read from. Must be in memmap.
+        """
+        offset   = self.memmap[register]['offset']
+        bytesize = self.memmap[register]['size']
+        ctype    = STRUCT_CTYPES.get(bytesize)  # Treat as 32-bit if longer than 8B
+
+        if bytesize in (4, 8):
+            value = self.parent.read(self.name, size=bytesize, offset=offset)
+            value = struct.unpack('>%s' % ctype, value)[0]
+        elif bytesize in (1, 2):
+            if bytesize == 2 and offset % 4 not in (0, 2):
+                raise RuntimeError("Attempted to read 16-bits from 32-bit word with %iB offset. "
+                                   "Not supported." % (offset%4))
+            read_addr = offset - offset % 4
+            value = self.parent.read(self.name, size=4, offset=read_addr)
+            valuearr = struct.unpack('>%i%s' % (int(4 / bytesize), ctype), value)
+            value = valuearr[::-1][int((offset % 4) / bytesize)]
+        else:
+            raise RuntimeError("Cannot read %s of size %i: only 1,2,4,8 B supported" % (register, bytesize))
+        return value
+
+    def _memmap_read_array(self, register, ctype='L'):
+        """ Read array chunk from mem-map """
+        offset   = self.memmap[register]['offset']
+        bytesize = self.memmap[register]['size']
+
+        if isinstance(ctype, str):
+            wsize = STRUCT_CTYPES_TO_B[ctype]
+        elif isinstance(ctype, int):
+            wsize = ctype
+            ctype = STRUCT_CTYPES[ctype]
+        else:
+            raise RuntimeError('Unknown ctype: %s' % ctype)
+
+        value = self.parent.read(self.name, size=bytesize, offset=offset)
+        value = struct.unpack('>%i%s' % (int(bytesize / wsize), ctype), value)
+        return value
+
+    def _memmap_write_array(self, register, value, ctype='L'):
+        offset   = self.memmap[register]['offset']
+        bytesize = self.memmap[register]['size']
+
+        if isinstance(ctype, str):
+            wsize = STRUCT_CTYPES_TO_B[ctype]
+        elif isinstance(ctype, int):
+            wsize = ctype
+            ctype = STRUCT_CTYPES[ctype]
+        else:
+            raise RuntimeError('Unknown ctype: %s' % ctype)
+
+        n_elem = int(bytesize / wsize)  # Differs to n_elem in small bytesize code!
+        if len(value) != n_elem:
+            raise RuntimeError("Register is %i 32-bit words long, but array is "
+                               "of length %i. Make sure these match." % (len(value), n_elem))
+        if isinstance(value, str):
+            packed = value
+        else:
+            packed = struct.pack('>%i%s' % (n_elem, ctype), *value)
+        self.parent.blindwrite(self.name, packed, offset=offset)
+
+    def configure_core(self, mac, ip, port, gateway=None, subnet_mask=None):
+        """
+        Configure the interface by writing to its internal configuration registers.
+
+        :param mac: String or Integer input, MAC address (e.g. '02:00:00:00:00:01')
+        :param ipaddress: String or Integer input, IP address (eg '10.0.0.1')
+        :param port: String or Integer input
+        :param gateway: String or Integer input, an IP address
+        :param subnet_mask: string or integer, subnet mask (e.g. '255.255.255.0')
+        """
+
+        mac_to_write         = Mac(mac).mac_int
+        ip_address_to_write  = IpAddress(ip).ip_int
+        port_to_write        = port if isinstance(port, int) else int(port)
+        gateway_to_write = IpAddress(gateway).ip_int if gateway is not None else 1
+        subnet_mask_to_write = IpAddress(subnet_mask).ip_int if subnet_mask is not None else 0xffffff00
+
+        self._memmap_write('MAC_ADDR', mac_to_write)
+        self._memmap_write('IP_ADDR',  ip_address_to_write)
+        self._memmap_write('NETMASK',  subnet_mask_to_write)
+        self._memmap_write('GW_ADDR',  gateway_to_write)
+        self._memmap_write('PORT',     port_to_write)
+
+        self.fabric_enable()
+        self.fabric_soft_reset_toggle()
 
     def dhcp_start(self):
         """
@@ -556,28 +691,10 @@ class TenGbe(Memory, Gbe):
         self.core_details = returnval
         return returnval
 
-    def get_arp_details(self, port_dump=None):
-        """
-        Get ARP details from this interface.
-
-        :param port_dump: A list of raw bytes from interface memory.
-        :type port_dump: list
-        """
-        if self.memmap_compliant:
-            arp_addr = OFFSET_ARP_CACHE
-        else:
-            arp_addr = 0x3000
-
-        if port_dump is None:
-            port_dump = self.parent.read(self.name, 16384)
-            port_dump = list(struct.unpack('>16384B', port_dump))
-        returnval = []
-        for addr in range(256):
-            mac = []
-            for ctr in range(2, 8):
-                mac.append(port_dump[arp_addr + (addr * 8) + ctr])
-            returnval.append(mac)
-        return returnval
+    def get_arp_details(self, N=256):
+        """ Get ARP details from this interface. """
+        arp_table = self._memmap_read_array('ARP_CACHE', ctype='Q')
+        return list(map(Mac, arp_table[:N]))
 
     def get_cpu_details(self, port_dump=None):
         """
@@ -603,6 +720,18 @@ class TenGbe(Memory, Gbe):
                 tmp.append(port_dump[8192 + (8 * ctr) + ctr2])
             returnval['cpu_rx'][ctr * 8] = tmp
         return returnval
+
+    def set_single_arp_entry(self, ip, mac):
+        """
+        Set a single MAC address entry in the ARP table.
+
+        :param ip (string) : IP whose MAC we should set. E.g. '10.0.1.123'
+        :param mac (int)   : MAC address to associate with this IP. Eg. 0x020304050607
+        """
+        arp_addr = self.memmap['ARP_CACHE']['offset']
+        arp_addr += 8*int(ip.split('.')[-1])
+        mac_pack = struct.pack('>Q', mac)
+        self.parent.write(self.name, mac_pack, offset=arp_addr)
 
     def set_arp_table(self, macs):
         """Set the ARP table with a list of MAC addresses. The list, `macs`,

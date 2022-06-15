@@ -1,6 +1,6 @@
 import sys
 import logging
-from multiprocessing import Process, Queue
+from multiprocessing import Process, queue
 
 
 import casperfpga
@@ -27,7 +27,7 @@ def check_fpga_thing(result_queue, fpga):
 
 
 # this won't
-results = Queue()
+results = queue()
 for loop in range(LOOP_LIMIT):
     print('Loop {}'.format(loop))
     sys.stdout.flush()
@@ -35,7 +35,7 @@ for loop in range(LOOP_LIMIT):
     p.start()
     p.join(timeout=30)
     result = results.get()
-    print result
+    print(result)
     sys.stdout.flush()
 
 # end

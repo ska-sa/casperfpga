@@ -315,7 +315,6 @@ class MPU9250:
         # This is an effective way of detecting connectivity of I2C bus
         if self.whoami() is not self.WHOAMI:
             msg = "MPU9250 at address {} is not ready!".format(addr)
-            logger.error(msg)
             raise IOError(msg)
 
     def init(self,gyro=True,accel=True,lowpower=False):
@@ -499,7 +498,7 @@ class MPU9250:
             [1,6],
             [1,7],]
 
-        if conf not in range(9):
+        if conf not in list(range(9)):
             raise ValueError("Invalid parameter")
 
         config = param[conf]
@@ -563,7 +562,7 @@ class MPU9250:
             [3,6],
             [3,7],]
 
-        if conf not in range(10):
+        if conf not in list(range(10)):
             raise ValueError("Invalid parameter")
 
         config = param[conf]
@@ -594,32 +593,32 @@ class MPU9250:
             return dict([(regId,self.getRegister(regId)) for regId in self.DICT])
         elif rid in self.DICT:
             rval = self.read(rid)
-            return {name: self._get(rval,mask) for name, mask in self.DICT[rid].items()}
+            return {name: self._get(rval,mask) for name, mask in list(self.DICT[rid].items())}
         else:
             raise ValueError("Invalid parameter")
 
     @property
     def accel_scale(self):
-        if self._accel_scale not in range(4):
+        if self._accel_scale not in list(range(4)):
             self._accel_scale = self.getWord('ACCEL_FS_SEL')
         return self._accel_scale
 
     @accel_scale.setter
     def accel_scale(self,scale):
-        if scale not in range(4):
+        if scale not in list(range(4)):
             raise ValueError("Invalid parameter")
         self.ACCEL_SCALE = scale
         self.setWord('ACCEL_FS_SEL', scale)
 
     @property
     def gyro_scale(self):
-        if self._gyro_scale not in range(4):
+        if self._gyro_scale not in list(range(4)):
             self._gyro_scale = self.getWord('GYRO_FS_SEL')
         return self._gyro_scale
 
     @gyro_scale.setter
     def accel_scale(self,scale):
-        if scale not in range(4):
+        if scale not in list(range(4)):
             raise ValueError("Invalid parameter")
         self.GYRO_SCALE = scale
         self.setWord('GYRO_FS_SEL', scale)
@@ -706,7 +705,7 @@ class MPU9250:
                 data['accel'] = self.interpretAccel(data['accel'])
             return data
         else:
-            interm = '/tmp/'+str(random.randint(0,sys.maxint))
+            interm = '/tmp/'+str(random.randint(0,sys.maxsize))
             with open(interm,'r+') as fi, open(filename,'w') as fo:
                 self._readFIFO2File(fi,length*n,wait)
                 fi.seek(0)
@@ -727,9 +726,9 @@ class MPU9250:
             raise ValueError("Invalid parameter")
         if any(key not in TYPES for key in types):
             raise ValueError("Invalid parameter")
-        if any(not isinstance(value,int) for value in types.values()):
+        if any(not isinstance(value,int) for value in list(types.values())):
             raise ValueError("Invalid parameter")
-        if any(value >= 16 or value < 1 for value in types.values()):
+        if any(value >= 16 or value < 1 for value in list(types.values())):
             raise ValueError("Invalid parameter")
 
         # each
@@ -795,10 +794,10 @@ class MPU9250:
                 handle.write('\n'.join([str(num) for num in data]))
         else:
             total = length
-            percent=range(0,101,10)
+            percent=list(range(0,101,10))
             while length > 0:
                 if verbose and (total-length)*100./total > percent[0]:
-                    print str(percent[0])+'%...',
+                    print(str(percent[0])+'%...', end=' ')
                     sys.stdout.flush()
                     percent = percent[1:]
                 cnts = self.readFIFOCount()
@@ -814,7 +813,7 @@ class MPU9250:
                 else:
                     time.sleep(wait)
             if verbose:
-                print(str(percent[0])+'%')
+                print((str(percent[0])+'%'))
 
     def _readFIFO2MEM(self,length=None,wait=0.001,verbose=True):
         """ 
@@ -829,10 +828,10 @@ class MPU9250:
                 data = self.read(rid, cnts)
         else:
             total = length
-            percent=range(10,101,10)
+            percent=list(range(10,101,10))
             while length > 0:
                 if verbose and (total-length)*1./total > percent[0]:
-                    print(str(percent[0])+'%...',)
+                    print((str(percent[0])+'%...',))
                     sys.stdout.flush()
                     percent = percent[1:]
                 cnts = self.readFIFOCount()
@@ -847,7 +846,7 @@ class MPU9250:
                 else:
                     time.sleep(wait)
             if verbose:
-                print(str(percent[0])+'%')
+                print((str(percent[0])+'%'))
         return data
 
     #def setAccelBias(self,bias):
@@ -1043,7 +1042,7 @@ class AK8963:
         self.addr = addr
 
         if self.whoami() is not self.WHOAMI:
-            logger.error("AK893 at address {} is not ready!".format(addr))
+            raise IOError("AK893 at address {} is not ready!".format(addr))
 
     def init(self):
         """ 

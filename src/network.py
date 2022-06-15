@@ -43,7 +43,7 @@ class Mac(object):
         mac_int = None
         if isinstance(mac, Mac):
             mac_str = str(mac)
-        elif isinstance(mac, basestring):
+        elif isinstance(mac, str):
             mac_str = mac
         elif isinstance(mac, int):
             mac_int = mac
@@ -107,7 +107,7 @@ class Mac(object):
     def __eq__(self, other):
         if isinstance(other, Mac):
             return int(self) == int(other)
-        elif isinstance(other, basestring):
+        elif isinstance(other, str):
             return int(self) == self.str2mac(other)
         elif isinstance(other, int):
             return int(self) == other
@@ -151,7 +151,7 @@ class IpAddress(object):
         ip_int = None
         if isinstance(ip, IpAddress):
             ip_str = str(ip)
-        elif isinstance(ip, basestring):
+        elif isinstance(ip, str):
             ip_str = ip
         elif isinstance(ip, int):
             ip_int = ip
@@ -203,7 +203,7 @@ class IpAddress(object):
     def __eq__(self, other):
         if isinstance(other, IpAddress):
             return int(self) == int(other)
-        elif isinstance(other, basestring):
+        elif isinstance(other, str):
             return int(self) == self.str2ip(other)
         elif isinstance(other, int):
             return int(self) == other
