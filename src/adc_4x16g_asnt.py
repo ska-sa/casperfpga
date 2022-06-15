@@ -4,11 +4,11 @@ import time
 import struct
 #import matplotlib.pyplot as plt
 import numpy as np
-from wishbonedevice import WishBoneDevice
+from .wishbonedevice import WishBoneDevice
 
-from xspi import Xspi, Xspi_Config
-from xspi_h import *
-from xgpio import XGpio, XGpio_Config
+from .xspi import Xspi, Xspi_Config
+from .xspi_h import *
+from .xgpio import XGpio, XGpio_Config
 
 #But this is the value that causes the PRBS generator to be reset at the right time
 PRBS_MATCH  = 0xf6b6b649   
@@ -482,10 +482,10 @@ class Adc_4X16G_ASNT(object):
         for i in range(8):
             self.initial_DACvals[reg_add[i]] = value[i]
             self.write_DAC_value(reg_add[i], value[i])
-        print (self.initial_DACvals)
+        print((self.initial_DACvals))
 
     def write_DAC_value(self,DAC_add, DAC_val):
-        print("DAC",DAC_add, "set to ", DAC_val)
+        print(("DAC",DAC_add, "set to ", DAC_val))
         #value_hex_no_0x = hex(DAC_val).split('x')[1]
         #string_to_send = ""
         #string_to_send += str(DAC_add).rjust(4, '0')        
@@ -548,7 +548,7 @@ class Adc_4X16G_ASNT(object):
         test_offset = 200
         for n in range(test_offset, test_offset + numbits):
             match_pattern = (match_pattern<<1) | bit3[n]
-        print("Match pattern = " + hex(match_pattern))
+        print(("Match pattern = " + hex(match_pattern)))
         #now find the position of that pattern in each of the bits
         #We'll record those positions here
         match_pos = [999,999,999,999]
@@ -608,7 +608,7 @@ class Adc_4X16G_ASNT(object):
         time.sleep(0.5)
         for trial in range(1,3):
             print("")
-            print("Trial #", trial)
+            print(("Trial #", trial))
             #Reset the transceivers and logic
             #ser_slow('R')
             self.ser_slow('R',[])
@@ -634,7 +634,7 @@ class Adc_4X16G_ASNT(object):
             #for adc_chan in chan_list:
             #Reset the data fifos
             #ser_slow('V')
-            print("adjusting ADC channel ", self.channel_sel)
+            print(("adjusting ADC channel ", self.channel_sel))
             val_list = []
             #self.WriteGPIO0(FIFOREAD_MASK,FIFOREAD_MASK)
             self.get_samples(samples_2_get, val_list)
@@ -654,7 +654,7 @@ class Adc_4X16G_ASNT(object):
             test_offset = 200
             for n in range(test_offset, test_offset + numbits):
                 match_pattern = (match_pattern<<1) | bit3[n]
-            print("Match pattern = " + hex(match_pattern))
+            print(("Match pattern = " + hex(match_pattern)))
             #now find the position of that pattern in each of the bits
             #We'll record those positions here
             match_pos = [999,999,999,999]
@@ -682,22 +682,22 @@ class Adc_4X16G_ASNT(object):
                     pattern = (pattern<<1) | bit0[position + n]
                 if (pattern == match_pattern): 
                     match_pos[0] = position
-            print("Offset of each lane's match pattern ", match_pos)
+            print(("Offset of each lane's match pattern ", match_pos))
             #Now we calculate how many bits to shift each channel to align them
             min_pos = min(match_pos)
             max_pos = max(match_pos)
             min_chan = match_pos.index(min(match_pos))
             max_chan = match_pos.index(max(match_pos))
             if min_pos == 999: 
-                print("No pattern match in channel " + str(min_chan))
-                print("Alignment failed for channel ", self.channel_sel)
+                print(("No pattern match in channel " + str(min_chan)))
+                print(("Alignment failed for channel ", self.channel_sel))
                 align_fail = 1
                 time.sleep(0.1)
             for n in range(3, -1, -1):
                 steps_to_shift = match_pos[n] - min_pos
                 if steps_to_shift > 63: 
-                    print("Necessary shift exceeds 63 in bit ", n)
-                    print("Alignment failed for channel ", self.channel_sel)
+                    print(("Necessary shift exceeds 63 in bit ", n))
+                    print(("Alignment failed for channel ", self.channel_sel))
                     align_fail = 1
                     time.sleep(0.1)
                             
@@ -707,7 +707,7 @@ class Adc_4X16G_ASNT(object):
                     if (match_pos[n] != 999):
                         steps_to_shift = match_pos[n] - min_pos
                         if steps_to_shift > 64: steps_to_shift = 64
-                        print("Shift bit " + str(n) + " " + str(steps_to_shift))                   
+                        print(("Shift bit " + str(n) + " " + str(steps_to_shift)))                   
                         self.bit_shift(self.channel_sel, n, steps_to_shift)
                         #time.sleep(.1)
             else:
@@ -717,7 +717,7 @@ class Adc_4X16G_ASNT(object):
             # In the current design, it's only for the current channel
             if align_fail == 0:
                 #for adc_chan in range(1,3):
-                print("Checking alignment channel ", self.channel_sel)
+                print(("Checking alignment channel ", self.channel_sel))
                 align_fail = self.check_alignment()
                 if align_fail == 1: 
                     #break

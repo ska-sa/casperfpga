@@ -1,5 +1,5 @@
 import logging
-from memory import Memory
+from .memory import Memory
 import struct
 
 LOGGER = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class Xil_Device(Memory):
         :return: a Gbe object
         """
         address, length_bytes = -1, -1
-        for mem_name in memorymap_dict.keys():
+        for mem_name in list(memorymap_dict.keys()):
             if mem_name == device_name:
                 address = memorymap_dict[mem_name]['address']
                 length_bytes = memorymap_dict[mem_name]['bytes']
@@ -50,7 +50,7 @@ class Xil_Device(Memory):
 
     def read_int(self,word_offset):
         data = self.parent.read_int(self.name,word_offset)
-        print(hex(data))
+        print((hex(data)))
     
     def write_int(self,value,word_offset):
         self.parent.write_int(self.name,value,False,word_offset)

@@ -818,7 +818,7 @@ class Xspi(object):
         * Verify that only one bit in the incoming slave mask is set.
         """
         NumAsserted = 0
-        NumSlaveBits_list = range(self.NumSlaveBits)
+        NumSlaveBits_list = list(range(self.NumSlaveBits))
         NumSlaveBits_list = reversed(NumSlaveBits_list)
         for Index in NumSlaveBits_list:
             if ((SlaveMask >> Index) & 0x1):
