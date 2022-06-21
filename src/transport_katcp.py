@@ -125,6 +125,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             self.disconnect()
         except:
             pass
+        
 
     @staticmethod
     def test_host_type(host_ip, timeout=5):
@@ -495,6 +496,16 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.logger.info('%s: programmed %s okay.' % (self.host, filename))
         self.prog_info['last_programmed'] = filename
         self.prog_info['last_uploaded'] = ''
+
+    def prog_user_image(self):
+        """
+        Program the FPGA. Specifically designed to work when using
+        katcp transport. Uses the last uploaded design to program
+        the fpga with.
+        """
+        self.upload_to_ram_and_program(self.prog_info['last_programmed'])
+
+
 
     def deprogram(self):
         """
