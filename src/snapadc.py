@@ -37,10 +37,14 @@ class SnapAdc(object):
     M_WB_W_ISERDES_BITSLIP_CHIP_SEL = 0b11111111 << 8
     M_WB_W_ISERDES_BITSLIP_LANE_SEL = 0b111 << 5
 
-    def __init__(self, interface, device_name, device_info, initialise=False, ref=None):
-        self.name = device_name
+
+    # def __init__(self, interface, device_name, device_info, initialise=False, ref=None):
+
+    def __init__(self, interface, initialize=False, ref=None):
+        # self.name = device_name
+        device_info = {}
         ADC = 'HMCAD1511'
-        resolution = int(device_info.get('adc_resolution', '8'))
+        # resolution = int(device_info.get('adc_resolution', '8'))
         self.RESOLUTION  = 8
         self.adc = None
         self.lmx = None
@@ -59,11 +63,12 @@ class SnapAdc(object):
         self.ramList = ['adc16_wb_ram0', 'adc16_wb_ram1', 'adc16_wb_ram2']
         self.laneList = [0, 1, 2, 3, 4, 5, 6, 7]
 
-        if resolution not in [8,12,14]:
-            self.logger.error("Invalid parameter")
-            raise ValueError("Invalid parameter")
-        else:
-            self.RESOLUTION = resolution
+        # if resolution not in [8,12,14]:
+            # self.logger.error("Invalid parameter")
+            # raise ValueError("Invalid parameter")
+        # else:
+            # self.RESOLUTION = resolution
+        
         self.curDelay = np.zeros((len(self.adcList),len(self.laneList)))
 
         if ref is not None:
@@ -112,7 +117,6 @@ class SnapAdc(object):
             init(160,4,8)   4 channel mode, 160Msps, 8bit resolution
 
         """
-
         if self.lmx is not None:
             self.logger.debug("Reseting frequency synthesizer")
             self.lmx.init()
@@ -580,7 +584,8 @@ class SnapAdc(object):
             raise ValueError("Invalid parameter")
 
         if taps==True:
-            taps = range(32)
+            # taps = range(32)
+            taps = list(range(32))
         elif taps in self.adcList:
             taps = [taps]
         if not isinstance(taps,list) and taps!=None:
@@ -877,7 +882,7 @@ class SnapAdc(object):
         return ok
 
     @classmethod
-    def from_device_info(cls, parent, device_name, device_info, initialise=False, **kwargs):
+    def from_device_info(cls, parent, initialize=False, **kwargs):
         """
         Process device info and the memory map to get all the necessary info
         and return a SKARAB ADC instance.
@@ -885,8 +890,8 @@ class SnapAdc(object):
         :param device_name:
         :param device_info:
         :param memorymap_dict:
-        :param initialise:
+        :param initialize:
         :param kwargs:
         :return:
         """
-        return cls(parent, device_name, device_info, initialise, **kwargs)
+        return cls(parent, initialize, **kwargs)
