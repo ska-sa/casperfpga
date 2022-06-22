@@ -48,7 +48,7 @@ setuptools.setup(
     # Specify version in-line here
     install_requires=[
         'katcp==0.6.2',
-        'numpy==1.16',
+        'numpy==1.22.0',
         'odict',
         'setuptools',
         'tornado==4.3',
