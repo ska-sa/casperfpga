@@ -823,7 +823,8 @@ class SnapAdc(object):
 
     def isLineClockAligned(self):
         errs = self.testPatterns(mode='std',pattern1=self.p1,pattern2=self.p2)
-        if np.all(np.array([adc.values() for adc in errs.values()])==0):
+        #if np.all(np.array([adc.values() for adc in errs.values()])==0):
+        if np.all(np.array([list(adc.values()) for adc in errs.values()]) == 0):
             return True
         else:
             self.logger.debug('Line clock NOT aligned.\n{0}'.format(str(errs)))
