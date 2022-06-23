@@ -396,10 +396,10 @@ class Xspi(object):
 
 
     def XSpi_WriteReg(self, RegOffset, RegisterValue):
-        self.parent.write_int(self.devname,RegisterValue,True, RegOffset/4)
+        self.parent.write_int(self.devname,RegisterValue,True, RegOffset//4)
 
     def XSpi_ReadReg(self, RegOffset):  
-        return self.parent.read_int(self.devname, RegOffset/4)
+        return self.parent.read_int(self.devname, RegOffset//4)
 
     def XSpi_IntrGlobalEnable(self):
         self.XSpi_WriteReg(XSP_DGIER_OFFSET, XSP_GINTR_ENABLE_MASK)
