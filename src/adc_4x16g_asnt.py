@@ -415,7 +415,7 @@ class Adc_4X16G_ASNT(object):
         time.sleep(0.5)
         # the input width of the wb_bram 256bits input, and the width is 2^6
         # so it's 2048
-        length = 256*2**6/8
+        length = 256*2**6//8
         vals = self.wbram._read(addr=0, size=length)
         fmt = '!2048'+'B'
         #vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
