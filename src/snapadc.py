@@ -74,7 +74,6 @@ class SnapAdc(object):
         # Purposely setting ref=None below to prevent LMX object
         # from being attached so we can do it ourselves
 
-        self.RESOLUTION  = 8
         self.resolution = resolution # XXX: At some point, decide which notation to use between resolution and RESOLUTION
         self.adc = None
         self.lmx = None
@@ -240,7 +239,7 @@ class SnapAdc(object):
         elif numChannel==4 and sample_rate<60:
             lowClkFreq = True
         # XXX this case already covered above
-        #elif numChannel==4 and self.RESOLUTION==14 and sample_rate<30:
+        #elif numChannel==4 and self.resolution==14 and sample_rate<30:
         #    lowClkFreq = True
         else:
             lowClkFreq = False
@@ -250,7 +249,7 @@ class SnapAdc(object):
             self.adc.setOperatingMode(numChannel, 1, lowClkFreq)
         elif type(self.adc) is HMCAD1520:
             self.adc.setOperatingMode(numChannel, 1, lowClkFreq,
-                                      self.RESOLUTION)
+                                      self.resolution)
 
         # ADC init/lmx select messes with FPGA clock, so reprogram
         self.logger.debug('Reprogramming the FPGA for ADCs')
@@ -390,7 +389,7 @@ class SnapAdc(object):
             data = [self.readRAM(r, signed) for r in ram if r in self.adcList]
             return dict(zip(ram, data))
         elif ram in self.adcList:
-            if self.RESOLUTION > 8:     # ADC_DATA_WIDTH  == 16
+            if self.resolution > 8:     # ADC_DATA_WIDTH  == 16
                 fmt = '!1024' + ('h' if signed else 'B')
                 length = 2048
             else:
@@ -676,8 +675,8 @@ class SnapAdc(object):
         elif pattern1==None and pattern2==None:
             # synchronization mode
             self.controller.test('pat_sync')
-            # pattern1 = 0b11110000 when self.RESOLUTION is 8
-            # pattern1 = 0b111111000000 when self.RESOLUTION is 12
+            # pattern1 = 0b11110000 when self.resolution is 8
+            # pattern1 = 0b111111000000 when self.resolution is 12
             pattern1 = ((2 ** (self.resolution // 2)) - 1) << (self.resolution // 2)
             pattern1 = self._signed(pattern1, self.resolution)
         elif isinstance(pattern1,int) and pattern2==None:
@@ -920,13 +919,13 @@ class SnapAdc(object):
         for chip, lanes in chips_lanes.items():
             self.selectADC(chip)
             self.adc.test('dual_custom_pat', self.p1, self.p2)
-            ans1 = self._signed(self.p1, self.RESOLUTION)
-            ans2 = self._signed(self.p2, self.RESOLUTION)
+            ans1 = self._signed(self.p1, self.resolution)
+            ans2 = self._signed(self.p2, self.resolution)
             failed_lanes = []
-            for cnt in range(2 * self.RESOLUTION):
+            for cnt in range(2 * self.resolution):
                 slipped = False
                 self.snapshot() # make bitslip "take" (?!) XXX
-                d = self.readRAM(chip).reshape(-1, self.RESOLUTION)
+                d = self.readRAM(chip).reshape(-1, self.resolution)
                 # sanity check: these failures mean line clock errors
                 failed_lanes += [L for L in lanes
                         if np.any(d[0::2,L] != d[0,L]) or \
@@ -934,7 +933,7 @@ class SnapAdc(object):
                 lanes = [L for L in lanes if L not in failed_lanes]
                 for lane in lanes:
                     if not d[0,lane] in [ans1, ans2]:
-                        if cnt == 2*self.RESOLUTION - 1:
+                        if cnt == 2*self.resolution - 1:
                             # Failed on last try
                             failed_lanes += [lane]
                         self.bitslip(chip, lane)
