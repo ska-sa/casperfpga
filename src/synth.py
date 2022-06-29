@@ -2,6 +2,7 @@ from .wishbonedevice import WishBoneDevice
 import fractions as _frac
 import logging
 import time
+import numpy as np
 
 class LMXRaw(object):
 
@@ -367,7 +368,13 @@ class LMX2581(WishBoneDevice):
         # Update some bits of d1 with d2, while keep other bits unchanged
         if mask:
             d1 = d1 & ~mask
+            if np.abs(d1-int(d1)) < 0.01:
+                d1 = int(d1)
+            else: raise ValueError
             d2 = d2 * (mask & -mask)
+            if np.abs(d2-int(d2)) < 0.01:
+                d2 = int(d2)
+            else: raise ValueError
         return d1 | d2
 
     def _get(self, data, mask):

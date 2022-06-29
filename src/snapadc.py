@@ -75,6 +75,7 @@ class SnapAdc(object):
         # from being attached so we can do it ourselves
 
         self.RESOLUTION  = 8
+        self.resolution = resolution # XXX: At some point, decide which notation to use between resolution and RESOLUTION
         self.adc = None
         self.lmx = None
         self.clksw = None
@@ -198,7 +199,7 @@ class SnapAdc(object):
             assert(self.lmx.setFreq(sample_rate)) # Error if failed
 
         logger.info("Configuring clock source switch")
-        if self.synth is not None:
+        if self.lmx is not None:
             self.clksw.setSwitch('a')
         else:
             self.clksw.setSwitch('b')
@@ -270,6 +271,135 @@ class SnapAdc(object):
         self._retry_cnt = 0
         self.working_taps = {} # initializing invalidates cached values
         return
+
+    def selectADC(self, chipSel=None):
+        """ Select one or multiple ADCs
+
+        Select the ADC(s) to be configured. ADCs are numbered by 0, 1, 2...
+        E.g. 
+            selectADC(0)        # select the 1st ADC
+            selectADC(1)        # select two ADCs
+            selectADC(2)        # select all ADCs
+        """
+
+        # can activate low for HMCAD1511, but inverted in wb_adc16_controller
+        if chipSel==None:       # Select all ADC chips
+            self.adc.cs = np.bitwise_or.reduce([0b1 << s for s in self.adcList])
+        elif isinstance(chipSel, list) and all(s in self.adcList for s in chipSel):
+            csList = [0b1 << s for s in self.adcList if s in chipSel]
+            self.adc.cs = np.bitwise_or.reduce(csList)
+        elif chipSel in self.adcList:
+            self.adc.cs = 0b1 << chipSel
+        else:
+            raise ValueError("Invalid Parameter")
+
+    def setDemux(self, numChannel=1):
+        """
+        when mode==0: numChannel=4
+            data = data[:,[0,4,1,5,2,6,3,7]]
+        when mode==1: numChannel=2
+            data = data[:,[0,1,4,5,2,3,6,7]]
+        when mode==2: numChannel=1
+            data = data[:,[0,1,2,3,4,5,6,7]]
+        """
+        modeMap = {4:0, 2:1, 1:2} # mapping of numChannel to mode
+        if numChannel not in modeMap.keys():
+            raise ValueError("Invalid Parameter")
+        mode = modeMap[numChannel]
+        val = self._set(0x0, mode, self.M_WB_W_DEMUX_MODE)
+        val = self._set(val, 0b1,  self.M_WB_W_DEMUX_WRITE)
+        self.adc._write(val, self.A_WB_W_CTRL)
+
+    def reset(self):
+        """ Reset all adc16_interface logics inside FPGA """
+        val = self._set(0x0, 0x1, self.M_WB_W_RESET)
+        self.adc._write(0x0, self.A_WB_W_CTRL)
+        self.adc._write(val, self.A_WB_W_CTRL)
+        self.adc._write(0x0, self.A_WB_W_CTRL)
+
+    def snapshot(self):
+        """ Save 1024 consecutive samples of each ADC into its corresponding bram """
+        # No wat to snapshot a single ADC because the HDL code is designed so
+        val = self._set(0x0, 0x1, self.M_WB_W_SNAP_REQ)
+        self.adc._write(0x0, self.A_WB_W_CTRL)
+        self.adc._write(val, self.A_WB_W_CTRL)
+        self.adc._write(0x0, self.A_WB_W_CTRL)
+
+    def calibrateAdcOffset(self):
+        self.logger.warning('Operation not supported.')
+
+    def calibrationAdcGain(self):
+        self.logger.warning('Operation not supported.')
+
+    def getRegister(self, rid=None):
+        if rid==None:
+            return [self.getRegister(regId) for regId in self.A_WB_R_LIST]
+        elif rid in self.A_WB_R_LIST:
+            rval = self.adc._read(rid)
+            return {name: self._get(rval,mask) for name, mask in self.WB_DICT[rid].items()}
+        else:
+            raise ValueError("Invalid Parameter")
+
+    def _get(self, data, mask):
+        data = data & mask
+        return data / (mask & -mask)
+
+    def _set(self, d1, d2, mask=None):
+        # Update some bis of d1 with d2, while keeping other bits unchanged 
+        if mask:
+            d1 = d1 & ~mask
+            d2 = d2 * (mask & -mask)
+        return d1 | d2 
+
+    def getWord(self, name):
+        rid = self.getRegId(name)
+        rval = self.adc._read(rid)
+        return self._get(rval, self.WB_DICT[rid][name])
+
+    def getRegId(self, name):
+        rid = [d for d in self.A_WB_R_LIST if name in self.WB_DICT[d]]
+        if len(rid) == 0:
+            raise ValueError("Invalid Parameter")
+        else:
+            return rid[0]
+
+    def interleave(self, data, mode):
+        """ Reorder the data according to the interleaving mode
+
+        E.g.
+            data = np.arange(1024).reshape(-1,8)
+            interleave(data, 1) # return a one-column numpy array
+            interleave(data, 2) # return a two-column numpy array
+            interleave(data, 3) # return a four-column numpy array
+        """
+        return self.adc.interleave(data, mode)
+
+    def readRAM(self, ram=None, signed=True):
+        """ Read RAM(s) and return the 1024-sample data 
+
+        E.g.
+            readRAM()       # read all RAMs, return a list of arrays
+            readRAM(1)      # read the 2nd RAMs, return a 128X8 aray
+            readRAM([0,1])  # read 2 RAMs, return two arrays
+            readRAM(signed=False)   # return a list of arrays in unsigned format
+        """
+        if ram==None:       # read all RAMS
+            return self.readRAM(self.adcList, signed)
+        elif isinstance(ram, list) and all(r in self.adcList for r in ram):
+                            # read a list of RAMs
+            data = [self.readRAM(r, signed) for r in ram if r in self.adcList]
+            return dict(zip(ram, data))
+        elif ram in self.adcList:
+            if self.RESOLUTION > 8:     # ADC_DATA_WIDTH  == 16
+                fmt = '!1024' + ('h' if signed else 'B')
+                length = 2048
+            else:
+                fmt = '!1024' + ('b' if signed else 'B') 
+                length = 1024
+            vals = self.ram[ram]._read(addr=0, size=length)
+            vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
+        else:
+            raise ValueError
 
     # A lane in this method actually corresponds to a "branch" in HMCAD1511 datasheet.
     # But I have to follow the naming convention of signals in casper repo.
