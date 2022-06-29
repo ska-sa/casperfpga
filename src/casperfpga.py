@@ -796,7 +796,6 @@ class CasperFpga(object):
         self._create_other_devices(device_dict, initialise=initialise_objects)
         self.logger.info("Creating ADC devices")
         self._create_casper_adc_devices(device_dict, initialise=initialise_objects)
-        self._create_other_devices(device_dict, initialise=initialise_objects)
         self.transport.memory_devices = self.memory_devices
         self.logger.info("Creating devices by register name")
         self._create_casper_device_by_regname(device_dict)
