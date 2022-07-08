@@ -21,8 +21,8 @@ from .sbram import Sbram
 from .snap import Snap
 from .snapadc import SnapAdc
 from .tengbe import TenGbe
-from . import progska
 from . import skarab_fileops
+import progska
 
 # BEGIN VERSION CHECK
 # Get package version when locally imported from repo or via -e develop install
