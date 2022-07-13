@@ -747,7 +747,7 @@ class SnapAdc(object):
         if all(d != 0 for d in data):
             return False
             
-        dist=np.zeros(data.shape)
+        dist=np.zeros(data.shape, dtype=int)
         curDist = 0
         for i in range(data.size):
             if data[i] != 0:
