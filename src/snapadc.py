@@ -447,7 +447,7 @@ class SnapAdc(object):
         elif laneSel not in self.laneList:
             raise ValueError("Invalid parameter")
 
-        if not isinstance(tap, int):
+        if not isinstance(tap, (int, np.integer)):
             raise ValueError("Invalid parameter")
 
         strl = ','.join([str(c) for c in laneSel])
