@@ -785,7 +785,7 @@ class SnapAdc(object):
             stds = self.testPatterns(taps=True) # Sweep tap settings and get std
             for adc in self.adcList:
                 for lane in self.laneList:
-                    vals = np.array(stds[adc].values())[:,lane]
+                    vals = np.array(list(stds[adc].values()))[:,lane]
                     t = self.decideDelay(vals)  # Find a proper tap setting 
                     if not t:
                         self.logger.error("ADC{0} lane{1} delay decision failed".format(adc,lane))
@@ -797,7 +797,7 @@ class SnapAdc(object):
             # decide chip-wise delay tap under single pattern test mode
             stds = self.testPatterns(taps=True) # Sweep tap settings and get std
             for adc in self.adcList:
-                vals = np.array(stds[adc].values())
+                vals = np.array(list(stds[adc].values()))
                 t = self.decideDelay(vals)  # Find a proper tap setting 
                 if not t:
                     self.logger.error("ADC{0} delay decision failed".format(adc))
@@ -812,7 +812,7 @@ class SnapAdc(object):
 
             for adc in self.adcList:
                 for lane in self.laneList:
-                    vals = np.array(errs[adc].values())[:,lane]
+                    vals = np.array(list(errs[adc].values()))[:,lane]
                     t = self.decideDelay(vals)  # Find a proper tap setting 
                     if not t:
                         self.logger.error("ADC{0} lane{1} delay decision failed".format(adc,lane))
@@ -823,7 +823,6 @@ class SnapAdc(object):
 
     def isLineClockAligned(self):
         errs = self.testPatterns(mode='std',pattern1=self.p1,pattern2=self.p2)
-        #if np.all(np.array([adc.values() for adc in errs.values()])==0):
         if np.all(np.array([list(adc.values()) for adc in errs.values()]) == 0):
             return True
         else:
