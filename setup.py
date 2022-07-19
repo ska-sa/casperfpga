@@ -65,6 +65,7 @@ setuptools.setup(
         'requests',
         'circus'
     ],
+    extras_require = {'test': ['pytest', 'pytest-datadir']},
     packages=['casperfpga', 'casperfpga.debug', 'casperfpga.progska'],
     package_dir={'casperfpga': 'src', 'casperfpga.debug': 'debug', 'casperfpga.progska': 'progska'},
     package_data={'casperfpga': data_files},
