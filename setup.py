@@ -56,7 +56,7 @@ setuptools.setup(
         'future',
         'numpy',
         'katcp',
-        'katversion'
+        'katversion',
         'odict',
         'setuptools',
         'tornado',
