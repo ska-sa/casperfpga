@@ -1,0 +1,205 @@
+#!/bin/kcpfpg
+?uploadbin
+?register	snapC_ctrl	0x10000	0x4
+?register	snapA_status	0x10004	0x4
+?register	snapA_ctrl	0x10008	0x4
+?register	sys_block	0x1000c	0x20
+?register	sys_board_id	0x1000c	0x4
+?register	sys_rev	0x10010	0x4
+?register	sys_rev_rcs	0x10018	0x4
+?register	sys_scratchpad	0x1001c	0x4
+?register	sys_clkcounter	0x10020	0x4
+?register	snapB_status	0x1002c	0x4
+?register	snapA_bram	0x10030	0x20000
+?register	adc16_use_synth	0x30030	0x4
+?register	eth_sw	0x30034	0xf000
+?register	lmx_ctrl	0x3f034	0x4
+?register	adc16_wb_ram2	0x3f038	0x1000
+?register	adc16_controller	0x40038	0x100
+?register	adc16_wb_ram0	0x40138	0x1000
+?register	adc16_wb_ram1	0x41138	0x1000
+?register	snapB_bram	0x42138	0x20000
+?register	snapC_status	0x62138	0x4
+?register	snapC_bram	0x6213c	0x20000
+?register	snapB_ctrl	0x8213c	0x4
+?meta	SNAP	xps:xsg	hw_sys	SNAP:xc7k160t
+?meta	SNAP	xps:xsg	clk_src	adc0_clk
+?meta	SNAP	xps:xsg	clk_rate	250
+?meta	SNAP	xps:xsg	use_microblaze	on
+?meta	SNAP	xps:xsg	sample_period	1
+?meta	SNAP	xps:xsg	synthesis_tool	XST
+?meta	snapA/bram	xps:bram	arith_type	Unsigned
+?meta	snapA/bram	xps:bram	addr_width	15
+?meta	snapA/bram	xps:bram	data_width	32
+?meta	snapA/bram	xps:bram	reg_prim_output	off
+?meta	snapA/bram	xps:bram	reg_core_output	off
+?meta	snapA/bram	xps:bram	optimization	Minimum_Area
+?meta	snapA/bram	xps:bram	data_bin_pt	0
+?meta	snapA/bram	xps:bram	init_vals	[0:2^15-1]
+?meta	snapA/bram	xps:bram	sample_rate	1
+?meta	snapB/bram	xps:bram	arith_type	Unsigned
+?meta	snapB/bram	xps:bram	addr_width	15
+?meta	snapB/bram	xps:bram	data_width	32
+?meta	snapB/bram	xps:bram	reg_prim_output	off
+?meta	snapB/bram	xps:bram	reg_core_output	off
+?meta	snapB/bram	xps:bram	optimization	Minimum_Area
+?meta	snapB/bram	xps:bram	data_bin_pt	0
+?meta	snapB/bram	xps:bram	init_vals	[0:2^15-1]
+?meta	snapB/bram	xps:bram	sample_rate	1
+?meta	snapC/bram	xps:bram	arith_type	Unsigned
+?meta	snapC/bram	xps:bram	addr_width	15
+?meta	snapC/bram	xps:bram	data_width	32
+?meta	snapC/bram	xps:bram	reg_prim_output	off
+?meta	snapC/bram	xps:bram	reg_core_output	off
+?meta	snapC/bram	xps:bram	optimization	Minimum_Area
+?meta	snapC/bram	xps:bram	data_bin_pt	0
+?meta	snapC/bram	xps:bram	init_vals	[0:2^15-1]
+?meta	snapC/bram	xps:bram	sample_rate	1
+?meta	snap_adc	xps:snap_adc	sample_rate	500
+?meta	snap_adc	xps:snap_adc	snap_inputs	6
+?meta	snap_adc	xps:snap_adc	adc_resolution	8
+?meta	snapA/ctrl	xps:sw_reg	io_dir	From\_Processor
+?meta	snapA/ctrl	xps:sw_reg	io_delay	0
+?meta	snapA/ctrl	xps:sw_reg	init_val	0
+?meta	snapA/ctrl	xps:sw_reg	sample_period	1
+?meta	snapA/ctrl	xps:sw_reg	names	reg
+?meta	snapA/ctrl	xps:sw_reg	bitwidths	32
+?meta	snapA/ctrl	xps:sw_reg	bin_pts	0
+?meta	snapA/ctrl	xps:sw_reg	arith_types	0
+?meta	snapA/ctrl	xps:sw_reg	sim_port	off
+?meta	snapA/ctrl	xps:sw_reg	show_format	on
+?meta	snapA/status	xps:sw_reg	io_dir	To\_Processor
+?meta	snapA/status	xps:sw_reg	io_delay	0
+?meta	snapA/status	xps:sw_reg	init_val	0
+?meta	snapA/status	xps:sw_reg	sample_period	1
+?meta	snapA/status	xps:sw_reg	names	reg
+?meta	snapA/status	xps:sw_reg	bitwidths	32
+?meta	snapA/status	xps:sw_reg	bin_pts	0
+?meta	snapA/status	xps:sw_reg	arith_types	0
+?meta	snapA/status	xps:sw_reg	sim_port	off
+?meta	snapA/status	xps:sw_reg	show_format	on
+?meta	snapB/ctrl	xps:sw_reg	io_dir	From\_Processor
+?meta	snapB/ctrl	xps:sw_reg	io_delay	0
+?meta	snapB/ctrl	xps:sw_reg	init_val	0
+?meta	snapB/ctrl	xps:sw_reg	sample_period	1
+?meta	snapB/ctrl	xps:sw_reg	names	reg
+?meta	snapB/ctrl	xps:sw_reg	bitwidths	32
+?meta	snapB/ctrl	xps:sw_reg	bin_pts	0
+?meta	snapB/ctrl	xps:sw_reg	arith_types	0
+?meta	snapB/ctrl	xps:sw_reg	sim_port	off
+?meta	snapB/ctrl	xps:sw_reg	show_format	on
+?meta	snapB/status	xps:sw_reg	io_dir	To\_Processor
+?meta	snapB/status	xps:sw_reg	io_delay	0
+?meta	snapB/status	xps:sw_reg	init_val	0
+?meta	snapB/status	xps:sw_reg	sample_period	1
+?meta	snapB/status	xps:sw_reg	names	reg
+?meta	snapB/status	xps:sw_reg	bitwidths	32
+?meta	snapB/status	xps:sw_reg	bin_pts	0
+?meta	snapB/status	xps:sw_reg	arith_types	0
+?meta	snapB/status	xps:sw_reg	sim_port	off
+?meta	snapB/status	xps:sw_reg	show_format	on
+?meta	snapC/ctrl	xps:sw_reg	io_dir	From\_Processor
+?meta	snapC/ctrl	xps:sw_reg	io_delay	0
+?meta	snapC/ctrl	xps:sw_reg	init_val	0
+?meta	snapC/ctrl	xps:sw_reg	sample_period	1
+?meta	snapC/ctrl	xps:sw_reg	names	reg
+?meta	snapC/ctrl	xps:sw_reg	bitwidths	32
+?meta	snapC/ctrl	xps:sw_reg	bin_pts	0
+?meta	snapC/ctrl	xps:sw_reg	arith_types	0
+?meta	snapC/ctrl	xps:sw_reg	sim_port	off
+?meta	snapC/ctrl	xps:sw_reg	show_format	on
+?meta	snapC/status	xps:sw_reg	io_dir	To\_Processor
+?meta	snapC/status	xps:sw_reg	io_delay	0
+?meta	snapC/status	xps:sw_reg	init_val	0
+?meta	snapC/status	xps:sw_reg	sample_period	1
+?meta	snapC/status	xps:sw_reg	names	reg
+?meta	snapC/status	xps:sw_reg	bitwidths	32
+?meta	snapC/status	xps:sw_reg	bin_pts	0
+?meta	snapC/status	xps:sw_reg	arith_types	0
+?meta	snapC/status	xps:sw_reg	sim_port	off
+?meta	snapC/status	xps:sw_reg	show_format	on
+?meta	eth/sw	xps:ten_gbe	flavour	sfp+
+?meta	eth/sw	xps:ten_gbe	slot	0
+?meta	eth/sw	xps:ten_gbe	port_r1	0
+?meta	eth/sw	xps:ten_gbe	port_r2_cx4	0
+?meta	eth/sw	xps:ten_gbe	port_r2_sfpp	0
+?meta	eth/sw	xps:ten_gbe	rx_dist_ram	on
+?meta	eth/sw	xps:ten_gbe	large_frames	off
+?meta	eth/sw	xps:ten_gbe	show_param	on
+?meta	eth/sw	xps:ten_gbe	pre_emph_r2	0.74
+?meta	eth/sw	xps:ten_gbe	pre_emph	3
+?meta	eth/sw	xps:ten_gbe	post_emph_r2	0.18
+?meta	eth/sw	xps:ten_gbe	rxeqmix_r2	7
+?meta	eth/sw	xps:ten_gbe	swing_r2	940
+?meta	eth/sw	xps:ten_gbe	swing	800
+?meta	eth/sw	xps:ten_gbe	fab_en	on
+?meta	eth/sw	xps:ten_gbe	fab_mac	2207781620256
+?meta	eth/sw	xps:ten_gbe	fab_ip	168430112
+?meta	eth/sw	xps:ten_gbe	fab_udp	8511
+?meta	eth/sw	xps:ten_gbe	fab_gate	1
+?meta	eth/sw	xps:ten_gbe	cpu_rx_en	on
+?meta	eth/sw	xps:ten_gbe	cpu_tx_en	on
+?meta	eth/sw	xps:ten_gbe	ttl	255
+?meta	eth/sw	xps:ten_gbe	promisc_mode	off
+?meta	eth/sw	xps:ten_gbe	debug_ctr_width	32
+?meta	eth/sw	xps:ten_gbe	txctr	off
+?meta	eth/sw	xps:ten_gbe	txerrctr	off
+?meta	eth/sw	xps:ten_gbe	txerrctr_len	577
+?meta	eth/sw	xps:ten_gbe	txofctr	off
+?meta	eth/sw	xps:ten_gbe	txfullctr	off
+?meta	eth/sw	xps:ten_gbe	txvldctr	off
+?meta	eth/sw	xps:ten_gbe	txsnaplen	0\_-\_no\_snap
+?meta	eth/sw	xps:ten_gbe	rxctr	off
+?meta	eth/sw	xps:ten_gbe	rxerrctr	off
+?meta	eth/sw	xps:ten_gbe	rxerrctr_len	100
+?meta	eth/sw	xps:ten_gbe	rxofctr	off
+?meta	eth/sw	xps:ten_gbe	rxbadctr	off
+?meta	eth/sw	xps:ten_gbe	rxvldctr	off
+?meta	eth/sw	xps:ten_gbe	rxeofctr	off
+?meta	eth/sw	xps:ten_gbe	rxsnaplen	0\_-\_no\_snap
+?meta	snapA	casper:snapshot	storage	bram
+?meta	snapA	casper:snapshot	dram_dimm	1
+?meta	snapA	casper:snapshot	dram_clock	200
+?meta	snapA	casper:snapshot	nsamples	15
+?meta	snapA	casper:snapshot	data_width	32
+?meta	snapA	casper:snapshot	offset	off
+?meta	snapA	casper:snapshot	circap	off
+?meta	snapA	casper:snapshot	value	off
+?meta	snapA	casper:snapshot	ext_arm	off
+?meta	snapA	casper:snapshot	ext_circ	off
+?meta	snapA	casper:snapshot	provide_outputs	on
+?meta	snapA	casper:snapshot	use_dsp48	off
+?meta	snapB	casper:snapshot	storage	bram
+?meta	snapB	casper:snapshot	dram_dimm	1
+?meta	snapB	casper:snapshot	dram_clock	200
+?meta	snapB	casper:snapshot	nsamples	15
+?meta	snapB	casper:snapshot	data_width	32
+?meta	snapB	casper:snapshot	offset	off
+?meta	snapB	casper:snapshot	circap	off
+?meta	snapB	casper:snapshot	value	off
+?meta	snapB	casper:snapshot	ext_arm	off
+?meta	snapB	casper:snapshot	ext_circ	off
+?meta	snapB	casper:snapshot	provide_outputs	on
+?meta	snapB	casper:snapshot	use_dsp48	off
+?meta	snapC	casper:snapshot	storage	bram
+?meta	snapC	casper:snapshot	dram_dimm	1
+?meta	snapC	casper:snapshot	dram_clock	200
+?meta	snapC	casper:snapshot	nsamples	15
+?meta	snapC	casper:snapshot	data_width	32
+?meta	snapC	casper:snapshot	offset	off
+?meta	snapC	casper:snapshot	circap	off
+?meta	snapC	casper:snapshot	value	off
+?meta	snapC	casper:snapshot	ext_arm	off
+?meta	snapC	casper:snapshot	ext_circ	off
+?meta	snapC	casper:snapshot	provide_outputs	on
+?meta	snapC	casper:snapshot	use_dsp48	off
+?meta	77777	77777	tags	casper:snapshot,xps:bram,xps:snap_adc,xps:sw_reg,xps:ten_gbe,xps:xsg
+?meta	77777	77777	system	snap_500
+?meta	77777	77777	builddate	22-Jul-2021\_17:54:02
+?meta	77777	77777	xlSgRoot	/data/opt/Xilinx/Vivado/2019.1/lib/lnx64.o/matlab/sysgen.mexa64
+?meta	77777_git	rcs	/data/home/kocz/hera/hera_corr_f/snap_500.slx	[kocz@acme1]	[git@github.com:HERA-Team/hera_corr_f.git]	[File not in Git. Compiled: Thu, 22 Jul 2021 17:54:03 -0700]	[On branch master - Your branch is up-to-date with 'origin/master'.]	[]
+?meta	77777_git	rcs	/home/kocz/hera/hera_corr_f/mlib_devel	[kocz@acme1]	[https://github.com/HERA-Team/mlib_devel]	[ec8cb4a0e72035a82c74f9df652e689591adce91 - 1220894+jkocz@users.noreply.github.com - Wed, 3 Mar 2021 15:13:20 -0800]	[HEAD detached at ec8cb4a - nothing to commit (use -u to show untracked files)]	[]
+?meta	77777	77777	md5_header	45bf4498aca6dafe1bd381f5bab7885d
+?meta	77777	77777	md5_bitstream	25cffc593d0e6e5f9dcc4ec3d4bad014
+?meta	77777	77777	flash_write_checksum	32764_1988
+?quit

@@ -1,0 +1,440 @@
+#!/bin/kcpfpg
+?uploadbin
+?register	adc16_controller	0x10000	0x100
+?register	adc16_wb_ram0	0x10100	0x1000
+?register	adc16_wb_ram1	0x11100	0x1000
+?register	adc16_wb_ram2	0x12100	0x1000
+?register	chan_reorder_reorder3_map1	0x13100	0x1000
+?register	corr_0_acc_cnt	0x14100	0x4
+?register	corr_0_acc_len	0x14104	0x4
+?register	corr_0_dout	0x14108	0x2000
+?register	corr_0_input_sel	0x16108	0x4
+?register	delay_delays	0x1610c	0x4
+?register	eq_core_clip_cnt	0x16110	0x4
+?register	eq_core_coeffs	0x16114	0x4000
+?register	eth_ctrl	0x1a114	0x4
+?register	eth_sw	0x1a118	0xf000
+?register	i2c_ant0	0x29118	0x40
+?register	i2c_ant1	0x29158	0x40
+?register	i2c_ant2	0x29198	0x40
+?register	input_snap_sel	0x291d8	0x4
+?register	input_snapshot_bram	0x291dc	0x1000
+?register	input_snapshot_ctrl	0x2a1dc	0x4
+?register	input_snapshot_status	0x2a1e0	0x4
+?register	input_source_sel	0x2a1e4	0x4
+?register	noise_seed_0	0x2a1e8	0x4
+?register	noise_seed_1	0x2a1ec	0x4
+?register	packetizer_ants	0x2a1f0	0x80
+?register	packetizer_chans	0x2a270	0x80
+?register	packetizer_ips	0x2a2f0	0x80
+?register	pfb_ctrl	0x2a370	0x4
+?register	pfb_status	0x2a374	0x4
+?register	phase_switch_enable_demod	0x2a378	0x4
+?register	phase_switch_enable_mod	0x2a37c	0x4
+?register	phase_switch_gpio_switch_offset	0x2a380	0x4
+?register	phase_switch_gpio_switch_states	0x2a384	0x1000
+?register	phase_switch_sw_switch_states	0x2b384	0x1000
+?register	sync_arm	0x2c384	0x4
+?register	sync_count	0x2c388	0x4
+?register	sync_period	0x2c38c	0x4
+?register	sync_sync_delay	0x2c390	0x4
+?register	sync_uptime	0x2c394	0x4
+?register	timebase_sync_period	0x2c398	0x4
+?register	version_version	0x2c39c	0x4
+?register	lmx_ctrl	0x2c3a0	0x4
+?register	adc16_use_synth	0x2c3a4	0x4
+?register	sys_block	0x2c3a8	0x20
+?register	sys_board_id	0x2c3a8	0x4
+?register	sys_rev	0x2c3ac	0x4
+?register	sys_rev_rcs	0x2c3b4	0x4
+?register	sys_scratchpad	0x2c3b8	0x4
+?register	sys_clkcounter	0x2c3bc	0x4
+?meta	SNAP	xps:xsg	hw_sys	SNAP:xc7k160t
+?meta	SNAP	xps:xsg	clk_src	adc0_clk
+?meta	SNAP	xps:xsg	clk_rate	250
+?meta	SNAP	xps:xsg	use_microblaze	on
+?meta	SNAP	xps:xsg	sample_period	1
+?meta	SNAP	xps:xsg	synthesis_tool	XST
+?meta	chan_reorder/reorder3/map1	xps:bram	arith_type	Unsigned
+?meta	chan_reorder/reorder3/map1	xps:bram	addr_width	10
+?meta	chan_reorder/reorder3/map1	xps:bram	data_width	32
+?meta	chan_reorder/reorder3/map1	xps:bram	reg_prim_output	on
+?meta	chan_reorder/reorder3/map1	xps:bram	reg_core_output	on
+?meta	chan_reorder/reorder3/map1	xps:bram	optimization	Minimum_Area
+?meta	chan_reorder/reorder3/map1	xps:bram	data_bin_pt	0
+?meta	chan_reorder/reorder3/map1	xps:bram	init_vals	map
+?meta	chan_reorder/reorder3/map1	xps:bram	sample_rate	1
+?meta	corr/0/dout	xps:bram	arith_type	Unsigned
+?meta	corr/0/dout	xps:bram	addr_width	nchan_bits-3
+?meta	corr/0/dout	xps:bram	data_width	64
+?meta	corr/0/dout	xps:bram	reg_prim_output	on
+?meta	corr/0/dout	xps:bram	reg_core_output	on
+?meta	corr/0/dout	xps:bram	optimization	Minimum_Area
+?meta	corr/0/dout	xps:bram	data_bin_pt	0
+?meta	corr/0/dout	xps:bram	init_vals	[0:2^10-1]
+?meta	corr/0/dout	xps:bram	sample_rate	1
+?meta	eq/core/coeffs	xps:bram	arith_type	Unsigned
+?meta	eq/core/coeffs	xps:bram	addr_width	ceil(log2(2^nchan\_*\_nants))
+?meta	eq/core/coeffs	xps:bram	data_width	16
+?meta	eq/core/coeffs	xps:bram	reg_prim_output	on
+?meta	eq/core/coeffs	xps:bram	reg_core_output	on
+?meta	eq/core/coeffs	xps:bram	optimization	Minimum_Area
+?meta	eq/core/coeffs	xps:bram	data_bin_pt	0
+?meta	eq/core/coeffs	xps:bram	init_vals	[0:2^10-1]
+?meta	eq/core/coeffs	xps:bram	sample_rate	1
+?meta	input/snapshot/bram	xps:bram	arith_type	Unsigned
+?meta	input/snapshot/bram	xps:bram	addr_width	10
+?meta	input/snapshot/bram	xps:bram	data_width	32
+?meta	input/snapshot/bram	xps:bram	reg_prim_output	off
+?meta	input/snapshot/bram	xps:bram	reg_core_output	off
+?meta	input/snapshot/bram	xps:bram	optimization	Minimum_Area
+?meta	input/snapshot/bram	xps:bram	data_bin_pt	0
+?meta	input/snapshot/bram	xps:bram	init_vals	[0:2^10-1]
+?meta	input/snapshot/bram	xps:bram	sample_rate	1
+?meta	packetizer/ants	xps:bram	arith_type	Unsigned
+?meta	packetizer/ants	xps:bram	addr_width	ceil(log2(pkts_per_cycle))
+?meta	packetizer/ants	xps:bram	data_width	32
+?meta	packetizer/ants	xps:bram	reg_prim_output	on
+?meta	packetizer/ants	xps:bram	reg_core_output	on
+?meta	packetizer/ants	xps:bram	optimization	Minimum_Area
+?meta	packetizer/ants	xps:bram	data_bin_pt	0
+?meta	packetizer/ants	xps:bram	init_vals	[0\_1\_2\_3\_4\_5\_6\_7\_8\_9\_10\_11\_12\_13\_14\_15\_16\_17\_18\_19\_20\_21\_22\_23\_24\_25\_26\_27\_28\_29\_30\_31]
+?meta	packetizer/ants	xps:bram	sample_rate	1
+?meta	packetizer/chans	xps:bram	arith_type	Unsigned
+?meta	packetizer/chans	xps:bram	addr_width	ceil(log2(pkts_per_cycle))
+?meta	packetizer/chans	xps:bram	data_width	32
+?meta	packetizer/chans	xps:bram	reg_prim_output	on
+?meta	packetizer/chans	xps:bram	reg_core_output	on
+?meta	packetizer/chans	xps:bram	optimization	Minimum_Area
+?meta	packetizer/chans	xps:bram	data_bin_pt	0
+?meta	packetizer/chans	xps:bram	init_vals	[0\_1\_2\_3\_4\_5\_6\_7\_8\_9\_10\_11\_12\_13\_14\_15\_16\_17\_18\_19\_20\_21\_22\_23\_24\_25\_26\_27\_28\_29\_30\_31]
+?meta	packetizer/chans	xps:bram	sample_rate	1
+?meta	packetizer/ips	xps:bram	arith_type	Unsigned
+?meta	packetizer/ips	xps:bram	addr_width	ceil(log2(pkts_per_cycle))
+?meta	packetizer/ips	xps:bram	data_width	32
+?meta	packetizer/ips	xps:bram	reg_prim_output	on
+?meta	packetizer/ips	xps:bram	reg_core_output	on
+?meta	packetizer/ips	xps:bram	optimization	Minimum_Area
+?meta	packetizer/ips	xps:bram	data_bin_pt	0
+?meta	packetizer/ips	xps:bram	init_vals	[1\_2\_3\_4\_5\_6\_7\_8\_9\_10\_11\_12\_13\_14\_15\_16\_17\_18\_19\_20\_21\_22\_23\_24\_25\_26\_27\_28\_29\_30\_31\_32]
+?meta	packetizer/ips	xps:bram	sample_rate	1
+?meta	phase_switch/gpio_switch_states	xps:bram	arith_type	Unsigned
+?meta	phase_switch/gpio_switch_states	xps:bram	addr_width	12
+?meta	phase_switch/gpio_switch_states	xps:bram	data_width	8
+?meta	phase_switch/gpio_switch_states	xps:bram	reg_prim_output	on
+?meta	phase_switch/gpio_switch_states	xps:bram	reg_core_output	on
+?meta	phase_switch/gpio_switch_states	xps:bram	optimization	Minimum_Area
+?meta	phase_switch/gpio_switch_states	xps:bram	data_bin_pt	0
+?meta	phase_switch/gpio_switch_states	xps:bram	init_vals	[0:2^10-1]
+?meta	phase_switch/gpio_switch_states	xps:bram	sample_rate	1
+?meta	phase_switch/sw_switch_states	xps:bram	arith_type	Unsigned
+?meta	phase_switch/sw_switch_states	xps:bram	addr_width	12
+?meta	phase_switch/sw_switch_states	xps:bram	data_width	8
+?meta	phase_switch/sw_switch_states	xps:bram	reg_prim_output	on
+?meta	phase_switch/sw_switch_states	xps:bram	reg_core_output	on
+?meta	phase_switch/sw_switch_states	xps:bram	optimization	Minimum_Area
+?meta	phase_switch/sw_switch_states	xps:bram	data_bin_pt	0
+?meta	phase_switch/sw_switch_states	xps:bram	init_vals	[0:2^10-1]
+?meta	phase_switch/sw_switch_states	xps:bram	sample_rate	1
+?meta	adc/snap_adc	xps:snap_adc	sample_rate	500
+?meta	adc/snap_adc	xps:snap_adc	snap_inputs	6
+?meta	adc/snap_adc	xps:snap_adc	adc_resolution	8
+?meta	corr/0/acc_cnt	xps:sw_reg	io_dir	To\_Processor
+?meta	corr/0/acc_cnt	xps:sw_reg	io_delay	0
+?meta	corr/0/acc_cnt	xps:sw_reg	init_val	0
+?meta	corr/0/acc_cnt	xps:sw_reg	sample_period	1
+?meta	corr/0/acc_cnt	xps:sw_reg	names	reg
+?meta	corr/0/acc_cnt	xps:sw_reg	bitwidths	32
+?meta	corr/0/acc_cnt	xps:sw_reg	bin_pts	0
+?meta	corr/0/acc_cnt	xps:sw_reg	arith_types	0
+?meta	corr/0/acc_cnt	xps:sw_reg	sim_port	on
+?meta	corr/0/acc_cnt	xps:sw_reg	show_format	on
+?meta	corr/0/acc_len	xps:sw_reg	io_dir	From\_Processor
+?meta	corr/0/acc_len	xps:sw_reg	io_delay	0
+?meta	corr/0/acc_len	xps:sw_reg	init_val	0
+?meta	corr/0/acc_len	xps:sw_reg	sample_period	1
+?meta	corr/0/acc_len	xps:sw_reg	names	reg
+?meta	corr/0/acc_len	xps:sw_reg	bitwidths	32
+?meta	corr/0/acc_len	xps:sw_reg	bin_pts	0
+?meta	corr/0/acc_len	xps:sw_reg	arith_types	0
+?meta	corr/0/acc_len	xps:sw_reg	sim_port	on
+?meta	corr/0/acc_len	xps:sw_reg	show_format	on
+?meta	corr/0/input_sel	xps:sw_reg	io_dir	From\_Processor
+?meta	corr/0/input_sel	xps:sw_reg	io_delay	0
+?meta	corr/0/input_sel	xps:sw_reg	init_val	0
+?meta	corr/0/input_sel	xps:sw_reg	sample_period	1
+?meta	corr/0/input_sel	xps:sw_reg	names	reg
+?meta	corr/0/input_sel	xps:sw_reg	bitwidths	32
+?meta	corr/0/input_sel	xps:sw_reg	bin_pts	0
+?meta	corr/0/input_sel	xps:sw_reg	arith_types	0
+?meta	corr/0/input_sel	xps:sw_reg	sim_port	on
+?meta	corr/0/input_sel	xps:sw_reg	show_format	on
+?meta	delay/delays	xps:sw_reg	io_dir	From\_Processor
+?meta	delay/delays	xps:sw_reg	io_delay	0
+?meta	delay/delays	xps:sw_reg	init_val	0
+?meta	delay/delays	xps:sw_reg	sample_period	1
+?meta	delay/delays	xps:sw_reg	names	reg
+?meta	delay/delays	xps:sw_reg	bitwidths	32
+?meta	delay/delays	xps:sw_reg	bin_pts	0
+?meta	delay/delays	xps:sw_reg	arith_types	0
+?meta	delay/delays	xps:sw_reg	sim_port	on
+?meta	delay/delays	xps:sw_reg	show_format	off
+?meta	eq/core/clip_cnt	xps:sw_reg	io_dir	To\_Processor
+?meta	eq/core/clip_cnt	xps:sw_reg	io_delay	0
+?meta	eq/core/clip_cnt	xps:sw_reg	init_val	0
+?meta	eq/core/clip_cnt	xps:sw_reg	sample_period	1
+?meta	eq/core/clip_cnt	xps:sw_reg	names	reg
+?meta	eq/core/clip_cnt	xps:sw_reg	bitwidths	32
+?meta	eq/core/clip_cnt	xps:sw_reg	bin_pts	0
+?meta	eq/core/clip_cnt	xps:sw_reg	arith_types	0
+?meta	eq/core/clip_cnt	xps:sw_reg	sim_port	on
+?meta	eq/core/clip_cnt	xps:sw_reg	show_format	on
+?meta	eth/ctrl	xps:sw_reg	io_dir	From\_Processor
+?meta	eth/ctrl	xps:sw_reg	io_delay	0
+?meta	eth/ctrl	xps:sw_reg	init_val	0
+?meta	eth/ctrl	xps:sw_reg	sample_period	1
+?meta	eth/ctrl	xps:sw_reg	names	reg
+?meta	eth/ctrl	xps:sw_reg	bitwidths	32
+?meta	eth/ctrl	xps:sw_reg	bin_pts	0
+?meta	eth/ctrl	xps:sw_reg	arith_types	0
+?meta	eth/ctrl	xps:sw_reg	sim_port	on
+?meta	eth/ctrl	xps:sw_reg	show_format	off
+?meta	input/snap_sel	xps:sw_reg	io_dir	From\_Processor
+?meta	input/snap_sel	xps:sw_reg	io_delay	0
+?meta	input/snap_sel	xps:sw_reg	init_val	0
+?meta	input/snap_sel	xps:sw_reg	sample_period	1
+?meta	input/snap_sel	xps:sw_reg	names	reg
+?meta	input/snap_sel	xps:sw_reg	bitwidths	32
+?meta	input/snap_sel	xps:sw_reg	bin_pts	0
+?meta	input/snap_sel	xps:sw_reg	arith_types	0
+?meta	input/snap_sel	xps:sw_reg	sim_port	on
+?meta	input/snap_sel	xps:sw_reg	show_format	off
+?meta	input/snapshot/ctrl	xps:sw_reg	io_dir	From\_Processor
+?meta	input/snapshot/ctrl	xps:sw_reg	io_delay	0
+?meta	input/snapshot/ctrl	xps:sw_reg	init_val	0
+?meta	input/snapshot/ctrl	xps:sw_reg	sample_period	1
+?meta	input/snapshot/ctrl	xps:sw_reg	names	reg
+?meta	input/snapshot/ctrl	xps:sw_reg	bitwidths	32
+?meta	input/snapshot/ctrl	xps:sw_reg	bin_pts	0
+?meta	input/snapshot/ctrl	xps:sw_reg	arith_types	0
+?meta	input/snapshot/ctrl	xps:sw_reg	sim_port	off
+?meta	input/snapshot/ctrl	xps:sw_reg	show_format	on
+?meta	input/snapshot/status	xps:sw_reg	io_dir	To\_Processor
+?meta	input/snapshot/status	xps:sw_reg	io_delay	0
+?meta	input/snapshot/status	xps:sw_reg	init_val	0
+?meta	input/snapshot/status	xps:sw_reg	sample_period	1
+?meta	input/snapshot/status	xps:sw_reg	names	reg
+?meta	input/snapshot/status	xps:sw_reg	bitwidths	32
+?meta	input/snapshot/status	xps:sw_reg	bin_pts	0
+?meta	input/snapshot/status	xps:sw_reg	arith_types	0
+?meta	input/snapshot/status	xps:sw_reg	sim_port	off
+?meta	input/snapshot/status	xps:sw_reg	show_format	on
+?meta	input/source_sel	xps:sw_reg	io_dir	From\_Processor
+?meta	input/source_sel	xps:sw_reg	io_delay	0
+?meta	input/source_sel	xps:sw_reg	init_val	0
+?meta	input/source_sel	xps:sw_reg	sample_period	1
+?meta	input/source_sel	xps:sw_reg	names	reg
+?meta	input/source_sel	xps:sw_reg	bitwidths	32
+?meta	input/source_sel	xps:sw_reg	bin_pts	0
+?meta	input/source_sel	xps:sw_reg	arith_types	0
+?meta	input/source_sel	xps:sw_reg	sim_port	on
+?meta	input/source_sel	xps:sw_reg	show_format	off
+?meta	noise/seed/0	xps:sw_reg	io_dir	From\_Processor
+?meta	noise/seed/0	xps:sw_reg	io_delay	0
+?meta	noise/seed/0	xps:sw_reg	init_val	0
+?meta	noise/seed/0	xps:sw_reg	sample_period	1
+?meta	noise/seed/0	xps:sw_reg	names	reg
+?meta	noise/seed/0	xps:sw_reg	bitwidths	32
+?meta	noise/seed/0	xps:sw_reg	bin_pts	0
+?meta	noise/seed/0	xps:sw_reg	arith_types	0
+?meta	noise/seed/0	xps:sw_reg	sim_port	on
+?meta	noise/seed/0	xps:sw_reg	show_format	off
+?meta	noise/seed/1	xps:sw_reg	io_dir	From\_Processor
+?meta	noise/seed/1	xps:sw_reg	io_delay	0
+?meta	noise/seed/1	xps:sw_reg	init_val	0
+?meta	noise/seed/1	xps:sw_reg	sample_period	1
+?meta	noise/seed/1	xps:sw_reg	names	reg
+?meta	noise/seed/1	xps:sw_reg	bitwidths	32
+?meta	noise/seed/1	xps:sw_reg	bin_pts	0
+?meta	noise/seed/1	xps:sw_reg	arith_types	0
+?meta	noise/seed/1	xps:sw_reg	sim_port	on
+?meta	noise/seed/1	xps:sw_reg	show_format	off
+?meta	pfb/ctrl	xps:sw_reg	io_dir	From\_Processor
+?meta	pfb/ctrl	xps:sw_reg	io_delay	0
+?meta	pfb/ctrl	xps:sw_reg	init_val	0
+?meta	pfb/ctrl	xps:sw_reg	sample_period	1
+?meta	pfb/ctrl	xps:sw_reg	names	reg
+?meta	pfb/ctrl	xps:sw_reg	bitwidths	32
+?meta	pfb/ctrl	xps:sw_reg	bin_pts	0
+?meta	pfb/ctrl	xps:sw_reg	arith_types	0
+?meta	pfb/ctrl	xps:sw_reg	sim_port	on
+?meta	pfb/ctrl	xps:sw_reg	show_format	off
+?meta	pfb/status	xps:sw_reg	io_dir	To\_Processor
+?meta	pfb/status	xps:sw_reg	io_delay	0
+?meta	pfb/status	xps:sw_reg	init_val	0
+?meta	pfb/status	xps:sw_reg	sample_period	1
+?meta	pfb/status	xps:sw_reg	names	reg
+?meta	pfb/status	xps:sw_reg	bitwidths	32
+?meta	pfb/status	xps:sw_reg	bin_pts	0
+?meta	pfb/status	xps:sw_reg	arith_types	0
+?meta	pfb/status	xps:sw_reg	sim_port	on
+?meta	pfb/status	xps:sw_reg	show_format	off
+?meta	phase_switch/enable_demod	xps:sw_reg	io_dir	From\_Processor
+?meta	phase_switch/enable_demod	xps:sw_reg	io_delay	0
+?meta	phase_switch/enable_demod	xps:sw_reg	init_val	0
+?meta	phase_switch/enable_demod	xps:sw_reg	sample_period	1
+?meta	phase_switch/enable_demod	xps:sw_reg	names	reg
+?meta	phase_switch/enable_demod	xps:sw_reg	bitwidths	32
+?meta	phase_switch/enable_demod	xps:sw_reg	bin_pts	0
+?meta	phase_switch/enable_demod	xps:sw_reg	arith_types	0
+?meta	phase_switch/enable_demod	xps:sw_reg	sim_port	on
+?meta	phase_switch/enable_demod	xps:sw_reg	show_format	off
+?meta	phase_switch/enable_mod	xps:sw_reg	io_dir	From\_Processor
+?meta	phase_switch/enable_mod	xps:sw_reg	io_delay	0
+?meta	phase_switch/enable_mod	xps:sw_reg	init_val	0
+?meta	phase_switch/enable_mod	xps:sw_reg	sample_period	1
+?meta	phase_switch/enable_mod	xps:sw_reg	names	reg
+?meta	phase_switch/enable_mod	xps:sw_reg	bitwidths	32
+?meta	phase_switch/enable_mod	xps:sw_reg	bin_pts	0
+?meta	phase_switch/enable_mod	xps:sw_reg	arith_types	0
+?meta	phase_switch/enable_mod	xps:sw_reg	sim_port	on
+?meta	phase_switch/enable_mod	xps:sw_reg	show_format	off
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	io_dir	From\_Processor
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	io_delay	0
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	init_val	0
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	sample_period	1
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	names	reg
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	bitwidths	32
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	bin_pts	0
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	arith_types	0
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	sim_port	on
+?meta	phase_switch/gpio_switch_offset	xps:sw_reg	show_format	off
+?meta	sync/arm	xps:sw_reg	io_dir	From\_Processor
+?meta	sync/arm	xps:sw_reg	io_delay	0
+?meta	sync/arm	xps:sw_reg	init_val	0
+?meta	sync/arm	xps:sw_reg	sample_period	1
+?meta	sync/arm	xps:sw_reg	names	reg
+?meta	sync/arm	xps:sw_reg	bitwidths	32
+?meta	sync/arm	xps:sw_reg	bin_pts	0
+?meta	sync/arm	xps:sw_reg	arith_types	0
+?meta	sync/arm	xps:sw_reg	sim_port	on
+?meta	sync/arm	xps:sw_reg	show_format	off
+?meta	sync/count	xps:sw_reg	io_dir	To\_Processor
+?meta	sync/count	xps:sw_reg	io_delay	0
+?meta	sync/count	xps:sw_reg	init_val	0
+?meta	sync/count	xps:sw_reg	sample_period	1
+?meta	sync/count	xps:sw_reg	names	reg
+?meta	sync/count	xps:sw_reg	bitwidths	32
+?meta	sync/count	xps:sw_reg	bin_pts	0
+?meta	sync/count	xps:sw_reg	arith_types	0
+?meta	sync/count	xps:sw_reg	sim_port	on
+?meta	sync/count	xps:sw_reg	show_format	on
+?meta	sync/period	xps:sw_reg	io_dir	To\_Processor
+?meta	sync/period	xps:sw_reg	io_delay	0
+?meta	sync/period	xps:sw_reg	init_val	0
+?meta	sync/period	xps:sw_reg	sample_period	1
+?meta	sync/period	xps:sw_reg	names	reg
+?meta	sync/period	xps:sw_reg	bitwidths	32
+?meta	sync/period	xps:sw_reg	bin_pts	0
+?meta	sync/period	xps:sw_reg	arith_types	0
+?meta	sync/period	xps:sw_reg	sim_port	on
+?meta	sync/period	xps:sw_reg	show_format	on
+?meta	sync/sync_delay	xps:sw_reg	io_dir	From\_Processor
+?meta	sync/sync_delay	xps:sw_reg	io_delay	0
+?meta	sync/sync_delay	xps:sw_reg	init_val	0
+?meta	sync/sync_delay	xps:sw_reg	sample_period	1
+?meta	sync/sync_delay	xps:sw_reg	names	reg
+?meta	sync/sync_delay	xps:sw_reg	bitwidths	32
+?meta	sync/sync_delay	xps:sw_reg	bin_pts	0
+?meta	sync/sync_delay	xps:sw_reg	arith_types	0
+?meta	sync/sync_delay	xps:sw_reg	sim_port	on
+?meta	sync/sync_delay	xps:sw_reg	show_format	off
+?meta	sync/uptime	xps:sw_reg	io_dir	To\_Processor
+?meta	sync/uptime	xps:sw_reg	io_delay	0
+?meta	sync/uptime	xps:sw_reg	init_val	0
+?meta	sync/uptime	xps:sw_reg	sample_period	1
+?meta	sync/uptime	xps:sw_reg	names	reg
+?meta	sync/uptime	xps:sw_reg	bitwidths	32
+?meta	sync/uptime	xps:sw_reg	bin_pts	0
+?meta	sync/uptime	xps:sw_reg	arith_types	0
+?meta	sync/uptime	xps:sw_reg	sim_port	on
+?meta	sync/uptime	xps:sw_reg	show_format	on
+?meta	timebase/sync_period	xps:sw_reg	io_dir	From\_Processor
+?meta	timebase/sync_period	xps:sw_reg	io_delay	0
+?meta	timebase/sync_period	xps:sw_reg	init_val	0
+?meta	timebase/sync_period	xps:sw_reg	sample_period	1
+?meta	timebase/sync_period	xps:sw_reg	names	reg
+?meta	timebase/sync_period	xps:sw_reg	bitwidths	32
+?meta	timebase/sync_period	xps:sw_reg	bin_pts	0
+?meta	timebase/sync_period	xps:sw_reg	arith_types	0
+?meta	timebase/sync_period	xps:sw_reg	sim_port	on
+?meta	timebase/sync_period	xps:sw_reg	show_format	off
+?meta	version/version	xps:sw_reg	io_dir	To\_Processor
+?meta	version/version	xps:sw_reg	io_delay	0
+?meta	version/version	xps:sw_reg	sample_period	1
+?meta	version/version	xps:sw_reg	names	reg
+?meta	version/version	xps:sw_reg	bitwidths	32
+?meta	version/version	xps:sw_reg	bin_pts	0
+?meta	version/version	xps:sw_reg	arith_types	0
+?meta	version/version	xps:sw_reg	sim_port	on
+?meta	version/version	xps:sw_reg	show_format	off
+?meta	eth/sw	xps:ten_gbe	flavour	sfp+
+?meta	eth/sw	xps:ten_gbe	slot	0
+?meta	eth/sw	xps:ten_gbe	port_r1	0
+?meta	eth/sw	xps:ten_gbe	port_r2_cx4	0
+?meta	eth/sw	xps:ten_gbe	port_r2_sfpp	0
+?meta	eth/sw	xps:ten_gbe	rx_dist_ram	on
+?meta	eth/sw	xps:ten_gbe	large_frames	off
+?meta	eth/sw	xps:ten_gbe	show_param	on
+?meta	eth/sw	xps:ten_gbe	pre_emph_r2	0.74
+?meta	eth/sw	xps:ten_gbe	pre_emph	3
+?meta	eth/sw	xps:ten_gbe	post_emph_r2	0.18
+?meta	eth/sw	xps:ten_gbe	rxeqmix_r2	7
+?meta	eth/sw	xps:ten_gbe	swing_r2	940
+?meta	eth/sw	xps:ten_gbe	swing	800
+?meta	eth/sw	xps:ten_gbe	fab_en	on
+?meta	eth/sw	xps:ten_gbe	fab_mac	2207781620256
+?meta	eth/sw	xps:ten_gbe	fab_ip	168430112
+?meta	eth/sw	xps:ten_gbe	fab_udp	8511
+?meta	eth/sw	xps:ten_gbe	fab_gate	1
+?meta	eth/sw	xps:ten_gbe	cpu_rx_en	on
+?meta	eth/sw	xps:ten_gbe	cpu_tx_en	on
+?meta	eth/sw	xps:ten_gbe	ttl	255
+?meta	eth/sw	xps:ten_gbe	promisc_mode	off
+?meta	eth/sw	xps:ten_gbe	debug_ctr_width	32
+?meta	eth/sw	xps:ten_gbe	txctr	off
+?meta	eth/sw	xps:ten_gbe	txerrctr	off
+?meta	eth/sw	xps:ten_gbe	txerrctr_len	577
+?meta	eth/sw	xps:ten_gbe	txofctr	off
+?meta	eth/sw	xps:ten_gbe	txfullctr	off
+?meta	eth/sw	xps:ten_gbe	txvldctr	off
+?meta	eth/sw	xps:ten_gbe	txsnaplen	0\_-\_no\_snap
+?meta	eth/sw	xps:ten_gbe	rxctr	off
+?meta	eth/sw	xps:ten_gbe	rxerrctr	off
+?meta	eth/sw	xps:ten_gbe	rxerrctr_len	100
+?meta	eth/sw	xps:ten_gbe	rxofctr	off
+?meta	eth/sw	xps:ten_gbe	rxbadctr	off
+?meta	eth/sw	xps:ten_gbe	rxvldctr	off
+?meta	eth/sw	xps:ten_gbe	rxeofctr	off
+?meta	eth/sw	xps:ten_gbe	rxsnaplen	0\_-\_no\_snap
+?meta	input/snapshot	casper:snapshot	storage	bram
+?meta	input/snapshot	casper:snapshot	dram_dimm	1
+?meta	input/snapshot	casper:snapshot	dram_clock	200
+?meta	input/snapshot	casper:snapshot	nsamples	10
+?meta	input/snapshot	casper:snapshot	data_width	32
+?meta	input/snapshot	casper:snapshot	offset	off
+?meta	input/snapshot	casper:snapshot	circap	off
+?meta	input/snapshot	casper:snapshot	value	off
+?meta	input/snapshot	casper:snapshot	ext_arm	off
+?meta	input/snapshot	casper:snapshot	ext_circ	off
+?meta	input/snapshot	casper:snapshot	provide_outputs	on
+?meta	input/snapshot	casper:snapshot	use_dsp48	off
+?meta	77777	77777	tags	casper:snapshot,xps:bram,xps:snap_adc,xps:sw_reg,xps:ten_gbe,xps:xsg
+?meta	77777	77777	system	snap_fengine_git
+?meta	77777	77777	builddate	13-Apr-2022\_15:43:11
+?meta	77777	77777	sys	snap_fengine_git
+?meta	77777	77777	xlSgRoot	/tools/Xilinx/Vivado/2019.1/lib/lnx64.o/matlab/sysgen.mexa64
+?meta	77777	77777	md5_header	e7f8d2b729d437ddb3bd58da01b46733
+?meta	77777	77777	md5_bitstream	36a618613961ba6e8df2c26503251ae4
+?meta	77777	77777	flash_write_checksum	58109_1988
+?quit
