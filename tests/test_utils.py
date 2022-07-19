@@ -1,13 +1,13 @@
 import os
 import pytest
-from casperfpga import utils
+from .casperfpga import utils
 
-from casperfpga import register
-from casperfpga import sbram
-from casperfpga import snap
-from casperfpga import tengbe
-from casperfpga import fortygbe
-from casperfpga import qdr
+from .casperfpga import register
+from .casperfpga import sbram
+from .casperfpga import snap
+from .casperfpga import tengbe
+from .casperfpga import fortygbe
+from .casperfpga import qdr
 
 def test_parse_example00(shared_datadir):
     """
