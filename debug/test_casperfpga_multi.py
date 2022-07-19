@@ -1,6 +1,6 @@
 import sys
 import logging
-from multiprocessing import Process, queue
+from multiprocessing import Process, Queue
 
 
 import casperfpga
