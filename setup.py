@@ -55,7 +55,7 @@ setuptools.setup(
         'IPython',
         'future',
         'numpy',
-        'katcp==0.8.0',
+        'katcp==0.9.0',
         'odict',
         'setuptools',
         'tornado',
