@@ -856,7 +856,7 @@ class SnapAdc(object):
 
     def rampTest(self):
         errs = self.testPatterns(mode='ramp')
-        return np.all(np.array([adc.values() for adc in errs.values()])==0)
+        return np.all(np.array([list(adc.values()) for adc in errs.values()])==0)
 
     def isLaneBonded(self, bondAllAdcs=False):
         """
