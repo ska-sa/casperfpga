@@ -59,7 +59,7 @@ class AlveoTransport(KatcpTransport):
 
   def memread(self, addr):
     """
-    :param addr: absolute memory address from which to read
+    :param addr: absolute memory address from which to read (numeric hex or dec value)
     :return: string of the read value in hexadecimal
     """
     assert(type(addr) == int), 'Please supply numeric address (hex or dec)!'
@@ -76,9 +76,9 @@ class AlveoTransport(KatcpTransport):
 
   def memwrite(self, addr, data):
     """
-    :param addr: absolute memory address to write to
+    :param addr: absolute memory address to write to (numeric hex or dec value)
     :param dataword: numeric data to write (four-byte word)
-    :return: string of the read value in hexadecimal
+    :return: True or False
     """
     assert(type(addr) == int), 'Please supply numeric address (hex or dec)!'
     assert(type(data) == int), 'Please supply numeric data (hex or dec)!'
@@ -98,18 +98,34 @@ class AlveoTransport(KatcpTransport):
     return args[0][1] == data_str
 
   def wordwrite(self, device_name, data, offset=0, verify=True):
+    """
+    :param device_name: name of memory device from which to read
+    :param data: the numeric data to write, in hex. or dec.
+    :param offset: the offset, in bytes, at which to write
+    :param verify: verify the operation by reading back data
+    :return: True or False
+    """
     #extend the functionality of blindwrite
-    assert(type(data) == str), 'Please supply data in string format'
-    data_int = int(data, base=16)
-    assert(data_int < pow(2,32)), 'Please supply a 32-bit-bounded data word'
-    data_packed = pack('I', data_int) 
+    #assert(type(data) == str), 'Please supply data in string format'
+    assert(type(data) == int), 'Please supply numeric data (hex or dec)'
+    #data_int = int(data, base=16)
+    assert(data < pow(2,32)), 'Please supply a 32-bit-bounded data word'
+    data_packed = pack('I', data) 
     super(AlveoTransport, self).blindwrite(device_name, data_packed, offset)
     if verify == True:
-      verify_data_str = self.wordread(device_name)
-      return verify_data_str.lower() == data.lower()
+      verify_data_str_hex = self.wordread(device_name)
+      #return verify_data_str.lower() == data.lower()
+      return int(verify_data_str_hex,base=16) == data
 
 
   def upload_to_ram_and_program(self, filename, timeout=120):  #TODO this timeout may be too short for large images
+    """
+    Upload an FPG file to the Alveo.
+
+    :param filename: the file to upload
+    :param timeout: how long to wait, seconds
+    :return: True upon success
+    """
     self.upload_to_flash(filename)
     self.program(filename)
 
