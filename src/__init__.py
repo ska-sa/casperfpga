@@ -13,6 +13,7 @@ from .transport_itpm import ItpmTransport
 from .transport_redis import RedisTapcpTransport
 from .transport_localpcie import LocalPcieTransport
 from .transport_remotepcie import RemotePcieTransport
+from .transport_alveo import AlveoTransport
 from .memory import Memory
 from .network import IpAddress, Mac
 from .qdr import Qdr

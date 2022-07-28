@@ -28,10 +28,12 @@ from .transport_katcp import KatcpTransport
 from .transport_tapcp import TapcpTransport
 from .transport_skarab import SkarabTransport
 from .transport_dummy import DummyTransport
+from .transport_alveo import AlveoTransport
 from .casper_platform_id_map import PLATFORM_ID
 
 from .CasperLogHandlers import configure_console_logging, configure_file_logging
 from .CasperLogHandlers import getLogger
+
 
 # known CASPER memory-accessible devices and their associated
 # classes and containers
@@ -124,12 +126,16 @@ class CasperFpga(object):
         except KeyError:
             self.set_log_level(log_level='ERROR')
 
+        port = get_kwarg('port', kwargs)
+        if not port:
+          port = 7147
+
         # was the transport specified?
         transport = get_kwarg('transport', kwargs)
         if transport:
             self.transport = transport(**kwargs)
         else:
-            transport_class = self.choose_transport(self.host)
+            transport_class = self.choose_transport(self.host, port)
             self.transport = transport_class(**kwargs)
 
         # this is just for code introspection
@@ -164,7 +170,7 @@ class CasperFpga(object):
         self.platform = PLATFORM_ID.get(self._get_platform_id(), None)
         self.transport.platform = self.platform
         
-    def choose_transport(self, host_ip):
+    def choose_transport(self, host_ip, port):
         """
         Test whether a given host is a katcp client or a skarab
 
@@ -175,13 +181,17 @@ class CasperFpga(object):
             return DummyTransport
         try:
             if SkarabTransport.test_host_type(host_ip):
-                self.logger.debug('%s seems to be a SKARAB' % host_ip)
+                self.logger.info('%s seems to be a SKARAB' % host_ip)
                 return SkarabTransport
+            #must test for Alveo transport before Katcp transport (since alveo inherits from katcp)
+            elif AlveoTransport.test_host_type(host_ip, port):
+                self.logger.info('%s:%d seems to be an ALVEO' % (host_ip,port))
+                return AlveoTransport
             elif KatcpTransport.test_host_type(host_ip):
-                self.logger.debug('%s seems to be ROACH' % host_ip)
+                self.logger.info('%s seems to be ROACH' % host_ip)
                 return KatcpTransport
             elif TapcpTransport.test_host_type(host_ip):
-                self.logger.debug('%s seems to be a TapcpTransport' % host_ip)
+                self.logger.info('%s seems to be a TapcpTransport' % host_ip)
                 return TapcpTransport
             else:
                 errmsg = 'Possible that host does not follow one of the \

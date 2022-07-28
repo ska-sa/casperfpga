@@ -115,6 +115,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self._timeout = timeout
         self.connect()
         self.logger.info('%s: port(%s) created and connected.' % (self.host, port))
+        self.sensor_list = {};
 
     def __del__(self):
         """
@@ -328,7 +329,9 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         reply, _ = self.katcprequest(name='status',
                                      request_timeout=self._timeout)
-        return reply.arguments[1].decode()
+        return reply.arguments[0] == 'ok'
+        # this was the alternative from the merge conflict.
+        #return reply.arguments[1].decode()
 
     def ping(self):
         """
@@ -399,6 +402,18 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                           str(size))
         )
         return reply.arguments[1]
+
+
+    def get_sensor_data(self):
+        """
+        :return: sensor data 
+        """
+        #self.sensor_list.update({"12V_PEX": ["12.51", "V"]})
+        _,informs = self.katcprequest(
+            name='sensor-value', request_timeout=self._timeout, require_ok=True,
+        )
+        return [(i.arguments[0], i.arguments[1], i.arguments[2], i.arguments[3], i.arguments[4]) for i in informs]
+        #return self.sensor_list
 
     def blindwrite(self, device_name, data, offset=0):
         """
@@ -692,6 +707,20 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                             (request_result, upload_result))
         self.prog_info['last_uploaded'] = filename
         return
+
+#    def upload_and_program(self, filename):
+##try:
+#        self.upload_to_flash(filename)
+#        self.program(filename)
+#
+#        reply, _ = self.katcprequest(
+#        name='alveo-program', request_timeout=120, require_ok=True)
+#        if reply.arguments[0] != 'ok':
+#          raise RuntimeError('%s: could not program alveo' % self.host)
+#
+#        self._delete_bof(filename)
+##except Exception as e:
+##       print(e)
 
     def _delete_bof(self, filename):
         """
