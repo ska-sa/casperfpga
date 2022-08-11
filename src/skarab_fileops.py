@@ -3,7 +3,7 @@ import struct
 import logging
 import time
 import socket
-from .casperfpga import progska
+import progska
 
 from . import skarab_definitions as sd
 from .utils import threaded_fpga_operation as thop
