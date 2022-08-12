@@ -21,6 +21,7 @@ from .sbram import Sbram
 from .snap import Snap
 from .snapadc import SnapAdc
 from .tengbe import TenGbe
+from . import progska
 from . import skarab_fileops
 
 # BEGIN VERSION CHECK
