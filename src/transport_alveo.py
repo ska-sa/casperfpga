@@ -1,6 +1,11 @@
-from transport_katcp import KatcpTransport
+from .transport_katcp import KatcpTransport
 import katcp
 from struct import *
+
+from .network import IpAddress, Mac
+#from hundredgbe import HundredGbe
+from .transport import Transport
+from .utils import create_meta_dictionary, get_hostname, get_kwarg
 
 class AlveoFunctionError(RuntimeError):
   """Not an Alveo function"""
@@ -8,6 +13,63 @@ class AlveoFunctionError(RuntimeError):
 
 #inherit from katcp transport for now (TODO)
 class AlveoTransport(KatcpTransport):
+
+  hgbe_base_addr = 0x100000
+  # def __init__(self, host_ip):
+  def __init__(self, **kwargs):
+      """
+
+      :param host:
+      :param port:
+      :param timeout:
+      :param connect:
+      """
+      port = get_kwarg('port', kwargs, 7147)
+      timeout = get_kwarg('timeout', kwargs, 10)
+      Transport.__init__(self, **kwargs)
+
+      # Create instance of self.logger
+      # try:
+      #     self.logger = kwargs['logger']
+      # except KeyError:
+      #     self.logger = logging.getLogger(__name__)
+
+      try:
+          self.parent = kwargs['parent_fpga']
+          self.logger = self.parent.logger
+      except KeyError:
+          errmsg = 'parent_fpga argument not supplied when creating katcp device'
+          raise RuntimeError(errmsg)
+
+      new_connection_msg = '*** NEW CONNECTION MADE TO {} ***'.format(self.host)
+      self.logger.info(new_connection_msg)
+
+      katcp.CallbackClient.__init__(
+            self, self.host, port, tb_limit=20,
+            timeout=timeout, logger=self.logger, auto_reconnect=True)
+      self.system_info = {}
+      self.unhandled_inform_handler = None
+      self._timeout = timeout
+      self.connect()
+      self.logger.info('%s: port(%s) created and connected.' % (self.host, port))
+      self.sensor_list = {};
+
+      self.hgbe_base_addr = 0x100000
+
+      self.reg_map = {'src_mac_addr_lower'  : 0x00,
+                      'src_mac_addr_upper'  : 0x04,
+                      'dst_mac_addr_lower'  : 0x0C,
+                      'dst_mac_addr_upper'  : 0x10,
+                      'dst_ip_addr'         : 0x24,
+                      'src_ip_addr'         : 0x28,
+                      'fabric_port'         : 0x2C,
+                      'udp_count'           : 0x4C,
+                      'ping_count'          : 0x50,
+                      'arp_count'           : 0x54,
+                      'dropped_mac_count'   : 0x60,
+                      'dropped_ip_count'    : 0x64,
+                      'dropped_port_count'  : 0x68}
+               #       'multicast_mask' : 0x24}
 
   @staticmethod
   def test_host_type(host_ip, port, timeout=5):
@@ -30,7 +92,8 @@ class AlveoTransport(KatcpTransport):
       board.stop()
 
       args = [(i.arguments[0], i.arguments[1]) for i in informs]
-      if args[0][1] == '0x74736574':
+      if args[0][1].decode() == '0x74736574':
+     # if args[0][1] == '0x00000000':
       #if args[0][1] == '0xDECADE05':
       #if reply.arguments[1] == '0xdecade05':       #for wordread katcp msg
         #print("Seems to be an ALVEO")   #TODO to be removed
@@ -69,9 +132,8 @@ class AlveoTransport(KatcpTransport):
         request_args=(addr_str,))   #note-to-self (rvw) this comma is NB when args get unpacked
     #print reply.arguments
     args = [(i.arguments[0], i.arguments[1]) for i in informs]
-    #print args
 
-    return args[0][1]
+    return args[0][1].decode()
 
 
   def memwrite(self, addr, data):
@@ -145,3 +207,172 @@ class AlveoTransport(KatcpTransport):
 
   def check_phy_counter(self):
     raise AlveoFunctionError("Not an Alveo function")
+
+
+  def ip_dest_address(self):
+    ip = self.memread(self.hgbe_base_addr + self.reg_map['dst_ip_addr'])
+    ip_address = IpAddress(ip)
+    return ip_address
+
+
+  def ip_src_address(self):
+    ip = self.memread(self.hgbe_base_addr + self.reg_map['src_ip_addr'])
+    ip_address = IpAddress(ip)
+    return ip_address
+
+
+  def get_dest_ip(self):
+    """
+    Retrieve core's IP address from HW.
+
+    :return: IpAddress object
+    """
+    IP_address = self.ip_dest_address()
+    return IP_address
+
+
+  def get_src_ip(self):
+    """
+    Retrieve core's IP address from HW.
+
+    :return: IpAddress object
+    """
+    IP_address = self.ip_src_address()
+    return IP_address
+
+
+  def get_dest_mac(self):
+    gbedata = []
+    for ctr in range(0xC, 0x14, 4):
+        gbedata.append(int(self.memread(self.hgbe_base_addr + ctr), 16))
+    gbebytes = []
+    for d in gbedata:
+        gbebytes.append((d >> 24) & 0xff)
+        gbebytes.append((d >> 16) & 0xff)
+        gbebytes.append((d >> 8) & 0xff)
+        gbebytes.append((d >> 0) & 0xff)
+    pd = gbebytes
+    return Mac('{}:{}:{}:{}:{}:{}'.format(*pd[2:]))
+
+
+  def get_src_mac(self):
+    gbedata = []
+    for ctr in range(0x0, 0x8, 4):
+        gbedata.append(int(self.memread(self.hgbe_base_addr + ctr), 16))
+    gbebytes = []
+    for d in gbedata:
+        gbebytes.append((d >> 24) & 0xff)
+        gbebytes.append((d >> 16) & 0xff)
+        gbebytes.append((d >> 8) & 0xff)
+        gbebytes.append((d >> 0) & 0xff)
+    pd = gbebytes
+    return Mac('{}:{}:{}:{}:{}:{}'.format(*pd[2:]))
+
+
+  def get_port(self, station=''):
+    """
+    Retrieve core's port from HW.
+
+    :return:  int
+    """
+    en_port = int(self.memread(self.hgbe_base_addr + self.reg_map['fabric_port']), 16)
+    if station == 'source':
+        port = en_port & (2 ** 16 - 1)
+    elif station == 'destination':
+        port = en_port >> 16 & (2 ** 16 - 1)
+    else:
+        errmsg = 'Error specifying port station'
+        self.logger.error(errmsg)
+        raise ValueError(errmsg)
+    return port
+
+
+  def set_port(self, port, station=''):
+    """
+    set the source or destination port of the 100GbE
+
+    :param port: port number
+    :param station: specify 'source' or 'destination'
+    :return: string of the read value in hexadecimal
+    """
+    if station == 'source':
+        en_port = int(self.memread(self.hgbe_base_addr + self.reg_map['fabric_port']), 16)
+        if en_port & (2 ** 16 - 1) == port:
+            print('%s port already set to %s'%(station, port))
+            return True
+        else:
+            en_port_new = (en_port & 0xFFFF0000) + port
+            self.memwrite(self.hgbe_base_addr + self.reg_map['fabric_port'], en_port_new)
+            port_readback = self.get_port('source')
+            if port_readback == port:
+               print('%s port set to %s'%(station, port_readback))
+               return True
+            else:
+               return False
+    elif station == 'destination':
+        en_port = int(self.memread(self.hgbe_base_addr + self.reg_map['fabric_port']), 16)
+       # if (en_port >> 16) & (2 ** 16 - 1) == port:
+        if (en_port >> 16) & (2 ** 16 - 1) == port:
+            print('%s port already set to %s'%(station, port))
+            return True
+        else:
+            en_port_new = (en_port & 0x0000FFFF) + (port << 16)
+            self.memwrite(self.hgbe_base_addr + self.reg_map['fabric_port'], en_port_new)
+            port_readback = self.get_port('destination')
+            if port_readback == port:
+               print('%s port set to %s'%(station, port_readback))
+               return True
+            else:
+               return False
+
+    else:
+        errmsg = 'Error specifying port station'
+        self.logger.error(errmsg)
+        raise ValueError(errmsg)
+
+
+  def get_udp_count(self):
+    udp_count = int(self.memread(self.hgbe_base_addr + self.reg_map['udp_count']), 16)
+    return udp_count
+
+
+  def get_ping_count(self):
+    ping_count = int(self.memread(self.hgbe_base_addr + self.reg_map['ping_count']), 16)
+    return ping_count
+
+
+  def get_arp_count(self):
+    arp_count = int(self.memread(self.hgbe_base_addr + self.reg_map['arp_count']), 16)
+    return arp_count
+
+
+  def get_dropped_mac_count(self):
+    dropped_mac_count = int(self.memread(self.hgbe_base_addr + self.reg_map['dropped_mac_count']), 16)
+    return dropped_mac_count
+
+
+  def get_dropped_ip_count(self):
+    dropped_ip_count = int(self.memread(self.hgbe_base_addr + self.reg_map['dropped_ip_count']), 16)
+    return dropped_ip_count
+
+
+  def get_dropped_port_count(self):
+    dropped_port_count = int(self.memread(self.hgbe_base_addr + self.reg_map['dropped_port_count']), 16)
+    return dropped_port_count
+
+
+  def get_counters(self):
+    udp_count = self.get_udp_count()
+    ping_count = self.get_ping_count()
+    arp_count = self.get_arp_count()
+    dropped_mac_count = self.get_dropped_mac_count()
+    dropped_ip_count = self.get_dropped_ip_count()
+    dropped_port_count = self.get_dropped_port_count()
+    self.counters = {
+            "udpcnt"            : udp_count,
+            "pingcnt"           : ping_count,
+            "arp_count"         : arp_count,
+            "dropped_mac_cnt"   : dropped_mac_count,
+            "dropped_ip_cnt"    : dropped_ip_count,
+            "dropped_port_cnt"  : dropped_port_count}
+    return self.counters
