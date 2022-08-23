@@ -14,7 +14,6 @@ class AlveoFunctionError(RuntimeError):
 #inherit from katcp transport for now (TODO)
 class AlveoTransport(KatcpTransport):
 
-  hgbe_base_addr = 0x100000
   # def __init__(self, host_ip):
   def __init__(self, **kwargs):
       """
@@ -56,7 +55,7 @@ class AlveoTransport(KatcpTransport):
 
       self.hgbe_base_addr = 0x100000
 
-      self.reg_map = {'src_mac_addr_lower'  : 0x00,
+      self.hgbe_reg_map = {'src_mac_addr_lower'  : 0x00,
                       'src_mac_addr_upper'  : 0x04,
                       'dst_mac_addr_lower'  : 0x0C,
                       'dst_mac_addr_upper'  : 0x10,
@@ -210,18 +209,18 @@ class AlveoTransport(KatcpTransport):
 
 
   def ip_dest_address(self):
-    ip = self.memread(self.hgbe_base_addr + self.reg_map['dst_ip_addr'])
+    ip = self.memread(self.hgbe_base_addr + self.hgbe_reg_map['dst_ip_addr'])
     ip_address = IpAddress(ip)
     return ip_address
 
 
   def ip_src_address(self):
-    ip = self.memread(self.hgbe_base_addr + self.reg_map['src_ip_addr'])
+    ip = self.memread(self.hgbe_base_addr + self.hgbe_reg_map['src_ip_addr'])
     ip_address = IpAddress(ip)
     return ip_address
 
 
-  def get_dest_ip(self):
+  def get_hgbe_dest_ip(self):
     """
     Retrieve core's IP address from HW.
 
@@ -231,7 +230,7 @@ class AlveoTransport(KatcpTransport):
     return IP_address
 
 
-  def get_src_ip(self):
+  def get_hgbe_src_ip(self):
     """
     Retrieve core's IP address from HW.
 
@@ -241,7 +240,7 @@ class AlveoTransport(KatcpTransport):
     return IP_address
 
 
-  def get_dest_mac(self):
+  def get_hgbe_dest_mac(self):
     gbedata = []
     for ctr in range(0xC, 0x14, 4):
         gbedata.append(int(self.memread(self.hgbe_base_addr + ctr), 16))
@@ -255,7 +254,7 @@ class AlveoTransport(KatcpTransport):
     return Mac('{}:{}:{}:{}:{}:{}'.format(*pd[2:]))
 
 
-  def get_src_mac(self):
+  def get_hgbe_src_mac(self):
     gbedata = []
     for ctr in range(0x0, 0x8, 4):
         gbedata.append(int(self.memread(self.hgbe_base_addr + ctr), 16))
@@ -269,13 +268,13 @@ class AlveoTransport(KatcpTransport):
     return Mac('{}:{}:{}:{}:{}:{}'.format(*pd[2:]))
 
 
-  def get_port(self, station=''):
+  def get_hgbe_port(self, station=''):
     """
     Retrieve core's port from HW.
 
     :return:  int
     """
-    en_port = int(self.memread(self.hgbe_base_addr + self.reg_map['fabric_port']), 16)
+    en_port = int(self.memread(self.hgbe_base_addr + self.hgbe_reg_map['fabric_port']), 16)
     if station == 'source':
         port = en_port & (2 ** 16 - 1)
     elif station == 'destination':
@@ -287,7 +286,7 @@ class AlveoTransport(KatcpTransport):
     return port
 
 
-  def set_port(self, port, station=''):
+  def set_hgbe_port(self, port, station=''):
     """
     set the source or destination port of the 100GbE
 
@@ -296,29 +295,29 @@ class AlveoTransport(KatcpTransport):
     :return: string of the read value in hexadecimal
     """
     if station == 'source':
-        en_port = int(self.memread(self.hgbe_base_addr + self.reg_map['fabric_port']), 16)
+        en_port = int(self.memread(self.hgbe_base_addr + self.hgbe_reg_map['fabric_port']), 16)
         if en_port & (2 ** 16 - 1) == port:
             print('%s port already set to %s'%(station, port))
             return True
         else:
             en_port_new = (en_port & 0xFFFF0000) + port
-            self.memwrite(self.hgbe_base_addr + self.reg_map['fabric_port'], en_port_new)
-            port_readback = self.get_port('source')
+            self.memwrite(self.hgbe_base_addr + self.hgbe_reg_map['fabric_port'], en_port_new)
+            port_readback = self.get_hgbe_port('source')
             if port_readback == port:
                print('%s port set to %s'%(station, port_readback))
                return True
             else:
                return False
     elif station == 'destination':
-        en_port = int(self.memread(self.hgbe_base_addr + self.reg_map['fabric_port']), 16)
+        en_port = int(self.memread(self.hgbe_base_addr + self.hgbe_reg_map['fabric_port']), 16)
        # if (en_port >> 16) & (2 ** 16 - 1) == port:
         if (en_port >> 16) & (2 ** 16 - 1) == port:
             print('%s port already set to %s'%(station, port))
             return True
         else:
             en_port_new = (en_port & 0x0000FFFF) + (port << 16)
-            self.memwrite(self.hgbe_base_addr + self.reg_map['fabric_port'], en_port_new)
-            port_readback = self.get_port('destination')
+            self.memwrite(self.hgbe_base_addr + self.hgbe_reg_map['fabric_port'], en_port_new)
+            port_readback = self.get_hgbe_port('destination')
             if port_readback == port:
                print('%s port set to %s'%(station, port_readback))
                return True
@@ -331,43 +330,43 @@ class AlveoTransport(KatcpTransport):
         raise ValueError(errmsg)
 
 
-  def get_udp_count(self):
-    udp_count = int(self.memread(self.hgbe_base_addr + self.reg_map['udp_count']), 16)
+  def get_hgbe_udp_count(self):
+    udp_count = int(self.memread(self.hgbe_base_addr + self.hgbe_reg_map['udp_count']), 16)
     return udp_count
 
 
-  def get_ping_count(self):
-    ping_count = int(self.memread(self.hgbe_base_addr + self.reg_map['ping_count']), 16)
+  def get_hgbe_ping_count(self):
+    ping_count = int(self.memread(self.hgbe_base_addr + self.hgbe_reg_map['ping_count']), 16)
     return ping_count
 
 
-  def get_arp_count(self):
-    arp_count = int(self.memread(self.hgbe_base_addr + self.reg_map['arp_count']), 16)
+  def get_hgbe_arp_count(self):
+    arp_count = int(self.memread(self.hgbe_base_addr + self.hgbe_reg_map['arp_count']), 16)
     return arp_count
 
 
-  def get_dropped_mac_count(self):
-    dropped_mac_count = int(self.memread(self.hgbe_base_addr + self.reg_map['dropped_mac_count']), 16)
+  def get_hgbe_dropped_mac_count(self):
+    dropped_mac_count = int(self.memread(self.hgbe_base_addr + self.hgbe_reg_map['dropped_mac_count']), 16)
     return dropped_mac_count
 
 
-  def get_dropped_ip_count(self):
-    dropped_ip_count = int(self.memread(self.hgbe_base_addr + self.reg_map['dropped_ip_count']), 16)
+  def get_hgbe_dropped_ip_count(self):
+    dropped_ip_count = int(self.memread(self.hgbe_base_addr + self.hgbe_reg_map['dropped_ip_count']), 16)
     return dropped_ip_count
 
 
-  def get_dropped_port_count(self):
-    dropped_port_count = int(self.memread(self.hgbe_base_addr + self.reg_map['dropped_port_count']), 16)
+  def get_hgbe_dropped_port_count(self):
+    dropped_port_count = int(self.memread(self.hgbe_base_addr + self.hgbe_reg_map['dropped_port_count']), 16)
     return dropped_port_count
 
 
-  def get_counters(self):
-    udp_count = self.get_udp_count()
-    ping_count = self.get_ping_count()
-    arp_count = self.get_arp_count()
-    dropped_mac_count = self.get_dropped_mac_count()
-    dropped_ip_count = self.get_dropped_ip_count()
-    dropped_port_count = self.get_dropped_port_count()
+  def get_hgbe_counters(self):
+    udp_count = self.get_hgbe_udp_count()
+    ping_count = self.get_hgbe_ping_count()
+    arp_count = self.get_hgbe_arp_count()
+    dropped_mac_count = self.get_hgbe_dropped_mac_count()
+    dropped_ip_count = self.get_hgbe_dropped_ip_count()
+    dropped_port_count = self.get_hgbe_dropped_port_count()
     self.counters = {
             "udpcnt"            : udp_count,
             "pingcnt"           : ping_count,
