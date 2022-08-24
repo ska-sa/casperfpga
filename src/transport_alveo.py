@@ -203,6 +203,27 @@ class AlveoTransport(KatcpTransport):
     return True
 
 
+  def _upload_to_ram_and_program_bitfile(self, filename, timeout=120):  #TODO this timeout may be too short for large images
+    """
+    Upload an FPG file to the Alveo.
+
+    :param filename: the file to upload
+    :param timeout: how long to wait, seconds
+    :return: True upon success
+    """
+    self.upload_to_flash(filename)
+
+    reply, _ = self.katcprequest(
+    name='alveo-program', request_timeout=timeout, require_ok=True, request_args=(filename,))
+    #delete regardless of returned status, then check status...
+    self._delete_bof(filename)
+    if reply.arguments[0] != 'ok':
+      raise RuntimeError('%s: could not program alveo' % self.host)
+
+    if self.reset() != True:
+      raise RuntimeError('%s: could not reset alveo' % self.host)
+
+    return True
 
   def check_phy_counter(self):
     raise AlveoFunctionError("Not an Alveo function")
