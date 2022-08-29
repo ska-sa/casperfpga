@@ -5,6 +5,7 @@ import time
 import logging
 import sys
 import socket
+import katcp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +24,66 @@ class CheckCounter(object):
         self.required = required
         self.data = None
         self.changed = False
+
+
+def list_alveos(remote_host_ip):
+
+    """
+    Find available Alveos in predefined port range on given host
+
+    :param remote_host_ip: IP Addr of remote node hosting the Alveos
+    :return: a dictionary of dictionaries of available Alveos and respective parameters
+    """
+
+    alveos={}    #empty dictionary detailing available alveo connections in given port range on given host
+
+    for remote_port in range(7150,7160,2):
+      #in order to get the output of this function "neat", first look for open TCP sockets
+      #in the given port range, then check if it's a tcpbs svr on the other end. This is due
+      #to the difficulty in catching the "tornado lib" callback exception with a try..except block
+      #and leads to a verbose (and non-concise) output, flooding the user interface with
+      #(unnecessary) traceback output, so the strategy followed is in mitigation of this.
+      #Basically, just tell the user what he/she has asked for - the available alveos.
+
+      sock    = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      remote  = (remote_host_ip, remote_port)
+      result = sock.connect_ex(remote);
+      sock.close()    #don't need this socket anymore, so close
+
+      if result == 0:
+        #this means theres a stream connection available on this remote port
+        #let's see if it's tcpbs on the other end
+        timeout=1
+        try:
+          board = katcp.BlockingClient(host=remote_host_ip, port=remote_port, timeout=timeout)
+          board.setDaemon(True)
+          board.start()
+          connected = board.wait_connected(timeout)
+
+          if connected:
+          #have to block here (ie sleep) else board obj gets stopped before it's used (so it seems)
+            time.sleep(1)
+            boardtype = board.versions
+            if boardtype.has_key('alveo-card'):
+              #print('[katcp] port=%d\ttype=%-20s\tserial=%s' % (remote_port, boardtype['alveo-card'][0], boardtype['alveo-serial'][0]))
+              alveos[boardtype['alveo-card'][0]]={}    #alveos is now dictionary of dictionaries. This key should be unique
+              alveos[boardtype['alveo-card'][0]]['proto']='katcp'
+              alveos[boardtype['alveo-card'][0]]['host']=remote_host_ip
+              alveos[boardtype['alveo-card'][0]]['port']=remote_port
+              alveos[boardtype['alveo-card'][0]]['serial']=boardtype['alveo-serial'][0]
+
+            #else:
+            #  print('[katcp] port=%d\ttype=%-20s\tserial=None' % (remote_port, "None"))
+
+          board.stop()
+
+        except AttributeError:
+          raise RuntimeError("Please ensure that katcp-python >=v0.6.3 is being used")
+
+        except Exception:
+          pass
+
+    return alveos
 
 
 def create_meta_dictionary(metalist):
@@ -412,7 +473,7 @@ def threaded_fpga_function(fpga_list, timeout, target_function):
         fpga_list, timeout, (dofunc, target_function[1], target_function[2]))
 
 
-def threaded_fpga_operation(fpga_list, timeout, target_function):
+def threaded_fpga_operation(fpga_list, timeout, target_function, num_retries=5, retry_sleep_time=5):
     """
     Thread any operation against many FPGA objects
 
@@ -432,29 +493,50 @@ def threaded_fpga_operation(fpga_list, timeout, target_function):
         rv = target_function[0](fpga, *target_function[1], **target_function[2])
         resultq.put_nowait((fpga.host, rv))
 
-    num_fpgas = len(fpga_list)
-    result_queue = queue.Queue(maxsize=num_fpgas)
-    thread_list = []
-    for fpga_ in fpga_list:
-        thread = threading.Thread(target=jobfunc, args=(result_queue, fpga_))
-        thread.setDaemon(True)
-        thread.start()
-        thread_list.append(thread)
-    for thread_ in thread_list:
-        thread_.join(timeout)
-        if thread_.isAlive():
-            break
-    returnval = {}
-    hosts_missing = [fpga.host for fpga in fpga_list]
-    while True:
-        try:
-            result = result_queue.get_nowait()
-            returnval[result[0]] = result[1]
-            hosts_missing.pop(hosts_missing.index(result[0]))
-        except queue.Empty:
-            break
+    def run_threaded_op(int_fpga_list):
+        num_fpgas = len(int_fpga_list)
+        result_queue = Queue.Queue(maxsize=num_fpgas)
+        thread_list = []
+        for fpga_ in int_fpga_list:
+            thread = threading.Thread(target=jobfunc, args=(result_queue, fpga_))
+            thread.setDaemon(True)
+            thread.start()
+            thread_list.append(thread)
+        for thread_ in thread_list:
+            thread_.join(timeout)
+            if thread_.isAlive():
+                break
+        returnval = {}
+        hosts_missing = [fpga.host for fpga in int_fpga_list]
+        while True:
+            try:
+                result = result_queue.get_nowait()
+                returnval[result[0]] = result[1]
+                hosts_missing.pop(hosts_missing.index(result[0]))
+            except Queue.Empty:
+                break
+        return returnval, hosts_missing
+    
+    retry = 0
+    current_fpga_list = fpga_list[:]
+    while retry < num_retries:
+        returnval, hosts_missing = run_threaded_op(current_fpga_list)
+        if hosts_missing:
+            #warnmsg = ('Ran function {} on hosts. Did not get a response '
+            #           'from {}.'.format(target_function[0].__name__, hosts_missing))
+            warnmsg = ('Ran function {} on hosts. Did not get a response '
+                       'from {}.'.format(target_function[0].func_name, hosts_missing))
+            LOGGER.warning(warnmsg)
+            retry += 1
+            new_fpga_list = []
+            for fpga_obj in current_fpga_list:
+                if fpga_obj.host in hosts_missing:
+                    new_fpga_list.append(fpga_obj)
+            current_fpga_list = new_fpga_list[:]
+            time.sleep(retry_sleep_time)
+
     if hosts_missing:
-        errmsg = 'Ran \'%s\' on hosts. Did not get a response ' \
+        errmsg = 'Ran function \'%s\' on hosts. Did not get a response ' \
                  'from %s.' % (target_function[0].__name__, hosts_missing)
         LOGGER.error(errmsg)
     return returnval

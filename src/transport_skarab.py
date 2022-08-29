@@ -10,6 +10,7 @@ import contextlib
 
 from threading import Lock
 
+from . import CasperLogHandlers
 from . import skarab_definitions as sd
 from . import skarab_fileops as skfops
 from .transport import Transport
@@ -847,8 +848,8 @@ class SkarabTransport(Transport):
         request_payload = request_object.create_payload(sequence_number)
         retransmit_count = 0
         while retransmit_count < retries:
-            self.logger.debug('{}: retransmit attempts: {}'.format(
-                hostname, retransmit_count))
+            self.logger.debug('{}: retransmit attempts: {}, timeout = {}, retries = {}'.format(
+                hostname, retransmit_count, timeout, retries))
             try:
                 self.logger.debug('{}: sending pkt({}, {}) to port {} = {}'.format(
                     hostname, request_object.packet['command_type'],
@@ -888,7 +889,8 @@ class SkarabTransport(Transport):
                 raise KeyboardInterrupt
             retransmit_count += 1
         self._lock.release()
-        errmsg = '{}: retransmit count exceeded. Giving up.'.format(hostname)
+        errmsg = ('{}: retransmit count exceeded, giving up: {}, timeout = {}, retries = {}'.format(
+            hostname, retransmit_count, timeout, retries))
         self.logger.debug(errmsg)
         raise SkarabSendPacketError(errmsg)
 
@@ -1218,6 +1220,9 @@ class SkarabTransport(Transport):
                 raise SkarabReadFailed(errmsg)
             else:
                 return response
+        else:
+            errmsg = 'Wishbone timeout. Address 0x{:x}'.format(wb_address)
+            raise SkarabReadFailed(errmsg)
 
     def read_wishbone(self, wb_address,
                       timeout=None,
@@ -4337,19 +4342,30 @@ class SkarabTransport(Transport):
         else:
             return True
 
-    def _set_1v0_trip_current_threshold(self, trip_threshold=35):
+    def _set_1v0_trip_current_threshold(self, trip_threshold=35, 
+                                        force_over_30=False):
         """
         Reconfigure the 1V0 current trip threshold
+        
+        The recommended 1v0 current trip threshold is 30 A. Exceeding this 
+        is done at your own risk and may potentially void the warranty 
+        of your SKARABs.
         :param trip_threshold: The desired 1V0 current trip threshold (Amps)
+        :param force_over_30: a flag that must be explicity set if the 
+        threshold is to be set above 30A (i.e. the recomended operating limit)
         :return: True if success, False otherwise
         """
 
         # check that the desired threshold is within the acceptable range
 
-        if trip_threshold < 20:
-            self.logger.warning("Desired current limit too low! "
-                                "Threshold must be >= 20A")
-            return False
+        if trip_threshold not in range(20, 37):
+            self.logger.warning("Desired current limit must be between 20A and 36A!")
+            raise ValueError("Desired current limit not in acceptable range: [20:36]A")
+        
+        if trip_threshold > 30 and not force_over_30:
+            self.logger.warning(
+                "Must explicitly set flag 'force_over_30' to set current limit above reccomended limit of 30A")
+            raise Warning("Must explicitly set flag 'force_over_30' to set current limit above reccomended limit of 30A")
 
         # work out the [LSB, MSB] to set the threshold
 

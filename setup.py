@@ -39,7 +39,6 @@ progska_extension = setuptools.Extension(
 
 data_files = ['tengbe_mmap.txt', 'tengbe_mmap_legacy.txt', 'fortygbe_mmap_legacy.txt']
 
-
 setuptools.setup(
     name=NAME,
     description=DESCRIPTION,
