@@ -11,6 +11,7 @@ AUTHOR  = 'Tyrone van Balla'
 EMAIL   = 'tvanballa at ska.ac.za'
 VERSION = '0.2.0' # Need to adopt the __version__.py format
 
+
 here = os.path.abspath(os.path.dirname(__file__))
 
 try:
@@ -50,14 +51,21 @@ setuptools.setup(
     long_description_content_type='text/markdown',
     # Specify version in-line here
     install_requires=[
+        'IPython',
+        'future',
         'numpy',
-        'katcp>=0.7',
+        'katcp==0.9.1',
+        'katversion',
         'odict',
         'setuptools',
         'tornado',
         'redis',
-        'tftpy==0.8.0',
+        'tftpy==0.8.2',
+        'progressbar2',
+        'requests',
+        'circus'
     ],
+    extras_require = {'test': ['pytest', 'pytest-datadir']},
     packages=['casperfpga', 'casperfpga.debug', 'casperfpga.progska'],
     package_dir={'casperfpga': 'src', 'casperfpga.debug': 'debug', 'casperfpga.progska': 'progska'},
     package_data={'casperfpga': data_files},

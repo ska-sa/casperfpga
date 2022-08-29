@@ -4,8 +4,8 @@ import logging
 import time
 import socket
 
-from . import skarab_definitions as sd
 from . import progska
+from . import skarab_definitions as sd
 from .utils import threaded_fpga_operation as thop
 from .network import IpAddress
 

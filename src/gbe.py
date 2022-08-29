@@ -109,7 +109,7 @@ class Gbe(object):
             raise ValueError('%s: 10Gbe interface must '
                              'have mac, ip and port.' % self.fullname)
 
-    def setup(self, mac, ipaddress, port):
+    def setup(self, mac, ipaddress, port, gateway=None, subnet_mask=None):
         """
         No longer implemented. See `configure_core`
         """

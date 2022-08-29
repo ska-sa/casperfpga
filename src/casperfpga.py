@@ -4,7 +4,6 @@ import time
 import socket
 from time import strptime
 import string
-
 import collections
 
 from . import register
@@ -20,6 +19,8 @@ from . import katadc
 from . import skarabadc
 from . import snapadc
 from . import sysmon
+from . import xil_device
+from . import adc_4x16g_asnt
 from .memory import Memory
 
 from .attribute_container import AttributeContainer
@@ -50,10 +51,15 @@ CASPER_MEMORY_DEVICES = {
     'xps:hmc':          {'class': hmc.Hmc,           'container': 'hmcs'},
     'xps:skarab_adc4x3g_14':     {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
     'xps:skarab_adc4x3g_14_byp': {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:xil_device':   {'class': xil_device.Xil_Device, 'container': 'xil_device'}
 }
 
 CASPER_ADC_DEVICES = {
     'xps:katadc':                   {'class': katadc.KatAdc,        'container': 'adcs'},
+    'xps:skarab_adc4x3g_14':        {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
+    'xps:adc_4x16g_asnt':           {'class': adc_4x16g_asnt.Adc_4X16G_ASNT, 'container': 'adcs'},
+    'xps:snap_adc':                 {'class': snapadc.SnapAdc,      'container': 'adcs'}
 }
 
 # other devices - blocks that aren't memory devices nor ADCs, but about which we'd
@@ -669,7 +675,7 @@ class CasperFpga(object):
         :return: None
         """
         for device_name, device_info in list(device_dict.items()):
-            
+
             if device_name == '':
                 raise NameError('There\'s a problem somewhere, got a blank '
                                 'device name?')
@@ -754,10 +760,11 @@ class CasperFpga(object):
                                    - e.g. The SKARAB ADC's PLL SYNC
         :return: <nothing> the information is populated in the class
         """
-        t_filename, t_fpg_info = \
-            self.transport.get_system_information_from_transport()
-        filename = filename or t_filename
-        fpg_info = fpg_info or t_fpg_info
+        if (filename is None):
+            t_filename, t_fpg_info = \
+                self.transport.get_system_information_from_transport()
+            filename = t_filename
+            fpg_info = t_fpg_info
         if (filename is None) and (fpg_info is None):
             raise RuntimeError('Either filename or parsed fpg data '
                                'must be given.')
@@ -797,7 +804,6 @@ class CasperFpga(object):
             self.rcs_info['git'].pop('tag')
         except:
             pass
-
         # Create Register Map
         self.logger.info("Creating memory devices")
         self._create_memory_devices(device_dict, memorymap_dict,
