@@ -22,6 +22,7 @@ from . import sysmon
 from . import xil_device
 from . import adc_4x16g_asnt
 from .memory import Memory
+from . import rfdc
 
 from .attribute_container import AttributeContainer
 from .utils import parse_fpg, get_hostname, get_kwarg, get_git_info_from_fpg
@@ -60,6 +61,8 @@ CASPER_ADC_DEVICES = {
     'xps:skarab_adc4x3g_14_byp':    {'class': skarabadc.SkarabAdc,  'container': 'adcs'},
     'xps:adc_4x16g_asnt':           {'class': adc_4x16g_asnt.Adc_4X16G_ASNT, 'container': 'adcs'},
     'xps:snap_adc':                 {'class': snapadc.SnapAdc,      'container': 'adcs'}
+    'xps:snap_adc':                 {'class': snapadc.SnapAdc,      'container': 'adcs'},
+    'xps:rfdc':                     {'class': rfdc.RFDC,            'container': 'adcs'}
 }
 
 # other devices - blocks that aren't memory devices nor ADCs, but about which we'd
