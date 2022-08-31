@@ -9,5 +9,5 @@ PLATFORM_ID = {
   0xA3: "zrf16_29dr",
   0xA4: "zrf16_49dr",
   0xA5: "rfsoc2x2",
-  0xA6: "rfsoc4x2
+  0xA6: "rfsoc4x2"
 }
