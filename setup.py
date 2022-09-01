@@ -54,7 +54,7 @@ setuptools.setup(
         'IPython',
         'future',
         'numpy',
-        'katcp',
+        'katcp==0.9.1',
         'katversion',
         'odict',
         'setuptools',
@@ -77,7 +77,7 @@ setuptools.setup(
     keywords='casper ska meerkat fpga',
     classifiers=[
         "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
-        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.8',
         'Operating System :: OS Independent',
 	    'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: Scientific/Engineering :: Astronomy',
