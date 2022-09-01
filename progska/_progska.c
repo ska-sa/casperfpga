@@ -1,5 +1,7 @@
+
 #include <Python.h>
 #include <stdio.h>
+#include "progska.h"
 
 static char module_docstring[] =
     "This module provides a fast uploading interface for SKARABs.";
