@@ -3,6 +3,7 @@ control and monitor fpga-based casper designs.
 """
 
 # import all the main classes that we'll use often
+from . import progska
 from .bitfield import Bitfield, Field
 from .katadc import KatAdc
 from .casperfpga import CasperFpga
@@ -22,7 +23,6 @@ from .sbram import Sbram
 from .snap import Snap
 from .snapadc import SnapAdc
 from .tengbe import TenGbe
-from . import progska
 from . import skarab_fileops
 
 # BEGIN VERSION CHECK

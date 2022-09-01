@@ -1,4 +1,4 @@
-import time,numpy as np,logging,struct
+import time, numpy as np, logging, struct
 from .i2c import I2C_DEVICE
 
 class LTC2990(I2C_DEVICE):

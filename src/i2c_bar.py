@@ -1,5 +1,5 @@
-import time,numpy as np,logging
-from i2c import I2C_DEVICE
+import time, numpy as np, logging
+from .i2c import I2C_DEVICE
 
 
 class MS5611_01B(I2C_DEVICE):

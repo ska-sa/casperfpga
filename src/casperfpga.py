@@ -696,14 +696,13 @@ class CasperFpga(object):
                     errmsg = '{} is not a callable ADC Class'.format(known_device_class)
                     raise TypeError(errmsg)
 
-                new_device = known_device_class.from_device_info(self,
-                                device_name, device_info, initialise=initialise)
+                new_device = known_device_class.from_device_info(self, initialize=initialise)
                 
-                if new_device.name in list(self.adc_devices.keys()):
-                    errmsg = 'Device {} of type {} already exists in \
-                             the devices list'.format(new_device.name, type(new_device))
+                # if new_device.name in list(self.adc_devices.keys()):
+                    # errmsg = 'Device {} of type {} already exists in \
+                             # the devices list'.format(new_device.name, type(new_device))
 
-                    raise NameError(errmsg)
+                    # raise NameError(errmsg)
                 
                 self.devices[device_name] = new_device
                 self.adc_devices[device_name] = new_device
