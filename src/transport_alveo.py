@@ -116,7 +116,14 @@ class AlveoTransport(KatcpTransport):
     :return: True/False
     """
     reply, _ = self.katcprequest(name='alveo-reset', request_timeout=self._timeout)
-    return reply.arguments[0] == 'ok'
+    ret = reply.arguments[0]
+
+    #ensure reply is a string literal
+    try:
+        ret = ret.decode()
+    except (UnicodeDecodeError, AttributeError):
+        pass
+    return ret == 'ok'
 
 
   def memread(self, addr):
@@ -194,7 +201,16 @@ class AlveoTransport(KatcpTransport):
     name='alveo-program', request_timeout=timeout, require_ok=True)
     #delete regardless of returned status, then check status...
     self._delete_bof(filename)
-    if reply.arguments[0] != 'ok':
+
+    ret = reply.arguments[0]
+
+    #ensure reply is a string literal
+    try:
+        ret = ret.decode()
+    except (UnicodeDecodeError, AttributeError):
+        pass
+
+    if ret != 'ok':
       raise RuntimeError('%s: could not program alveo' % self.host)
 
     if self.reset() != True:
