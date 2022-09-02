@@ -64,7 +64,7 @@ def list_alveos(remote_host_ip):
           #have to block here (ie sleep) else board obj gets stopped before it's used (so it seems)
             time.sleep(1)
             boardtype = board.versions
-            if boardtype.get('alveo-card'):
+            if 'alveo-card' in boardtype:
               #print('[katcp] port=%d\ttype=%-20s\tserial=%s' % (remote_port, boardtype['alveo-card'][0], boardtype['alveo-serial'][0]))
               alveos[boardtype['alveo-card'][0]]={}    #alveos is now dictionary of dictionaries. This key should be unique
               alveos[boardtype['alveo-card'][0]]['proto']='katcp'
