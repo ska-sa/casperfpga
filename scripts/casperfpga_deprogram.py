@@ -28,9 +28,9 @@ if args.log_level != '':
 # look for hosts in the leases file
 if args.dnsmasq:
     hosts, lease_filename = fpgautils.hosts_from_dhcp_leases()
-    print('Found %i roaches in %s.' % (len(hosts), lease_filename))
+    print(('Found %i roaches in %s.' % (len(hosts), lease_filename)))
     for host in hosts:
-        print('\t%s' % host)
+        print(('\t%s' % host))
 else:
     hosts = [args.hostname]
 

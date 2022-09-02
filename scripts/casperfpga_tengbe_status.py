@@ -52,7 +52,7 @@ if args.log_level != '':
 
 # create the devices and connect to them
 if args.hosts.strip() == '':
-    if corr2 is None or 'CORR2INI' not in os.environ.keys():
+    if corr2 is None or 'CORR2INI' not in list(os.environ.keys()):
         raise RuntimeError('No hosts given and no corr2 config found. '
                            'No hosts.')
     fpgas = corr2.utils.script_get_fpgas(args)
@@ -67,8 +67,8 @@ for fpga in fpgas:
     numgbes = len(fpga.gbes)
     if numgbes < 1:
         raise RuntimeWarning('Host %s has no gbe cores', fpga.host)
-    print('%s: found %i gbe core%s: %s' % (
-        fpga.host, numgbes, '' if numgbes == 1 else 's', fpga.gbes.keys()))
+    print(('%s: found %i gbe core%s: %s' % (
+        fpga.host, numgbes, '' if numgbes == 1 else 's', list(fpga.gbes.keys()))))
 
 if args.resetctrs:
     def reset_gbe_debug(fpga_):
@@ -94,8 +94,8 @@ def get_gbe_data(fpga):
         for regname in ctr_data:
             regdata = ctr_data[regname]
             try:
-                if ('timestamp' in regdata.keys()) and \
-                        ('data' in regdata.keys()):
+                if ('timestamp' in list(regdata.keys())) and \
+                        ('data' in list(regdata.keys())):
                     ctr_data[regname] = regdata['data']['reg']
             except AttributeError:
                 pass
@@ -215,7 +215,7 @@ try:
                     line = scroller.add_string(fld, start_pos)
                     start_pos += pos_increment
                 scroller.add_string('', cr=True)
-                for core, core_data in fpga_data.items():
+                for core, core_data in list(fpga_data.items()):
                     if tap_data[fpga.host][core] is not None:
                         tap_running = tap_data[fpga.host][core]['name'] == ''
                         fpga_data[core]['ip'] = tap_data[fpga.host][core]['ip']
@@ -227,7 +227,7 @@ try:
                     line = scroller.add_string(core)
                     for header_register in fpga_headers:
                         core_regname = header_register.replace('gbe', core)
-                        if core_regname in core_data.keys():
+                        if core_regname in list(core_data.keys()):
                             fld = '{val:>{width}}'.format(
                                     val=core_data[core_regname],
                                     width=max_fldname)
@@ -241,7 +241,7 @@ try:
             last_refresh = time.time()
         else:
             time.sleep(0.05)
-except Exception, e:
+except Exception as e:
     exit_gracefully(None, None)
     raise
 

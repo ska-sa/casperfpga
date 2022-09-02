@@ -56,9 +56,9 @@ fpga.get_system_information()
 if args.listsnaps:
     snapshots = fpga.snapshots
     numsnaps = len(snapshots)
-    print('Found %i snapshot%s:' % (numsnaps, '' if numsnaps == 1 else 's'))
+    print(('Found %i snapshot%s:' % (numsnaps, '' if numsnaps == 1 else 's')))
     for snap in snapshots:
-        print('\t%s-%i-%s' % (snap.name, snap.length, snap.fields_string_get()))
+        print(('\t%s-%i-%s' % (snap.name, snap.length, snap.fields_string_get())))
     fpga.disconnect()
     import sys
     sys.exit(0)
