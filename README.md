@@ -93,7 +93,7 @@ $ cd casperfpga/
 $ git checkout master
 $ sudo apt-get install python-pip
 $ sudo pip install -r requirements.txt
-$ sudo pip install casperfpga
+$ sudo pip install .
 ```
 
 The distribution on the Python Package Index is, of course, a built-distribution; this contains an already-compiled version of the SKARAB programming utility `progska`, written in `C`. Operating Systems tested using `pip install casperfpga` include:
