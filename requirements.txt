@@ -13,4 +13,3 @@ jedi
 parso
 ipython
 requests
--e git+https://github.com/casper-astro/tftpy.git#egg=tftpy-0.6.3_fork-py2.7.egg
