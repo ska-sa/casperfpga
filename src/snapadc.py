@@ -902,7 +902,7 @@ class SnapAdc(object):
     def isLineClockAligned(self):
         errs = self.testPatterns(mode='std',pattern1=self.p1,pattern2=self.p2)
 
-        if np.all(np.array([adc.values() for adc in errs.values()])==0):
+        if np.all(np.array([list(adc.values()) for adc in errs.values()])==0):
             logger.info('Line clock of all ADCs aligned.')
             return True
         else:
@@ -1019,7 +1019,7 @@ class SnapAdc(object):
         return ok
 
     @classmethod
-    def from_device_info(cls, parent, initialize=False, **kwargs):
+    def from_device_info(cls, parent, device_name, device_info, initialize=False, **kwargs):
         """
         Process device info and the memory map to get all the necessary info
         and return a SKARAB ADC instance.
@@ -1031,4 +1031,4 @@ class SnapAdc(object):
         :param kwargs:
         :return:
         """
-        return cls(parent, initialize, **kwargs)
+        return cls(parent, device_name, device_info, initialize, **kwargs)
