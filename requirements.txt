@@ -7,7 +7,7 @@ tornado
 redis
 tftpy
 progressbar2
-#ipython reqs for py3.5
+#ipython reqs for py3
 traitlets
 jedi
 parso

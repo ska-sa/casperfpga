@@ -260,7 +260,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.logger.info('%s: disconnected' % self.host)
 
     def katcprequest(self, name, request_timeout=-1.0, require_ok=True,
-                     request_args=()):
+                     request_args=(), max_retries=3, retry_delay_s=0.5):
         """
         Make a blocking request to the KATCP server and check the result.
         Raise an error if the reply indicates a request failure.
@@ -270,13 +270,23 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             must time out
         :param require_ok: will we raise an exception on a response != ok
         :param request_args: request arguments.
+        :param max_retries: maximum number of retries in the case of errors (3).
+        :param retry_delay_s: the delay between retries in the case of errors (0.5 seconds).
         :return: tuple of reply and informs
         """
         # TODO raise sensible errors
         if request_timeout == -1:
             request_timeout = self._timeout
         request = katcp.Message.request(name, *request_args)
-        reply, informs = self.blocking_request(request, timeout=request_timeout)
+        reply = None
+        retries = 0
+
+        while retries == 0 or (require_ok and retries < max_retries and (reply.arguments[0] != katcp.Message.OK)):
+            if retries > 0:
+                time.sleep(retry_delay_s)
+            reply, informs = self.blocking_request(request, timeout=request_timeout)
+            retries += 1
+        
         if (reply.arguments[0] != katcp.Message.OK) and require_ok:
             if reply.arguments[0] == katcp.Message.FAIL:
                 raise KatcpRequestFail(

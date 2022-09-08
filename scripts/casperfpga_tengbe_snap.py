@@ -7,7 +7,7 @@ View the contents of a GBE RX or TX snapblock.
 
 @author: paulp
 """
-from __future__ import print_function
+
 import sys
 import time
 import argparse
@@ -86,7 +86,7 @@ if args.listcores:
     fpga.disconnect()
     sys.exit(0)
 
-if args.core not in fpga.gbes.keys():
+if args.core not in list(fpga.gbes.keys()):
     fpga.disconnect()
     raise RuntimeError('No gbe core \'%s\' found.' % args.core)
 
@@ -109,11 +109,11 @@ else:
     key_order = ['led_up', 'led_rx', 'valid_in', 'EOF_KEY', 'bad_frame',
                  'overrun', 'IP_KEY', 'DATA_KEY']
     coredata = gbecore.read_rxsnap()
-    data_key = 'data' if 'data' in coredata.keys() else 'data_in'
+    data_key = 'data' if 'data' in list(coredata.keys()) else 'data_in'
     key_order[key_order.index('DATA_KEY')] = data_key
-    ip_key = 'ip' if 'ip' in coredata.keys() else 'ip_in'
+    ip_key = 'ip' if 'ip' in list(coredata.keys()) else 'ip_in'
     key_order[key_order.index('IP_KEY')] = ip_key
-    eof_key = 'eof' if 'eof' in coredata.keys() else 'eof_in'
+    eof_key = 'eof' if 'eof' in list(coredata.keys()) else 'eof_in'
     key_order[key_order.index('EOF_KEY')] = eof_key
 fpga.disconnect()
 

@@ -54,7 +54,7 @@ if args.log_level != '':
 
 # create the devices and connect to them
 if args.hosts.strip() == '':
-    if corr2 is None or 'CORR2INI' not in os.environ.keys():
+    if corr2 is None or 'CORR2INI' not in list(os.environ.keys()):
         raise RuntimeError('No hosts given and no corr2 config found. '
                            'No hosts.')
     fpgas = corr2.utils.script_get_fpgas(args)
@@ -69,17 +69,17 @@ for fpga in fpgas:
     numgbes = len(fpga.gbes)
     if numgbes < 1:
         raise RuntimeWarning('Host %s has no gbe cores', fpga.host)
-    print('%s: found %i gbe core%s: %s' % (
-        fpga.host, numgbes, '' if numgbes == 1 else 's', fpga.gbes.keys()))
+    print(('%s: found %i gbe core%s: %s' % (
+        fpga.host, numgbes, '' if numgbes == 1 else 's', list(fpga.gbes.keys()))))
 
 for fpga in fpgas:
     if args.core == 'all':
         cores = fpga.gbes.names()
     else:
         cores = [args.core]
-    print(50*'#')
-    print('%s:' % fpga.host)
-    print(50*'#')
+    print((50*'#'))
+    print(('%s:' % fpga.host))
+    print((50*'#'))
     for core in cores:
         fpga.gbes[core].print_gbe_core_details(
             arp=args.arp, cpu=args.cpu, refresh=True)
