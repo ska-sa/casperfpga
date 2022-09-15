@@ -506,10 +506,7 @@ class SnapAdc(object):
         elif laneSel not in self.laneList:
             raise ValueError("Invalid parameter")
 
-        if not isinstance(tap, (int, np.int64)):
-            raise ValueError("Invalid parameter")
-            if isinstance(tap, np.int64):
-                tap = int(tap)   # Fix for Py3
+        tap = int(tap) # Fix for Py3
  
         strl = ','.join([str(c) for c in laneSel])
         strc = ','.join([str(c) for c in chipSel])
