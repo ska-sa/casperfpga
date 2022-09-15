@@ -1,8 +1,8 @@
 import logging
 import struct
 import numpy as np
-from pkg_resources import resource_filename
 
+from pkg_resources import resource_filename
 from .memory import Memory
 from .network import Mac, IpAddress
 from .gbe import Gbe
@@ -12,8 +12,97 @@ LOGGER = logging.getLogger(__name__)
 STRUCT_CTYPES = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 STRUCT_CTYPES_TO_B = {'B': 1, 'H': 2, 'L': 4, 'Q': 8}
 
-TENGBE_UNIFIED_MMAP_TXT = resource_filename('casperfpga', 'tengbe_mmap.txt')
-TENGBE_MMAP_LEGACY_TXT  = resource_filename('casperfpga', 'tengbe_mmap_legacy.txt')
+TENGBE_UNIFIED_MMAP_TXT = 'tengbe_mmap.txt'
+TENGBE_MMAP_LEGACY_TXT  = 'tengbe_mmap_legacy.txt'
+
+# Offsets for fields in the memory map, in bytes
+OFFSET_CORE_TYPE   = 0x0
+OFFSET_BUFFER_SIZE = 0x4
+OFFSET_WORD_LEN    = 0x8
+OFFSET_MAC_ADDR    = 0xc
+OFFSET_IP_ADDR     = 0x14
+OFFSET_GW_ADDR     = 0x18
+OFFSET_NETMASK     = 0x1c
+OFFSET_MC_IP       = 0x20
+OFFSET_MC_MASK     = 0x24
+OFFSET_BUF_VLD     = 0x28
+OFFSET_FLAGS       = 0x2c
+OFFSET_PORT        = 0x30
+OFFSET_STATUS      = 0x34
+OFFSET_CONTROL     = 0x40
+OFFSET_ARP_SIZE    = 0x44
+OFFSET_TX_PKT_RATE = 0x48
+OFFSET_TX_PKT_CNT  = 0x4c
+OFFSET_TX_VLD_RATE = 0x50
+OFFSET_TX_VLD_CNT  = 0x54
+OFFSET_TX_OF_CNT   = 0x58
+OFFSET_TX_AF_CNT   = 0x5c
+OFFSET_RX_PKT_RATE = 0x60
+OFFSET_RX_PKT_CNT  = 0x64
+OFFSET_RX_VLD_RATE = 0x68
+OFFSET_RX_VLD_CNT  = 0x6c
+OFFSET_RX_OF_CNT   = 0x70
+OFFSET_RX_AF_CNT   = 0x74
+OFFSET_COUNT_RST   = 0x78
+
+OFFSET_ARP_CACHE   = 0x1000
+OFFSET_TX_BUFFER   = 0x4000
+OFFSET_RX_BUFFER   = 0x8000
+
+# Sizes for fields in the memory map, in bytes
+SIZE_CORE_TYPE   = 0x4
+SIZE_BUFFER_SIZE = 0x4
+SIZE_WORD_LEN    = 0x4
+SIZE_MAC_ADDR    = 0x8
+SIZE_IP_ADDR     = 0x4
+SIZE_GW_ADDR     = 0x4
+SIZE_NETMASK     = 0x4
+SIZE_MC_IP       = 0x4
+SIZE_MC_MASK     = 0x4
+SIZE_BUF_AVAIL   = 0x4
+SIZE_FLAGS       = 0x4
+SIZE_PORT        = 0x4
+SIZE_STATUS      = 0x8
+SIZE_CONTROL     = 0x8
+SIZE_ARP_SIZE    = 0x4
+SIZE_TX_PKT_RATE = 0x4
+SIZE_TX_PKT_CNT  = 0x4
+SIZE_TX_VLD_RATE = 0x4
+SIZE_TX_VLD_CNT  = 0x4
+SIZE_TX_OF_CNT   = 0x4
+SIZE_TX_AF_CNT   = 0x4
+SIZE_RX_PKT_RATE = 0x4
+SIZE_RX_PKT_CNT  = 0x4
+SIZE_RX_VLD_RATE = 0x4
+SIZE_RX_VLD_CNT  = 0x4
+SIZE_RX_OF_CNT   = 0x4
+SIZE_RX_AF_CNT   = 0x4
+SIZE_COUNT_RST   = 0x4
+
+SIZE_ARP_CACHE   = 0x3000
+SIZE_TX_BUFFER   = 0x4000
+SIZE_RX_BUFFER   = 0x4000
+
+def read_memory_map_definition(filename):
+    """ Read memory map definition from text file.
+
+    Returns a python dictionary:
+        {REGISTER_NAME1: {'offset': offset, 'size': size, 'rwflag': rwflag},
+         REGISTER_NAME2: {'offset': offset, 'size': size, 'rwflag': rwflag}
+         ...}
+
+    Notes:
+        Used by TenGbe.configure_core() to write to mmap.
+    """
+    mmap_arr = np.genfromtxt(filename, dtype='str', skip_header=1)
+    mmap_keys    = list(mmap_arr[:, 0])
+    mmap_offsets = [int(x, 0) for x in mmap_arr[:, 1]]
+    mmap_size    = [int(x, 0) for x in mmap_arr[:, 2]]
+    mmap_rw      = list(mmap_arr[:, 3])
+    mmap  = {}
+    for ii, k in enumerate(mmap_keys):
+        mmap[k] = {'offset': mmap_offsets[ii], 'size': mmap_size[ii], 'rwflag': mmap_rw[ii]}
+    return mmap
 
 def read_memory_map_definition(filename):
     """ Read memory map definition from text file.

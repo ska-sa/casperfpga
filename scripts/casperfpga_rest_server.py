@@ -284,11 +284,11 @@ if __name__ == '__main__':
     PCIE_XDMA_DICT = LocalPcieTransport.get_pcie_xdma_map()
     XDMA_PCIE_DICT = {}
 
-    for (pci_id, xdma_id) in PCIE_XDMA_DICT.items():
+    for (pci_id, xdma_id) in list(PCIE_XDMA_DICT.items()):
         XDMA_PCIE_DICT[xdma_id] = pci_id
         localtransport = getTransportTarget(xdma_id, fpgfile=args.fpgfile)
         if args.program:
-            print('Programmed "pcie{}" successfully: {}'.format(pci_id, localtransport.upload_to_ram_and_program(args.fpgfile)))
+            print(('Programmed "pcie{}" successfully: {}'.format(pci_id, localtransport.upload_to_ram_and_program(args.fpgfile))))
         else:
             localtransport._setFpgfile_path(args.fpgfile)
 

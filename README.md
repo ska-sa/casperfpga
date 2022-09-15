@@ -45,6 +45,45 @@ INFO:casperfpga.transport_katcp:roach020203: port(7147) created and connected.
 DEBUG:root:casperfpga.casperfpga:roach020203: now a CasperFpga
 ```
 
+### Alveo Support ###
+Currently, support for the Alveo exists in a separate [`branch`](https://github.com/ska-sa/casperfpga/tree/alveo). It
+relies on the [`alveo-sw`](https://github.com/ska-sa/alveo-sw) infrastructure being installed on the server hosting the
+Alveo cards.
+
+Once installed, a connection can be established to the Alveo as follows:
+
+```python
+In [1]: import casperfpga
+
+In [2]: casperfpga.utils.list_alveos("10.8.96.150")
+Out[2]:
+{'alveo_0_u50': {'host': '10.8.96.150',
+ 'port': 7150,
+ 'proto': 'katcp',
+ 'serial': '501211207V5X'}}
+
+In [3]: alveo = casperfpga.CasperFpga('10.8.96.150', port=7150);
+
+```
+
+The Alveo can now be programmed with an appropriate Alveo-compatible fpg:
+
+```python
+alveo.transport.upload_to_ram_and_program('my_fpg_file.fpg')
+```
+
+List of some useful commands in the Alveo transport layer:
+
+```python
+alveo.transport.memread
+alveo.transport.memwrite
+alveo.transport.listbof
+alveo.transport.listdev
+alveo.transport.wordread
+alveo.transport.wordwrite
+alveo.transport.get_sensor_data
+```
+
 ## Installation ##
 [`casperfpga`](https://pypi.org/project/casperfpga/) is now available on the Python Package Index (PyPI) and can be installed via [`pip`](https://pip.pypa.io/en/stable/). However, should you need to interface with a SNAP board, your installation workflow involves the extra step of installing against `casperfpga's requirements.txt`.
 
@@ -54,7 +93,7 @@ $ cd casperfpga/
 $ git checkout master
 $ sudo apt-get install python-pip
 $ sudo pip install -r requirements.txt
-$ sudo pip install casperfpga
+$ sudo pip install .
 ```
 
 The distribution on the Python Package Index is, of course, a built-distribution; this contains an already-compiled version of the SKARAB programming utility `progska`, written in `C`. Operating Systems tested using `pip install casperfpga` include:

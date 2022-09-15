@@ -39,7 +39,6 @@ progska_extension = setuptools.Extension(
 
 data_files = ['tengbe_mmap.txt', 'tengbe_mmap_legacy.txt', 'fortygbe_mmap_legacy.txt']
 
-
 setuptools.setup(
     name=NAME,
     description=DESCRIPTION,
@@ -61,7 +60,7 @@ setuptools.setup(
         'setuptools',
         'tornado',
         'redis',
-        'tftpy==0.8.2',
+        'tftpy',
         'progressbar2',
         'requests',
         'circus'
@@ -79,7 +78,7 @@ setuptools.setup(
     keywords='casper ska meerkat fpga',
     classifiers=[
         "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
-        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.8',
         'Operating System :: OS Independent',
 	    'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: Scientific/Engineering :: Astronomy',

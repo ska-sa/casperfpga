@@ -98,6 +98,7 @@ class SnapAdc(object):
             raise ValueError("Invalid resolution parameter")
         
         self.curDelay = [[0]*len(self.laneList)]*len(self.adcList)
+        #self.curDelay = np.zeros((len(self.adcList),len(self.laneList)))
 
         #if ref is not None:
         #    self.lmx = LMX2581(host,'lmx_ctrl', fosc=ref)
@@ -341,7 +342,7 @@ class SnapAdc(object):
 
     def _get(self, data, mask):
         data = data & mask
-        return data / (mask & -mask)
+        return data // (mask & -mask)
 
     def _set(self, d1, d2, mask=None):
         # Update some bis of d1 with d2, while keeping other bits unchanged 
@@ -516,7 +517,7 @@ class SnapAdc(object):
 
         matc = np.array([(cs*4) for cs in chipSel])
 
-        matla = np.array([int(l/2) for l in laneSel if l%2==0])
+        matla = np.array([int(l//2) for l in laneSel if l%2==0])
         if matla.size:
             mata =  np.repeat(matc.reshape(-1,1),matla.size,1) + \
                 np.repeat(matla.reshape(1,-1),matc.size,0)
@@ -524,7 +525,7 @@ class SnapAdc(object):
         else:
             vala = 0
         
-        matlb = np.array([int(l/2) for l in laneSel if l%2==1])
+        matlb = np.array([int(l//2) for l in laneSel if l%2==1])
         if matlb.size:
             matb =  np.repeat(matc.reshape(-1,1),matlb.size,1) + \
                 np.repeat(matlb.reshape(1,-1),matc.size,0)
@@ -817,7 +818,7 @@ class SnapAdc(object):
         if all(d != 0 for d in data):
             return False
             
-        dist=np.zeros(data.shape)
+        dist=np.zeros(data.shape, dtype=int)
         curDist = 0
         for i in range(data.size):
             if data[i] != 0:
@@ -901,7 +902,7 @@ class SnapAdc(object):
     def isLineClockAligned(self):
         errs = self.testPatterns(mode='std',pattern1=self.p1,pattern2=self.p2)
 
-        if np.all(np.array([adc.values() for adc in errs.values()])==0):
+        if np.all(np.array([list(adc.values()) for adc in errs.values()])==0):
             logger.info('Line clock of all ADCs aligned.')
             return True
         else:
@@ -1016,3 +1017,18 @@ class SnapAdc(object):
                 ok = ok and (np.all(d[adc][0] == d[adc][0][0]))
         self.adc.test("off")
         return ok
+
+    @classmethod
+    def from_device_info(cls, parent, device_name, device_info, initialize=False, **kwargs):
+        """
+        Process device info and the memory map to get all the necessary info
+        and return a SKARAB ADC instance.
+        :param parent: The parent device, normally a casperfpga instance
+        :param device_name:
+        :param device_info:
+        :param memorymap_dict:
+        :param initialize:
+        :param kwargs:
+        :return:
+        """
+        return cls(parent, device_name, device_info, initialize, **kwargs)

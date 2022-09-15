@@ -115,6 +115,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self._timeout = timeout
         self.connect()
         self.logger.info('%s: port(%s) created and connected.' % (self.host, port))
+        self.sensor_list = {};
 
     def __del__(self):
         """
@@ -125,6 +126,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             self.disconnect()
         except:
             pass
+        
 
     @staticmethod
     def test_host_type(host_ip, timeout=5):
@@ -258,7 +260,7 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.logger.info('%s: disconnected' % self.host)
 
     def katcprequest(self, name, request_timeout=-1.0, require_ok=True,
-                     request_args=()):
+                     request_args=(), max_retries=3, retry_delay_s=0.5):
         """
         Make a blocking request to the KATCP server and check the result.
         Raise an error if the reply indicates a request failure.
@@ -268,13 +270,23 @@ class KatcpTransport(Transport, katcp.CallbackClient):
             must time out
         :param require_ok: will we raise an exception on a response != ok
         :param request_args: request arguments.
+        :param max_retries: maximum number of retries in the case of errors (3).
+        :param retry_delay_s: the delay between retries in the case of errors (0.5 seconds).
         :return: tuple of reply and informs
         """
         # TODO raise sensible errors
         if request_timeout == -1:
             request_timeout = self._timeout
         request = katcp.Message.request(name, *request_args)
-        reply, informs = self.blocking_request(request, timeout=request_timeout)
+        reply = None
+        retries = 0
+
+        while retries == 0 or (require_ok and retries < max_retries and (reply.arguments[0] != katcp.Message.OK)):
+            if retries > 0:
+                time.sleep(retry_delay_s)
+            reply, informs = self.blocking_request(request, timeout=request_timeout)
+            retries += 1
+        
         if (reply.arguments[0] != katcp.Message.OK) and require_ok:
             if reply.arguments[0] == katcp.Message.FAIL:
                 raise KatcpRequestFail(
@@ -328,7 +340,9 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         """
         reply, _ = self.katcprequest(name='status',
                                      request_timeout=self._timeout)
-        return reply.arguments[1].decode()
+        return reply.arguments[0] == 'ok'
+        # this was the alternative from the merge conflict.
+        #return reply.arguments[1].decode()
 
     def ping(self):
         """
@@ -399,6 +413,18 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                           str(size))
         )
         return reply.arguments[1]
+
+
+    def get_sensor_data(self):
+        """
+        :return: sensor data 
+        """
+        #self.sensor_list.update({"12V_PEX": ["12.51", "V"]})
+        _,informs = self.katcprequest(
+            name='sensor-value', request_timeout=self._timeout, require_ok=True,
+        )
+        return [(i.arguments[0], i.arguments[1], i.arguments[2], i.arguments[3], i.arguments[4]) for i in informs]
+        #return self.sensor_list
 
     def blindwrite(self, device_name, data, offset=0):
         """
@@ -495,6 +521,16 @@ class KatcpTransport(Transport, katcp.CallbackClient):
         self.logger.info('%s: programmed %s okay.' % (self.host, filename))
         self.prog_info['last_programmed'] = filename
         self.prog_info['last_uploaded'] = ''
+
+    def prog_user_image(self):
+        """
+        Program the FPGA. Specifically designed to work when using
+        katcp transport. Uses the last uploaded design to program
+        the fpga with.
+        """
+        self.upload_to_ram_and_program(self.prog_info['last_programmed'])
+
+
 
     def deprogram(self):
         """
@@ -692,6 +728,20 @@ class KatcpTransport(Transport, katcp.CallbackClient):
                             (request_result, upload_result))
         self.prog_info['last_uploaded'] = filename
         return
+
+#    def upload_and_program(self, filename):
+##try:
+#        self.upload_to_flash(filename)
+#        self.program(filename)
+#
+#        reply, _ = self.katcprequest(
+#        name='alveo-program', request_timeout=120, require_ok=True)
+#        if reply.arguments[0] != 'ok':
+#          raise RuntimeError('%s: could not program alveo' % self.host)
+#
+#        self._delete_bof(filename)
+##except Exception as e:
+##       print(e)
 
     def _delete_bof(self, filename):
         """

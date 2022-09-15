@@ -241,11 +241,11 @@ class LMX2581(WishBoneDevice):
             # Bypass VCO_DIV by properly setting OUTA_MUX and OUTB_MUX
             VCO_DIV = None
         else:
-            vco_guess = int(vco_min / synth_mhz) + 1
+            vco_guess = int(vco_min // synth_mhz) + 1
             VCO_DIV = vco_guess + vco_guess%2
         
         # Get PLLN, PLL_NUM, and PLL_DEN
-        pll = float(1 if VCO_DIV is None else VCO_DIV) * synth_mhz / ref_signal
+        pll = float(1 if VCO_DIV is None else VCO_DIV) * synth_mhz // ref_signal
         PLL_N = int(pll)
         frac = pll - PLL_N
         if frac < 1.0/(1<<22): # smallest fraction on the synth
@@ -311,7 +311,7 @@ class LMX2581(WishBoneDevice):
         else:
             self.setWord(1, 'OUTA_MUX')
             self.setWord(1, 'OUTB_MUX')
-            VCO_DIV = VCO_DIV / 2 - 1
+            VCO_DIV = VCO_DIV // 2 - 1
             self.setWord(VCO_DIV, 'VCO_DIV')
 
         # 3. (optional) If the MSB of the fractional numerator or charge pump gain
@@ -379,7 +379,7 @@ class LMX2581(WishBoneDevice):
 
     def _get(self, data, mask):
         data = data & mask
-        return data / (mask & -mask)
+        return data // (mask & -mask)
 
     def reset(self):
         self.setWord(1,'RESET')

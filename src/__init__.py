@@ -3,6 +3,7 @@ control and monitor fpga-based casper designs.
 """
 
 # import all the main classes that we'll use often
+from . import progska
 from .bitfield import Bitfield, Field
 from .katadc import KatAdc
 from .casperfpga import CasperFpga
@@ -13,6 +14,7 @@ from .transport_itpm import ItpmTransport
 from .transport_redis import RedisTapcpTransport
 from .transport_localpcie import LocalPcieTransport
 from .transport_remotepcie import RemotePcieTransport
+from .transport_alveo import AlveoTransport
 from .memory import Memory
 from .network import IpAddress, Mac
 from .qdr import Qdr
@@ -21,7 +23,6 @@ from .sbram import Sbram
 from .snap import Snap
 from .snapadc import SnapAdc
 from .tengbe import TenGbe
-from . import progska
 from . import skarab_fileops
 
 # BEGIN VERSION CHECK
