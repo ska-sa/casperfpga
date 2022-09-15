@@ -404,7 +404,7 @@ class SnapAdc(object):
 
     # A lane in this method actually corresponds to a "branch" in HMCAD1511 datasheet.
     # But I have to follow the naming convention of signals in casper repo.
-    def bitslip(self, chipSel=None, laneSel=None):
+    def bitslip(self, chipSel=None, laneSel=None, verify=False):
         """ Reorder the parallelize data for word-alignment purpose
         
         Reorder the parallelized data by asserting a itslip command to the bitslip 
