@@ -398,6 +398,7 @@ class SnapAdc(object):
                 length = 1024
             vals = self.ram[ram]._read(addr=0, size=length)
             vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
+            return vals
         else:
             raise ValueError
 
