@@ -65,6 +65,7 @@ setuptools.setup(
         'progressbar2',
         'requests',
         'circus'
+        'crcmod'
     ],
     extras_require = {'test': ['pytest', 'pytest-datadir']},
     packages=['casperfpga', 'casperfpga.debug', 'casperfpga.progska'],
