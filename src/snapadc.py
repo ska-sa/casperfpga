@@ -398,12 +398,13 @@ class SnapAdc(object):
                 length = 1024
             vals = self.ram[ram]._read(addr=0, size=length)
             vals = np.array(struct.unpack(fmt,vals)).reshape(-1,8)
+            return vals
         else:
             raise ValueError
 
     # A lane in this method actually corresponds to a "branch" in HMCAD1511 datasheet.
     # But I have to follow the naming convention of signals in casper repo.
-    def bitslip(self, chipSel=None, laneSel=None):
+    def bitslip(self, chipSel=None, laneSel=None, verify=False):
         """ Reorder the parallelize data for word-alignment purpose
         
         Reorder the parallelized data by asserting a itslip command to the bitslip 
@@ -505,10 +506,7 @@ class SnapAdc(object):
         elif laneSel not in self.laneList:
             raise ValueError("Invalid parameter")
 
-        if not isinstance(tap, (int, np.int64)):
-            raise ValueError("Invalid parameter")
-            if isinstance(tap, np.int64):
-                tap = int(tap)   # Fix for Py3
+        tap = int(tap) # Fix for Py3
  
         strl = ','.join([str(c) for c in laneSel])
         strc = ','.join([str(c) for c in chipSel])
