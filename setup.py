@@ -63,7 +63,8 @@ setuptools.setup(
         'tftpy',
         'progressbar2',
         'requests',
-        'circus'
+        'circus',
+        'crcmod'
     ],
     extras_require = {'test': ['pytest', 'pytest-datadir']},
     packages=['casperfpga', 'casperfpga.debug', 'casperfpga.progska'],
