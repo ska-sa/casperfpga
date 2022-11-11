@@ -59,7 +59,7 @@ class SnapAdc(object):
     ERROR_FRAME = 4
     ERROR_RAMP = 5
 
-    def __init__(self, host, device_name, device_info, initialise=False):
+    def __init__(self, host, device_name, device_info, initialise=False, **kwargs):
         """
         Instantiate an ADC block.
 
@@ -94,7 +94,7 @@ class SnapAdc(object):
         self.clksw = None
         self.ram = None
         
-        self.logger = logging.get('logger', logging.getLogger(__name__))
+        self.logger = kwargs.get('logger', logging.getLogger(__name__))
 
         # Current delay tap settings for all IDELAYE2
         self.curDelay = None
