@@ -59,8 +59,7 @@ class SnapAdc(object):
     ERROR_FRAME = 4
     ERROR_RAMP = 5
 
-    def __init__(self, host, ADC='HMCAD1511', resolution=8, ref=10,
-                 logger=None, **kwargs):
+    def __init__(self, host, device_name, device_info, initialise=False):
         """
         Instantiate an ADC block.
 
@@ -74,13 +73,28 @@ class SnapAdc(object):
         # Purposely setting ref=None below to prevent LMX object
         # from being attached so we can do it ourselves
 
-        self.resolution = resolution # XXX: At some point, decide which notation to use between resolution and RESOLUTION
+        try:
+            self.resolution  = int(self.device_info['adc_resolution'])
+            self.sample_rate = float(self.device_info['sample_rate'])
+            self.num_channel = int(self.device_info['snap_inputs'])
+        except:
+            print(self.device_info)
+            raise
+        # By default, the ref is 10MHz
+        self.ref = 10
+        # If the resolution is 8, we will use HMCAD1511;
+        # if it's 12 or 14, we will use HMCAD1520.
+        if self.resolution == 8:
+            ADC = 'HMCAD1511'
+        else:
+            ADC = 'HMCAD1520'
+
         self.adc = None
         self.lmx = None
         self.clksw = None
         self.ram = None
-
-        self.logger = kwargs.get('logger', logging.getLogger(__name__))
+        
+        self.logger = logging.get('logger', logging.getLogger(__name__))
 
         # Current delay tap settings for all IDELAYE2
         self.curDelay = None
@@ -107,14 +121,14 @@ class SnapAdc(object):
 
         self.clksw = HMC922(host,'adc16_use_synth')
         self.ram = [WishBoneDevice(host,name) for name in self.ramList]
-
+        ADC='HMCAD1511'
         if ADC not in ['HMCAD1511','HMCAD1520']:
             raise ValueError("Invalid parameter")
 
         if ADC == 'HMCAD1511':
             self.adc = HMCAD1511(host,'adc16_controller')
         else:   # 'HMCAD1520'
-            self.adc = HMCAD1520(host,'adc16_controller')
+            self.adc = HMCAD1520(host,'adc16_controller')   
 
         # test pattern for clock aligning
         pats = [0b10101010,0b01010101,0b00000000,0b11111111]
@@ -125,10 +139,11 @@ class SnapAdc(object):
 
         # below is from hera_corr_f/blocks.py
         # Attach our own wrapping of LMX
+        ref=10
         self.lmx = LMX2581(host, 'lmx_ctrl', fosc=ref)
         self.name            = 'SNAP_adc'
         self.clock_divide    = 1
-        self.resolution      = resolution
+        #self.resolution      = resolution
         self.host = host # the SNAPADC class doesn't directly expose this
         self.working_taps = {}
         self._retry_cnt = 0
