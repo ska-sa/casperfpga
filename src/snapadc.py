@@ -73,6 +73,8 @@ class SnapAdc(object):
         # Purposely setting ref=None below to prevent LMX object
         # from being attached so we can do it ourselves
 
+        self.name = device_name
+        self.device_info = device_info
         try:
             self.resolution  = int(self.device_info['adc_resolution'])
             self.sample_rate = float(self.device_info['sample_rate'])
@@ -150,6 +152,9 @@ class SnapAdc(object):
         #self._retry = kwargs.get('retry',7)
         self._retry = kwargs.get('retry',20)
         self._retry_wait = kwargs.get('retry_wait',1)
+
+        if initialise:
+            self.init(sample_rate=self.sample_rate, num_channel=self.num_channel)
 
     def set_gain(self, gain):
         """
