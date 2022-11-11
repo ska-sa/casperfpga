@@ -59,7 +59,7 @@ class SnapAdc(object):
     ERROR_FRAME = 4
     ERROR_RAMP = 5
 
-    def __init__(self, host, device_name, device_info, initialise=False, **kwargs):
+    def __init__(self, host, device_name, device_info, initialize=False, **kwargs):
         """
         Instantiate an ADC block.
 
@@ -153,7 +153,7 @@ class SnapAdc(object):
         self._retry = kwargs.get('retry',20)
         self._retry_wait = kwargs.get('retry_wait',1)
 
-        if initialise:
+        if initialize:
             self.init(sample_rate=self.sample_rate, num_channel=self.num_channel)
 
     def set_gain(self, gain):
