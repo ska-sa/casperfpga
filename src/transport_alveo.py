@@ -1,7 +1,5 @@
 import logging
-import time
 import sys
-import progressbar
 
 from .transport_katcp import KatcpTransport
 import katcp
@@ -60,9 +58,6 @@ class AlveoTransport(KatcpTransport):
       self.sensor_list = {};
 
       self.hgbe_base_addr = 0x100000
-      self.hbm_stack0_base_addr = 0x400000
-      self.hbm_stack1_base_addr = 0x800000
-      
       
       self.hgbe_reg_map = {'src_mac_addr_lower'  : 0x00,
                            'src_mac_addr_upper'  : 0x04,
@@ -78,6 +73,20 @@ class AlveoTransport(KatcpTransport):
                            'dropped_ip_count'    : 0x64,
                            'dropped_port_count'  : 0x68}
 
+      # The base adressses for the HBM stacks/banks in the Xilinx Alveo.
+      self.hbm_stack_base_addr = {0 : 0x400000,
+                                  1 : 0x800000}
+
+      # The memory controller region bitfields for the HBM are provided below as an extract from:
+      # AXI High Bandwidth Memory Controller v1.0 LogiCORE IP Product Guide (PG276) found at https://docs.xilinx.com/r/en-US/pg276-axi-hbm/Memory-Controller-Register-Map
+      self.hbm_controller_regions = {0 : 0b01000,
+                                     1 : 0b01100,
+                                     2 : 0b01001,
+                                     3 : 0b01101,
+                                     4 : 0b01010,
+                                     5 : 0b01110,
+                                     6 : 0b01011,
+                                     7 : 0b01111}
 
       # The memory controller register map for the HBM ECC and Status registers, Activity Monitor/Status registers and Activity Monitor Tracking registers are provided below as an extract from: 
       # AXI High Bandwidth Memory Controller v1.0 LogiCORE IP Product Guide (PG276) found at https://docs.xilinx.com/r/en-US/pg276-axi-hbm/Memory-Controller-Register-Map
@@ -127,18 +136,6 @@ class AlveoTransport(KatcpTransport):
                            'AM_RMW_CYCLE_PS0': 0x13894,
                            'AM_RMW_CYCLE_PS1': 0x13898}
 
-
-      # The memory controller region bitfields for the HBM are provided below as an extract from:
-      # AXI High Bandwidth Memory Controller v1.0 LogiCORE IP Product Guide (PG276) found at https://docs.xilinx.com/r/en-US/pg276-axi-hbm/Memory-Controller-Register-Map
-      self.hbm_controller_regions = {0 : 0b01000,
-                                     1 : 0b01100,
-                                     2 : 0b01001,
-                                     3 : 0b01101,
-                                     4 : 0b01010,
-                                     5 : 0b01110,
-                                     6 : 0b01011,
-                                     7 : 0b01111}
-            
 
   @staticmethod
   def test_host_type(host_ip, port, timeout=5):
@@ -351,12 +348,13 @@ class AlveoTransport(KatcpTransport):
     gbedata = []
     for ctr in range(0xC, 0x14, 4):
         gbedata.append(int(self.memread(self.hgbe_base_addr + ctr), 16))
+    gbedata.reverse()
     gbebytes = []
     for d in gbedata:
-        gbebytes.append((d >> 24) & 0xff)
-        gbebytes.append((d >> 16) & 0xff)
-        gbebytes.append((d >> 8) & 0xff)
-        gbebytes.append((d >> 0) & 0xff)
+        gbebytes.append(hex((d >> 24) & 0xff))
+        gbebytes.append(hex((d >> 16) & 0xff))
+        gbebytes.append(hex((d >> 8) & 0xff))
+        gbebytes.append(hex((d >> 0) & 0xff))
     pd = gbebytes
     return Mac('{}:{}:{}:{}:{}:{}'.format(*pd[2:]))
 
@@ -365,12 +363,13 @@ class AlveoTransport(KatcpTransport):
     gbedata = []
     for ctr in range(0x0, 0x8, 4):
         gbedata.append(int(self.memread(self.hgbe_base_addr + ctr), 16))
+    gbedata.reverse()
     gbebytes = []
     for d in gbedata:
-        gbebytes.append((d >> 24) & 0xff)
-        gbebytes.append((d >> 16) & 0xff)
-        gbebytes.append((d >> 8) & 0xff)
-        gbebytes.append((d >> 0) & 0xff)
+        gbebytes.append(hex((d >> 24) & 0xff))
+        gbebytes.append(hex((d >> 16) & 0xff))
+        gbebytes.append(hex((d >> 8) & 0xff))
+        gbebytes.append(hex((d >> 0) & 0xff))
     pd = gbebytes
     return Mac('{}:{}:{}:{}:{}:{}'.format(*pd[2:]))
 
@@ -557,72 +556,68 @@ STAT_DFI_INIT_COMPLETE
     hbm_stacks = []        
 
     if stack == None and controller == None and reg_name == '':
-        widgets = ['Processing: ', progressbar.AnimatedMarker()]
-        bar = progressbar.ProgressBar(widgets=widgets).start()
-
-        for hbm_stack_idx in range(2):
+        for hbm_stack_idx in self.hbm_stack_base_addr.keys():
             hbm_base_addr = self.get_hbm_base_addr(hbm_stack_idx)
             controllers = []
             self.logger.info("stack " + str(hbm_stack_idx))
             for region_idx, upper_5_bit_addr in self.hbm_controller_regions.items():
                 registers = dict()
                 self.logger.info(" reading memory controller " + str(region_idx))
-                i = 0
                 for reg, reg_offset in self.hbm_reg_map.items():
                     registers[reg] = self.memread(hbm_base_addr + (reg_offset + (upper_5_bit_addr << 17)))
-                    bar.update(i)
-                    i = i + 1
                 controllers.insert(region_idx, registers)
                 hbm_stacks.insert(hbm_stack_idx, controllers)
         return hbm_stacks
 
     elif stack != None and controller == None and reg_name == '':
-        widgets = ['Processing: ', progressbar.AnimatedMarker()]
-        bar = progressbar.ProgressBar(widgets=widgets).start()
-
-        hbm_base_addr = self.get_hbm_base_addr(stack)
-        controllers = []
-        self.logger.info("stack " + str(stack))
-        for region_idx, upper_5_bit_addr in self.hbm_controller_regions.items():
-            registers = dict()
-            self.logger.info(" reading memory controller " + str(region_idx))
-            i = 0
-            for reg, reg_offset in self.hbm_reg_map.items():
-                registers[reg] = self.memread(hbm_base_addr + (reg_offset + (upper_5_bit_addr << 17)))
-                bar.update(i)
-                i = i + 1
-            controllers.insert(region_idx, registers)
-        return controllers
+        if stack in self.hbm_stack_base_addr.keys():
+            hbm_base_addr = self.get_hbm_base_addr(stack)
+            controllers = []
+            self.logger.info("stack " + str(stack))
+            for region_idx, upper_5_bit_addr in self.hbm_controller_regions.items():
+                registers = dict()
+                self.logger.info(" reading memory controller " + str(region_idx))
+                for reg, reg_offset in self.hbm_reg_map.items():
+                    registers[reg] = self.memread(hbm_base_addr + (reg_offset + (upper_5_bit_addr << 17)))
+                controllers.insert(region_idx, registers)
+            return controllers
+        else:
+            self.logger.error(str(stack) + " does not exist in hbm stack dictionary.")
+            sys.exit()
 
     elif stack != None and controller != None and reg_name == '':
-        hbm_base_addr = self.get_hbm_base_addr(stack)
-        registers = dict()
-        for reg, reg_offset in self.hbm_reg_map.items():
-                registers[reg] = self.memread(hbm_base_addr + (reg_offset + (self.hbm_controller_regions.get(controller) << 17)))
-        return registers
+        if (stack in self.hbm_stack_base_addr.keys()) and (controller in self.hbm_controller_regions.keys()):
+            hbm_base_addr = self.get_hbm_base_addr(stack)
+            registers = dict()
+            for reg, reg_offset in self.hbm_reg_map.items():
+                    registers[reg] = self.memread(hbm_base_addr + (reg_offset + (self.hbm_controller_regions.get(controller) << 17)))
+            return registers
+        else:
+            self.logger.error("stack " + str(stack) + " and/or " + "controller " + str(controller) + " does not exist in hbm dictionaries.")
+            sys.exit()
 
     elif stack != None and controller != None and reg_name != '':
-        hbm_base_addr = self.get_hbm_base_addr(stack)
-        registers = dict()
-        registers[reg_name] = self.memread(hbm_base_addr + (self.hbm_reg_map.get(reg_name) + (self.hbm_controller_regions.get(controller) << 17)))
-        return registers
+        if (stack in self.hbm_stack_base_addr.keys()) and (controller in self.hbm_controller_regions.keys()) and (reg_name in self.hbm_reg_map.keys()):
+            hbm_base_addr = self.get_hbm_base_addr(stack)
+            registers = dict()
+            registers[reg_name] = self.memread(hbm_base_addr + (self.hbm_reg_map.get(reg_name) + (self.hbm_controller_regions.get(controller) << 17)))
+            return registers
+        else:
+            self.logger.error("stack " + str(stack) + " and/or " + "controller " + str(controller) + " reg_name  " + str(reg_name) + " does not exist in hbm dictionaries.")
+            sys.exit()
 
     else:
-        self.logger.error('Arguments error')
+        self.logger.error("Arguments error: If you specify a particular register name then you must also specify from which stack and from which memory controller. If you specify a memory controller then you must also specify from which stack.")
         return None
 
   def get_hbm_base_addr(self, hbm_stack):
     '''
     Retrieves the hbm base address depending on the which stack to read from or write to.
     :param hbm_stack: which hbm stack/bank to read from or write to? Must be 0 or 1.
+
     '''
-    if hbm_stack == 0:
-        hbm_base_address = self.hbm_stack0_base_addr
-    elif hbm_stack == 1:
-        hbm_base_address = self.hbm_stack1_base_addr
-    else:
-        self.logger.error('hbm_stack ' + str(hbm_stack) + ' is not declared')
-        sys.exit()
+
+    hbm_base_address = self.hbm_stack_base_addr.get(hbm_stack)
     return hbm_base_address
 
 
@@ -659,7 +654,6 @@ STAT_DFI_INIT_COMPLETE
     STAT_INT_ECC_1BIT_THRESH_PS1 - D[0] : This bit is set when the number of 1-bit ECC errors exceeds the threshold defined in CFG_ECC_1BIT_INT_THRESH. Reading this register automatically clears it. Reset value 1’b0.
     STAT_DFI_INIT_COMPLETE - D[0] : This value is set to ‘1’ when PHY initialization has completed. Reset value 1’b0.
     STAT_DFI_CATTRIP - D[0] : This register will be set if the temperature ever exceeds the catastrophic value per HBM2 Jedec specification. Reset value 1’b0.
-STAT_DFI_INIT_COMPLETE
 
     # Activity Monitor/Status registers
 
