@@ -482,7 +482,104 @@ class AlveoTransport(KatcpTransport):
             "dropped_port_cnt"  : dropped_port_count}
     return self.counters
 
+  def set_hgbe_mac(self, mac, station=''):
+    """
+    set the source or destination mac address of the 100GbE
+
+    :param port: mac address e.g. '82:00:00:af:25:10'. Please only specify the mac address in this format.
+    :param station: specify 'source' or 'destination'
+    :return: True of False
+    """
+    if station == 'source':
+        en_mac = self.get_hgbe_src_mac()
+        if en_mac == mac:
+            print('%s mac already set to %s'%(station, mac))
+            return True
+        else:
+            mac_list = mac.split(":")
+            mac_upper = int(mac_list[0] + mac_list[1], 16)
+            mac_lower = int(mac_list[2] + mac_list[3] + mac_list[4] + mac_list[5], 16)
+            self.memwrite(self.hgbe_base_addr + self.hgbe_reg_map['src_mac_addr_lower'], mac_lower)
+            self.memwrite(self.hgbe_base_addr + self.hgbe_reg_map['src_mac_addr_upper'], mac_upper)
+            mac_readback = self.get_hgbe_src_mac()
+            if mac_readback == mac:
+               print('%s mac set to %s'%(station, mac_readback))
+               return True
+            else:
+               return False
+    elif station == 'destination':
+        en_mac = self.get_hgbe_dest_mac()
+        if en_mac == mac:
+            print('%s mac already set to %s'%(station, mac))
+            return True
+        else:
+            mac_list = mac.split(":")
+            mac_upper = int(mac_list[0] + mac_list[1], 16)
+            mac_lower = int(mac_list[2] + mac_list[3] + mac_list[4] + mac_list[5], 16)
+            self.memwrite(self.hgbe_base_addr + self.hgbe_reg_map['dst_mac_addr_lower'], mac_lower)
+            self.memwrite(self.hgbe_base_addr + self.hgbe_reg_map['dst_mac_addr_upper'], mac_upper)
+            mac_readback = self.get_hgbe_dest_mac()
+            if mac_readback == mac:
+               print('%s mac set to %s'%(station, mac_readback))
+               return True
+            else:
+               return False
+    else:
+        errmsg = 'Error specifying mac station'
+        self.logger.error(errmsg)
+        raise ValueError(errmsg)
   
+  def set_hgbe_ip(self, ip, station=''):
+      '''
+      set the source or destination ip address of the 100GbE
+
+      :param ip: ip address e.g. '192.168.2.11'. Please only specify the ip address in this format.
+      :param station: specify 'source' or 'destination'
+      :return: True or False
+
+      '''
+      if station == 'source':
+        en_ip = self.get_hgbe_src_ip()
+        if en_ip == ip:
+            print('%s ip already set to %s'%(station, ip))
+            return True
+        else:
+             ip_list = ip.split(".")
+             ipbytes = []
+             ipbytes.append((int(ip_list[0], 10) << 24) & 0xff000000)
+             ipbytes.append((int(ip_list[1], 10) << 16) & 0x00ff0000)
+             ipbytes.append((int(ip_list[2], 10) << 8) & 0x0000ff00)
+             ipbytes.append((int(ip_list[3], 10) << 0) & 0x000000ff)
+             ip_value = sum(ipbytes)
+             self.memwrite(self.hgbe_base_addr + self.hgbe_reg_map['src_ip_addr'], ip_value)
+             ip_readback = self.get_hgbe_src_ip()
+             if ip_readback == ip:
+                print('%s ip set to %s'%(station, ip_readback))
+                return True
+             else:
+                return False
+      elif station == 'destination':
+        en_ip = self.get_hgbe_dest_ip()
+        if en_ip == ip:
+            print('%s ip already set to %s'%(station, ip))
+            return True
+        else:
+             ip_list = ip.split(".")
+             ipbytes = []
+             ipbytes.append((int(ip_list[0], 10) << 24) & 0xff000000)
+             ipbytes.append((int(ip_list[1], 10) << 16) & 0x00ff0000)
+             ipbytes.append((int(ip_list[2], 10) << 8) & 0x0000ff00)
+             ipbytes.append((int(ip_list[3], 10) << 0) & 0x000000ff)
+             ip_value = sum(ipbytes)
+             self.memwrite(self.hgbe_base_addr + self.hgbe_reg_map['dst_ip_addr'], ip_value)
+             ip_readback = self.get_hgbe_dest_ip()
+             if ip_readback == ip:
+                print('%s ip set to %s'%(station, ip_readback))
+                return True
+             else:
+                return False
+
+
   def hbm_rd(self, stack=None, controller=None, reg_name=''):
     '''
     readback the hbm memory at a specified stack, memeory controller region and address offset.
