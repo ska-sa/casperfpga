@@ -230,7 +230,7 @@ class AlveoTransport(KatcpTransport):
     args = [(i.arguments[0], i.arguments[1]) for i in informs]
     #print args
 
-    return args[0][1] == data_str
+    return args[0][1] == bytes(data_str, 'utf-8')
 
   def wordwrite(self, device_name, data, offset=0, verify=True):
     """
