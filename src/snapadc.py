@@ -141,7 +141,8 @@ class SnapAdc(object):
 
         # below is from hera_corr_f/blocks.py
         # Attach our own wrapping of LMX
-        self.lmx = LMX2581(host, 'lmx_ctrl', fosc=self.ref)
+        if(self.ref == None):
+            self.lmx = LMX2581(host, 'lmx_ctrl', fosc=self.ref)
         self.name            = 'SNAP_adc'
         self.clock_divide    = 1
         #self.resolution      = resolution
