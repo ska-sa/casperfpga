@@ -1,5 +1,5 @@
 future==0.16.0
-ipython==5.3.0
+ipython==8.10.0
 katcp==0.6.2
 numpy==1.16
 odict
